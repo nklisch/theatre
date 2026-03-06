@@ -1,3 +1,5 @@
+pub mod inspect;
+pub mod scene_tree;
 pub mod snapshot;
 
 use rmcp::handler::server::wrapper::Parameters;
@@ -5,10 +7,12 @@ use rmcp::model::ErrorData as McpError;
 use rmcp::tool;
 use rmcp::tool_router;
 use spectator_core::{bearing, budget::SnapshotBudgetDefaults, budget::resolve_budget, types::Position3};
-use spectator_protocol::query::{DetailLevel, GetSnapshotDataParams, SnapshotResponse};
+use spectator_protocol::query::{DetailLevel, GetNodeInspectParams, GetSnapshotDataParams, NodeInspectResponse, SnapshotResponse};
 
 use crate::server::SpectatorServer;
 use crate::tcp::query_addon;
+use inspect::{SpatialInspectParams, build_spatial_context, parse_include};
+use scene_tree::{SceneTreeToolParams, build_scene_tree_params};
 use snapshot::{
     SpatialSnapshotParams, build_expand_response, build_full_response, build_perspective,
     build_perspective_param, build_standard_response, build_summary_response, parse_detail,
@@ -121,6 +125,108 @@ impl SpectatorServer {
                 build_full_response(&raw_data, &entities_with_rel, &persp, budget_limit, hard_cap)
             }
         };
+
+        serde_json::to_string(&response).map_err(|e| {
+            McpError::internal_error(format!("Response serialization error: {e}"), None)
+        })
+    }
+
+    /// Deep inspection of a single node — transform, physics, state, children,
+    /// signals, script, and spatial context. The "tell me everything about this
+    /// one thing" tool.
+    #[tool(description = "Deep inspection of a single node. Returns transform, physics, state, children, signals, script, and spatial context. Use the 'include' parameter to select specific categories and reduce token usage. Default includes all categories.")]
+    pub async fn spatial_inspect(
+        &self,
+        Parameters(params): Parameters<SpatialInspectParams>,
+    ) -> Result<String, McpError> {
+        let include = parse_include(&params.include)?;
+
+        let query_params = GetNodeInspectParams {
+            path: params.node.clone(),
+            include: include.clone(),
+        };
+
+        let raw_data: NodeInspectResponse = {
+            let data = query_addon(
+                &self.state,
+                "get_node_inspect",
+                serde_json::to_value(&query_params).map_err(|e| {
+                    McpError::internal_error(format!("Param serialization error: {e}"), None)
+                })?,
+            )
+            .await?;
+            serde_json::from_value(data).map_err(|e| {
+                McpError::internal_error(format!("Response deserialization error: {e}"), None)
+            })?
+        };
+
+        let mut response = serde_json::to_value(&raw_data).map_err(|e| {
+            McpError::internal_error(format!("Serialization error: {e}"), None)
+        })?;
+
+        if let Some(raw_ctx) = &raw_data.spatial_context_raw {
+            let spatial_context = build_spatial_context(raw_ctx);
+            if let serde_json::Value::Object(ref mut map) = response {
+                map.remove("spatial_context_raw");
+                map.insert("spatial_context".to_string(), spatial_context);
+            }
+        }
+
+        let json_bytes = serde_json::to_vec(&response).unwrap_or_default().len();
+        let used = spectator_core::budget::estimate_tokens(json_bytes);
+        if let serde_json::Value::Object(ref mut map) = response {
+            map.insert(
+                "budget".to_string(),
+                serde_json::json!({
+                    "used": used,
+                    "limit": 1500,
+                    "hard_cap": SnapshotBudgetDefaults::HARD_CAP,
+                }),
+            );
+        }
+
+        serde_json::to_string(&response).map_err(|e| {
+            McpError::internal_error(format!("Response serialization error: {e}"), None)
+        })
+    }
+
+    /// Navigate and query the Godot scene tree structure. Not spatial — this is
+    /// about understanding the node hierarchy.
+    #[tool(description = "Navigate the Godot scene tree. Actions: 'roots' (top-level nodes), 'children' (immediate children), 'subtree' (recursive tree with depth limit), 'ancestors' (parent chain to root), 'find' (search by name/class/group/script). Use 'include' to control per-node data.")]
+    pub async fn scene_tree(
+        &self,
+        Parameters(params): Parameters<SceneTreeToolParams>,
+    ) -> Result<String, McpError> {
+        let query_params = build_scene_tree_params(&params)?;
+
+        let data = query_addon(
+            &self.state,
+            "get_scene_tree",
+            serde_json::to_value(&query_params).map_err(|e| {
+                McpError::internal_error(format!("Param serialization error: {e}"), None)
+            })?,
+        )
+        .await?;
+
+        let json_bytes = serde_json::to_vec(&data).unwrap_or_default().len();
+        let used = spectator_core::budget::estimate_tokens(json_bytes);
+        let budget_limit = resolve_budget(
+            params.token_budget,
+            1500,
+            SnapshotBudgetDefaults::HARD_CAP,
+        );
+
+        let mut response = data;
+        if let serde_json::Value::Object(ref mut map) = response {
+            map.insert(
+                "budget".to_string(),
+                serde_json::json!({
+                    "used": used,
+                    "limit": budget_limit,
+                    "hard_cap": SnapshotBudgetDefaults::HARD_CAP,
+                }),
+            );
+        }
 
         serde_json::to_string(&response).map_err(|e| {
             McpError::internal_error(format!("Response serialization error: {e}"), None)

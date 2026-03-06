@@ -112,6 +112,17 @@ pub fn perspective_from_yaw(position: Position3, yaw_deg: f64) -> Perspective {
     }
 }
 
+/// Create a Perspective from a position and explicit forward vector.
+pub fn perspective_from_forward(position: Position3, forward: [f64; 3]) -> Perspective {
+    let (facing, facing_deg) = compass_bearing(forward);
+    Perspective {
+        position,
+        forward,
+        facing,
+        facing_deg,
+    }
+}
+
 /// Global compass bearing of a forward vector.
 /// Returns degrees: 0 = north (+Z in Godot), clockwise from above.
 /// Godot convention: +Z is "south" in standard compass but we follow
@@ -218,6 +229,13 @@ mod tests {
         let (cardinal, deg) = compass_bearing([0.0, 0.0, -1.0]);
         assert!((deg).abs() < 1.0 || (deg - 360.0).abs() < 1.0, "Expected 0°, got {deg}");
         assert_eq!(cardinal, Cardinal::Ahead);
+    }
+
+    #[test]
+    fn perspective_from_forward_negative_z() {
+        let p = perspective_from_forward([0.0, 0.0, 0.0], [0.0, 0.0, -1.0]);
+        assert_eq!(p.facing, Cardinal::Ahead);
+        assert!(p.facing_deg.abs() < 1.0 || (p.facing_deg - 360.0).abs() < 1.0);
     }
 
     #[test]

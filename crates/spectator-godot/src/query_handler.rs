@@ -1,6 +1,6 @@
 use spectator_protocol::{
     messages::Message,
-    query::GetSnapshotDataParams,
+    query::{GetNodeInspectParams, GetSceneTreeParams, GetSnapshotDataParams},
 };
 
 use crate::collector::SpectatorCollector;
@@ -16,6 +16,8 @@ pub fn handle_query(
     let result = match method {
         "get_snapshot_data" => handle_get_snapshot_data(params, collector),
         "get_frame_info" => handle_get_frame_info(collector),
+        "get_node_inspect" => handle_get_node_inspect(params, collector),
+        "get_scene_tree" => handle_get_scene_tree(params, collector),
         _ => Err(QueryError {
             code: "method_not_found".to_string(),
             message: format!("Unknown query method: {method}"),
@@ -58,5 +60,40 @@ fn handle_get_frame_info(collector: &SpectatorCollector) -> Result<serde_json::V
     serde_json::to_value(&info).map_err(|e| QueryError {
         code: "internal".to_string(),
         message: format!("Serialization error: {e}"),
+    })
+}
+
+fn handle_get_node_inspect(
+    params: serde_json::Value,
+    collector: &SpectatorCollector,
+) -> Result<serde_json::Value, QueryError> {
+    let params: GetNodeInspectParams = serde_json::from_value(params).map_err(|e| QueryError {
+        code: "invalid_params".to_string(),
+        message: format!("Invalid params: {e}"),
+    })?;
+
+    let data = collector.inspect_node(&params).map_err(|e| QueryError {
+        code: "node_not_found".to_string(),
+        message: e,
+    })?;
+
+    serde_json::to_value(&data).map_err(|e| QueryError {
+        code: "internal".to_string(),
+        message: format!("Serialization error: {e}"),
+    })
+}
+
+fn handle_get_scene_tree(
+    params: serde_json::Value,
+    collector: &SpectatorCollector,
+) -> Result<serde_json::Value, QueryError> {
+    let params: GetSceneTreeParams = serde_json::from_value(params).map_err(|e| QueryError {
+        code: "invalid_params".to_string(),
+        message: format!("Invalid params: {e}"),
+    })?;
+
+    collector.query_scene_tree(&params).map_err(|e| QueryError {
+        code: "node_not_found".to_string(),
+        message: e,
     })
 }
