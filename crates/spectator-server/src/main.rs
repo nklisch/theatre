@@ -1,3 +1,4 @@
+mod mcp;
 mod server;
 mod tcp;
 

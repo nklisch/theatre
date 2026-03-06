@@ -1,7 +1,10 @@
+use godot::obj::Gd;
 use godot::prelude::*;
 use spectator_protocol::{codec, handshake::Handshake, messages::Message};
 use std::io::ErrorKind;
 use std::net::{TcpListener, TcpStream};
+
+use crate::collector::SpectatorCollector;
 
 #[derive(GodotClass)]
 #[class(base = Node)]
@@ -11,6 +14,7 @@ pub struct SpectatorTCPServer {
     client: Option<TcpStream>,
     port: i32,
     handshake_completed: bool,
+    collector: Option<Gd<SpectatorCollector>>,
 }
 
 #[godot_api]
@@ -22,12 +26,19 @@ impl INode for SpectatorTCPServer {
             client: None,
             port: 9077,
             handshake_completed: false,
+            collector: None,
         }
     }
 }
 
 #[godot_api]
 impl SpectatorTCPServer {
+    /// Wire the collector into the TCP server.
+    #[func]
+    pub fn set_collector(&mut self, collector: Gd<SpectatorCollector>) {
+        self.collector = Some(collector);
+    }
+
     /// Start listening on the given port. Binds to localhost only.
     #[func]
     pub fn start(&mut self, port: i32) {
@@ -63,12 +74,10 @@ impl SpectatorTCPServer {
     /// Poll for new connections and incoming messages. Call every _physics_process.
     #[func]
     pub fn poll(&mut self) {
-        // Accept new connections if we don't have one
         if self.client.is_none() {
             self.try_accept();
         }
 
-        // Read incoming messages from connected client
         if self.client.is_some() {
             self.try_read();
         }
@@ -91,9 +100,7 @@ impl SpectatorTCPServer {
                 self.handshake_completed = false;
                 self.send_handshake();
             }
-            Err(ref e) if e.kind() == ErrorKind::WouldBlock => {
-                // No pending connection — normal for non-blocking
-            }
+            Err(ref e) if e.kind() == ErrorKind::WouldBlock => {}
             Err(e) => {
                 godot_error!("[Spectator] Accept error: {}", e);
             }
@@ -110,7 +117,6 @@ impl SpectatorTCPServer {
         let msg = Message::Handshake(handshake);
 
         if let Some(stream) = &mut self.client {
-            // Temporarily set blocking for the handshake write
             stream.set_nonblocking(false).ok();
             match codec::write_message(stream, &msg) {
                 Ok(()) => {
@@ -134,7 +140,6 @@ impl SpectatorTCPServer {
             None => return,
         };
 
-        // Temporarily set blocking with a very short timeout for reads
         stream.set_nonblocking(false).ok();
         stream
             .set_read_timeout(Some(std::time::Duration::from_millis(1)))
@@ -164,7 +169,6 @@ impl SpectatorTCPServer {
             }
         }
 
-        // Restore non-blocking
         if let Some(stream) = &self.client {
             stream.set_nonblocking(true).ok();
         }
@@ -183,9 +187,39 @@ impl SpectatorTCPServer {
                 godot_error!("[Spectator] Handshake rejected: {}", err.message);
                 self.disconnect_client();
             }
+            Message::Query { id, method, params } => {
+                if let Some(ref collector) = self.collector {
+                    let response = crate::query_handler::handle_query(
+                        id,
+                        &method,
+                        params,
+                        &collector.bind(),
+                    );
+                    self.send_response(response);
+                } else {
+                    self.send_response(Message::Error {
+                        id,
+                        code: "scene_not_loaded".to_string(),
+                        message: "Collector not available".to_string(),
+                    });
+                }
+            }
             _ => {
-                // M0: ignore other message types
-                godot_print!("[Spectator] Received message (unhandled in M0)");
+                godot_print!("[Spectator] Received unhandled message type");
+            }
+        }
+    }
+
+    fn send_response(&mut self, msg: Message) {
+        if let Some(stream) = &mut self.client {
+            stream.set_nonblocking(false).ok();
+            if let Err(e) = codec::write_message(stream, &msg) {
+                godot_error!("[Spectator] Failed to send response: {}", e);
+                self.disconnect_client();
+                return;
+            }
+            if let Some(stream) = &self.client {
+                stream.set_nonblocking(true).ok();
             }
         }
     }
@@ -197,13 +231,18 @@ impl SpectatorTCPServer {
 
     fn get_godot_version(&self) -> String {
         let info = godot::classes::Engine::singleton().get_version_info();
-        let major = info.get("major").unwrap_or(Variant::from(0)).to::<i32>();
-        let minor = info.get("minor").unwrap_or(Variant::from(0)).to::<i32>();
+        let major = info
+            .get("major")
+            .and_then(|v| v.try_to::<i32>().ok())
+            .unwrap_or(0);
+        let minor = info
+            .get("minor")
+            .and_then(|v| v.try_to::<i32>().ok())
+            .unwrap_or(0);
         format!("{}.{}", major, minor)
     }
 
     fn detect_scene_dimensions(&self) -> u32 {
-        // M0: default to 3. Full detection in M9 (2D support).
         3
     }
 
