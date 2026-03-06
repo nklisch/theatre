@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "spectator": {
+      "type": "stdio",
+      "command": "./target/release/spectator-server",
+      "env": {
+        "SPECTATOR_PORT": "9077"
+      }
+    }
+  }
+}
