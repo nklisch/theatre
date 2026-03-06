@@ -1,9 +1,5 @@
 use godot::prelude::*;
-use spectator_protocol::{
-    codec,
-    handshake::Handshake,
-    messages::Message,
-};
+use spectator_protocol::{codec, handshake::Handshake, messages::Message};
 use std::io::ErrorKind;
 use std::net::{TcpListener, TcpStream};
 
@@ -201,14 +197,8 @@ impl SpectatorTCPServer {
 
     fn get_godot_version(&self) -> String {
         let info = godot::classes::Engine::singleton().get_version_info();
-        let major = info
-            .get("major")
-            .unwrap_or(Variant::from(0))
-            .to::<i32>();
-        let minor = info
-            .get("minor")
-            .unwrap_or(Variant::from(0))
-            .to::<i32>();
+        let major = info.get("major").unwrap_or(Variant::from(0)).to::<i32>();
+        let minor = info.get("minor").unwrap_or(Variant::from(0)).to::<i32>();
         format!("{}.{}", major, minor)
     }
 

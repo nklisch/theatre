@@ -27,10 +27,7 @@ pub enum Message {
 
     /// Addon → Server: query response
     #[serde(rename = "response")]
-    Response {
-        id: String,
-        data: serde_json::Value,
-    },
+    Response { id: String, data: serde_json::Value },
 
     /// Addon → Server: query error
     #[serde(rename = "error")]

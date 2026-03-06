@@ -38,10 +38,7 @@ pub fn read_message<T: DeserializeOwned>(reader: &mut impl io::Read) -> Result<T
 }
 
 /// Write one length-prefixed JSON message to a synchronous writer.
-pub fn write_message<T: Serialize>(
-    writer: &mut impl io::Write,
-    msg: &T,
-) -> Result<(), CodecError> {
+pub fn write_message<T: Serialize>(writer: &mut impl io::Write, msg: &T) -> Result<(), CodecError> {
     let bytes = encode(msg)?;
     writer.write_all(&bytes).map_err(CodecError::Io)?;
     writer.flush().map_err(CodecError::Io)?;

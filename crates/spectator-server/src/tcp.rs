@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tokio::io::WriteHalf;
 use tokio::net::TcpStream;
 use tokio::sync::Mutex;
-use tokio::time::{sleep, Duration};
+use tokio::time::{Duration, sleep};
 use uuid::Uuid;
 
 /// Handle to the TCP connection's write half, for sending queries.
@@ -19,6 +19,7 @@ pub struct TcpClientHandle {
 }
 
 /// Shared state between MCP handlers and TCP client task.
+#[derive(Default)]
 pub struct SessionState {
     pub tcp_writer: Option<TcpClientHandle>,
     pub connected: bool,
@@ -36,17 +37,6 @@ pub struct HandshakeInfo {
     pub scene_dimensions: u32,
     pub physics_ticks_per_sec: u32,
     pub project_name: String,
-}
-
-impl Default for SessionState {
-    fn default() -> Self {
-        Self {
-            tcp_writer: None,
-            connected: false,
-            session_id: None,
-            handshake_info: None,
-        }
-    }
 }
 
 /// Background task: connect to addon, handle handshake, reconnect on disconnect.
@@ -81,10 +71,7 @@ pub async fn tcp_client_loop(state: Arc<Mutex<SessionState>>, port: u16) {
     }
 }
 
-async fn handle_connection(
-    stream: TcpStream,
-    state: Arc<Mutex<SessionState>>,
-) -> Result<()> {
+async fn handle_connection(stream: TcpStream, state: Arc<Mutex<SessionState>>) -> Result<()> {
     let (mut reader, writer) = tokio::io::split(stream);
 
     // Step 1: Read handshake from addon
