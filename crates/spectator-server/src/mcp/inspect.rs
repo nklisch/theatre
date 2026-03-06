@@ -1,7 +1,7 @@
 use rmcp::model::ErrorData as McpError;
 use schemars::JsonSchema;
 use serde::Deserialize;
-use spectator_core::{bearing, types::Position3};
+use spectator_core::{bearing, types::{Position3, vec_to_array3}};
 use spectator_protocol::query::{InspectCategory, SpatialContextRaw};
 
 /// Parameters for the spatial_inspect MCP tool.
@@ -55,11 +55,8 @@ pub fn parse_include(strings: &[String]) -> Result<Vec<InspectCategory>, McpErro
 /// Build the spatial_context block from raw addon data.
 /// Computes bearings server-side from the raw positions.
 pub fn build_spatial_context(raw: &SpatialContextRaw) -> serde_json::Value {
-    let node_pos: Position3 = [
-        raw.node_position.first().copied().unwrap_or(0.0),
-        raw.node_position.get(1).copied().unwrap_or(0.0),
-        raw.node_position.get(2).copied().unwrap_or(0.0),
-    ];
+    let node_pos: Position3 = vec_to_array3(&raw.node_position);
+    // z defaults to -1.0 (Godot forward) in case the addon sends an incomplete vector
     let node_fwd = [
         raw.node_forward.first().copied().unwrap_or(0.0),
         raw.node_forward.get(1).copied().unwrap_or(0.0),
@@ -72,11 +69,7 @@ pub fn build_spatial_context(raw: &SpatialContextRaw) -> serde_json::Value {
         .nearby
         .iter()
         .map(|e| {
-            let target_pos: Position3 = [
-                e.position.first().copied().unwrap_or(0.0),
-                e.position.get(1).copied().unwrap_or(0.0),
-                e.position.get(2).copied().unwrap_or(0.0),
-            ];
+            let target_pos: Position3 = vec_to_array3(&e.position);
             let rel = bearing::relative_position(&perspective, target_pos, false);
             let mut entry = serde_json::json!({
                 "path": e.path,

@@ -6,11 +6,50 @@ use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::ErrorData as McpError;
 use rmcp::tool;
 use rmcp::tool_router;
-use spectator_core::{bearing, budget::SnapshotBudgetDefaults, budget::resolve_budget, types::Position3};
+use serde::{Deserialize, Serialize};
+use spectator_core::{bearing, budget::SnapshotBudgetDefaults, budget::resolve_budget, types::{Position3, vec_to_array3}};
 use spectator_protocol::query::{DetailLevel, GetNodeInspectParams, GetSnapshotDataParams, NodeInspectResponse, SnapshotResponse};
 
 use crate::server::SpectatorServer;
 use crate::tcp::query_addon;
+
+// ---------------------------------------------------------------------------
+// Shared MCP helpers
+// ---------------------------------------------------------------------------
+
+fn serialize_params<T: Serialize>(params: &T) -> Result<serde_json::Value, McpError> {
+    serde_json::to_value(params).map_err(|e| {
+        McpError::internal_error(format!("Param serialization error: {e}"), None)
+    })
+}
+
+fn deserialize_response<T: for<'de> Deserialize<'de>>(
+    data: serde_json::Value,
+) -> Result<T, McpError> {
+    serde_json::from_value(data).map_err(|e| {
+        McpError::internal_error(format!("Response deserialization error: {e}"), None)
+    })
+}
+
+fn serialize_response<T: Serialize>(response: &T) -> Result<String, McpError> {
+    serde_json::to_string(response).map_err(|e| {
+        McpError::internal_error(format!("Response serialization error: {e}"), None)
+    })
+}
+
+/// Inject a `budget` block into a JSON object value.
+fn inject_budget(response: &mut serde_json::Value, used: u32, limit: u32) {
+    if let serde_json::Value::Object(map) = response {
+        map.insert(
+            "budget".to_string(),
+            serde_json::json!({
+                "used": used,
+                "limit": limit,
+                "hard_cap": SnapshotBudgetDefaults::HARD_CAP,
+            }),
+        );
+    }
+}
 use inspect::{SpatialInspectParams, build_spatial_context, parse_include};
 use scene_tree::{SceneTreeToolParams, build_scene_tree_params};
 use snapshot::{
@@ -46,17 +85,9 @@ impl SpectatorServer {
         };
 
         let raw_data: SnapshotResponse = {
-            let data = query_addon(
-                &self.state,
-                "get_snapshot_data",
-                serde_json::to_value(&query_params).map_err(|e| {
-                    McpError::internal_error(format!("Param serialization error: {e}"), None)
-                })?,
-            )
-            .await?;
-            serde_json::from_value(data).map_err(|e| {
-                McpError::internal_error(format!("Response deserialization error: {e}"), None)
-            })?
+            let data = query_addon(&self.state, "get_snapshot_data", serialize_params(&query_params)?)
+                .await?;
+            deserialize_response(data)?
         };
 
         // 4. Build perspective for spatial calculations
@@ -67,11 +98,7 @@ impl SpectatorServer {
             .entities
             .iter()
             .filter_map(|e| {
-                let pos: Position3 = [
-                    e.position.first().copied().unwrap_or(0.0),
-                    e.position.get(1).copied().unwrap_or(0.0),
-                    e.position.get(2).copied().unwrap_or(0.0),
-                ];
+                let pos: Position3 = vec_to_array3(&e.position);
                 let rel = bearing::relative_position(&persp, pos, !e.visible);
                 if rel.dist > params.radius {
                     return None;
@@ -108,9 +135,7 @@ impl SpectatorServer {
                 budget_limit,
                 hard_cap,
             )?;
-            return serde_json::to_string(&response).map_err(|e| {
-                McpError::internal_error(format!("Serialization error: {e}"), None)
-            });
+            return serialize_response(&response);
         }
 
         // 9. Build response based on detail level
@@ -126,9 +151,7 @@ impl SpectatorServer {
             }
         };
 
-        serde_json::to_string(&response).map_err(|e| {
-            McpError::internal_error(format!("Response serialization error: {e}"), None)
-        })
+        serialize_response(&response)
     }
 
     /// Deep inspection of a single node — transform, physics, state, children,
@@ -147,17 +170,9 @@ impl SpectatorServer {
         };
 
         let raw_data: NodeInspectResponse = {
-            let data = query_addon(
-                &self.state,
-                "get_node_inspect",
-                serde_json::to_value(&query_params).map_err(|e| {
-                    McpError::internal_error(format!("Param serialization error: {e}"), None)
-                })?,
-            )
-            .await?;
-            serde_json::from_value(data).map_err(|e| {
-                McpError::internal_error(format!("Response deserialization error: {e}"), None)
-            })?
+            let data = query_addon(&self.state, "get_node_inspect", serialize_params(&query_params)?)
+                .await?;
+            deserialize_response(data)?
         };
 
         let mut response = serde_json::to_value(&raw_data).map_err(|e| {
@@ -174,20 +189,9 @@ impl SpectatorServer {
 
         let json_bytes = serde_json::to_vec(&response).unwrap_or_default().len();
         let used = spectator_core::budget::estimate_tokens(json_bytes);
-        if let serde_json::Value::Object(ref mut map) = response {
-            map.insert(
-                "budget".to_string(),
-                serde_json::json!({
-                    "used": used,
-                    "limit": 1500,
-                    "hard_cap": SnapshotBudgetDefaults::HARD_CAP,
-                }),
-            );
-        }
+        inject_budget(&mut response, used, 1500);
 
-        serde_json::to_string(&response).map_err(|e| {
-            McpError::internal_error(format!("Response serialization error: {e}"), None)
-        })
+        serialize_response(&response)
     }
 
     /// Navigate and query the Godot scene tree structure. Not spatial — this is
@@ -199,37 +203,16 @@ impl SpectatorServer {
     ) -> Result<String, McpError> {
         let query_params = build_scene_tree_params(&params)?;
 
-        let data = query_addon(
-            &self.state,
-            "get_scene_tree",
-            serde_json::to_value(&query_params).map_err(|e| {
-                McpError::internal_error(format!("Param serialization error: {e}"), None)
-            })?,
-        )
-        .await?;
+        let data = query_addon(&self.state, "get_scene_tree", serialize_params(&query_params)?)
+            .await?;
 
         let json_bytes = serde_json::to_vec(&data).unwrap_or_default().len();
         let used = spectator_core::budget::estimate_tokens(json_bytes);
-        let budget_limit = resolve_budget(
-            params.token_budget,
-            1500,
-            SnapshotBudgetDefaults::HARD_CAP,
-        );
+        let budget_limit = resolve_budget(params.token_budget, 1500, SnapshotBudgetDefaults::HARD_CAP);
 
         let mut response = data;
-        if let serde_json::Value::Object(ref mut map) = response {
-            map.insert(
-                "budget".to_string(),
-                serde_json::json!({
-                    "used": used,
-                    "limit": budget_limit,
-                    "hard_cap": SnapshotBudgetDefaults::HARD_CAP,
-                }),
-            );
-        }
+        inject_budget(&mut response, used, budget_limit);
 
-        serde_json::to_string(&response).map_err(|e| {
-            McpError::internal_error(format!("Response serialization error: {e}"), None)
-        })
+        serialize_response(&response)
     }
 }

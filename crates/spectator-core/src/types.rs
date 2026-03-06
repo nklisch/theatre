@@ -124,6 +124,18 @@ pub struct TransformData {
     pub scale: [f64; 3],
 }
 
+/// Convert a `Vec<f64>` slice to a fixed `[f64; 3]`, filling missing elements with `0.0`.
+///
+/// Used to safely convert protocol `Vec<f64>` fields (position, rotation, velocity)
+/// into the fixed-size arrays used by the core spatial logic.
+pub fn vec_to_array3(v: &[f64]) -> [f64; 3] {
+    [
+        v.first().copied().unwrap_or(0.0),
+        v.get(1).copied().unwrap_or(0.0),
+        v.get(2).copied().unwrap_or(0.0),
+    ]
+}
+
 /// Frame metadata from the addon.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FrameInfo {

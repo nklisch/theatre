@@ -84,6 +84,21 @@ impl SpectatorTCPServer {
     }
 }
 
+/// Run `f` with the stream in blocking mode, then restore non-blocking.
+///
+/// Using a closure means the mutable borrow of the stream is contained inside
+/// `f` and released before the caller handles the result — NLL then allows
+/// `self.disconnect_client()` to be called immediately after.
+fn with_blocking_io<F, R>(stream: &mut TcpStream, f: F) -> R
+where
+    F: FnOnce(&mut TcpStream) -> R,
+{
+    stream.set_nonblocking(false).ok();
+    let result = f(stream);
+    stream.set_nonblocking(true).ok();
+    result
+}
+
 // Private implementation methods (not exposed to GDScript)
 impl SpectatorTCPServer {
     fn try_accept(&mut self) {
@@ -117,19 +132,13 @@ impl SpectatorTCPServer {
         let msg = Message::Handshake(handshake);
 
         if let Some(stream) = &mut self.client {
-            stream.set_nonblocking(false).ok();
-            match codec::write_message(stream, &msg) {
-                Ok(()) => {
-                    godot_print!("[Spectator] Handshake sent");
-                }
+            let result = with_blocking_io(stream, |s| codec::write_message(s, &msg));
+            match result {
+                Ok(()) => godot_print!("[Spectator] Handshake sent"),
                 Err(e) => {
                     godot_error!("[Spectator] Failed to send handshake: {}", e);
                     self.disconnect_client();
-                    return;
                 }
-            }
-            if let Some(stream) = &self.client {
-                stream.set_nonblocking(true).ok();
             }
         }
     }
@@ -140,12 +149,12 @@ impl SpectatorTCPServer {
             None => return,
         };
 
-        stream.set_nonblocking(false).ok();
-        stream
-            .set_read_timeout(Some(std::time::Duration::from_millis(1)))
-            .ok();
+        let result = with_blocking_io(stream, |s| {
+            s.set_read_timeout(Some(std::time::Duration::from_millis(1))).ok();
+            codec::read_message::<Message>(s)
+        });
 
-        match codec::read_message::<Message>(stream) {
+        match result {
             Ok(msg) => {
                 self.handle_message(msg);
             }
@@ -160,17 +169,11 @@ impl SpectatorTCPServer {
             {
                 godot_print!("[Spectator] Client disconnected");
                 self.disconnect_client();
-                return;
             }
             Err(e) => {
                 godot_error!("[Spectator] Read error: {}", e);
                 self.disconnect_client();
-                return;
             }
-        }
-
-        if let Some(stream) = &self.client {
-            stream.set_nonblocking(true).ok();
         }
     }
 
@@ -212,14 +215,10 @@ impl SpectatorTCPServer {
 
     fn send_response(&mut self, msg: Message) {
         if let Some(stream) = &mut self.client {
-            stream.set_nonblocking(false).ok();
-            if let Err(e) = codec::write_message(stream, &msg) {
+            let result = with_blocking_io(stream, |s| codec::write_message(s, &msg));
+            if let Err(e) = result {
                 godot_error!("[Spectator] Failed to send response: {}", e);
                 self.disconnect_client();
-                return;
-            }
-            if let Some(stream) = &self.client {
-                stream.set_nonblocking(true).ok();
             }
         }
     }

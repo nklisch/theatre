@@ -11,25 +11,6 @@ use spectator_protocol::query::{
     SnapshotResponse, SpatialContextRaw, TransformEntityData, TreeInclude,
 };
 
-/// Static class heuristic: these classes are treated as static by default.
-const STATIC_CLASSES: &[&str] = &[
-    "StaticBody3D",
-    "StaticBody2D",
-    "CSGShape3D",
-    "CSGBox3D",
-    "CSGCylinder3D",
-    "CSGMesh3D",
-    "CSGPolygon3D",
-    "CSGSphere3D",
-    "CSGTorus3D",
-    "CSGCombiner3D",
-    "MeshInstance3D",
-    "GridMap",
-    "WorldEnvironment",
-    "DirectionalLight3D",
-    "OmniLight3D",
-    "SpotLight3D",
-];
 
 #[derive(GodotClass)]
 #[class(base = Node)]
@@ -90,9 +71,9 @@ impl SpectatorCollector {
                         // Forward in Godot is -Z; col_c() is the local +Z column
                         let fwd = camera.get_global_transform().basis.col_c();
                         return PerspectiveData {
-                            position: vec![pos.x as f64, pos.y as f64, pos.z as f64],
-                            rotation_deg: vec![rot.x as f64, rot.y as f64, rot.z as f64],
-                            forward: vec![-fwd.x as f64, -fwd.y as f64, -fwd.z as f64],
+                            position: vec3(pos),
+                            rotation_deg: vec3(rot),
+                            forward: vec3(-fwd),
                         };
                     }
                 }
@@ -108,9 +89,9 @@ impl SpectatorCollector {
                     let rot = node.get_global_rotation_degrees();
                     let fwd = node.get_global_transform().basis.col_c();
                     return PerspectiveData {
-                        position: vec![pos.x as f64, pos.y as f64, pos.z as f64],
-                        rotation_deg: vec![rot.x as f64, rot.y as f64, rot.z as f64],
-                        forward: vec![-fwd.x as f64, -fwd.y as f64, -fwd.z as f64],
+                        position: vec3(pos),
+                        rotation_deg: vec3(rot),
+                        forward: vec3(-fwd),
                     };
                 }
                 PerspectiveData {
@@ -192,8 +173,8 @@ impl SpectatorCollector {
         let mut entity = EntityData {
             path: self.get_relative_path(&node_ref),
             class: class_name,
-            position: vec![pos.x as f64, pos.y as f64, pos.z as f64],
-            rotation_deg: vec![rot.x as f64, rot.y as f64, rot.z as f64],
+            position: vec3(pos),
+            rotation_deg: vec3(rot),
             velocity,
             groups,
             visible,
@@ -223,12 +204,10 @@ impl SpectatorCollector {
     /// Get the velocity of a node, if it's a physics body.
     fn get_velocity(&self, node: &Gd<Node3D>) -> Vec<f64> {
         if let Ok(body) = node.clone().try_cast::<CharacterBody3D>() {
-            let v = body.get_velocity();
-            return vec![v.x as f64, v.y as f64, v.z as f64];
+            return vec3(body.get_velocity());
         }
         if let Ok(body) = node.clone().try_cast::<RigidBody3D>() {
-            let v = body.get_linear_velocity();
-            return vec![v.x as f64, v.y as f64, v.z as f64];
+            return vec3(body.get_linear_velocity());
         }
         vec![0.0, 0.0, 0.0]
     }
@@ -329,8 +308,7 @@ impl SpectatorCollector {
             let v = body.get_velocity();
             let on_floor = body.is_on_floor();
             let floor_normal = if on_floor {
-                let n = body.get_floor_normal();
-                Some(vec![n.x as f64, n.y as f64, n.z as f64])
+                Some(vec3(body.get_floor_normal()))
             } else {
                 None
             };
@@ -338,7 +316,7 @@ impl SpectatorCollector {
             let layer = phys.get_collision_layer();
             let mask = phys.get_collision_mask();
             return Some(PhysicsEntityData {
-                velocity: vec![v.x as f64, v.y as f64, v.z as f64],
+                velocity: vec3(v),
                 on_floor,
                 floor_normal,
                 collision_layer: layer,
@@ -355,25 +333,13 @@ impl SpectatorCollector {
         let basis = t.basis;
         let scale = node.get_scale();
         TransformEntityData {
-            origin: vec![origin.x as f64, origin.y as f64, origin.z as f64],
+            origin: vec3(origin),
             basis: vec![
-                vec![
-                    basis.col_a().x as f64,
-                    basis.col_a().y as f64,
-                    basis.col_a().z as f64,
-                ],
-                vec![
-                    basis.col_b().x as f64,
-                    basis.col_b().y as f64,
-                    basis.col_b().z as f64,
-                ],
-                vec![
-                    basis.col_c().x as f64,
-                    basis.col_c().y as f64,
-                    basis.col_c().z as f64,
-                ],
+                vec3(basis.col_a()),
+                vec3(basis.col_b()),
+                vec3(basis.col_c()),
             ],
-            scale: vec![scale.x as f64, scale.y as f64, scale.z as f64],
+            scale: vec3(scale),
         }
     }
 
@@ -466,14 +432,10 @@ impl SpectatorCollector {
             let local = n3d.get_position();
             let scale = n3d.get_scale();
             InspectTransform {
-                global_origin: vec![global.x as f64, global.y as f64, global.z as f64],
-                global_rotation_deg: vec![
-                    global_rot.x as f64,
-                    global_rot.y as f64,
-                    global_rot.z as f64,
-                ],
-                local_origin: vec![local.x as f64, local.y as f64, local.z as f64],
-                scale: vec![scale.x as f64, scale.y as f64, scale.z as f64],
+                global_origin: vec3(global),
+                global_rotation_deg: vec3(global_rot),
+                local_origin: vec3(local),
+                scale: vec3(scale),
             }
         } else {
             InspectTransform {
@@ -493,14 +455,13 @@ impl SpectatorCollector {
             let on_wall = body.is_on_wall();
             let on_ceiling = body.is_on_ceiling();
             let floor_normal = if on_floor {
-                let n = body.get_floor_normal();
-                Some(vec![n.x as f64, n.y as f64, n.z as f64])
+                Some(vec3(body.get_floor_normal()))
             } else {
                 None
             };
             let phys: Gd<PhysicsBody3D> = body.upcast();
             return Some(InspectPhysics {
-                velocity: vec![v.x as f64, v.y as f64, v.z as f64],
+                velocity: vec3(v),
                 speed,
                 on_floor,
                 on_wall,
@@ -515,7 +476,7 @@ impl SpectatorCollector {
             let speed = (v.x * v.x + v.y * v.y + v.z * v.z).sqrt() as f64;
             let phys: Gd<PhysicsBody3D> = body.upcast();
             return Some(InspectPhysics {
-                velocity: vec![v.x as f64, v.y as f64, v.z as f64],
+                velocity: vec3(v),
                 speed,
                 on_floor: false,
                 on_wall: false,
@@ -579,22 +540,8 @@ impl SpectatorCollector {
                 }
             }
             "NavigationAgent3D" => {
-                if let Ok(nav) = child
-                    .clone()
-                    .try_cast::<godot::classes::NavigationAgent3D>()
-                {
-                    props.insert(
-                        "target_reached".to_string(),
-                        serde_json::Value::Bool(nav.is_target_reached()),
-                    );
-                    let dist = nav.distance_to_target();
-                    if let Some(n) = serde_json::Number::from_f64(dist as f64) {
-                        props.insert(
-                            "distance_remaining".to_string(),
-                            serde_json::Value::Number(n),
-                        );
-                    }
-                }
+                // NavigationAgent3D is not exposed as a gdext class in api-4-2;
+                // props are skipped for now.
             }
             "Area3D" => {
                 if let Ok(area) = child.clone().try_cast::<godot::classes::Area3D>() {
@@ -641,14 +588,14 @@ impl SpectatorCollector {
                         let obj_name = callable
                             .object()
                             .map(|o| {
-                                if let Ok(n) = o.try_cast::<Node>() {
+                                if let Ok(n) = o.clone().try_cast::<Node>() {
                                     self.get_relative_path(&n)
                                 } else {
                                     format!("<{}>", o.get_class())
                                 }
                             })
                             .unwrap_or_else(|| "<unknown>".to_string());
-                        let method = callable.method_name().to_string();
+                        let method = callable.method_name().map(|n| n.to_string()).unwrap_or_default();
                         Some(serde_json::Value::String(format!("{obj_name}:{method}")))
                     })
                     .collect();
@@ -672,7 +619,7 @@ impl SpectatorCollector {
 
         let base_class = node.get_class().to_string();
 
-        let methods = if let Ok(gd_script) = script.clone().try_cast::<godot::classes::Script>() {
+        let methods = if let Ok(mut gd_script) = script.clone().try_cast::<godot::classes::Script>() {
             let method_list: Array<VarDictionary> = gd_script.get_script_method_list();
             (0..method_list.len())
                 .filter_map(|i| {
@@ -728,8 +675,8 @@ impl SpectatorCollector {
 
         let pos = node3d.get_global_position();
         let fwd_col = node3d.get_global_transform().basis.col_c();
-        let node_position = vec![pos.x as f64, pos.y as f64, pos.z as f64];
-        let node_forward = vec![-fwd_col.x as f64, -fwd_col.y as f64, -fwd_col.z as f64];
+        let node_position = vec3(pos);
+        let node_forward = vec3(-fwd_col);
 
         let (camera_visible, camera_distance) = if let Some(vp) = self.base().get_viewport() {
             if let Some(camera) = vp.get_camera_3d() {
@@ -793,7 +740,7 @@ impl SpectatorCollector {
                 result.push(NearbyEntityRaw {
                     path: self.get_relative_path(&node_ref),
                     class: node_ref.get_class().to_string(),
-                    position: vec![pos.x as f64, pos.y as f64, pos.z as f64],
+                    position: vec3(pos),
                     groups: self.get_groups(&node_ref),
                 });
             }
@@ -1159,6 +1106,11 @@ impl SpectatorCollector {
             delta,
         }
     }
+}
+
+/// Convert a Godot `Vector3` to a `Vec<f64>`.
+fn vec3(v: Vector3) -> Vec<f64> {
+    vec![v.x as f64, v.y as f64, v.z as f64]
 }
 
 fn snapshot_empty() -> SnapshotResponse {

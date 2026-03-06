@@ -39,59 +39,51 @@ struct QueryError {
     message: String,
 }
 
-fn handle_get_snapshot_data(
-    params: serde_json::Value,
-    collector: &SpectatorCollector,
-) -> Result<serde_json::Value, QueryError> {
-    let params: GetSnapshotDataParams = serde_json::from_value(params).map_err(|e| QueryError {
+fn parse_params<T: for<'de> serde::Deserialize<'de>>(
+    value: serde_json::Value,
+) -> Result<T, QueryError> {
+    serde_json::from_value(value).map_err(|e| QueryError {
         code: "invalid_params".to_string(),
         message: format!("Invalid params: {e}"),
-    })?;
+    })
+}
 
-    let data = collector.collect_snapshot(&params);
-    serde_json::to_value(&data).map_err(|e| QueryError {
+fn to_json_value<T: serde::Serialize>(data: &T) -> Result<serde_json::Value, QueryError> {
+    serde_json::to_value(data).map_err(|e| QueryError {
         code: "internal".to_string(),
         message: format!("Serialization error: {e}"),
     })
 }
 
+fn handle_get_snapshot_data(
+    params: serde_json::Value,
+    collector: &SpectatorCollector,
+) -> Result<serde_json::Value, QueryError> {
+    let params: GetSnapshotDataParams = parse_params(params)?;
+    to_json_value(&collector.collect_snapshot(&params))
+}
+
 fn handle_get_frame_info(collector: &SpectatorCollector) -> Result<serde_json::Value, QueryError> {
-    let info = collector.get_frame_info();
-    serde_json::to_value(&info).map_err(|e| QueryError {
-        code: "internal".to_string(),
-        message: format!("Serialization error: {e}"),
-    })
+    to_json_value(&collector.get_frame_info())
 }
 
 fn handle_get_node_inspect(
     params: serde_json::Value,
     collector: &SpectatorCollector,
 ) -> Result<serde_json::Value, QueryError> {
-    let params: GetNodeInspectParams = serde_json::from_value(params).map_err(|e| QueryError {
-        code: "invalid_params".to_string(),
-        message: format!("Invalid params: {e}"),
-    })?;
-
+    let params: GetNodeInspectParams = parse_params(params)?;
     let data = collector.inspect_node(&params).map_err(|e| QueryError {
         code: "node_not_found".to_string(),
         message: e,
     })?;
-
-    serde_json::to_value(&data).map_err(|e| QueryError {
-        code: "internal".to_string(),
-        message: format!("Serialization error: {e}"),
-    })
+    to_json_value(&data)
 }
 
 fn handle_get_scene_tree(
     params: serde_json::Value,
     collector: &SpectatorCollector,
 ) -> Result<serde_json::Value, QueryError> {
-    let params: GetSceneTreeParams = serde_json::from_value(params).map_err(|e| QueryError {
-        code: "invalid_params".to_string(),
-        message: format!("Invalid params: {e}"),
-    })?;
-
+    let params: GetSceneTreeParams = parse_params(params)?;
     collector.query_scene_tree(&params).map_err(|e| QueryError {
         code: "node_not_found".to_string(),
         message: e,

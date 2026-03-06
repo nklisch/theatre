@@ -3,16 +3,14 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spectator_core::{
     bearing,
-    budget::{BudgetEnforcer, BudgetReport, SnapshotBudgetDefaults, resolve_budget},
+    budget::BudgetEnforcer,
     cluster::{self, Cluster},
-    types::{Cardinal, ChildInfo, Perspective, Position3, RawEntityData, RecentSignal, RelativePosition},
+    types::{Perspective, Position3, RawEntityData, RecentSignal, RelativePosition, vec_to_array3},
 };
 use spectator_protocol::query::{
-    DetailLevel, EntityData, GetSnapshotDataParams, PerspectiveParam, SnapshotResponse,
+    DetailLevel, EntityData, PerspectiveParam, SnapshotResponse,
 };
-
-use crate::server::SpectatorServer;
-use crate::tcp::query_addon;
+use spectator_protocol::static_classes::{classify_static_category, is_static_class};
 
 /// Parameters for the spatial_snapshot MCP tool.
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -55,15 +53,9 @@ pub struct SpatialSnapshotParams {
     pub expand: Option<String>,
 }
 
-fn default_perspective() -> String {
-    "camera".to_string()
-}
-fn default_radius() -> f64 {
-    50.0
-}
-fn default_detail() -> String {
-    "standard".to_string()
-}
+fn default_perspective() -> String { "camera".to_string() }
+fn default_radius() -> f64 { 50.0 }
+fn default_detail() -> String { "standard".to_string() }
 
 /// Processed entity for MCP output.
 #[derive(Debug, Serialize)]
@@ -221,21 +213,9 @@ fn to_raw_entity(e: &EntityData) -> RawEntityData {
     RawEntityData {
         path: e.path.clone(),
         class: e.class.clone(),
-        position: [
-            e.position.first().copied().unwrap_or(0.0),
-            e.position.get(1).copied().unwrap_or(0.0),
-            e.position.get(2).copied().unwrap_or(0.0),
-        ],
-        rotation_deg: [
-            e.rotation_deg.first().copied().unwrap_or(0.0),
-            e.rotation_deg.get(1).copied().unwrap_or(0.0),
-            e.rotation_deg.get(2).copied().unwrap_or(0.0),
-        ],
-        velocity: [
-            e.velocity.first().copied().unwrap_or(0.0),
-            e.velocity.get(1).copied().unwrap_or(0.0),
-            e.velocity.get(2).copied().unwrap_or(0.0),
-        ],
+        position: vec_to_array3(&e.position),
+        rotation_deg: vec_to_array3(&e.rotation_deg),
+        velocity: vec_to_array3(&e.velocity),
         groups: e.groups.clone(),
         state: e.state.clone(),
         visible: e.visible,
@@ -251,6 +231,17 @@ fn to_raw_entity(e: &EntityData) -> RawEntityData {
         physics: None,
         transform: None,
     }
+}
+
+fn perspective_json(
+    raw: &spectator_protocol::query::PerspectiveData,
+    persp: &Perspective,
+) -> serde_json::Value {
+    serde_json::json!({
+        "position": raw.position,
+        "facing": persp.facing,
+        "facing_deg": persp.facing_deg,
+    })
 }
 
 pub fn build_summary_response(
@@ -285,11 +276,7 @@ pub fn build_summary_response(
     serde_json::json!({
         "frame": raw.frame,
         "timestamp_ms": raw.timestamp_ms,
-        "perspective": {
-            "position": raw.perspective.position,
-            "facing": perspective.facing,
-            "facing_deg": perspective.facing_deg,
-        },
+        "perspective": perspective_json(&raw.perspective, perspective),
         "clusters": output_clusters,
         "total_nodes_tracked": total,
         "total_nodes_visible": visible,
@@ -315,7 +302,7 @@ pub fn build_standard_response(
     for (entity, rel) in entities {
         if is_static_class(&entity.class) {
             static_count += 1;
-            let cat = classify_static_category(&entity.class);
+            let cat = classify_static_category(&entity.class).to_string();
             let counter = static_categories
                 .entry(cat)
                 .or_insert(serde_json::json!(0));
@@ -338,11 +325,7 @@ pub fn build_standard_response(
             return serde_json::json!({
                 "frame": raw.frame,
                 "timestamp_ms": raw.timestamp_ms,
-                "perspective": {
-                    "position": raw.perspective.position,
-                    "facing": perspective.facing,
-                    "facing_deg": perspective.facing_deg,
-                },
+                "perspective": perspective_json(&raw.perspective, perspective),
                 "entities": dynamic_entities,
                 "static_summary": { "count": static_count, "categories": static_categories },
                 "pagination": pagination,
@@ -355,11 +338,7 @@ pub fn build_standard_response(
     serde_json::json!({
         "frame": raw.frame,
         "timestamp_ms": raw.timestamp_ms,
-        "perspective": {
-            "position": raw.perspective.position,
-            "facing": perspective.facing,
-            "facing_deg": perspective.facing_deg,
-        },
+        "perspective": perspective_json(&raw.perspective, perspective),
         "entities": dynamic_entities,
         "static_summary": { "count": static_count, "categories": static_categories },
         "budget": enforcer.report(),
@@ -407,11 +386,7 @@ pub fn build_full_response(
             return serde_json::json!({
                 "frame": raw.frame,
                 "timestamp_ms": raw.timestamp_ms,
-                "perspective": {
-                    "position": raw.perspective.position,
-                    "facing": perspective.facing,
-                    "facing_deg": perspective.facing_deg,
-                },
+                "perspective": perspective_json(&raw.perspective, perspective),
                 "entities": dynamic_entities,
                 "static_nodes": static_nodes,
                 "pagination": pagination,
@@ -424,11 +399,7 @@ pub fn build_full_response(
     serde_json::json!({
         "frame": raw.frame,
         "timestamp_ms": raw.timestamp_ms,
-        "perspective": {
-            "position": raw.perspective.position,
-            "facing": perspective.facing,
-            "facing_deg": perspective.facing_deg,
-        },
+        "perspective": perspective_json(&raw.perspective, perspective),
         "entities": dynamic_entities,
         "static_nodes": static_nodes,
         "budget": enforcer.report(),
@@ -480,34 +451,3 @@ pub fn build_expand_response(
     }))
 }
 
-pub fn is_static_class(class: &str) -> bool {
-    matches!(
-        class,
-        "StaticBody3D"
-            | "StaticBody2D"
-            | "CSGShape3D"
-            | "CSGBox3D"
-            | "CSGCylinder3D"
-            | "CSGMesh3D"
-            | "CSGPolygon3D"
-            | "CSGSphere3D"
-            | "CSGTorus3D"
-            | "CSGCombiner3D"
-            | "GridMap"
-            | "WorldEnvironment"
-            | "DirectionalLight3D"
-            | "OmniLight3D"
-            | "SpotLight3D"
-    )
-}
-
-pub fn classify_static_category(class: &str) -> String {
-    match class {
-        "StaticBody3D" | "StaticBody2D" => "collision".to_string(),
-        c if c.starts_with("CSG") => "csg".to_string(),
-        "GridMap" => "gridmap".to_string(),
-        "WorldEnvironment" => "environment".to_string(),
-        c if c.contains("Light") => "lights".to_string(),
-        _ => "other".to_string(),
-    }
-}
