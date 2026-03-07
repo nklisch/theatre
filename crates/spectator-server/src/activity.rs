@@ -190,6 +190,49 @@ pub fn recording_summary(params: &RecordingParams) -> String {
             let label = params.marker_label.as_deref().unwrap_or("(no label)");
             format!("Added marker: {label}")
         }
+        "snapshot_at" => {
+            let frame_info = if let Some(f) = params.at_frame {
+                format!("frame {f}")
+            } else if let Some(t) = params.at_time_ms {
+                format!("{t}ms")
+            } else {
+                "?".into()
+            };
+            let rec = params.recording_id.as_deref().unwrap_or("latest");
+            format!("Snapshot at {frame_info} in {rec}")
+        }
+        "query_range" => {
+            let from = params
+                .from_frame
+                .map(|f| f.to_string())
+                .unwrap_or("?".into());
+            let to = params
+                .to_frame
+                .map(|f| f.to_string())
+                .unwrap_or("?".into());
+            let node = params.node.as_deref().unwrap_or("?");
+            format!("Query range {from}-{to} for {node}")
+        }
+        "diff_frames" => {
+            let a = params
+                .frame_a
+                .map(|f| f.to_string())
+                .unwrap_or("?".into());
+            let b = params
+                .frame_b
+                .map(|f| f.to_string())
+                .unwrap_or("?".into());
+            format!("Diff frames {a} vs {b}")
+        }
+        "find_event" => {
+            let evt = params.event_type.as_deref().unwrap_or("?");
+            let filter = params.event_filter.as_deref().unwrap_or("");
+            if filter.is_empty() {
+                format!("Find events: {evt}")
+            } else {
+                format!("Find events: {evt} filter={filter}")
+            }
+        }
         other => format!("Recording: {other}"),
     }
 }

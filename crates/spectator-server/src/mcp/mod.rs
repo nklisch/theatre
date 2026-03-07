@@ -439,8 +439,16 @@ impl SpectatorServer {
         result
     }
 
-    /// Capture and manage play session recordings.
-    #[tool(description = "Capture and manage play session recordings. Actions: 'start' (begin recording with optional name and capture config), 'stop' (end recording, get metadata), 'status' (check recording state), 'list' (list saved recordings), 'delete' (remove a recording by recording_id), 'markers' (list markers in a recording by recording_id), 'add_marker' (add an agent marker to the active recording with marker_label).")]
+    /// Capture and analyze play session recordings.
+    #[tool(description = "Capture and analyze play session recordings. \
+        Capture: 'start' (begin recording), 'stop' (end recording), 'status' (check state), \
+        'list' (saved recordings), 'delete' (remove by recording_id), 'markers' (list markers), \
+        'add_marker' (agent marker). \
+        Analysis: 'snapshot_at' (spatial state at frame/time, requires at_frame or at_time_ms), \
+        'query_range' (search frame range with condition, requires node + from_frame + to_frame + condition), \
+        'diff_frames' (compare two frames, requires frame_a + frame_b), \
+        'find_event' (search events by type, requires event_type). \
+        Analysis defaults to most recent recording if recording_id is omitted.")]
     pub async fn recording(
         &self,
         Parameters(params): Parameters<recording::RecordingParams>,

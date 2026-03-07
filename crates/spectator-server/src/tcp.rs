@@ -52,6 +52,8 @@ pub struct SessionState {
     pub watch_engine: WatchEngine,
     /// Active session configuration (merged from TOML defaults + spatial_config overrides).
     pub config: SessionConfig,
+    /// Cached filesystem path to recording storage (resolved from addon).
+    pub recording_storage_path: Option<String>,
 }
 
 impl Default for SessionState {
@@ -66,6 +68,7 @@ impl Default for SessionState {
             delta_engine: DeltaEngine::new(),
             watch_engine: WatchEngine::new(),
             config: SessionConfig::default(),
+            recording_storage_path: None,
         }
     }
 }

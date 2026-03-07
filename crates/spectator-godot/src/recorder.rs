@@ -1,8 +1,8 @@
 use godot::obj::Gd;
 use godot::prelude::*;
 use rusqlite::Connection;
-use serde::{Deserialize, Serialize};
 use spectator_protocol::query::{DetailLevel, GetSnapshotDataParams, PerspectiveParam};
+use spectator_protocol::recording::FrameEntityData;
 
 use crate::collector::SpectatorCollector;
 
@@ -30,22 +30,7 @@ struct CapturedMarker {
     label: String,
 }
 
-// ---------------------------------------------------------------------------
-// Lightweight frame data for recording (subset of EntityData)
-// ---------------------------------------------------------------------------
-
-/// Compact entity snapshot serialized as MessagePack per frame.
-#[derive(Serialize, Deserialize)]
-struct FrameEntityData {
-    path: String,
-    class: String,
-    position: Vec<f64>,
-    rotation_deg: Vec<f64>,
-    velocity: Vec<f64>,
-    groups: Vec<String>,
-    visible: bool,
-    state: serde_json::Map<String, serde_json::Value>,
-}
+// FrameEntityData is defined in spectator-protocol and imported above.
 
 // ---------------------------------------------------------------------------
 // SpectatorRecorder GDExtension class
@@ -661,7 +646,7 @@ fn current_physics_frame() -> u64 {
     godot::classes::Engine::singleton().get_physics_frames()
 }
 
-fn globalize_path(godot_path: &str) -> String {
+pub(crate) fn globalize_path(godot_path: &str) -> String {
     godot::classes::ProjectSettings::singleton()
         .globalize_path(godot_path)
         .to_string()

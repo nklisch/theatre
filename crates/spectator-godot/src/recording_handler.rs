@@ -18,11 +18,18 @@ pub fn handle_recording_query(
         "recording_delete" => handle_delete(recorder, params),
         "recording_marker" => handle_marker(recorder, params),
         "recording_markers" => handle_get_markers(recorder, params),
+        "recording_resolve_path" => handle_resolve_path(params),
         _ => Err((
             "method_not_found".into(),
             format!("Unknown recording method: {method}"),
         )),
     }
+}
+
+fn handle_resolve_path(_params: &Value) -> Result<Value, (String, String)> {
+    let storage = "user://spectator_recordings/";
+    let globalized = crate::recorder::globalize_path(storage);
+    Ok(json!({ "path": globalized }))
 }
 
 fn handle_start(

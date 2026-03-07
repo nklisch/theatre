@@ -1,6 +1,7 @@
 mod activity;
 mod config;
 mod mcp;
+mod recording_analysis;
 mod server;
 mod tcp;
 
