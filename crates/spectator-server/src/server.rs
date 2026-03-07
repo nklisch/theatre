@@ -23,7 +23,20 @@ impl SpectatorServer {
 
     /// Push an activity log event to the addon (best-effort, non-blocking).
     pub(crate) async fn log_activity(&self, entry_type: &str, summary: &str, tool: &str) {
-        let event = crate::activity::build_activity_message(entry_type, summary, tool);
+        self.log_activity_with_meta(entry_type, summary, tool, None)
+            .await;
+    }
+
+    /// Push an activity log event with optional metadata (best-effort, non-blocking).
+    /// Use `meta` to include structured data — e.g. `{ "active_watches": N }` for watch events.
+    pub(crate) async fn log_activity_with_meta(
+        &self,
+        entry_type: &str,
+        summary: &str,
+        tool: &str,
+        meta: Option<serde_json::Value>,
+    ) {
+        let event = crate::activity::build_activity_message(entry_type, summary, tool, meta);
         let mut s = self.state.lock().await;
         if let Some(ref mut writer) = s.tcp_writer {
             let _ = spectator_protocol::codec::async_io::write_message(&mut writer.writer, &event)

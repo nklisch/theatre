@@ -421,7 +421,14 @@ impl SpectatorServer {
     ) -> Result<String, McpError> {
         let summary = crate::activity::watch_summary(&params);
         let result = watch::handle_spatial_watch(params, &self.state).await;
-        self.log_activity("watch", &summary, "spatial_watch").await;
+        let active_watches = self.state.lock().await.watch_engine.list().len() as u64;
+        self.log_activity_with_meta(
+            "watch",
+            &summary,
+            "spatial_watch",
+            Some(serde_json::json!({ "active_watches": active_watches })),
+        )
+        .await;
         result
     }
 

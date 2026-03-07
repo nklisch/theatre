@@ -154,7 +154,7 @@ func _on_recording_stopped(_id: String, _frames: int) -> void:
 	_set_recording_indicator(false)
 
 
-func _on_activity_received(entry_type: String, summary: String, _tool: String) -> void:
+func _on_activity_received(entry_type: String, summary: String, _tool: String, _active_watches: int) -> void:
 	if entry_type == "action":
 		_show_toast(summary)
 

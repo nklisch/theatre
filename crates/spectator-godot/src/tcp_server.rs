@@ -38,8 +38,9 @@ impl INode for SpectatorTCPServer {
 #[godot_api]
 impl SpectatorTCPServer {
     /// Emitted when an activity_log event is received from the server.
+    /// `active_watches` is the current watch count from meta (-1 if not provided).
     #[signal]
-    fn activity_received(entry_type: GString, summary: GString, tool_name: GString);
+    fn activity_received(entry_type: GString, summary: GString, tool_name: GString, active_watches: i64);
 
     /// Wire the collector into the TCP server.
     #[func]
@@ -284,12 +285,18 @@ impl SpectatorTCPServer {
                     .and_then(|v| v.as_str())
                     .unwrap_or("")
                     .to_string();
+                let active_watches: i64 = data
+                    .get("meta")
+                    .and_then(|m| m.get("active_watches"))
+                    .and_then(|v| v.as_i64())
+                    .unwrap_or(-1);
                 self.base_mut().emit_signal(
                     "activity_received",
                     &[
                         GString::from(entry_type.as_str()).to_variant(),
                         GString::from(summary.as_str()).to_variant(),
                         GString::from(tool_name.as_str()).to_variant(),
+                        active_watches.to_variant(),
                     ],
                 );
             }

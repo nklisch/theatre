@@ -296,7 +296,7 @@ The dock is a Godot scene (`.tscn`) with a `VBoxContainer` root. Layout follows 
 dock.tscn
 ├── VBoxContainer (root, "SpectatorDock")
 │   ├── HBoxContainer ("ConnectionSection")
-│   │   ├── TextureRect ("StatusDot")  — 12x12, colored circle
+│   │   ├── ColorRect ("StatusDot")  — 12x12, colored square indicator
 │   │   ├── Label ("StatusLabel")      — "Connected" / "Waiting..." / "Stopped"
 │   │   ├── HSeparator (spacer)
 │   │   └── Label ("PortLabel")        — "Port 9077"

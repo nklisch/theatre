@@ -234,14 +234,9 @@ func _delete_recording(recording_id: String) -> void:
 	_library_dirty = true
 
 
-func _on_activity_received(entry_type: String, summary: String, tool_name: String) -> void:
-	if entry_type == "watch":
-		if summary.begins_with("Watching "):
-			_active_watches += 1
-		elif summary.begins_with("Removed watch "):
-			_active_watches = max(0, _active_watches - 1)
-		elif summary == "Cleared all watches":
-			_active_watches = 0
+func _on_activity_received(entry_type: String, summary: String, tool_name: String, active_watches: int) -> void:
+	if active_watches >= 0:
+		_active_watches = active_watches
 	_add_activity_entry({
 		"entry_type": entry_type,
 		"summary": summary,
@@ -265,9 +260,9 @@ func _add_activity_entry(entry: Dictionary) -> void:
 		"action":
 			color = "yellow"
 		"watch":
-			color = "cyan"
+			color = "blue"
 		"recording":
-			color = "cyan"
+			color = "blue"
 		_:
 			color = "gray"
 

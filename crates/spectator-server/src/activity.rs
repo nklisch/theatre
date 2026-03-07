@@ -10,20 +10,33 @@ use crate::mcp::snapshot::SpatialSnapshotParams;
 use crate::mcp::watch::SpatialWatchParams;
 
 /// Build an activity_log Event message to push to the addon.
-pub fn build_activity_message(entry_type: &str, summary: &str, tool: &str) -> Message {
+///
+/// `meta` is an optional JSON object included as a top-level `"meta"` field.
+/// Watch events use `meta: { "active_watches": N }` so the dock can display
+/// the authoritative watch count without parsing summary strings.
+pub fn build_activity_message(
+    entry_type: &str,
+    summary: &str,
+    tool: &str,
+    meta: Option<serde_json::Value>,
+) -> Message {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs_f64();
 
+    let mut data = json!({
+        "entry_type": entry_type,
+        "summary": summary,
+        "tool": tool,
+        "timestamp": timestamp,
+    });
+    if let (Some(m), Some(obj)) = (meta, data.as_object_mut()) {
+        obj.insert("meta".into(), m);
+    }
     Message::Event {
         event: "activity_log".to_string(),
-        data: json!({
-            "entry_type": entry_type,
-            "summary": summary,
-            "tool": tool,
-            "timestamp": timestamp,
-        }),
+        data,
     }
 }
 
