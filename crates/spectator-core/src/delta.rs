@@ -292,7 +292,7 @@ fn detect_state_changes(prev: &EntitySnapshot, curr: &EntitySnapshot) -> Option<
 }
 
 /// Compare two JSON values with float thresholds.
-pub fn values_equal(a: &serde_json::Value, b: &serde_json::Value) -> bool {
+pub(crate) fn values_equal(a: &serde_json::Value, b: &serde_json::Value) -> bool {
     match (a, b) {
         (serde_json::Value::Number(a), serde_json::Value::Number(b)) => {
             match (a.as_f64(), b.as_f64()) {

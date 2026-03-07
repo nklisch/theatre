@@ -48,7 +48,7 @@ impl Default for ClusterStrategy {
 /// cluster.
 ///
 /// `entities` must already have `rel` data computed (distances, bearings).
-pub fn cluster_by_group(
+pub(crate) fn cluster_by_group(
     entities: &[(RawEntityData, RelativePosition)],
 ) -> Vec<Cluster> {
     let mut group_map: HashMap<String, Vec<(&RawEntityData, &RelativePosition)>> = HashMap::new();
@@ -141,7 +141,7 @@ pub fn cluster_entities(
 }
 
 /// Cluster by Godot class name.
-pub fn cluster_by_class(
+pub(crate) fn cluster_by_class(
     entities: &[(RawEntityData, RelativePosition)],
 ) -> Vec<Cluster> {
     let mut class_map: HashMap<String, Vec<(&RawEntityData, &RelativePosition)>> = HashMap::new();
@@ -177,7 +177,7 @@ pub fn cluster_by_class(
 }
 
 /// Cluster by spatial proximity (simple nearest-seed algorithm).
-pub fn cluster_by_proximity(
+pub(crate) fn cluster_by_proximity(
     entities: &[(RawEntityData, RelativePosition)],
 ) -> Vec<Cluster> {
     let dynamic: Vec<(&RawEntityData, &RelativePosition)> = entities
@@ -294,7 +294,7 @@ fn cluster_none(
 ///
 /// Examines common state properties (e.g., "state", "alert_level")
 /// and counts distinct values. Example output: "2 idle, 1 patrol".
-pub fn generate_cluster_summary(
+pub(crate) fn generate_cluster_summary(
     entities: &[&RawEntityData],
 ) -> Option<String> {
     if entities.is_empty() {

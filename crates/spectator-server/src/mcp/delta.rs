@@ -3,24 +3,22 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 use spectator_core::{
-    budget::{estimate_tokens, resolve_budget},
-    delta::EntitySnapshot,
+    budget::resolve_budget,
+    delta::{DeltaResult, EntitySnapshot},
     index::{IndexedEntity, SpatialIndex},
     types::vec_to_array3,
+    watch::WatchTrigger,
 };
 use spectator_protocol::query::{DetailLevel, GetSnapshotDataParams, PerspectiveParam};
 
-use crate::tcp::query_addon;
+use crate::tcp::{get_config, query_addon};
 
-use super::{deserialize_response, inject_budget, serialize_params, serialize_response};
+use super::{deserialize_response, finalize_response, serialize_params};
 use super::snapshot::to_entity_snapshot;
 
 /// MCP parameters for the spatial_delta tool.
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct SpatialDeltaParams {
-    /// Frame to diff against. If omitted, diffs against the last query.
-    pub since_frame: Option<u64>,
-
     /// Perspective type: "camera" or "point". Default: "camera".
     #[serde(default = "default_perspective")]
     pub perspective: String,
@@ -44,6 +42,48 @@ fn default_perspective() -> String {
 }
 fn default_radius() -> f64 {
     50.0
+}
+
+/// Build the shared delta JSON object (from_frame, to_frame, and the 5 optional
+/// change categories). Used by both spatial_delta and spatial_action return_delta.
+pub fn build_delta_json(delta: &DeltaResult, watch_triggers: &[WatchTrigger]) -> serde_json::Value {
+    let mut out = serde_json::json!({
+        "from_frame": delta.from_frame,
+        "to_frame": delta.to_frame,
+    });
+    if let serde_json::Value::Object(ref mut map) = out {
+        if !delta.moved.is_empty() {
+            map.insert(
+                "moved".into(),
+                serde_json::to_value(&delta.moved).unwrap_or_default(),
+            );
+        }
+        if !delta.state_changed.is_empty() {
+            map.insert(
+                "state_changed".into(),
+                serde_json::to_value(&delta.state_changed).unwrap_or_default(),
+            );
+        }
+        if !delta.entered.is_empty() {
+            map.insert(
+                "entered".into(),
+                serde_json::to_value(&delta.entered).unwrap_or_default(),
+            );
+        }
+        if !delta.exited.is_empty() {
+            map.insert(
+                "exited".into(),
+                serde_json::to_value(&delta.exited).unwrap_or_default(),
+            );
+        }
+        if !watch_triggers.is_empty() {
+            map.insert(
+                "watch_triggers".into(),
+                serde_json::to_value(watch_triggers).unwrap_or_default(),
+            );
+        }
+    }
+    out
 }
 
 pub async fn handle_spatial_delta(
@@ -75,10 +115,7 @@ pub async fn handle_spatial_delta(
     };
 
     // 3. Get config and query addon for current state
-    let config = {
-        let s = state.lock().await;
-        s.config.clone()
-    };
+    let config = get_config(state).await;
 
     let query_params = GetSnapshotDataParams {
         perspective: perspective_param,
@@ -142,44 +179,10 @@ pub async fn handle_spatial_delta(
         (delta, triggers, events)
     };
 
-    // 6. Build response — omit empty categories
-    let mut response = serde_json::json!({
-        "from_frame": delta_result.from_frame,
-        "to_frame": delta_result.to_frame,
-        "static_changed": false,
-    });
-
+    // 6. Build response using shared helper, then add delta-only fields
+    let mut response = build_delta_json(&delta_result, &watch_triggers);
     if let serde_json::Value::Object(ref mut map) = response {
-        if !delta_result.moved.is_empty() {
-            map.insert(
-                "moved".into(),
-                serde_json::to_value(&delta_result.moved).unwrap_or_default(),
-            );
-        }
-        if !delta_result.state_changed.is_empty() {
-            map.insert(
-                "state_changed".into(),
-                serde_json::to_value(&delta_result.state_changed).unwrap_or_default(),
-            );
-        }
-        if !delta_result.entered.is_empty() {
-            map.insert(
-                "entered".into(),
-                serde_json::to_value(&delta_result.entered).unwrap_or_default(),
-            );
-        }
-        if !delta_result.exited.is_empty() {
-            map.insert(
-                "exited".into(),
-                serde_json::to_value(&delta_result.exited).unwrap_or_default(),
-            );
-        }
-        if !watch_triggers.is_empty() {
-            map.insert(
-                "watch_triggers".into(),
-                serde_json::to_value(&watch_triggers).unwrap_or_default(),
-            );
-        }
+        map.insert("static_changed".into(), serde_json::json!(false));
 
         // Include buffered signal events
         let signal_entries: Vec<serde_json::Value> = signals_emitted
@@ -206,11 +209,7 @@ pub async fn handle_spatial_delta(
 
     // 7. Budget
     let budget_limit = resolve_budget(params.token_budget, 1000, config.token_hard_cap);
-    let json_bytes = serde_json::to_vec(&response).unwrap_or_default().len();
-    let used = estimate_tokens(json_bytes);
-    inject_budget(&mut response, used, budget_limit, config.token_hard_cap);
-
-    serialize_response(&response)
+    finalize_response(&mut response, budget_limit, config.token_hard_cap)
 }
 
 #[cfg(test)]
@@ -223,6 +222,23 @@ mod tests {
         let params: SpatialDeltaParams = serde_json::from_str(json).unwrap();
         assert_eq!(params.perspective, "camera");
         assert_eq!(params.radius, 50.0);
-        assert!(params.since_frame.is_none());
+    }
+
+    #[test]
+    fn build_delta_json_empty() {
+        use spectator_core::delta::DeltaResult;
+        let delta = DeltaResult {
+            from_frame: 1,
+            to_frame: 2,
+            moved: vec![],
+            state_changed: vec![],
+            entered: vec![],
+            exited: vec![],
+        };
+        let json = build_delta_json(&delta, &[]);
+        assert_eq!(json["from_frame"], 1);
+        assert_eq!(json["to_frame"], 2);
+        assert!(json.get("moved").is_none());
+        assert!(json.get("watch_triggers").is_none());
     }
 }

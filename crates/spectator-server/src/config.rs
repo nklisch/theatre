@@ -6,12 +6,11 @@ use std::path::Path;
 
 /// TOML file shape — maps to the documented spectator.toml format.
 /// All sections and fields are optional.
+// [recording] and [display] sections parsed when M7 lands
 #[derive(Debug, Default, Deserialize)]
 pub struct SpectatorToml {
     pub connection: Option<ConnectionConfig>,
     pub tracking: Option<TrackingConfig>,
-    pub recording: Option<RecordingConfig>,
-    pub display: Option<DisplayConfig>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -28,19 +27,6 @@ pub struct TrackingConfig {
     pub bearing_format: Option<BearingFormat>,
     pub expose_internals: Option<bool>,
     pub poll_interval: Option<u32>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-pub struct RecordingConfig {
-    pub storage_path: Option<String>,
-    pub max_frames: Option<u32>,
-    pub capture_interval: Option<u32>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-pub struct DisplayConfig {
-    pub show_agent_notifications: Option<bool>,
-    pub show_recording_indicator: Option<bool>,
 }
 
 /// Load `spectator.toml` from a directory. Returns `SessionConfig` with the

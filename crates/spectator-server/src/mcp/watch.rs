@@ -2,12 +2,11 @@ use rmcp::model::ErrorData as McpError;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
-use spectator_core::{
-    budget::estimate_tokens,
-    watch::{ConditionOperator, TrackCategory, WatchCondition},
-};
+use spectator_core::watch::{ConditionOperator, TrackCategory, WatchCondition};
 
-use super::{inject_budget, serialize_response};
+use crate::tcp::get_config;
+
+use super::finalize_response;
 
 /// MCP parameters for the spatial_watch tool.
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -79,14 +78,26 @@ fn parse_track(s: &str) -> Result<TrackCategory, McpError> {
     }
 }
 
+fn format_conditions(conditions: &[WatchCondition]) -> String {
+    if conditions.is_empty() {
+        "none".to_string()
+    } else {
+        conditions
+            .iter()
+            .map(|c| {
+                let val = c.value.as_ref().map(|v| v.to_string()).unwrap_or_default();
+                format!("{} {:?} {}", c.property, c.operator, val)
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
 pub async fn handle_spatial_watch(
     params: SpatialWatchParams,
     state: &std::sync::Arc<tokio::sync::Mutex<crate::tcp::SessionState>>,
 ) -> Result<String, McpError> {
-    let hard_cap = {
-        let s = state.lock().await;
-        s.config.token_hard_cap
-    };
+    let hard_cap = get_config(state).await.token_hard_cap;
 
     match params.action.as_str() {
         "add" => {
@@ -117,36 +128,14 @@ pub async fn handle_spatial_watch(
                 s.watch_engine.add(spec.node, conditions, track)
             };
 
-            let conditions_desc = if watch.conditions.is_empty() {
-                "none".to_string()
-            } else {
-                watch
-                    .conditions
-                    .iter()
-                    .map(|c| {
-                        let val = c
-                            .value
-                            .as_ref()
-                            .map(|v| v.to_string())
-                            .unwrap_or_default();
-                        format!("{} {:?} {}", c.property, c.operator, val)
-                    })
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            };
-
             let mut response = serde_json::json!({
                 "watch_id": watch.id,
                 "watching": watch.node,
-                "conditions": conditions_desc,
+                "conditions": format_conditions(&watch.conditions),
                 "tracking": watch.track,
             });
 
-            let json_bytes = serde_json::to_vec(&response).unwrap_or_default().len();
-            let used = estimate_tokens(json_bytes);
-            inject_budget(&mut response, used, 200, hard_cap);
-
-            serialize_response(&response)
+            finalize_response(&mut response, 200, hard_cap)
         }
         "remove" => {
             let watch_id = params.watch_id.ok_or_else(|| {
@@ -163,11 +152,7 @@ pub async fn handle_spatial_watch(
                 "removed": if removed { 1 } else { 0 },
             });
 
-            let json_bytes = serde_json::to_vec(&response).unwrap_or_default().len();
-            let used = estimate_tokens(json_bytes);
-            inject_budget(&mut response, used, 200, hard_cap);
-
-            serialize_response(&response)
+            finalize_response(&mut response, 200, hard_cap)
         }
         "list" => {
             let watches = {
@@ -176,26 +161,10 @@ pub async fn handle_spatial_watch(
                     .list()
                     .iter()
                     .map(|w| {
-                        let conditions_desc = if w.conditions.is_empty() {
-                            "none".to_string()
-                        } else {
-                            w.conditions
-                                .iter()
-                                .map(|c| {
-                                    let val = c
-                                        .value
-                                        .as_ref()
-                                        .map(|v| v.to_string())
-                                        .unwrap_or_default();
-                                    format!("{} {:?} {}", c.property, c.operator, val)
-                                })
-                                .collect::<Vec<_>>()
-                                .join(", ")
-                        };
                         serde_json::json!({
                             "id": w.id,
                             "node": w.node,
-                            "conditions": conditions_desc,
+                            "conditions": format_conditions(&w.conditions),
                             "tracking": w.track,
                         })
                     })
@@ -206,11 +175,7 @@ pub async fn handle_spatial_watch(
                 "watches": watches,
             });
 
-            let json_bytes = serde_json::to_vec(&response).unwrap_or_default().len();
-            let used = estimate_tokens(json_bytes);
-            inject_budget(&mut response, used, 200, hard_cap);
-
-            serialize_response(&response)
+            finalize_response(&mut response, 200, hard_cap)
         }
         "clear" => {
             let removed = {
@@ -223,11 +188,7 @@ pub async fn handle_spatial_watch(
                 "removed": removed,
             });
 
-            let json_bytes = serde_json::to_vec(&response).unwrap_or_default().len();
-            let used = estimate_tokens(json_bytes);
-            inject_budget(&mut response, used, 200, hard_cap);
-
-            serialize_response(&response)
+            finalize_response(&mut response, 200, hard_cap)
         }
         other => Err(McpError::invalid_params(
             format!("Unknown action '{other}'. Valid: add, remove, list, clear"),
@@ -268,5 +229,22 @@ mod tests {
     #[test]
     fn parse_track_invalid() {
         assert!(parse_track("everything").is_err());
+    }
+
+    #[test]
+    fn format_conditions_empty() {
+        assert_eq!(format_conditions(&[]), "none");
+    }
+
+    #[test]
+    fn format_conditions_single() {
+        let conds = vec![WatchCondition {
+            property: "health".to_string(),
+            operator: ConditionOperator::Lt,
+            value: Some(serde_json::json!(20.0)),
+        }];
+        let s = format_conditions(&conds);
+        assert!(s.contains("health"));
+        assert!(s.contains("20"));
     }
 }

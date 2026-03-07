@@ -71,6 +71,9 @@ impl Default for SessionState {
 }
 
 /// Information received from the addon during handshake.
+/// TODO: Use scene_dimensions for 2D/3D spatial index selection,
+///       expose via spatial_config "view current" output.
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct HandshakeInfo {
     pub spectator_version: String,
@@ -291,6 +294,11 @@ pub async fn query_addon(
         QueryResult::Ok(data) => Ok(data),
         QueryResult::Err { code, message } => Err(make_spectator_error(&code, &message)),
     }
+}
+
+/// Get the current session config (immutable clone).
+pub async fn get_config(state: &Arc<Mutex<SessionState>>) -> SessionConfig {
+    state.lock().await.config.clone()
 }
 
 /// Map Spectator error codes to McpError.

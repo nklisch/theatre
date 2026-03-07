@@ -23,7 +23,7 @@ use spectator_protocol::query::{
 };
 
 use crate::server::SpectatorServer;
-use crate::tcp::query_addon;
+use crate::tcp::{get_config, query_addon};
 
 // ---------------------------------------------------------------------------
 // Shared MCP helpers
@@ -62,6 +62,19 @@ fn inject_budget(response: &mut serde_json::Value, used: u32, limit: u32, hard_c
         );
     }
 }
+
+/// Estimate token usage, inject budget block, and serialize response to JSON string.
+fn finalize_response(
+    response: &mut serde_json::Value,
+    budget_limit: u32,
+    hard_cap: u32,
+) -> Result<String, McpError> {
+    let json_bytes = serde_json::to_vec(response).unwrap_or_default().len();
+    let used = spectator_core::budget::estimate_tokens(json_bytes);
+    inject_budget(response, used, budget_limit, hard_cap);
+    serialize_response(response)
+}
+
 use action::{SpatialActionParams, build_action_request};
 use config::{SpatialConfigParams, handle_spatial_config};
 use delta::SpatialDeltaParams;
@@ -95,10 +108,7 @@ impl SpectatorServer {
         let perspective_param = build_perspective_param(&params)?;
 
         // 2b. Get current session config
-        let config = {
-            let s = self.state.lock().await;
-            s.config.clone()
-        };
+        let config = get_config(&self.state).await;
 
         // 3. Query addon for raw data
         let query_params = GetSnapshotDataParams {
@@ -218,10 +228,7 @@ impl SpectatorServer {
         Parameters(params): Parameters<SpatialInspectParams>,
     ) -> Result<String, McpError> {
         let activity_summary = crate::activity::inspect_summary(&params.node);
-        let config = {
-            let s = self.state.lock().await;
-            s.config.clone()
-        };
+        let config = get_config(&self.state).await;
 
         let include = parse_include(&params.include)?;
 
@@ -249,12 +256,8 @@ impl SpectatorServer {
             }
         }
 
-        let json_bytes = serde_json::to_vec(&response).unwrap_or_default().len();
-        let used = spectator_core::budget::estimate_tokens(json_bytes);
         let budget_limit = resolve_budget(None, 1500, config.token_hard_cap);
-        inject_budget(&mut response, used, budget_limit, config.token_hard_cap);
-
-        let result = serialize_response(&response);
+        let result = finalize_response(&mut response, budget_limit, config.token_hard_cap);
         self.log_activity("query", &activity_summary, "spatial_inspect").await;
         result
     }
@@ -272,19 +275,11 @@ impl SpectatorServer {
         let data = query_addon(&self.state, "get_scene_tree", serialize_params(&query_params)?)
             .await?;
 
-        let config = {
-            let s = self.state.lock().await;
-            s.config.clone()
-        };
+        let config = get_config(&self.state).await;
 
-        let json_bytes = serde_json::to_vec(&data).unwrap_or_default().len();
-        let used = spectator_core::budget::estimate_tokens(json_bytes);
         let budget_limit = resolve_budget(params.token_budget, 1500, config.token_hard_cap);
-
         let mut response = data;
-        inject_budget(&mut response, used, budget_limit, config.token_hard_cap);
-
-        let result = serialize_response(&response);
+        let result = finalize_response(&mut response, budget_limit, config.token_hard_cap);
         self.log_activity("query", &activity_summary, "scene_tree").await;
         result
     }
@@ -300,10 +295,7 @@ impl SpectatorServer {
         Parameters(params): Parameters<SpatialActionParams>,
     ) -> Result<String, McpError> {
         let activity_summary = crate::activity::action_summary(&params);
-        let config = {
-            let s = self.state.lock().await;
-            s.config.clone()
-        };
+        let config = get_config(&self.state).await;
 
         let action_request = build_action_request(&params)?;
         let data = query_addon(
@@ -356,7 +348,7 @@ impl SpectatorServer {
                                 .collect();
 
                         let mut s = self.state.lock().await;
-                        let delta =
+                        let delta_result =
                             s.delta_engine.compute_delta(&current_snapshots, raw_data.frame);
                         let triggers = s.watch_engine.evaluate(
                             s.delta_engine.last_snapshot_map(),
@@ -368,44 +360,7 @@ impl SpectatorServer {
                         s.delta_engine
                             .store_snapshot(raw_data.frame, current_snapshots);
 
-                        // Build inline delta
-                        let mut delta_json = serde_json::json!({
-                            "from_frame": delta.from_frame,
-                            "to_frame": delta.to_frame,
-                        });
-                        if let serde_json::Value::Object(ref mut map) = delta_json {
-                            if !delta.moved.is_empty() {
-                                map.insert(
-                                    "moved".into(),
-                                    serde_json::to_value(&delta.moved).unwrap_or_default(),
-                                );
-                            }
-                            if !delta.state_changed.is_empty() {
-                                map.insert(
-                                    "state_changed".into(),
-                                    serde_json::to_value(&delta.state_changed).unwrap_or_default(),
-                                );
-                            }
-                            if !delta.entered.is_empty() {
-                                map.insert(
-                                    "entered".into(),
-                                    serde_json::to_value(&delta.entered).unwrap_or_default(),
-                                );
-                            }
-                            if !delta.exited.is_empty() {
-                                map.insert(
-                                    "exited".into(),
-                                    serde_json::to_value(&delta.exited).unwrap_or_default(),
-                                );
-                            }
-                            if !triggers.is_empty() {
-                                map.insert(
-                                    "watch_triggers".into(),
-                                    serde_json::to_value(&triggers).unwrap_or_default(),
-                                );
-                            }
-                        }
-
+                        let delta_json = delta::build_delta_json(&delta_result, &triggers);
                         if let serde_json::Value::Object(ref mut map) = response {
                             map.insert("delta".into(), delta_json);
                         }
@@ -446,7 +401,7 @@ impl SpectatorServer {
 
     /// See what changed since the last query. Returns moved entities, state
     /// changes, new/removed nodes, emitted signals, and watch triggers.
-    #[tool(description = "See what changed since the last query. Returns moved entities, state changes, new/removed nodes, and watch triggers. Use after spatial_snapshot or spatial_action to see effects. Use since_frame to diff against a specific frame.")]
+    #[tool(description = "See what changed since the last query. Returns moved entities, state changes, new/removed nodes, and watch triggers. Use after spatial_snapshot or spatial_action to see effects.")]
     pub async fn spatial_delta(
         &self,
         Parameters(params): Parameters<SpatialDeltaParams>,

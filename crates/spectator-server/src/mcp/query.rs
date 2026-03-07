@@ -6,17 +6,17 @@ use tokio::sync::Mutex;
 
 use spectator_core::{
     bearing::{self, perspective_from_forward, perspective_from_yaw},
-    budget::{estimate_tokens, resolve_budget},
+    budget::resolve_budget,
     index::NearestResult,
-    types::{vec_to_array3, Position3},
+    types::{vec_to_array3, Perspective, Position3},
 };
 use spectator_protocol::query::{
     NavPathResponse, QueryOrigin, RaycastResponse, ResolveNodeResponse, SpatialQueryRequest,
 };
 
-use crate::tcp::{query_addon, SessionState};
+use crate::tcp::{get_config, query_addon, SessionState};
 
-use super::{deserialize_response, inject_budget, serialize_params, serialize_response};
+use super::{deserialize_response, finalize_response, serialize_params};
 
 /// MCP parameters for the spatial_query tool.
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -105,26 +105,33 @@ pub async fn resolve_origin(
     }
 }
 
+/// Build a perspective from a position and optional forward vector.
+fn build_perspective_for_query(pos: Position3, forward: Option<[f64; 3]>) -> Perspective {
+    forward
+        .map(|fwd| perspective_from_forward(pos, fwd))
+        .unwrap_or_else(|| perspective_from_yaw(pos, 0.0))
+}
+
+/// Build a single JSON entry for a nearest/radius query result.
+fn query_result_entry(r: &NearestResult, perspective: &Perspective) -> serde_json::Value {
+    let rel = bearing::relative_position(perspective, r.position, false);
+    serde_json::json!({
+        "path": r.path,
+        "dist": (r.distance * 10.0).round() / 10.0,
+        "bearing": rel.bearing,
+        "class": r.class,
+    })
+}
+
 fn build_nearest_response(
     results: &[NearestResult],
     from_pos: Position3,
     from_forward: Option<[f64; 3]>,
 ) -> serde_json::Value {
-    let perspective = from_forward
-        .map(|fwd| perspective_from_forward(from_pos, fwd))
-        .unwrap_or_else(|| perspective_from_yaw(from_pos, 0.0));
-
+    let perspective = build_perspective_for_query(from_pos, from_forward);
     let entries: Vec<serde_json::Value> = results
         .iter()
-        .map(|r| {
-            let rel = bearing::relative_position(&perspective, r.position, false);
-            serde_json::json!({
-                "path": r.path,
-                "dist": (r.distance * 10.0).round() / 10.0,
-                "bearing": rel.bearing,
-                "class": r.class,
-            })
-        })
+        .map(|r| query_result_entry(r, &perspective))
         .collect();
 
     serde_json::json!({
@@ -139,21 +146,10 @@ fn build_radius_response(
     from_forward: Option<[f64; 3]>,
     radius: f64,
 ) -> serde_json::Value {
-    let perspective = from_forward
-        .map(|fwd| perspective_from_forward(from_pos, fwd))
-        .unwrap_or_else(|| perspective_from_yaw(from_pos, 0.0));
-
+    let perspective = build_perspective_for_query(from_pos, from_forward);
     let entries: Vec<serde_json::Value> = results
         .iter()
-        .map(|r| {
-            let rel = bearing::relative_position(&perspective, r.position, false);
-            serde_json::json!({
-                "path": r.path,
-                "dist": (r.distance * 10.0).round() / 10.0,
-                "bearing": rel.bearing,
-                "class": r.class,
-            })
-        })
+        .map(|r| query_result_entry(r, &perspective))
         .collect();
 
     serde_json::json!({
@@ -174,14 +170,10 @@ pub async fn build_relationship_response(
 ) -> Result<serde_json::Value, McpError> {
     let distance = bearing::distance(from_pos, to_pos);
 
-    let persp_a = from_forward
-        .map(|fwd| perspective_from_forward(from_pos, fwd))
-        .unwrap_or_else(|| perspective_from_yaw(from_pos, 0.0));
+    let persp_a = build_perspective_for_query(from_pos, from_forward);
     let rel_a_to_b = bearing::relative_position(&persp_a, to_pos, false);
 
-    let persp_b = to_forward
-        .map(|fwd| perspective_from_forward(to_pos, fwd))
-        .unwrap_or_else(|| perspective_from_yaw(to_pos, 0.0));
+    let persp_b = build_perspective_for_query(to_pos, to_forward);
     let rel_b_to_a = bearing::relative_position(&persp_b, from_pos, false);
 
     // Raycast for line of sight
@@ -246,10 +238,7 @@ pub async fn handle_spatial_query(
     params: SpatialQueryParams,
     state: &Arc<Mutex<SessionState>>,
 ) -> Result<String, McpError> {
-    let config = {
-        let s = state.lock().await;
-        s.config.clone()
-    };
+    let config = get_config(state).await;
 
     let from_origin = parse_origin(&params.from)?;
     let groups = params.groups.as_deref().unwrap_or(&[]);
@@ -353,12 +342,7 @@ pub async fn handle_spatial_query(
         }
     }
 
-    // Inject budget
-    let json_bytes = serde_json::to_vec(&response).unwrap_or_default().len();
-    let used = estimate_tokens(json_bytes);
-    inject_budget(&mut response, used, budget_limit, config.token_hard_cap);
-
-    serialize_response(&response)
+    finalize_response(&mut response, budget_limit, config.token_hard_cap)
 }
 
 #[cfg(test)]

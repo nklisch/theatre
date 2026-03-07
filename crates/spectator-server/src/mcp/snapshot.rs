@@ -48,9 +48,6 @@ pub struct SpatialSnapshotParams {
     /// Soft token budget override.
     pub token_budget: Option<u32>,
 
-    /// Pagination cursor from a previous truncated response.
-    pub cursor: Option<String>,
-
     /// Expand a cluster from a previous summary response.
     pub expand: Option<String>,
 }
@@ -254,6 +251,10 @@ pub fn build_output_entity(entity: &EntityData, rel: &RelativePosition, full: bo
     }
 }
 
+fn is_entity_static(entity: &EntityData, config: &SessionConfig) -> bool {
+    config.matches_static_pattern(&entity.path) || is_static_class(&entity.class)
+}
+
 /// Convert EntityData to RawEntityData for use with the clustering engine.
 fn to_raw_entity(e: &EntityData, config: &SessionConfig) -> RawEntityData {
     RawEntityData {
@@ -265,7 +266,7 @@ fn to_raw_entity(e: &EntityData, config: &SessionConfig) -> RawEntityData {
         groups: e.groups.clone(),
         state: e.state.clone(),
         visible: e.visible,
-        is_static: config.matches_static_pattern(&e.path) || is_static_class(&e.class),
+        is_static: is_entity_static(e, config),
         children: Vec::new(),
         script: e.script.clone(),
         signals_recent: e
@@ -348,8 +349,7 @@ pub fn build_standard_response(
     let total = entities.len();
 
     for (entity, rel) in entities {
-        let entity_is_static = config.matches_static_pattern(&entity.path) || is_static_class(&entity.class);
-        if entity_is_static {
+        if is_entity_static(entity, config) {
             static_count += 1;
             let cat = classify_static_category(&entity.class).to_string();
             let counter = static_categories
@@ -410,8 +410,7 @@ pub fn build_full_response(
     let total = entities.len();
 
     for (entity, rel) in entities {
-        let entity_is_static = config.matches_static_pattern(&entity.path) || is_static_class(&entity.class);
-        if entity_is_static {
+        if is_entity_static(entity, config) {
             let node = serde_json::json!({
                 "path": entity.path,
                 "class": entity.class,
