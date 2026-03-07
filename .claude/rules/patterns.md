@@ -1,0 +1,9 @@
+# Code Patterns Index
+
+- **mcp-tool-handler**: `#[tool_router]` impl + `Parameters<T>` extraction + `query_addon` + `serialize_params`/`deserialize_response`/`finalize_response` helpers + `log_activity` at end → [mcp-tool-handler.md](.claude/skills/patterns/mcp-tool-handler.md)
+- **tcp-length-prefix**: All TCP messages framed as `[4-byte BE u32 length][JSON]`; codec module has sync and `#[cfg(feature="async")]` async variants; used in both server and godot crates → [tcp-length-prefix.md](.claude/skills/patterns/tcp-length-prefix.md)
+- **arc-mutex-state**: `Arc<Mutex<SessionState>>` shared between background TCP task and MCP handlers; locks released before `await`; request-response matching via `oneshot` channels stored in state → [arc-mutex-state.md](.claude/skills/patterns/arc-mutex-state.md)
+- **gdext-class**: `#[derive(GodotClass)]` + `#[class(base=Node)]` + `#[godot_api] impl INode` for lifecycle + `#[godot_api] impl T` for `#[func]`/`#[signal]` exports; `Gd<T>` for cross-class refs → [gdext-class.md](.claude/skills/patterns/gdext-class.md)
+- **serde-tagged-enum**: Protocol enums use `#[serde(tag="type")]` with explicit `#[serde(rename="snake_case")]` per variant; internal enums use `#[serde(rename_all="snake_case")]` → [serde-tagged-enum.md](.claude/skills/patterns/serde-tagged-enum.md)
+- **error-layering**: `CodecError` (library, Display+Error impl) → `anyhow::Result` (background tasks/main) → `McpError` (tool handlers, `internal_error`/`invalid_params`); no `.unwrap()` in library code → [error-layering.md](.claude/skills/patterns/error-layering.md)
+- **inline-test-fixtures**: `#[cfg(test)] mod tests` co-located in source file; reusable test data via small builder functions (`fn entity(...)`, `fn make_entity(...)`) not frameworks; file I/O tests use `tempfile::TempDir` → [inline-test-fixtures.md](.claude/skills/patterns/inline-test-fixtures.md)
