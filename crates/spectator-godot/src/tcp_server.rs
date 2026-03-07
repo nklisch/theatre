@@ -6,6 +6,7 @@ use std::io::ErrorKind;
 use std::net::{TcpListener, TcpStream};
 
 use crate::collector::SpectatorCollector;
+use crate::recorder::SpectatorRecorder;
 
 #[derive(GodotClass)]
 #[class(base = Node)]
@@ -16,6 +17,7 @@ pub struct SpectatorTCPServer {
     port: i32,
     handshake_completed: bool,
     collector: Option<Gd<SpectatorCollector>>,
+    recorder: Option<Gd<SpectatorRecorder>>,
 }
 
 #[godot_api]
@@ -28,6 +30,7 @@ impl INode for SpectatorTCPServer {
             port: 9077,
             handshake_completed: false,
             collector: None,
+            recorder: None,
         }
     }
 }
@@ -42,6 +45,12 @@ impl SpectatorTCPServer {
     #[func]
     pub fn set_collector(&mut self, collector: Gd<SpectatorCollector>) {
         self.collector = Some(collector);
+    }
+
+    /// Wire the recorder into the TCP server.
+    #[func]
+    pub fn set_recorder(&mut self, recorder: Gd<SpectatorRecorder>) {
+        self.recorder = Some(recorder);
     }
 
     /// Returns "connected", "waiting", or "stopped".
@@ -224,7 +233,23 @@ impl SpectatorTCPServer {
                 self.disconnect_client();
             }
             Message::Query { id, method, params } => {
-                if let Some(ref collector) = self.collector {
+                if method.starts_with("recording_") {
+                    let response_msg = if let Some(ref mut recorder) = self.recorder {
+                        match crate::recording_handler::handle_recording_query(
+                            recorder, &method, &params,
+                        ) {
+                            Ok(data) => Message::Response { id, data },
+                            Err((code, message)) => Message::Error { id, code, message },
+                        }
+                    } else {
+                        Message::Error {
+                            id,
+                            code: "internal_error".to_string(),
+                            message: "Recorder not available".to_string(),
+                        }
+                    };
+                    self.send_response(response_msg);
+                } else if let Some(ref collector) = self.collector {
                     let response = crate::query_handler::handle_query(
                         id,
                         &method,

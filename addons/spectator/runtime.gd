@@ -5,11 +5,13 @@ static var instance: Node = null
 
 var tcp_server: SpectatorTCPServer
 var collector: SpectatorCollector
+var recorder: SpectatorRecorder
 
 var _overlay: CanvasLayer
 var _pause_label: Label
 var _toast_container: VBoxContainer
 var _toasts: Array[Control] = []
+var _recording_dot: ColorRect
 
 const MAX_TOASTS := 3
 const TOAST_DURATION := 3.0
@@ -34,6 +36,13 @@ func _ready() -> void:
 	add_child(tcp_server)
 	tcp_server.set_collector(collector)
 	tcp_server.activity_received.connect(_on_activity_received)
+
+	recorder = SpectatorRecorder.new()
+	add_child(recorder)
+	recorder.set_collector(collector)
+	recorder.recording_stopped.connect(_on_recording_stopped)
+
+	tcp_server.set_recorder(recorder)
 
 	var port: int = ProjectSettings.get_setting("spectator/connection/port", 9077)
 	tcp_server.start(port)
@@ -65,6 +74,15 @@ func _setup_overlay() -> void:
 	_toast_container.offset_right = -20
 	_overlay.add_child(_toast_container)
 
+	_recording_dot = ColorRect.new()
+	_recording_dot.color = Color(0.9, 0.1, 0.1)
+	_recording_dot.custom_minimum_size = Vector2(16, 16)
+	_recording_dot.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_recording_dot.offset_left = 10
+	_recording_dot.offset_top = 10
+	_recording_dot.visible = false
+	_overlay.add_child(_recording_dot)
+
 
 func _physics_process(_delta: float) -> void:
 	if tcp_server:
@@ -76,6 +94,12 @@ func _shortcut_input(event: InputEvent) -> void:
 		return
 	if event is InputEventKey:
 		match event.keycode:
+			KEY_F8:
+				_toggle_recording()
+				get_viewport().set_input_as_handled()
+			KEY_F9:
+				_drop_marker()
+				get_viewport().set_input_as_handled()
 			KEY_F10:
 				_toggle_pause()
 				get_viewport().set_input_as_handled()
@@ -86,6 +110,48 @@ func _toggle_pause() -> void:
 	tree.paused = not tree.paused
 	if _pause_label:
 		_pause_label.visible = tree.paused
+
+
+func _toggle_recording() -> void:
+	if not recorder:
+		return
+	if recorder.is_recording():
+		recorder.stop_recording()
+		_set_recording_indicator(false)
+	else:
+		var storage_path: String = ProjectSettings.get_setting(
+			"spectator/recording/storage_path", "user://spectator_recordings/")
+		var interval: int = ProjectSettings.get_setting(
+			"spectator/recording/capture_interval", 1)
+		var max_frames: int = ProjectSettings.get_setting(
+			"spectator/recording/max_frames", 36000)
+		var id: String = recorder.start_recording("", storage_path, interval, max_frames)
+		if not id.is_empty():
+			_set_recording_indicator(true)
+
+
+func _drop_marker() -> void:
+	if not recorder or not recorder.is_recording():
+		return
+	recorder.add_marker("human", "")
+	if _recording_dot:
+		_recording_dot.color = Color.YELLOW
+		get_tree().create_timer(0.3).timeout.connect(func() -> void:
+			if _recording_dot:
+				_recording_dot.color = Color(0.9, 0.1, 0.1)
+		)
+
+
+func _set_recording_indicator(visible: bool) -> void:
+	if not ProjectSettings.get_setting(
+			"spectator/display/show_recording_indicator", true):
+		return
+	if _recording_dot:
+		_recording_dot.visible = visible
+
+
+func _on_recording_stopped(_id: String, _frames: int) -> void:
+	_set_recording_indicator(false)
 
 
 func _on_activity_received(entry_type: String, summary: String, _tool: String) -> void:
@@ -126,5 +192,7 @@ func _show_toast(text: String) -> void:
 
 func _exit_tree() -> void:
 	instance = null
+	if recorder and recorder.is_recording():
+		recorder.stop_recording()
 	if tcp_server:
 		tcp_server.stop()

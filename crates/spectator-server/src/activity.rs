@@ -4,6 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::mcp::action::SpatialActionParams;
 use crate::mcp::config::SpatialConfigParams;
+use crate::mcp::recording::RecordingParams;
 use crate::mcp::scene_tree::SceneTreeToolParams;
 use crate::mcp::snapshot::SpatialSnapshotParams;
 use crate::mcp::watch::SpatialWatchParams;
@@ -165,6 +166,31 @@ pub fn watch_summary(params: &SpatialWatchParams) -> String {
         "list" => "Listing watches".into(),
         "clear" => "Cleared all watches".into(),
         other => format!("Watch: {other}"),
+    }
+}
+
+pub fn recording_summary(params: &RecordingParams) -> String {
+    match params.action.as_str() {
+        "start" => {
+            let name = params.recording_name.as_deref().unwrap_or("(auto)");
+            format!("Started recording: {name}")
+        }
+        "stop" => "Stopped recording".into(),
+        "status" => "Checking recording status".into(),
+        "list" => "Listing recordings".into(),
+        "delete" => {
+            let id = params.recording_id.as_deref().unwrap_or("?");
+            format!("Deleted recording {id}")
+        }
+        "markers" => {
+            let id = params.recording_id.as_deref().unwrap_or("current");
+            format!("Listing markers for {id}")
+        }
+        "add_marker" => {
+            let label = params.marker_label.as_deref().unwrap_or("(no label)");
+            format!("Added marker: {label}")
+        }
+        other => format!("Recording: {other}"),
     }
 }
 

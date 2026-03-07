@@ -3,6 +3,7 @@ pub mod config;
 pub mod delta;
 pub mod inspect;
 pub mod query;
+pub mod recording;
 pub mod scene_tree;
 pub mod snapshot;
 pub mod watch;
@@ -435,6 +436,18 @@ impl SpectatorServer {
         let summary = crate::activity::config_summary(&params);
         let result = handle_spatial_config(params, &self.state).await;
         self.log_activity("config", &summary, "spatial_config").await;
+        result
+    }
+
+    /// Capture and manage play session recordings.
+    #[tool(description = "Capture and manage play session recordings. Actions: 'start' (begin recording with optional name and capture config), 'stop' (end recording, get metadata), 'status' (check recording state), 'list' (list saved recordings), 'delete' (remove a recording by recording_id), 'markers' (list markers in a recording by recording_id), 'add_marker' (add an agent marker to the active recording with marker_label).")]
+    pub async fn recording(
+        &self,
+        Parameters(params): Parameters<recording::RecordingParams>,
+    ) -> Result<String, McpError> {
+        let summary = crate::activity::recording_summary(&params);
+        let result = recording::handle_recording(params, &self.state).await;
+        self.log_activity("recording", &summary, "recording").await;
         result
     }
 }
