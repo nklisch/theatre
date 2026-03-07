@@ -10,7 +10,7 @@ use spectator_core::budget::resolve_budget;
 use crate::recording_analysis;
 use crate::tcp::{SessionState, query_addon};
 
-use super::finalize_response;
+use super::{finalize_response, require_param};
 
 // ---------------------------------------------------------------------------
 // MCP parameter types
@@ -109,9 +109,9 @@ pub async fn handle_recording(
 
     match params.action.as_str() {
         "start" => handle_start(&params, state, budget_limit, hard_cap).await,
-        "stop" => handle_stop(state, budget_limit, hard_cap).await,
-        "status" => handle_status(state, budget_limit, hard_cap).await,
-        "list" => handle_list(state, budget_limit, hard_cap).await,
+        "stop" => query_and_finalize(state, "recording_stop", json!({}), budget_limit, hard_cap).await,
+        "status" => query_and_finalize(state, "recording_status", json!({}), budget_limit, hard_cap).await,
+        "list" => query_and_finalize(state, "recording_list", json!({}), budget_limit, hard_cap).await,
         "delete" => handle_delete(&params, state, budget_limit, hard_cap).await,
         "markers" => handle_markers(&params, state, budget_limit, hard_cap).await,
         "add_marker" => handle_add_marker(&params, state, budget_limit, hard_cap).await,
@@ -136,6 +136,17 @@ pub async fn handle_recording(
 // Action handlers
 // ---------------------------------------------------------------------------
 
+async fn query_and_finalize(
+    state: &Arc<Mutex<SessionState>>,
+    method: &str,
+    params: serde_json::Value,
+    budget_limit: u32,
+    hard_cap: u32,
+) -> Result<String, McpError> {
+    let mut data = query_addon(state, method, params).await?;
+    finalize_response(&mut data, budget_limit, hard_cap)
+}
+
 async fn handle_start(
     params: &RecordingParams,
     state: &Arc<Mutex<SessionState>>,
@@ -154,45 +165,13 @@ async fn handle_start(
     finalize_response(&mut response, budget_limit, hard_cap)
 }
 
-async fn handle_stop(
-    state: &Arc<Mutex<SessionState>>,
-    budget_limit: u32,
-    hard_cap: u32,
-) -> Result<String, McpError> {
-    let data = query_addon(state, "recording_stop", json!({})).await?;
-    let mut response = data;
-    finalize_response(&mut response, budget_limit, hard_cap)
-}
-
-async fn handle_status(
-    state: &Arc<Mutex<SessionState>>,
-    budget_limit: u32,
-    hard_cap: u32,
-) -> Result<String, McpError> {
-    let data = query_addon(state, "recording_status", json!({})).await?;
-    let mut response = data;
-    finalize_response(&mut response, budget_limit, hard_cap)
-}
-
-async fn handle_list(
-    state: &Arc<Mutex<SessionState>>,
-    budget_limit: u32,
-    hard_cap: u32,
-) -> Result<String, McpError> {
-    let data = query_addon(state, "recording_list", json!({})).await?;
-    let mut response = data;
-    finalize_response(&mut response, budget_limit, hard_cap)
-}
-
 async fn handle_delete(
     params: &RecordingParams,
     state: &Arc<Mutex<SessionState>>,
     budget_limit: u32,
     hard_cap: u32,
 ) -> Result<String, McpError> {
-    let id = params.recording_id.as_deref().ok_or_else(|| {
-        McpError::invalid_params("recording_id is required for delete".to_string(), None)
-    })?;
+    let id = require_param!(params.recording_id.as_deref(), "recording_id is required for delete");
     let data = query_addon(state, "recording_delete", json!({ "recording_id": id })).await?;
     let mut response = data;
     finalize_response(&mut response, budget_limit, hard_cap)
@@ -204,9 +183,7 @@ async fn handle_markers(
     budget_limit: u32,
     hard_cap: u32,
 ) -> Result<String, McpError> {
-    let id = params.recording_id.as_deref().ok_or_else(|| {
-        McpError::invalid_params("recording_id is required for markers".to_string(), None)
-    })?;
+    let id = require_param!(params.recording_id.as_deref(), "recording_id is required for markers");
     let data = query_addon(state, "recording_markers", json!({ "recording_id": id })).await?;
     let mut response = data;
     finalize_response(&mut response, budget_limit, hard_cap)
@@ -240,17 +217,13 @@ async fn handle_snapshot_at(
     budget_limit: u32,
     hard_cap: u32,
 ) -> Result<String, McpError> {
-    let storage_path = recording_analysis::resolve_storage_path(state).await?;
-    let recording_id = resolve_recording_id(params, &storage_path)?;
-    let db = recording_analysis::open_recording_db(&storage_path, &recording_id)?;
-
-    let meta = recording_analysis::read_recording_meta(&db)?;
+    let session = recording_analysis::RecordingSession::open(state, params.recording_id.as_deref()).await?;
 
     let frame = if let Some(f) = params.at_frame {
-        meta.validate_frame(f)?;
+        session.meta.validate_frame(f)?;
         f
     } else if let Some(t) = params.at_time_ms {
-        let (frame, _) = recording_analysis::read_frame_at_time(&db, t)?;
+        let (frame, _) = recording_analysis::read_frame_at_time(&session.db, t)?;
         frame
     } else {
         return Err(McpError::invalid_params(
@@ -261,11 +234,8 @@ async fn handle_snapshot_at(
 
     let detail = params.detail.as_deref().unwrap_or("standard");
     let mut response =
-        recording_analysis::snapshot_at(&db, frame, detail, budget_limit, hard_cap)?;
-    if let Some(obj) = response.as_object_mut() {
-        obj.insert("recording_context".into(), meta.to_context());
-    }
-    finalize_response(&mut response, budget_limit, hard_cap)
+        recording_analysis::snapshot_at(&session.db, frame, detail, budget_limit, hard_cap)?;
+    session.finalize(&mut response, budget_limit, hard_cap)
 }
 
 async fn handle_query_range(
@@ -274,23 +244,13 @@ async fn handle_query_range(
     budget_limit: u32,
     hard_cap: u32,
 ) -> Result<String, McpError> {
-    let storage_path = recording_analysis::resolve_storage_path(state).await?;
-    let recording_id = resolve_recording_id(params, &storage_path)?;
-    let db = recording_analysis::open_recording_db(&storage_path, &recording_id)?;
+    let session = recording_analysis::RecordingSession::open(state, params.recording_id.as_deref()).await?;
 
-    let meta = recording_analysis::read_recording_meta(&db)?;
-
-    let node = params.node.as_deref().ok_or_else(|| {
-        McpError::invalid_params("query_range requires 'node' parameter".to_string(), None)
-    })?;
-    let from = params.from_frame.ok_or_else(|| {
-        McpError::invalid_params("query_range requires 'from_frame'".to_string(), None)
-    })?;
-    let to = params.to_frame.ok_or_else(|| {
-        McpError::invalid_params("query_range requires 'to_frame'".to_string(), None)
-    })?;
-    meta.validate_frame(from)?;
-    meta.validate_frame(to)?;
+    let node = require_param!(params.node.as_deref(), "query_range requires 'node' parameter");
+    let from = require_param!(params.from_frame, "query_range requires 'from_frame'");
+    let to = require_param!(params.to_frame, "query_range requires 'to_frame'");
+    session.meta.validate_frame(from)?;
+    session.meta.validate_frame(to)?;
     let condition: recording_analysis::QueryCondition = params
         .condition
         .as_ref()
@@ -301,19 +261,16 @@ async fn handle_query_range(
         })?;
 
     let mut response = recording_analysis::query_range(
-        &db,
-        &storage_path,
-        &recording_id,
+        &session.db,
+        &session.storage_path,
+        &session.recording_id,
         node,
         from,
         to,
         &condition,
         budget_limit,
     )?;
-    if let Some(obj) = response.as_object_mut() {
-        obj.insert("recording_context".into(), meta.to_context());
-    }
-    finalize_response(&mut response, budget_limit, hard_cap)
+    session.finalize(&mut response, budget_limit, hard_cap)
 }
 
 async fn handle_diff_frames(
@@ -322,26 +279,15 @@ async fn handle_diff_frames(
     budget_limit: u32,
     hard_cap: u32,
 ) -> Result<String, McpError> {
-    let storage_path = recording_analysis::resolve_storage_path(state).await?;
-    let recording_id = resolve_recording_id(params, &storage_path)?;
-    let db = recording_analysis::open_recording_db(&storage_path, &recording_id)?;
+    let session = recording_analysis::RecordingSession::open(state, params.recording_id.as_deref()).await?;
 
-    let meta = recording_analysis::read_recording_meta(&db)?;
+    let frame_a = require_param!(params.frame_a, "diff_frames requires 'frame_a'");
+    let frame_b = require_param!(params.frame_b, "diff_frames requires 'frame_b'");
+    session.meta.validate_frame(frame_a)?;
+    session.meta.validate_frame(frame_b)?;
 
-    let frame_a = params.frame_a.ok_or_else(|| {
-        McpError::invalid_params("diff_frames requires 'frame_a'".to_string(), None)
-    })?;
-    let frame_b = params.frame_b.ok_or_else(|| {
-        McpError::invalid_params("diff_frames requires 'frame_b'".to_string(), None)
-    })?;
-    meta.validate_frame(frame_a)?;
-    meta.validate_frame(frame_b)?;
-
-    let mut response = recording_analysis::diff_frames(&db, frame_a, frame_b, budget_limit)?;
-    if let Some(obj) = response.as_object_mut() {
-        obj.insert("recording_context".into(), meta.to_context());
-    }
-    finalize_response(&mut response, budget_limit, hard_cap)
+    let mut response = recording_analysis::diff_frames(&session.db, frame_a, frame_b, budget_limit)?;
+    session.finalize(&mut response, budget_limit, hard_cap)
 }
 
 async fn handle_find_event(
@@ -350,25 +296,20 @@ async fn handle_find_event(
     budget_limit: u32,
     hard_cap: u32,
 ) -> Result<String, McpError> {
-    let storage_path = recording_analysis::resolve_storage_path(state).await?;
-    let recording_id = resolve_recording_id(params, &storage_path)?;
-    let db = recording_analysis::open_recording_db(&storage_path, &recording_id)?;
+    let session = recording_analysis::RecordingSession::open(state, params.recording_id.as_deref()).await?;
 
-    let meta = recording_analysis::read_recording_meta(&db)?;
     if let Some(from) = params.from_frame {
-        meta.validate_frame(from)?;
+        session.meta.validate_frame(from)?;
     }
     if let Some(to) = params.to_frame {
-        meta.validate_frame(to)?;
+        session.meta.validate_frame(to)?;
     }
 
-    let event_type = params.event_type.as_deref().ok_or_else(|| {
-        McpError::invalid_params("find_event requires 'event_type'".to_string(), None)
-    })?;
+    let event_type = require_param!(params.event_type.as_deref(), "find_event requires 'event_type'");
 
     let mut response = recording_analysis::find_event(
-        &db,
-        &recording_id,
+        &session.db,
+        &session.recording_id,
         event_type,
         params.event_filter.as_deref(),
         params.node.as_deref(),
@@ -376,44 +317,7 @@ async fn handle_find_event(
         params.to_frame,
         budget_limit,
     )?;
-    if let Some(obj) = response.as_object_mut() {
-        obj.insert("recording_context".into(), meta.to_context());
-    }
-    finalize_response(&mut response, budget_limit, hard_cap)
-}
-
-/// Resolve recording_id: use explicit param, or find the most recent recording.
-fn resolve_recording_id(params: &RecordingParams, storage_path: &str) -> Result<String, McpError> {
-    if let Some(ref id) = params.recording_id {
-        return Ok(id.clone());
-    }
-    most_recent_recording(storage_path).ok_or_else(|| {
-        McpError::invalid_params(
-            "No recording_id specified and no recordings found".to_string(),
-            None,
-        )
-    })
-}
-
-/// Find the most recently modified .sqlite file in the storage directory.
-fn most_recent_recording(storage_path: &str) -> Option<String> {
-    let entries = std::fs::read_dir(storage_path).ok()?;
-    let mut newest: Option<(std::time::SystemTime, String)> = None;
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some("sqlite") {
-            continue;
-        }
-        let modified = entry.metadata().ok()?.modified().ok()?;
-        let stem = path.file_stem()?.to_str()?.to_string();
-
-        if newest.is_none() || modified > newest.as_ref().unwrap().0 {
-            newest = Some((modified, stem));
-        }
-    }
-
-    newest.map(|(_, id)| id)
+    session.finalize(&mut response, budget_limit, hard_cap)
 }
 
 // ---------------------------------------------------------------------------

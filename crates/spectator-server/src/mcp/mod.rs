@@ -64,8 +64,56 @@ fn inject_budget(response: &mut serde_json::Value, used: u32, limit: u32, hard_c
     }
 }
 
+/// Extract a required parameter, returning McpError::invalid_params if None.
+macro_rules! require_param {
+    ($expr:expr, $msg:expr) => {
+        $expr.ok_or_else(|| McpError::invalid_params($msg, None))?
+    };
+}
+use require_param;
+
+/// Query the addon and deserialize the response in one step.
+async fn query_and_deserialize<P: Serialize, R: for<'de> Deserialize<'de>>(
+    state: &std::sync::Arc<tokio::sync::Mutex<crate::tcp::SessionState>>,
+    method: &str,
+    params: &P,
+) -> Result<R, McpError> {
+    let data = query_addon(state, method, serialize_params(params)?).await?;
+    deserialize_response(data)
+}
+
+/// Parse a string into an enum variant, returning McpError::invalid_params on mismatch.
+fn parse_enum_param<T: Clone>(
+    value: &str,
+    field_name: &str,
+    variants: &[(&str, T)],
+) -> Result<T, McpError> {
+    for (name, variant) in variants {
+        if *name == value {
+            return Ok(variant.clone());
+        }
+    }
+    let valid: Vec<&str> = variants.iter().map(|(n, _)| *n).collect();
+    Err(McpError::invalid_params(
+        format!("Invalid {field_name} '{value}'. Valid: {}", valid.join(", ")),
+        None,
+    ))
+}
+
+/// Parse a list of strings into enum variants.
+fn parse_enum_list<T: Clone>(
+    values: &[String],
+    field_name: &str,
+    variants: &[(&str, T)],
+) -> Result<Vec<T>, McpError> {
+    values
+        .iter()
+        .map(|s| parse_enum_param(s, field_name, variants))
+        .collect()
+}
+
 /// Estimate token usage, inject budget block, and serialize response to JSON string.
-fn finalize_response(
+pub(crate) fn finalize_response(
     response: &mut serde_json::Value,
     budget_limit: u32,
     hard_cap: u32,
@@ -122,11 +170,8 @@ impl SpectatorServer {
             expose_internals: config.expose_internals,
         };
 
-        let raw_data: SnapshotResponse = {
-            let data = query_addon(&self.state, "get_snapshot_data", serialize_params(&query_params)?)
-                .await?;
-            deserialize_response(data)?
-        };
+        let raw_data: SnapshotResponse =
+            query_and_deserialize(&self.state, "get_snapshot_data", &query_params).await?;
 
         // 4. Build perspective for spatial calculations
         let persp = build_perspective(&raw_data.perspective);
@@ -271,11 +316,8 @@ impl SpectatorServer {
             expose_internals: config.expose_internals,
         };
 
-        let raw_data: NodeInspectResponse = {
-            let data = query_addon(&self.state, "get_node_inspect", serialize_params(&query_params)?)
-                .await?;
-            deserialize_response(data)?
-        };
+        let raw_data: NodeInspectResponse =
+            query_and_deserialize(&self.state, "get_node_inspect", &query_params).await?;
 
         let mut response = serde_json::to_value(&raw_data).map_err(|e| {
             McpError::internal_error(format!("Serialization error: {e}"), None)
@@ -339,11 +381,7 @@ impl SpectatorServer {
         .await?;
 
         let mut response: serde_json::Value = data;
-
-        let json_bytes = serde_json::to_vec(&response).unwrap_or_default().len();
-        let used = spectator_core::budget::estimate_tokens(json_bytes);
         let action_budget = resolve_budget(None, 500, config.token_hard_cap);
-        inject_budget(&mut response, used, action_budget, config.token_hard_cap);
 
         if params.return_delta {
             let has_baseline = {
@@ -412,7 +450,7 @@ impl SpectatorServer {
             }
         }
 
-        let result = serialize_response(&response);
+        let result = finalize_response(&mut response, action_budget, config.token_hard_cap);
         self.log_activity("action", &activity_summary, "spatial_action").await;
         result
     }

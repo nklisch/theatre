@@ -8,21 +8,20 @@ use std::collections::HashMap;
 use super::serialize_response;
 
 fn parse_cluster_by(s: &str) -> Result<ClusterStrategy, McpError> {
-    serde_json::from_str(&format!("\"{s}\"")).map_err(|_| {
-        McpError::invalid_params(
-            format!("Invalid cluster_by '{s}'. Valid: group, class, proximity, none"),
-            None,
-        )
-    })
+    super::parse_enum_param(s, "cluster_by", &[
+        ("group", ClusterStrategy::Group),
+        ("class", ClusterStrategy::Class),
+        ("proximity", ClusterStrategy::Proximity),
+        ("none", ClusterStrategy::None),
+    ])
 }
 
 fn parse_bearing_format(s: &str) -> Result<BearingFormat, McpError> {
-    serde_json::from_str(&format!("\"{s}\"")).map_err(|_| {
-        McpError::invalid_params(
-            format!("Invalid bearing_format '{s}'. Valid: cardinal, degrees, both"),
-            None,
-        )
-    })
+    super::parse_enum_param(s, "bearing_format", &[
+        ("cardinal", BearingFormat::Cardinal),
+        ("degrees", BearingFormat::Degrees),
+        ("both", BearingFormat::Both),
+    ])
 }
 
 /// MCP parameters for the spatial_config tool.

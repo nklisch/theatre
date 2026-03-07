@@ -32,24 +32,15 @@ fn default_include() -> Vec<String> {
 
 /// Parse include strings to InspectCategory enums.
 pub fn parse_include(strings: &[String]) -> Result<Vec<InspectCategory>, McpError> {
-    strings
-        .iter()
-        .map(|s| match s.as_str() {
-            "transform" => Ok(InspectCategory::Transform),
-            "physics" => Ok(InspectCategory::Physics),
-            "state" => Ok(InspectCategory::State),
-            "children" => Ok(InspectCategory::Children),
-            "signals" => Ok(InspectCategory::Signals),
-            "script" => Ok(InspectCategory::Script),
-            "spatial_context" => Ok(InspectCategory::SpatialContext),
-            other => Err(McpError::invalid_params(
-                format!(
-                    "Invalid include category '{other}'. Options: transform, physics, state, children, signals, script, spatial_context"
-                ),
-                None,
-            )),
-        })
-        .collect()
+    super::parse_enum_list(strings, "include category", &[
+        ("transform", InspectCategory::Transform),
+        ("physics", InspectCategory::Physics),
+        ("state", InspectCategory::State),
+        ("children", InspectCategory::Children),
+        ("signals", InspectCategory::Signals),
+        ("script", InspectCategory::Script),
+        ("spatial_context", InspectCategory::SpatialContext),
+    ])
 }
 
 /// Build the spatial_context block from raw addon data.

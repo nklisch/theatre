@@ -40,53 +40,32 @@ fn default_include() -> Option<Vec<String>> {
 }
 
 pub fn parse_action(s: &str) -> Result<SceneTreeAction, McpError> {
-    match s {
-        "roots" => Ok(SceneTreeAction::Roots),
-        "children" => Ok(SceneTreeAction::Children),
-        "subtree" => Ok(SceneTreeAction::Subtree),
-        "ancestors" => Ok(SceneTreeAction::Ancestors),
-        "find" => Ok(SceneTreeAction::Find),
-        other => Err(McpError::invalid_params(
-            format!(
-                "Invalid action '{other}'. Must be 'roots', 'children', 'subtree', 'ancestors', or 'find'."
-            ),
-            None,
-        )),
-    }
+    super::parse_enum_param(s, "action", &[
+        ("roots", SceneTreeAction::Roots),
+        ("children", SceneTreeAction::Children),
+        ("subtree", SceneTreeAction::Subtree),
+        ("ancestors", SceneTreeAction::Ancestors),
+        ("find", SceneTreeAction::Find),
+    ])
 }
 
 pub fn parse_find_by(s: &str) -> Result<FindBy, McpError> {
-    match s {
-        "name" => Ok(FindBy::Name),
-        "class" => Ok(FindBy::Class),
-        "group" => Ok(FindBy::Group),
-        "script" => Ok(FindBy::Script),
-        other => Err(McpError::invalid_params(
-            format!(
-                "Invalid find_by '{other}'. Must be 'name', 'class', 'group', or 'script'."
-            ),
-            None,
-        )),
-    }
+    super::parse_enum_param(s, "find_by", &[
+        ("name", FindBy::Name),
+        ("class", FindBy::Class),
+        ("group", FindBy::Group),
+        ("script", FindBy::Script),
+    ])
 }
 
 pub fn parse_tree_include(strings: &[String]) -> Result<Vec<TreeInclude>, McpError> {
-    strings
-        .iter()
-        .map(|s| match s.as_str() {
-            "class" => Ok(TreeInclude::Class),
-            "groups" => Ok(TreeInclude::Groups),
-            "script" => Ok(TreeInclude::Script),
-            "visible" => Ok(TreeInclude::Visible),
-            "process_mode" => Ok(TreeInclude::ProcessMode),
-            other => Err(McpError::invalid_params(
-                format!(
-                    "Invalid include '{other}'. Options: class, groups, script, visible, process_mode"
-                ),
-                None,
-            )),
-        })
-        .collect()
+    super::parse_enum_list(strings, "include", &[
+        ("class", TreeInclude::Class),
+        ("groups", TreeInclude::Groups),
+        ("script", TreeInclude::Script),
+        ("visible", TreeInclude::Visible),
+        ("process_mode", TreeInclude::ProcessMode),
+    ])
 }
 
 /// Build the GetSceneTreeParams from MCP tool params.

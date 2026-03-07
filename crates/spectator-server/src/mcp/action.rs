@@ -4,6 +4,8 @@ use serde::Deserialize;
 
 use spectator_protocol::query::ActionRequest;
 
+use super::require_param;
+
 /// MCP parameters for the spatial_action tool.
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct SpatialActionParams {
@@ -70,39 +72,20 @@ pub struct SpatialActionParams {
 pub fn build_action_request(params: &SpatialActionParams) -> Result<ActionRequest, McpError> {
     match params.action.as_str() {
         "pause" => {
-            let paused = params.paused.ok_or_else(|| {
-                McpError::invalid_params("'paused' (bool) is required for pause action", None)
-            })?;
+            let paused = require_param!(params.paused, "'paused' (bool) is required for pause action");
             Ok(ActionRequest::Pause { paused })
         }
         "advance_frames" => {
-            let frames = params.frames.ok_or_else(|| {
-                McpError::invalid_params(
-                    "'frames' (int) is required for advance_frames action",
-                    None,
-                )
-            })?;
+            let frames = require_param!(params.frames, "'frames' (int) is required for advance_frames action");
             Ok(ActionRequest::AdvanceFrames { frames })
         }
         "advance_time" => {
-            let seconds = params.seconds.ok_or_else(|| {
-                McpError::invalid_params(
-                    "'seconds' (float) is required for advance_time action",
-                    None,
-                )
-            })?;
+            let seconds = require_param!(params.seconds, "'seconds' (float) is required for advance_time action");
             Ok(ActionRequest::AdvanceTime { seconds })
         }
         "teleport" => {
-            let node = params.node.as_ref().ok_or_else(|| {
-                McpError::invalid_params("'node' is required for teleport action", None)
-            })?;
-            let position = params.position.as_ref().ok_or_else(|| {
-                McpError::invalid_params(
-                    "'position' ([x,y,z] or [x,y]) is required for teleport action",
-                    None,
-                )
-            })?;
+            let node = require_param!(params.node.as_ref(), "'node' is required for teleport action");
+            let position = require_param!(params.position.as_ref(), "'position' ([x,y,z] or [x,y]) is required for teleport action");
             Ok(ActionRequest::Teleport {
                 path: node.clone(),
                 position: position.clone(),
@@ -110,18 +93,9 @@ pub fn build_action_request(params: &SpatialActionParams) -> Result<ActionReques
             })
         }
         "set_property" => {
-            let node = params.node.as_ref().ok_or_else(|| {
-                McpError::invalid_params("'node' is required for set_property action", None)
-            })?;
-            let property = params.property.as_ref().ok_or_else(|| {
-                McpError::invalid_params(
-                    "'property' is required for set_property action",
-                    None,
-                )
-            })?;
-            let value = params.value.as_ref().ok_or_else(|| {
-                McpError::invalid_params("'value' is required for set_property action", None)
-            })?;
+            let node = require_param!(params.node.as_ref(), "'node' is required for set_property action");
+            let property = require_param!(params.property.as_ref(), "'property' is required for set_property action");
+            let value = require_param!(params.value.as_ref(), "'value' is required for set_property action");
             Ok(ActionRequest::SetProperty {
                 path: node.clone(),
                 property: property.clone(),
@@ -129,12 +103,8 @@ pub fn build_action_request(params: &SpatialActionParams) -> Result<ActionReques
             })
         }
         "call_method" => {
-            let node = params.node.as_ref().ok_or_else(|| {
-                McpError::invalid_params("'node' is required for call_method action", None)
-            })?;
-            let method = params.method.as_ref().ok_or_else(|| {
-                McpError::invalid_params("'method' is required for call_method action", None)
-            })?;
+            let node = require_param!(params.node.as_ref(), "'node' is required for call_method action");
+            let method = require_param!(params.method.as_ref(), "'method' is required for call_method action");
             let args = params
                 .method_args
                 .as_ref()
@@ -148,12 +118,8 @@ pub fn build_action_request(params: &SpatialActionParams) -> Result<ActionReques
             })
         }
         "emit_signal" => {
-            let node = params.node.as_ref().ok_or_else(|| {
-                McpError::invalid_params("'node' is required for emit_signal action", None)
-            })?;
-            let signal = params.signal.as_ref().ok_or_else(|| {
-                McpError::invalid_params("'signal' is required for emit_signal action", None)
-            })?;
+            let node = require_param!(params.node.as_ref(), "'node' is required for emit_signal action");
+            let signal = require_param!(params.signal.as_ref(), "'signal' is required for emit_signal action");
             let args = params.args.as_ref().cloned().unwrap_or_default();
             Ok(ActionRequest::EmitSignal {
                 path: node.clone(),
@@ -162,15 +128,8 @@ pub fn build_action_request(params: &SpatialActionParams) -> Result<ActionReques
             })
         }
         "spawn_node" => {
-            let scene_path = params.scene_path.as_ref().ok_or_else(|| {
-                McpError::invalid_params(
-                    "'scene_path' is required for spawn_node action",
-                    None,
-                )
-            })?;
-            let parent = params.parent.as_ref().ok_or_else(|| {
-                McpError::invalid_params("'parent' is required for spawn_node action", None)
-            })?;
+            let scene_path = require_param!(params.scene_path.as_ref(), "'scene_path' is required for spawn_node action");
+            let parent = require_param!(params.parent.as_ref(), "'parent' is required for spawn_node action");
             Ok(ActionRequest::SpawnNode {
                 scene_path: scene_path.clone(),
                 parent: parent.clone(),
@@ -179,9 +138,7 @@ pub fn build_action_request(params: &SpatialActionParams) -> Result<ActionReques
             })
         }
         "remove_node" => {
-            let node = params.node.as_ref().ok_or_else(|| {
-                McpError::invalid_params("'node' is required for remove_node action", None)
-            })?;
+            let node = require_param!(params.node.as_ref(), "'node' is required for remove_node action");
             Ok(ActionRequest::RemoveNode { path: node.clone() })
         }
         other => Err(McpError::invalid_params(

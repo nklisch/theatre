@@ -50,32 +50,22 @@ fn default_track() -> Vec<String> {
 }
 
 fn parse_operator(s: &str) -> Result<ConditionOperator, McpError> {
-    match s {
-        "lt" => Ok(ConditionOperator::Lt),
-        "gt" => Ok(ConditionOperator::Gt),
-        "eq" => Ok(ConditionOperator::Eq),
-        "changed" => Ok(ConditionOperator::Changed),
-        other => Err(McpError::invalid_params(
-            format!("Unknown operator '{other}'. Valid: lt, gt, eq, changed"),
-            None,
-        )),
-    }
+    super::parse_enum_param(s, "operator", &[
+        ("lt", ConditionOperator::Lt),
+        ("gt", ConditionOperator::Gt),
+        ("eq", ConditionOperator::Eq),
+        ("changed", ConditionOperator::Changed),
+    ])
 }
 
 fn parse_track(s: &str) -> Result<TrackCategory, McpError> {
-    match s {
-        "position" => Ok(TrackCategory::Position),
-        "state" => Ok(TrackCategory::State),
-        "signals" => Ok(TrackCategory::Signals),
-        "physics" => Ok(TrackCategory::Physics),
-        "all" => Ok(TrackCategory::All),
-        other => Err(McpError::invalid_params(
-            format!(
-                "Unknown track category '{other}'. Valid: position, state, signals, physics, all"
-            ),
-            None,
-        )),
-    }
+    super::parse_enum_param(s, "track category", &[
+        ("position", TrackCategory::Position),
+        ("state", TrackCategory::State),
+        ("signals", TrackCategory::Signals),
+        ("physics", TrackCategory::Physics),
+        ("all", TrackCategory::All),
+    ])
 }
 
 fn format_conditions(conditions: &[WatchCondition]) -> String {

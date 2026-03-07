@@ -1,4 +1,6 @@
 use rmcp::model::ErrorData as McpError;
+
+use super::require_param;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use spectator_core::{
@@ -118,36 +120,22 @@ pub fn to_entity_snapshot(e: &EntityData) -> EntitySnapshot {
 }
 
 pub fn parse_detail(s: &str) -> Result<DetailLevel, McpError> {
-    match s {
-        "summary" => Ok(DetailLevel::Summary),
-        "standard" => Ok(DetailLevel::Standard),
-        "full" => Ok(DetailLevel::Full),
-        _ => Err(McpError::invalid_params(
-            format!("Invalid detail level '{s}'. Must be 'summary', 'standard', or 'full'."),
-            None,
-        )),
-    }
+    super::parse_enum_param(s, "detail level", &[
+        ("summary", DetailLevel::Summary),
+        ("standard", DetailLevel::Standard),
+        ("full", DetailLevel::Full),
+    ])
 }
 
 pub fn build_perspective_param(params: &SpatialSnapshotParams) -> Result<PerspectiveParam, McpError> {
     match params.perspective.as_str() {
         "camera" => Ok(PerspectiveParam::Camera),
         "node" => {
-            let path = params.focal_node.as_ref().ok_or_else(|| {
-                McpError::invalid_params(
-                    "focal_node is required when perspective is 'node'",
-                    None,
-                )
-            })?;
+            let path = require_param!(params.focal_node.as_ref(), "focal_node is required when perspective is 'node'");
             Ok(PerspectiveParam::Node { path: path.clone() })
         }
         "point" => {
-            let pos = params.focal_point.as_ref().ok_or_else(|| {
-                McpError::invalid_params(
-                    "focal_point is required when perspective is 'point'",
-                    None,
-                )
-            })?;
+            let pos = require_param!(params.focal_point.as_ref(), "focal_point is required when perspective is 'point'");
             Ok(PerspectiveParam::Point { position: pos.clone() })
         }
         other => Err(McpError::invalid_params(
@@ -356,36 +344,57 @@ pub fn build_summary_response(
     })
 }
 
-pub fn build_standard_response(
+enum SnapshotTier {
+    Standard,
+    Full,
+}
+
+fn build_snapshot_body(
     raw: &SnapshotResponse,
     entities: &[(EntityData, RelativePosition)],
     perspective: &Perspective,
     budget_limit: u32,
     hard_cap: u32,
     config: &SessionConfig,
+    tier: SnapshotTier,
 ) -> serde_json::Value {
     let mut enforcer = BudgetEnforcer::new(budget_limit, hard_cap);
     enforcer.try_add(200);
 
+    let full = matches!(tier, SnapshotTier::Full);
     let mut dynamic_entities: Vec<OutputEntity> = Vec::new();
+    // Standard: accumulate count + category summary; Full: individual static nodes
     let mut static_count = 0usize;
     let mut static_categories: serde_json::Map<String, serde_json::Value> = serde_json::Map::new();
+    let mut static_nodes: Vec<serde_json::Value> = Vec::new();
     let total = entities.len();
 
     for (entity, rel) in entities {
         if is_entity_static(entity, config) {
-            static_count += 1;
-            let cat = classify_static_category(&entity.class).to_string();
-            let counter = static_categories
-                .entry(cat)
-                .or_insert(serde_json::json!(0));
-            if let Some(n) = counter.as_u64() {
-                *counter = serde_json::json!(n + 1);
+            if full {
+                let node = serde_json::json!({
+                    "path": entity.path,
+                    "class": entity.class,
+                    "pos": entity.position,
+                });
+                let bytes = serde_json::to_vec(&node).unwrap_or_default();
+                if enforcer.try_add(bytes.len()) {
+                    static_nodes.push(node);
+                }
+            } else {
+                static_count += 1;
+                let cat = classify_static_category(&entity.class).to_string();
+                let counter = static_categories
+                    .entry(cat)
+                    .or_insert(serde_json::json!(0));
+                if let Some(n) = counter.as_u64() {
+                    *counter = serde_json::json!(n + 1);
+                }
             }
             continue;
         }
 
-        let out = build_output_entity(entity, rel, false, config);
+        let out = build_output_entity(entity, rel, full, config);
         let bytes = serde_json::to_vec(&out).unwrap_or_default();
         if !enforcer.try_add(bytes.len()) {
             let pagination = PaginationBlock {
@@ -395,27 +404,48 @@ pub fn build_standard_response(
                 cursor: format!("snap_{}_p{}", raw.frame, dynamic_entities.len()),
                 omitted_nearest_dist: rel.dist,
             };
-            return serde_json::json!({
+            let mut resp = serde_json::json!({
                 "frame": raw.frame,
                 "timestamp_ms": raw.timestamp_ms,
                 "perspective": perspective_json(&raw.perspective, perspective),
                 "entities": dynamic_entities,
-                "static_summary": { "count": static_count, "categories": static_categories },
                 "pagination": pagination,
                 "budget": enforcer.report(),
             });
+            if full {
+                resp["static_nodes"] = serde_json::json!(static_nodes);
+            } else {
+                resp["static_summary"] = serde_json::json!({ "count": static_count, "categories": static_categories });
+            }
+            return resp;
         }
         dynamic_entities.push(out);
     }
 
-    serde_json::json!({
+    let mut resp = serde_json::json!({
         "frame": raw.frame,
         "timestamp_ms": raw.timestamp_ms,
         "perspective": perspective_json(&raw.perspective, perspective),
         "entities": dynamic_entities,
-        "static_summary": { "count": static_count, "categories": static_categories },
         "budget": enforcer.report(),
-    })
+    });
+    if full {
+        resp["static_nodes"] = serde_json::json!(static_nodes);
+    } else {
+        resp["static_summary"] = serde_json::json!({ "count": static_count, "categories": static_categories });
+    }
+    resp
+}
+
+pub fn build_standard_response(
+    raw: &SnapshotResponse,
+    entities: &[(EntityData, RelativePosition)],
+    perspective: &Perspective,
+    budget_limit: u32,
+    hard_cap: u32,
+    config: &SessionConfig,
+) -> serde_json::Value {
+    build_snapshot_body(raw, entities, perspective, budget_limit, hard_cap, config, SnapshotTier::Standard)
 }
 
 pub fn build_full_response(
@@ -426,58 +456,7 @@ pub fn build_full_response(
     hard_cap: u32,
     config: &SessionConfig,
 ) -> serde_json::Value {
-    let mut enforcer = BudgetEnforcer::new(budget_limit, hard_cap);
-    enforcer.try_add(200);
-
-    let mut dynamic_entities: Vec<OutputEntity> = Vec::new();
-    let mut static_nodes: Vec<serde_json::Value> = Vec::new();
-    let total = entities.len();
-
-    for (entity, rel) in entities {
-        if is_entity_static(entity, config) {
-            let node = serde_json::json!({
-                "path": entity.path,
-                "class": entity.class,
-                "pos": entity.position,
-            });
-            let bytes = serde_json::to_vec(&node).unwrap_or_default();
-            if enforcer.try_add(bytes.len()) {
-                static_nodes.push(node);
-            }
-            continue;
-        }
-
-        let out = build_output_entity(entity, rel, true, config);
-        let bytes = serde_json::to_vec(&out).unwrap_or_default();
-        if !enforcer.try_add(bytes.len()) {
-            let pagination = PaginationBlock {
-                truncated: true,
-                showing: dynamic_entities.len(),
-                total,
-                cursor: format!("snap_{}_p{}", raw.frame, dynamic_entities.len()),
-                omitted_nearest_dist: rel.dist,
-            };
-            return serde_json::json!({
-                "frame": raw.frame,
-                "timestamp_ms": raw.timestamp_ms,
-                "perspective": perspective_json(&raw.perspective, perspective),
-                "entities": dynamic_entities,
-                "static_nodes": static_nodes,
-                "pagination": pagination,
-                "budget": enforcer.report(),
-            });
-        }
-        dynamic_entities.push(out);
-    }
-
-    serde_json::json!({
-        "frame": raw.frame,
-        "timestamp_ms": raw.timestamp_ms,
-        "perspective": perspective_json(&raw.perspective, perspective),
-        "entities": dynamic_entities,
-        "static_nodes": static_nodes,
-        "budget": enforcer.report(),
-    })
+    build_snapshot_body(raw, entities, perspective, budget_limit, hard_cap, config, SnapshotTier::Full)
 }
 
 pub fn build_expand_response(

@@ -11,9 +11,9 @@ use spectator_core::{
 };
 use spectator_protocol::query::{DetailLevel, GetSnapshotDataParams, PerspectiveParam};
 
-use crate::tcp::{get_config, query_addon};
+use crate::tcp::get_config;
 
-use super::{deserialize_response, finalize_response, serialize_params};
+use super::{finalize_response, query_and_deserialize};
 use super::snapshot::to_entity_snapshot;
 
 /// MCP parameters for the spatial_delta tool.
@@ -127,11 +127,8 @@ pub async fn handle_spatial_delta(
         expose_internals: config.expose_internals,
     };
 
-    let raw_data: spectator_protocol::query::SnapshotResponse = {
-        let data =
-            query_addon(state, "get_snapshot_data", serialize_params(&query_params)?).await?;
-        deserialize_response(data)?
-    };
+    let raw_data: spectator_protocol::query::SnapshotResponse =
+        query_and_deserialize(state, "get_snapshot_data", &query_params).await?;
 
     // 4. Convert to entity snapshots
     let current_snapshots: Vec<EntitySnapshot> = raw_data

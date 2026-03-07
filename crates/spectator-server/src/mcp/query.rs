@@ -16,7 +16,7 @@ use spectator_protocol::query::{
 
 use crate::tcp::{get_config, query_addon, SessionState};
 
-use super::{deserialize_response, finalize_response, serialize_params};
+use super::{deserialize_response, finalize_response, query_and_deserialize, require_param, serialize_params};
 
 /// MCP parameters for the spatial_query tool.
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -95,8 +95,8 @@ pub async fn resolve_origin(
         QueryOrigin::Position(pos) => Ok((vec_to_array3(pos), None)),
         QueryOrigin::Node(path) => {
             let req = SpatialQueryRequest::ResolveNode { path: path.clone() };
-            let data = query_addon(state, "spatial_query", serialize_params(&req)?).await?;
-            let resolved: ResolveNodeResponse = deserialize_response(data)?;
+            let resolved: ResolveNodeResponse =
+                query_and_deserialize(state, "spatial_query", &req).await?;
             Ok((
                 vec_to_array3(&resolved.position),
                 Some(vec_to_array3(&resolved.forward)),
@@ -182,9 +182,8 @@ pub async fn build_relationship_response(
         to: to_origin.clone(),
         collision_mask: None,
     };
-    let raycast_data =
-        query_addon(state, "spatial_query", serialize_params(&raycast_req)?).await?;
-    let raycast: RaycastResponse = deserialize_response(raycast_data)?;
+    let raycast: RaycastResponse =
+        query_and_deserialize(state, "spatial_query", &raycast_req).await?;
 
     // Optional nav distance
     let nav_distance = {
@@ -267,18 +266,15 @@ pub async fn handle_spatial_query(
             build_radius_response(&results, from_pos, from_fwd, params.radius)
         }
         "raycast" => {
-            let to_val = params.to.as_ref().ok_or_else(|| {
-                McpError::invalid_params("'to' is required for raycast query", None)
-            })?;
+            let to_val = require_param!(params.to.as_ref(), "'to' is required for raycast query");
             let to_origin = parse_origin(to_val)?;
             let req = SpatialQueryRequest::Raycast {
                 from: from_origin.clone(),
                 to: to_origin,
                 collision_mask: None,
             };
-            let data =
-                query_addon(state, "spatial_query", serialize_params(&req)?).await?;
-            let raycast: RaycastResponse = deserialize_response(data)?;
+            let raycast: RaycastResponse =
+                query_and_deserialize(state, "spatial_query", &req).await?;
             serde_json::json!({
                 "query": "raycast",
                 "from": params.from,
@@ -287,17 +283,14 @@ pub async fn handle_spatial_query(
             })
         }
         "path_distance" => {
-            let to_val = params.to.as_ref().ok_or_else(|| {
-                McpError::invalid_params("'to' is required for path_distance query", None)
-            })?;
+            let to_val = require_param!(params.to.as_ref(), "'to' is required for path_distance query");
             let to_origin = parse_origin(to_val)?;
             let req = SpatialQueryRequest::PathDistance {
                 from: from_origin,
                 to: to_origin,
             };
-            let data =
-                query_addon(state, "spatial_query", serialize_params(&req)?).await?;
-            let nav: NavPathResponse = deserialize_response(data)?;
+            let nav: NavPathResponse =
+                query_and_deserialize(state, "spatial_query", &req).await?;
             serde_json::json!({
                 "query": "path_distance",
                 "from": params.from,
@@ -306,9 +299,7 @@ pub async fn handle_spatial_query(
             })
         }
         "relationship" => {
-            let to_val = params.to.as_ref().ok_or_else(|| {
-                McpError::invalid_params("'to' is required for relationship query", None)
-            })?;
+            let to_val = require_param!(params.to.as_ref(), "'to' is required for relationship query");
             let to_origin = parse_origin(to_val)?;
             let (from_pos, from_fwd) = resolve_origin(&from_origin, state).await?;
             let (to_pos, to_fwd) = resolve_origin(&to_origin, state).await?;

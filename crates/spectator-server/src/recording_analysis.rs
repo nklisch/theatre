@@ -153,6 +153,72 @@ pub fn read_recording_meta(db: &Connection) -> Result<RecordingMeta, McpError> {
 }
 
 // ---------------------------------------------------------------------------
+// RecordingSession
+// ---------------------------------------------------------------------------
+
+/// Open recording DB and metadata in one step. Used by all 4 analysis handlers.
+pub struct RecordingSession {
+    pub db: Connection,
+    pub meta: RecordingMeta,
+    pub storage_path: String,
+    pub recording_id: String,
+}
+
+impl RecordingSession {
+    pub async fn open(
+        state: &Arc<Mutex<SessionState>>,
+        recording_id: Option<&str>,
+    ) -> Result<Self, McpError> {
+        let storage_path = resolve_storage_path(state).await?;
+        let recording_id = match recording_id {
+            Some(id) => id.to_string(),
+            None => most_recent_recording(&storage_path).ok_or_else(|| {
+                McpError::invalid_params(
+                    "No recording_id specified and no recordings found",
+                    None,
+                )
+            })?,
+        };
+        let db = open_recording_db(&storage_path, &recording_id)?;
+        let meta = read_recording_meta(&db)?;
+        Ok(Self { db, meta, storage_path, recording_id })
+    }
+
+    pub fn finalize(
+        &self,
+        response: &mut serde_json::Value,
+        budget_limit: u32,
+        hard_cap: u32,
+    ) -> Result<String, McpError> {
+        if let Some(obj) = response.as_object_mut() {
+            obj.insert("recording_context".into(), self.meta.to_context());
+        }
+        crate::mcp::finalize_response(response, budget_limit, hard_cap)
+    }
+}
+
+/// Find the most recently modified .sqlite file in the storage directory.
+fn most_recent_recording(storage_path: &str) -> Option<String> {
+    let entries = std::fs::read_dir(storage_path).ok()?;
+    let mut newest: Option<(std::time::SystemTime, String)> = None;
+
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("sqlite") {
+            continue;
+        }
+        let modified = entry.metadata().ok()?.modified().ok()?;
+        let stem = path.file_stem()?.to_str()?.to_string();
+
+        if newest.is_none() || modified > newest.as_ref().unwrap().0 {
+            newest = Some((modified, stem));
+        }
+    }
+
+    newest.map(|(_, id)| id)
+}
+
+// ---------------------------------------------------------------------------
 // snapshot_at
 // ---------------------------------------------------------------------------
 
