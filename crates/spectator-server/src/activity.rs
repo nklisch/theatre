@@ -46,11 +46,10 @@ pub fn snapshot_summary(params: &SpatialSnapshotParams) -> String {
     }
     let detail = &params.detail;
     let mut parts = vec![format!("Snapshot ({detail})")];
-    if let Some(ref groups) = params.groups {
-        if !groups.is_empty() {
+    if let Some(ref groups) = params.groups
+        && !groups.is_empty() {
             parts.push(format!("groups: {}", groups.join(", ")));
         }
-    }
     if let Some(ref node) = params.focal_node {
         parts.push(format!("from: {node}"));
     }

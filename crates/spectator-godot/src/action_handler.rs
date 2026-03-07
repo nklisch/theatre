@@ -261,7 +261,7 @@ fn execute_call_method(
 
     let variant_args: Vec<Variant> = args
         .iter()
-        .map(|a| json_to_variant(a))
+        .map(json_to_variant)
         .collect::<Result<_, _>>()?;
 
     let arr: Array<Variant> = variant_args.into_iter().collect();
@@ -293,7 +293,7 @@ fn execute_emit_signal(
 
     let variant_args: Vec<Variant> = args
         .iter()
-        .map(|a| json_to_variant(a))
+        .map(json_to_variant)
         .collect::<Result<_, _>>()?;
 
     node.emit_signal(signal, &variant_args);
@@ -347,11 +347,10 @@ fn execute_spawn_node(
                     pos[2] as f32,
                 ));
             }
-        } else if let Ok(mut n2d) = instance.try_cast::<Node2D>() {
-            if pos.len() >= 2 {
+        } else if let Ok(mut n2d) = instance.try_cast::<Node2D>()
+            && pos.len() >= 2 {
                 n2d.set_global_position(Vector2::new(pos[0] as f32, pos[1] as f32));
             }
-        }
     }
 
     let node_path = format!("{parent_path}/{node_name}");
@@ -419,7 +418,7 @@ pub fn json_to_variant(value: &serde_json::Value) -> Result<Variant, String> {
             // Generic array
             let godot_array: Array<Variant> = arr
                 .iter()
-                .map(|v| json_to_variant(v))
+                .map(json_to_variant)
                 .collect::<Result<Vec<_>, _>>()?
                 .into_iter()
                 .collect();

@@ -26,19 +26,14 @@ pub struct ClusterNearest {
 }
 
 /// Clustering strategy.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ClusterStrategy {
+    #[default]
     Group,
     Class,
     Proximity,
     None,
-}
-
-impl Default for ClusterStrategy {
-    fn default() -> Self {
-        Self::Group
-    }
 }
 
 /// Cluster entities by group membership (default strategy).

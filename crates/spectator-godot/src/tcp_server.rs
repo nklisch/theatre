@@ -425,11 +425,10 @@ impl SpectatorTCPServer {
         }
         let count = node.get_child_count();
         for i in 0..count {
-            if let Some(child) = node.get_child(i) {
-                if Self::has_node_type_recursive(&child, check_2d) {
+            if let Some(child) = node.get_child(i)
+                && Self::has_node_type_recursive(&child, check_2d) {
                     return true;
                 }
-            }
         }
         false
     }

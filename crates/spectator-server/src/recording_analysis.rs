@@ -103,6 +103,33 @@ pub struct RecordingMeta {
     pub physics_ticks_per_sec: u32,
 }
 
+impl RecordingMeta {
+    /// Build a light JSON context object for inclusion in analysis responses.
+    pub fn to_context(&self) -> serde_json::Value {
+        json!({
+            "recording_id": self.id,
+            "name": self.name,
+            "frame_range": [self.started_at_frame, self.ended_at_frame],
+            "dimensions": match self.scene_dimensions { 2 => "2d", 3 => "3d", _ => "mixed" },
+        })
+    }
+
+    /// Validate that a frame number is within the recording's bounds.
+    pub fn validate_frame(&self, frame: u64) -> Result<(), McpError> {
+        let start = self.started_at_frame as u64;
+        if let Some(end) = self.ended_at_frame {
+            let end = end as u64;
+            if frame < start || frame > end {
+                return Err(McpError::invalid_params(
+                    format!("Frame {frame} out of range [{start}-{end}]"),
+                    None,
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
 /// Get recording metadata from the recording table.
 pub fn read_recording_meta(db: &Connection) -> Result<RecordingMeta, McpError> {
     db.query_row(
@@ -320,8 +347,8 @@ pub fn query_range(
         if let Some(range_match) =
             evaluate_condition(frame, time_ms, node, &entities, condition, &prev_entities)
         {
-            if condition.condition_type == "proximity" {
-                if let Some(dist) = range_match.distance {
+            if condition.condition_type == "proximity"
+                && let Some(dist) = range_match.distance {
                     if first_breach_frame.is_none() {
                         first_breach_frame = Some(frame);
                     }
@@ -330,7 +357,6 @@ pub fn query_range(
                         deepest_frame = Some(frame);
                     }
                 }
-            }
             matches.push(range_match);
         }
 
@@ -357,10 +383,10 @@ pub fn query_range(
     // Insert system markers for significant findings
     if condition.condition_type == "velocity_spike" || condition.condition_type == "proximity" {
         for m in &matches {
-            if let Some(ref note) = m.note {
-                if note.starts_with("velocity:")
+            if let Some(ref note) = m.note
+                && (note.starts_with("velocity:")
                     || note == "first_breach"
-                    || note == "deepest_penetration"
+                    || note == "deepest_penetration")
                 {
                     insert_system_marker(
                         storage_path,
@@ -370,7 +396,6 @@ pub fn query_range(
                         &format!("{}: {}", condition.condition_type, note),
                     );
                 }
-            }
         }
     }
 
@@ -517,13 +542,12 @@ fn evaluate_property_change(
 
 /// Simple glob matching for target patterns like "walls/*".
 fn path_matches(path: &str, pattern: &str) -> bool {
-    if pattern.ends_with("/*") {
-        let prefix = &pattern[..pattern.len() - 2];
+    if let Some(prefix) = pattern.strip_suffix("/*") {
         path.starts_with(prefix)
             && path.len() > prefix.len()
             && path.as_bytes()[prefix.len()] == b'/'
-    } else if pattern.ends_with('*') {
-        path.starts_with(&pattern[..pattern.len() - 1])
+    } else if let Some(stripped) = pattern.strip_suffix('*') {
+        path.starts_with(stripped)
     } else {
         path == pattern
     }

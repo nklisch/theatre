@@ -216,11 +216,10 @@ pub async fn build_relationship_response(
             Elevation::Below(d) => serde_json::json!(-d),
         };
     }
-    if !raycast.clear {
-        if let Some(ref occ) = raycast.blocked_by {
+    if !raycast.clear
+        && let Some(ref occ) = raycast.blocked_by {
             result["occluder"] = serde_json::json!(occ);
         }
-    }
     if let Some(nav) = nav_distance {
         result["nav_distance"] = serde_json::json!((nav * 10.0).round() / 10.0);
     }
@@ -336,11 +335,10 @@ pub async fn handle_spatial_query(
     };
 
     // Add "from" field if not already present
-    if let serde_json::Value::Object(ref mut map) = response {
-        if !map.contains_key("from") {
+    if let serde_json::Value::Object(ref mut map) = response
+        && !map.contains_key("from") {
             map.insert("from".into(), params.from.clone());
         }
-    }
 
     finalize_response(&mut response, budget_limit, config.token_hard_cap)
 }

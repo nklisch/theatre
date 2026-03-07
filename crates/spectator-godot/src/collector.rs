@@ -49,12 +49,6 @@ impl INode for SpectatorCollector {
 
 #[godot_api]
 impl SpectatorCollector {
-    /// GDScript-callable wrapper (used for testing).
-    #[func]
-    pub fn collect_snapshot_dict(&self, _params_json: GString) -> VarDictionary {
-        VarDictionary::new()
-    }
-
     /// Returns the number of nodes tracked in the last snapshot.
     #[func]
     pub fn get_tracked_count(&self) -> u32 {
@@ -205,12 +199,11 @@ impl SpectatorCollector {
                 let entity = self.collect_single_entity_3d(&node3d, params);
                 entities.push(entity);
             }
-        } else if let Ok(node2d) = node.clone().try_cast::<Node2D>() {
-            if self.should_collect_2d(&node2d, params) {
+        } else if let Ok(node2d) = node.clone().try_cast::<Node2D>()
+            && self.should_collect_2d(&node2d, params) {
                 let entity = self.collect_single_entity_2d(&node2d, params);
                 entities.push(entity);
             }
-        }
 
         let count = node.get_child_count();
         for i in 0..count {
@@ -224,11 +217,10 @@ impl SpectatorCollector {
     fn should_collect_3d(&self, node: &Gd<Node3D>, params: &GetSnapshotDataParams) -> bool {
         let class_name = node.get_class().to_string();
 
-        if !params.class_filter.is_empty() {
-            if !params.class_filter.iter().any(|f| class_name == *f) {
+        if !params.class_filter.is_empty()
+            && !params.class_filter.contains(&class_name) {
                 return false;
             }
-        }
 
         if !params.groups.is_empty() {
             let node_ref: Gd<Node> = node.clone().upcast();
@@ -248,11 +240,10 @@ impl SpectatorCollector {
     fn should_collect_2d(&self, node: &Gd<Node2D>, params: &GetSnapshotDataParams) -> bool {
         let class_name = node.get_class().to_string();
 
-        if !params.class_filter.is_empty() {
-            if !params.class_filter.iter().any(|f| class_name == *f) {
+        if !params.class_filter.is_empty()
+            && !params.class_filter.contains(&class_name) {
                 return false;
             }
-        }
 
         if !params.groups.is_empty() {
             let node_ref: Gd<Node> = node.clone().upcast();
@@ -495,7 +486,7 @@ impl SpectatorCollector {
                 continue;
             }
             let connections = node.get_signal_connection_list(name.as_str());
-            if connections.len() > 0 {
+            if !connections.is_empty() {
                 result.push(name);
             }
         }
@@ -545,11 +536,10 @@ impl SpectatorCollector {
 
     /// Get the relative path of a node from the current scene root.
     fn get_relative_path(&self, node: &Gd<Node>) -> String {
-        if let Some(tree) = self.base().get_tree() {
-            if let Some(root) = tree.get_current_scene() {
+        if let Some(tree) = self.base().get_tree()
+            && let Some(root) = tree.get_current_scene() {
                 return root.get_path_to(node).to_string();
             }
-        }
         node.get_name().to_string()
     }
 
@@ -774,14 +764,13 @@ impl SpectatorCollector {
         let mut props = serde_json::Map::new();
         match class {
             "CollisionShape3D" => {
-                if let Ok(cs) = child.clone().try_cast::<godot::classes::CollisionShape3D>() {
-                    if let Some(shape) = cs.get_shape() {
+                if let Ok(cs) = child.clone().try_cast::<godot::classes::CollisionShape3D>()
+                    && let Some(shape) = cs.get_shape() {
                         props.insert(
                             "shape".to_string(),
                             serde_json::Value::String(shape.get_class().to_string()),
                         );
                     }
-                }
             }
             "MeshInstance3D" => {
                 if let Ok(mi) = child.clone().try_cast::<Node3D>() {
@@ -812,14 +801,13 @@ impl SpectatorCollector {
                 }
             }
             "CollisionShape2D" => {
-                if let Ok(cs) = child.clone().try_cast::<godot::classes::CollisionShape2D>() {
-                    if let Some(shape) = cs.get_shape() {
+                if let Ok(cs) = child.clone().try_cast::<godot::classes::CollisionShape2D>()
+                    && let Some(shape) = cs.get_shape() {
                         props.insert(
                             "shape".to_string(),
                             serde_json::Value::String(shape.get_class().to_string()),
                         );
                     }
-                }
             }
             "Sprite2D" => {
                 if let Ok(s) = child.clone().try_cast::<Node2D>() {
@@ -864,7 +852,7 @@ impl SpectatorCollector {
                 continue;
             }
             let conns = node.get_signal_connection_list(name.as_str());
-            if conns.len() > 0 {
+            if !conns.is_empty() {
                 let targets: Vec<serde_json::Value> = (0..conns.len())
                     .filter_map(|j| {
                         let conn = conns.get(j)?;
@@ -981,8 +969,8 @@ impl SpectatorCollector {
         };
 
         let mut nearby = Vec::new();
-        if let Some(tree) = self.base().get_tree() {
-            if let Some(root) = tree.get_current_scene() {
+        if let Some(tree) = self.base().get_tree()
+            && let Some(root) = tree.get_current_scene() {
                 self.collect_nearby_recursive(&root, &pos, node, &mut nearby, 20.0);
                 nearby.sort_by(|a, b| {
                     let da = position_distance(&a.position, &node_position);
@@ -991,7 +979,6 @@ impl SpectatorCollector {
                 });
                 nearby.truncate(10);
             }
-        }
 
         let in_areas = self.collect_containing_areas(node3d);
 
@@ -1026,8 +1013,8 @@ impl SpectatorCollector {
         };
 
         let mut nearby = Vec::new();
-        if let Some(tree) = self.base().get_tree() {
-            if let Some(root) = tree.get_current_scene() {
+        if let Some(tree) = self.base().get_tree()
+            && let Some(root) = tree.get_current_scene() {
                 self.collect_nearby_recursive_2d(&root, &pos, node, &mut nearby, 500.0);
                 nearby.sort_by(|a, b| {
                     let da = position_distance(&a.position, &node_position);
@@ -1036,7 +1023,6 @@ impl SpectatorCollector {
                 });
                 nearby.truncate(10);
             }
-        }
 
         let in_areas = self.collect_containing_areas_2d(node2d);
 
@@ -1136,11 +1122,10 @@ impl SpectatorCollector {
     /// Find Area3D nodes that contain (overlap) the target node.
     fn collect_containing_areas(&self, node: &Gd<Node3D>) -> Vec<String> {
         let mut areas = Vec::new();
-        if let Some(tree) = self.base().get_tree() {
-            if let Some(root) = tree.get_current_scene() {
+        if let Some(tree) = self.base().get_tree()
+            && let Some(root) = tree.get_current_scene() {
                 self.find_areas_containing(&root, node, &mut areas);
             }
-        }
         areas
     }
 
@@ -1153,13 +1138,12 @@ impl SpectatorCollector {
         if let Ok(area) = node.clone().try_cast::<godot::classes::Area3D>() {
             let bodies = area.get_overlapping_bodies();
             for i in 0..bodies.len() {
-                if let Some(body) = bodies.get(i) {
-                    if body.instance_id() == target.instance_id() {
+                if let Some(body) = bodies.get(i)
+                    && body.instance_id() == target.instance_id() {
                         let area_node: Gd<Node> = area.clone().upcast();
                         result.push(self.get_relative_path(&area_node));
                         break;
                     }
-                }
             }
         }
 
@@ -1300,22 +1284,20 @@ impl SpectatorCollector {
                     children.insert(name, child_tree);
                 }
             }
-            if !children.is_empty() {
-                if let serde_json::Value::Object(ref mut map) = info {
+            if !children.is_empty()
+                && let serde_json::Value::Object(ref mut map) = info {
                     map.insert(
                         "children".to_string(),
                         serde_json::Value::Object(children),
                     );
                 }
-            }
-        } else if node.get_child_count() > 0 {
-            if let serde_json::Value::Object(ref mut map) = info {
+        } else if node.get_child_count() > 0
+            && let serde_json::Value::Object(ref mut map) = info {
                 map.insert(
                     "children".to_string(),
                     serde_json::json!({"...": "depth_limit_reached"}),
                 );
             }
-        }
 
         info
     }
@@ -1475,7 +1457,7 @@ impl SpectatorCollector {
     /// Get current frame info.
     pub fn get_frame_info(&self) -> FrameInfoResponse {
         let engine = Engine::singleton();
-        let frame = engine.get_physics_frames() as u64;
+        let frame = engine.get_physics_frames();
         let ticks = engine.get_physics_ticks_per_second() as u64;
         let timestamp_ms = if ticks > 0 { (frame * 1000) / ticks } else { 0 };
         let delta = if ticks > 0 { 1.0 / ticks as f64 } else { 0.0 };
@@ -1557,14 +1539,14 @@ impl SpectatorCollector {
     ) -> Result<NavPathResponse, String> {
         let nav_server = NavigationServer3D::singleton();
         let maps = nav_server.get_maps();
-        if maps.len() == 0 {
+        if maps.is_empty() {
             return Err(
                 "No navigation maps available. Is NavigationServer3D active?".into(),
             );
         }
         let map = maps.get(0).ok_or("No navigation map at index 0")?;
         let path = nav_server.map_get_path(map, from, to, true);
-        let traversable = path.len() > 0;
+        let traversable = !path.is_empty();
         let nav_distance: f64 = if traversable {
             let mut total = 0.0f32;
             for i in 1..path.len() {

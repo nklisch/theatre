@@ -218,10 +218,13 @@ async fn handle_add_marker(
     budget_limit: u32,
     hard_cap: u32,
 ) -> Result<String, McpError> {
-    let query = json!({
+    let mut query = json!({
         "source": "agent",
         "label": params.marker_label.as_deref().unwrap_or(""),
     });
+    if let Some(frame) = params.marker_frame {
+        query["frame"] = json!(frame);
+    }
     let data = query_addon(state, "recording_marker", query).await?;
     let mut response = data;
     finalize_response(&mut response, budget_limit, hard_cap)
@@ -241,7 +244,10 @@ async fn handle_snapshot_at(
     let recording_id = resolve_recording_id(params, &storage_path)?;
     let db = recording_analysis::open_recording_db(&storage_path, &recording_id)?;
 
+    let meta = recording_analysis::read_recording_meta(&db)?;
+
     let frame = if let Some(f) = params.at_frame {
+        meta.validate_frame(f)?;
         f
     } else if let Some(t) = params.at_time_ms {
         let (frame, _) = recording_analysis::read_frame_at_time(&db, t)?;
@@ -256,6 +262,9 @@ async fn handle_snapshot_at(
     let detail = params.detail.as_deref().unwrap_or("standard");
     let mut response =
         recording_analysis::snapshot_at(&db, frame, detail, budget_limit, hard_cap)?;
+    if let Some(obj) = response.as_object_mut() {
+        obj.insert("recording_context".into(), meta.to_context());
+    }
     finalize_response(&mut response, budget_limit, hard_cap)
 }
 
@@ -269,6 +278,8 @@ async fn handle_query_range(
     let recording_id = resolve_recording_id(params, &storage_path)?;
     let db = recording_analysis::open_recording_db(&storage_path, &recording_id)?;
 
+    let meta = recording_analysis::read_recording_meta(&db)?;
+
     let node = params.node.as_deref().ok_or_else(|| {
         McpError::invalid_params("query_range requires 'node' parameter".to_string(), None)
     })?;
@@ -278,6 +289,8 @@ async fn handle_query_range(
     let to = params.to_frame.ok_or_else(|| {
         McpError::invalid_params("query_range requires 'to_frame'".to_string(), None)
     })?;
+    meta.validate_frame(from)?;
+    meta.validate_frame(to)?;
     let condition: recording_analysis::QueryCondition = params
         .condition
         .as_ref()
@@ -297,6 +310,9 @@ async fn handle_query_range(
         &condition,
         budget_limit,
     )?;
+    if let Some(obj) = response.as_object_mut() {
+        obj.insert("recording_context".into(), meta.to_context());
+    }
     finalize_response(&mut response, budget_limit, hard_cap)
 }
 
@@ -310,14 +326,21 @@ async fn handle_diff_frames(
     let recording_id = resolve_recording_id(params, &storage_path)?;
     let db = recording_analysis::open_recording_db(&storage_path, &recording_id)?;
 
+    let meta = recording_analysis::read_recording_meta(&db)?;
+
     let frame_a = params.frame_a.ok_or_else(|| {
         McpError::invalid_params("diff_frames requires 'frame_a'".to_string(), None)
     })?;
     let frame_b = params.frame_b.ok_or_else(|| {
         McpError::invalid_params("diff_frames requires 'frame_b'".to_string(), None)
     })?;
+    meta.validate_frame(frame_a)?;
+    meta.validate_frame(frame_b)?;
 
     let mut response = recording_analysis::diff_frames(&db, frame_a, frame_b, budget_limit)?;
+    if let Some(obj) = response.as_object_mut() {
+        obj.insert("recording_context".into(), meta.to_context());
+    }
     finalize_response(&mut response, budget_limit, hard_cap)
 }
 
@@ -330,6 +353,14 @@ async fn handle_find_event(
     let storage_path = recording_analysis::resolve_storage_path(state).await?;
     let recording_id = resolve_recording_id(params, &storage_path)?;
     let db = recording_analysis::open_recording_db(&storage_path, &recording_id)?;
+
+    let meta = recording_analysis::read_recording_meta(&db)?;
+    if let Some(from) = params.from_frame {
+        meta.validate_frame(from)?;
+    }
+    if let Some(to) = params.to_frame {
+        meta.validate_frame(to)?;
+    }
 
     let event_type = params.event_type.as_deref().ok_or_else(|| {
         McpError::invalid_params("find_event requires 'event_type'".to_string(), None)
@@ -345,6 +376,9 @@ async fn handle_find_event(
         params.to_frame,
         budget_limit,
     )?;
+    if let Some(obj) = response.as_object_mut() {
+        obj.insert("recording_context".into(), meta.to_context());
+    }
     finalize_response(&mut response, budget_limit, hard_cap)
 }
 

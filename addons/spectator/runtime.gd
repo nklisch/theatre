@@ -40,7 +40,9 @@ func _ready() -> void:
 	recorder = SpectatorRecorder.new()
 	add_child(recorder)
 	recorder.set_collector(collector)
+	recorder.recording_started.connect(_on_recording_started)
 	recorder.recording_stopped.connect(_on_recording_stopped)
+	recorder.marker_added.connect(_on_marker_added)
 
 	tcp_server.set_recorder(recorder)
 
@@ -150,8 +152,26 @@ func _set_recording_indicator(visible: bool) -> void:
 		_recording_dot.visible = visible
 
 
+func _on_recording_started(_id: String, _name: String) -> void:
+	_set_recording_indicator(true)
+	_show_toast("Recording started")
+
+
 func _on_recording_stopped(_id: String, _frames: int) -> void:
 	_set_recording_indicator(false)
+
+
+func _on_marker_added(_frame: int, source: String, label: String) -> void:
+	var text := "Marker: %s" % label if not label.is_empty() else "Marker added"
+	if source != "human":
+		text = "[%s] %s" % [source, text]
+	_show_toast(text)
+	if _recording_dot:
+		_recording_dot.color = Color.YELLOW
+		get_tree().create_timer(0.3).timeout.connect(func() -> void:
+			if _recording_dot:
+				_recording_dot.color = Color(0.9, 0.1, 0.1)
+		)
 
 
 func _on_activity_received(entry_type: String, summary: String, _tool: String, _active_watches: int) -> void:

@@ -4,18 +4,13 @@ use std::collections::HashMap;
 use crate::cluster::ClusterStrategy;
 
 /// Bearing output format preference.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum BearingFormat {
     Cardinal,
     Degrees,
+    #[default]
     Both,
-}
-
-impl Default for BearingFormat {
-    fn default() -> Self {
-        Self::Both
-    }
 }
 
 /// Active session configuration.

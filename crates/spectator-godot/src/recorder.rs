@@ -98,7 +98,7 @@ impl INode for SpectatorRecorder {
         }
         self.frame_counter += 1;
 
-        if self.frame_counter % self.capture_interval != 0 {
+        if !self.frame_counter.is_multiple_of(self.capture_interval) {
             return;
         }
 
@@ -333,8 +333,8 @@ impl SpectatorRecorder {
             if let Ok(db) = Connection::open_with_flags(
                 &path,
                 rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-            ) {
-                if let Ok(mut stmt) = db.prepare(
+            )
+                && let Ok(mut stmt) = db.prepare(
                     "SELECT id, name, started_at_frame, ended_at_frame, \
                      started_at_ms, ended_at_ms FROM recording LIMIT 1",
                 ) {
@@ -376,7 +376,6 @@ impl SpectatorRecorder {
                         result.push(&dict);
                     }
                 }
-            }
         }
 
         result
@@ -386,7 +385,7 @@ impl SpectatorRecorder {
     #[func]
     pub fn delete_recording(&self, storage_path: GString, recording_id: GString) -> bool {
         let dir_path = globalize_path(&storage_path.to_string());
-        let file_path = format!("{}/{}.sqlite", dir_path, recording_id.to_string());
+        let file_path = format!("{}/{}.sqlite", dir_path, recording_id);
         std::fs::remove_file(&file_path).is_ok()
     }
 
@@ -411,7 +410,7 @@ impl SpectatorRecorder {
         recording_id: GString,
     ) -> Array<VarDictionary> {
         let dir_path = globalize_path(&storage_path.to_string());
-        let file_path = format!("{}/{}.sqlite", dir_path, recording_id.to_string());
+        let file_path = format!("{}/{}.sqlite", dir_path, recording_id);
         let mut result = Array::new();
 
         let db = match Connection::open_with_flags(

@@ -70,7 +70,9 @@ func _try_acquire_runtime() -> void:
 				var rec = rt.get("recorder")
 				if rec and is_instance_valid(rec):
 					_recorder = rec
+					_recorder.recording_started.connect(_on_recording_started)
 					_recorder.recording_stopped.connect(_on_recording_stopped)
+					_recorder.marker_added.connect(_on_marker_added)
 
 
 func _update_status() -> void:
@@ -180,10 +182,31 @@ func _update_recording_controls() -> void:
 	recording_stats.visible = _recording_active
 
 
+func _on_recording_started(_id: String, _name: String) -> void:
+	_recording_active = true
+	_update_recording_controls()
+	_add_activity_entry({
+		"entry_type": "recording",
+		"summary": "Recording started",
+		"tool": "recording",
+		"timestamp": Time.get_unix_time_from_system(),
+	})
+
+
 func _on_recording_stopped(_id: String, _frames: int) -> void:
 	_recording_active = false
 	_library_dirty = true
 	_update_recording_controls()
+
+
+func _on_marker_added(_frame: int, _source: String, label: String) -> void:
+	var text := "Marker: %s" % label if not label.is_empty() else "Marker added"
+	_add_activity_entry({
+		"entry_type": "recording",
+		"summary": text,
+		"tool": "recording",
+		"timestamp": Time.get_unix_time_from_system(),
+	})
 
 
 func _refresh_library() -> void:

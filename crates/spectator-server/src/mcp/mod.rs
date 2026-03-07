@@ -368,8 +368,7 @@ impl SpectatorServer {
                     serialize_params(&query_params)?,
                 )
                 .await
-                {
-                    if let Ok(raw_data) = serde_json::from_value::<
+                    && let Ok(raw_data) = serde_json::from_value::<
                         spectator_protocol::query::SnapshotResponse,
                     >(snap_data)
                     {
@@ -398,7 +397,6 @@ impl SpectatorServer {
                             map.insert("delta".into(), delta_json);
                         }
                     }
-                }
             } else {
                 // No baseline — can't compute delta
                 if let serde_json::Value::Object(ref mut map) = response {
