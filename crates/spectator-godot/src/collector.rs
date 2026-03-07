@@ -2,8 +2,8 @@ use godot::builtin::{Array, GString, StringName, Variant, VarDictionary, Vector2
 use godot::builtin::VariantType;
 use godot::classes::{
     CharacterBody2D, CharacterBody3D, Engine, NavigationServer3D, Node, Node2D, Node3D,
-    PhysicsBody2D, PhysicsBody3D, PhysicsRayQueryParameters3D, PhysicsServer3D, Resource,
-    RigidBody2D, RigidBody3D,
+    PhysicsBody2D, PhysicsBody3D, PhysicsRayQueryParameters2D, PhysicsRayQueryParameters3D,
+    PhysicsServer2D, PhysicsServer3D, Resource, RigidBody2D, RigidBody3D,
 };
 use godot::obj::Gd;
 use godot::prelude::*;
@@ -310,7 +310,7 @@ impl SpectatorCollector {
 
         let velocity = self.get_velocity_2d(node);
         let groups = self.get_groups(&node_ref);
-        let visible = node.is_visible_in_tree();
+        let visible = node.is_visible_in_tree() && self.is_in_camera_2d_viewport(pos);
         let state = self.get_exported_state(&node_ref);
 
         let mut entity = EntityData {
@@ -401,6 +401,24 @@ impl SpectatorCollector {
             basis: vec![vec![rot as f64]], // single angle for 2D
             scale: vec![scale.x as f64, scale.y as f64],
         }
+    }
+
+    /// Check if a 2D world position is within the Camera2D viewport.
+    /// Returns true if no Camera2D is found (conservative — don't filter).
+    fn is_in_camera_2d_viewport(&self, world_pos: Vector2) -> bool {
+        let Some(vp) = self.base().get_viewport() else {
+            return true;
+        };
+        if vp.get_camera_2d().is_none() {
+            return true;
+        }
+        let canvas_transform = vp.get_canvas_transform();
+        let screen_pos = canvas_transform * world_pos;
+        let vp_size = vp.get_visible_rect().size;
+        screen_pos.x >= 0.0
+            && screen_pos.x <= vp_size.x
+            && screen_pos.y >= 0.0
+            && screen_pos.y <= vp_size.y
     }
 
     /// Get all groups a node belongs to (excluding internal Godot groups).
@@ -1525,6 +1543,64 @@ impl SpectatorCollector {
                 clear: false,
                 blocked_by,
                 blocked_at: Some(vec![hit_pos.x as f64, hit_pos.y as f64, hit_pos.z as f64]),
+                total_distance,
+                clear_distance: from.distance_to(hit_pos) as f64,
+            })
+        }
+    }
+
+    /// Perform a 2D physics raycast between two points.
+    pub fn raycast_2d(
+        &self,
+        from: Vector2,
+        to: Vector2,
+        collision_mask: Option<u32>,
+    ) -> Result<RaycastResponse, String> {
+        let tree = self.base().get_tree().ok_or("Not in scene tree")?;
+        let world = tree
+            .get_root()
+            .ok_or("No root")?
+            .get_world_2d()
+            .ok_or("No World2D — is this a 2D scene?")?;
+        let space = world.get_space();
+        let mut physics_server = PhysicsServer2D::singleton();
+        let mut direct_state = physics_server
+            .space_get_direct_state(space)
+            .ok_or("Could not get 2D physics direct state")?;
+
+        let mut query =
+            PhysicsRayQueryParameters2D::create(from, to).ok_or("Could not create 2D ray query")?;
+        if let Some(mask) = collision_mask {
+            query.set_collision_mask(mask);
+        }
+
+        let result = direct_state.intersect_ray(&query);
+        let total_distance = from.distance_to(to) as f64;
+
+        if result.is_empty() {
+            Ok(RaycastResponse {
+                clear: true,
+                blocked_by: None,
+                blocked_at: None,
+                total_distance,
+                clear_distance: total_distance,
+            })
+        } else {
+            let hit_pos: Vector2 = result
+                .get("position")
+                .map(|v| v.to::<Vector2>())
+                .unwrap_or(Vector2::ZERO);
+            let blocked_by = result.get("collider").and_then(|v| {
+                v.try_to::<Gd<godot::classes::Object>>()
+                    .ok()
+                    .and_then(|obj| obj.try_cast::<Node>().ok())
+                    .map(|n| self.get_relative_path(&n))
+            });
+
+            Ok(RaycastResponse {
+                clear: false,
+                blocked_by,
+                blocked_at: Some(vec![hit_pos.x as f64, hit_pos.y as f64]),
                 total_distance,
                 clear_distance: from.distance_to(hit_pos) as f64,
             })

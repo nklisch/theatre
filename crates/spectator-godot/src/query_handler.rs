@@ -152,23 +152,42 @@ fn handle_spatial_query(
         } => {
             let from_pos = resolve_query_origin(&from, collector)?;
             let to_pos = resolve_query_origin(&to, collector)?;
-            let from_v3 = godot::builtin::Vector3::new(
-                from_pos[0] as f32,
-                from_pos[1] as f32,
-                from_pos[2] as f32,
-            );
-            let to_v3 = godot::builtin::Vector3::new(
-                to_pos[0] as f32,
-                to_pos[1] as f32,
-                to_pos[2] as f32,
-            );
-            let result = collector
-                .raycast(from_v3, to_v3, collision_mask)
-                .map_err(|e| QueryError {
-                    code: "query_failed".into(),
-                    message: e,
-                })?;
-            to_json_value(&result)
+            // Use 2D raycast when both positions are 2D (2 components)
+            if from_pos.len() <= 2 && to_pos.len() <= 2 {
+                let from_v2 = godot::builtin::Vector2::new(
+                    from_pos[0] as f32,
+                    *from_pos.get(1).unwrap_or(&0.0) as f32,
+                );
+                let to_v2 = godot::builtin::Vector2::new(
+                    to_pos[0] as f32,
+                    *to_pos.get(1).unwrap_or(&0.0) as f32,
+                );
+                let result = collector
+                    .raycast_2d(from_v2, to_v2, collision_mask)
+                    .map_err(|e| QueryError {
+                        code: "query_failed".into(),
+                        message: e,
+                    })?;
+                to_json_value(&result)
+            } else {
+                let from_v3 = godot::builtin::Vector3::new(
+                    from_pos[0] as f32,
+                    *from_pos.get(1).unwrap_or(&0.0) as f32,
+                    *from_pos.get(2).unwrap_or(&0.0) as f32,
+                );
+                let to_v3 = godot::builtin::Vector3::new(
+                    to_pos[0] as f32,
+                    *to_pos.get(1).unwrap_or(&0.0) as f32,
+                    *to_pos.get(2).unwrap_or(&0.0) as f32,
+                );
+                let result = collector
+                    .raycast(from_v3, to_v3, collision_mask)
+                    .map_err(|e| QueryError {
+                        code: "query_failed".into(),
+                        message: e,
+                    })?;
+                to_json_value(&result)
+            }
         }
         SpatialQueryRequest::PathDistance { from, to } => {
             let from_pos = resolve_query_origin(&from, collector)?;

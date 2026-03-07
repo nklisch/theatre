@@ -268,7 +268,7 @@ fn budget_truncate(entities: &[serde_json::Value], budget_limit: u32) -> Vec<ser
 /// Query condition for range search.
 #[derive(Debug, Deserialize)]
 pub struct QueryCondition {
-    /// Condition type: proximity, property_change, signal_emitted, velocity_spike, state_transition.
+    /// Condition type: proximity, property_change, signal_emitted, entered_area, velocity_spike, state_transition, collision.
     #[serde(rename = "type")]
     pub condition_type: String,
     /// Target node for proximity conditions.
@@ -345,7 +345,7 @@ pub fn query_range(
         })?;
 
         if let Some(range_match) =
-            evaluate_condition(frame, time_ms, node, &entities, condition, &prev_entities)
+            evaluate_condition(db, frame, time_ms, node, &entities, condition, &prev_entities)
         {
             if condition.condition_type == "proximity"
                 && let Some(dist) = range_match.distance {
@@ -381,21 +381,18 @@ pub fn query_range(
     }
 
     // Insert system markers for significant findings
-    if condition.condition_type == "velocity_spike" || condition.condition_type == "proximity" {
+    let marker_types = ["velocity_spike", "proximity", "collision"];
+    if marker_types.contains(&condition.condition_type.as_str()) {
         for m in &matches {
-            if let Some(ref note) = m.note
-                && (note.starts_with("velocity:")
-                    || note == "first_breach"
-                    || note == "deepest_penetration")
-                {
-                    insert_system_marker(
-                        storage_path,
-                        recording_id,
-                        m.frame,
-                        m.time_ms,
-                        &format!("{}: {}", condition.condition_type, note),
-                    );
-                }
+            if let Some(ref note) = m.note {
+                insert_system_marker(
+                    storage_path,
+                    recording_id,
+                    m.frame,
+                    m.time_ms,
+                    &format!("{}: {}", condition.condition_type, note),
+                );
+            }
         }
     }
 
@@ -415,6 +412,7 @@ pub fn query_range(
 }
 
 fn evaluate_condition(
+    db: &Connection,
     frame: u64,
     time_ms: u64,
     node: &str,
@@ -433,8 +431,106 @@ fn evaluate_condition(
         "state_transition" => {
             evaluate_property_change(frame, time_ms, node, entities, prev_entities, condition)
         }
-        "signal_emitted" | "entered_area" => None, // handled via events table
+        "signal_emitted" => evaluate_signal_emitted(db, frame, time_ms, node, condition),
+        "entered_area" => evaluate_entered_area(db, frame, time_ms, node),
+        "collision" => evaluate_collision(db, frame, time_ms, node),
         _ => None,
+    }
+}
+
+fn evaluate_signal_emitted(
+    db: &Connection,
+    frame: u64,
+    time_ms: u64,
+    node: &str,
+    condition: &QueryCondition,
+) -> Option<RangeMatch> {
+    let mut sql =
+        String::from("SELECT 1 FROM events WHERE event_type = 'signal' AND frame = ?1 AND node_path = ?2");
+    let mut params: Vec<Box<dyn rusqlite::types::ToSql>> =
+        vec![Box::new(frame as i64), Box::new(node.to_string())];
+
+    if let Some(ref signal_name) = condition.signal {
+        sql.push_str(" AND data LIKE ?3");
+        params.push(Box::new(format!("%\"signal\":\"{signal_name}\"%")));
+    }
+    sql.push_str(" LIMIT 1");
+
+    let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
+    let found: bool = db
+        .query_row(&sql, param_refs.as_slice(), |_| Ok(true))
+        .unwrap_or(false);
+
+    if found {
+        Some(RangeMatch {
+            frame,
+            time_ms,
+            distance: None,
+            node_pos: None,
+            node_velocity: None,
+            note: Some(format!(
+                "signal: {}",
+                condition.signal.as_deref().unwrap_or("(any)")
+            )),
+        })
+    } else {
+        None
+    }
+}
+
+fn evaluate_entered_area(
+    db: &Connection,
+    frame: u64,
+    time_ms: u64,
+    node: &str,
+) -> Option<RangeMatch> {
+    let found: bool = db
+        .query_row(
+            "SELECT 1 FROM events WHERE event_type = 'area_enter' AND frame = ?1 AND node_path = ?2 LIMIT 1",
+            rusqlite::params![frame as i64, node],
+            |_| Ok(true),
+        )
+        .unwrap_or(false);
+
+    if found {
+        Some(RangeMatch {
+            frame,
+            time_ms,
+            distance: None,
+            node_pos: None,
+            node_velocity: None,
+            note: Some("area_enter".into()),
+        })
+    } else {
+        None
+    }
+}
+
+fn evaluate_collision(
+    db: &Connection,
+    frame: u64,
+    time_ms: u64,
+    node: &str,
+) -> Option<RangeMatch> {
+    let found: bool = db
+        .query_row(
+            "SELECT 1 FROM events WHERE event_type = 'collision' AND frame = ?1 AND node_path = ?2 LIMIT 1",
+            rusqlite::params![frame as i64, node],
+            |_| Ok(true),
+        )
+        .unwrap_or(false);
+
+    if found {
+        Some(RangeMatch {
+            frame,
+            time_ms,
+            distance: None,
+            node_pos: None,
+            node_velocity: None,
+            note: Some("collision".into()),
+        })
+    } else {
+        None
     }
 }
 
@@ -1189,6 +1285,85 @@ CREATE INDEX IF NOT EXISTS idx_markers_frame ON markers(frame);
         assert!(path_matches("walls/segment_04", "walls/*"));
         assert!(!path_matches("enemies/scout", "walls/*"));
         assert!(!path_matches("walls", "walls/*")); // "walls" itself doesn't match "walls/*"
+    }
+
+    // --- query_range: signal_emitted condition ---
+
+    #[test]
+    fn query_range_signal_emitted_finds_matching_events() {
+        let db = test_db();
+        insert_frame(&db, 100, 1000, &[test_entity("enemy", [0.0, 0.0, 0.0])]);
+        insert_frame(&db, 101, 1017, &[test_entity("enemy", [0.0, 0.0, 0.0])]);
+        db.execute(
+            "INSERT INTO events (frame, event_type, node_path, data) VALUES (101, 'signal', 'enemy', '{\"signal\":\"hit\"}')",
+            [],
+        )
+        .unwrap();
+
+        let condition = QueryCondition {
+            condition_type: "signal_emitted".into(),
+            target: None,
+            threshold: None,
+            property: None,
+            signal: Some("hit".into()),
+        };
+
+        let response = query_range(&db, "/tmp", "rec_1", "enemy", 100, 101, &condition, 5000)
+            .unwrap();
+        let results = response["results"].as_array().unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0]["frame"], 101);
+    }
+
+    #[test]
+    fn query_range_entered_area_finds_matching_events() {
+        let db = test_db();
+        insert_frame(&db, 100, 1000, &[test_entity("enemy", [0.0, 0.0, 0.0])]);
+        insert_frame(&db, 101, 1017, &[test_entity("enemy", [0.0, 0.0, 0.0])]);
+        db.execute(
+            "INSERT INTO events (frame, event_type, node_path, data) VALUES (101, 'area_enter', 'enemy', '{\"area\":\"danger_zone\"}')",
+            [],
+        )
+        .unwrap();
+
+        let condition = QueryCondition {
+            condition_type: "entered_area".into(),
+            target: None,
+            threshold: None,
+            property: None,
+            signal: None,
+        };
+
+        let response = query_range(&db, "/tmp", "rec_1", "enemy", 100, 101, &condition, 5000)
+            .unwrap();
+        let results = response["results"].as_array().unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0]["note"], "area_enter");
+    }
+
+    #[test]
+    fn query_range_collision_finds_matching_events() {
+        let db = test_db();
+        insert_frame(&db, 100, 1000, &[test_entity("enemy", [0.0, 0.0, 0.0])]);
+        db.execute(
+            "INSERT INTO events (frame, event_type, node_path, data) VALUES (100, 'collision', 'enemy', '{\"with\":\"wall\"}')",
+            [],
+        )
+        .unwrap();
+
+        let condition = QueryCondition {
+            condition_type: "collision".into(),
+            target: None,
+            threshold: None,
+            property: None,
+            signal: None,
+        };
+
+        let response = query_range(&db, "/tmp", "rec_1", "enemy", 100, 100, &condition, 5000)
+            .unwrap();
+        let results = response["results"].as_array().unwrap();
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0]["note"], "collision");
     }
 
     // --- RecordingParams deserialization tests are in recording.rs ---

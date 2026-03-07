@@ -1,0 +1,32 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://player.gd" id="1"]
+[ext_resource type="Script" path="res://enemy.gd" id="2"]
+
+[node name="Main" type="Node2D"]
+
+[node name="Camera2D" type="Camera2D" parent="."]
+position = Vector2(400, 300)
+
+[node name="Player" type="CharacterBody2D" parent="."]
+position = Vector2(200, 500)
+script = ExtResource("1")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Player"]
+
+[node name="Enemy1" type="CharacterBody2D" parent="." groups=["enemies"]]
+position = Vector2(600, 500)
+script = ExtResource("2")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Enemy1"]
+
+[node name="Enemy2" type="CharacterBody2D" parent="." groups=["enemies"]]
+position = Vector2(800, 400)
+script = ExtResource("2")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Enemy2"]
+
+[node name="Floor" type="StaticBody2D" parent="." groups=["terrain"]]
+position = Vector2(400, 580)
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="Floor"]

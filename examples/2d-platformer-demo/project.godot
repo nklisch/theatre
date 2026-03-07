@@ -1,0 +1,17 @@
+; Engine configuration file.
+; It's best edited using the editor UI and not directly,
+; but it can also be manually edited with care.
+
+[application]
+
+config/name="Spectator 2D Demo"
+run/main_scene="res://main.tscn"
+config/features=PackedStringArray("4.3")
+
+[autoload]
+
+SpectatorRuntime="*res://addons/spectator/runtime.gd"
+
+[editor_plugins]
+
+enabled=PackedStringArray("res://addons/spectator/plugin.cfg")
