@@ -1,27 +1,44 @@
 use godot::builtin::{Array, GString, StringName, Variant, VarDictionary, Vector2, Vector3};
 use godot::builtin::VariantType;
-use godot::classes::{CharacterBody3D, Engine, Node, Node3D, PhysicsBody3D, Resource, RigidBody3D};
+use godot::classes::{
+    CharacterBody3D, Engine, NavigationServer3D, Node, Node2D, Node3D, PhysicsBody3D,
+    PhysicsRayQueryParameters3D, PhysicsServer3D, Resource, RigidBody3D,
+};
 use godot::obj::Gd;
 use godot::prelude::*;
 use spectator_protocol::query::{
     ChildData, DetailLevel, EntityData, FindBy, FrameInfoResponse, GetNodeInspectParams,
     GetSceneTreeParams, GetSnapshotDataParams, InspectCategory, InspectChild, InspectPhysics,
     InspectScript, InspectSignals, InspectState, InspectTransform, NearbyEntityRaw,
-    NodeInspectResponse, PerspectiveData, PerspectiveParam, PhysicsEntityData, SceneTreeAction,
-    SnapshotResponse, SpatialContextRaw, TransformEntityData, TreeInclude,
+    NavPathResponse, NodeInspectResponse, PerspectiveData, PerspectiveParam, PhysicsEntityData,
+    RaycastResponse, ResolveNodeResponse, SceneTreeAction, SnapshotResponse, SpatialContextRaw,
+    TransformEntityData, TreeInclude,
 };
+
+/// State for deferred frame advance (set by action_handler, read by tcp_server).
+#[derive(Default)]
+pub struct AdvanceState {
+    /// Number of physics frames remaining to advance.
+    pub remaining: u32,
+    /// Request ID waiting for advance completion.
+    pub pending_id: Option<String>,
+}
 
 
 #[derive(GodotClass)]
 #[class(base = Node)]
 pub struct SpectatorCollector {
     base: Base<Node>,
+    pub advance_state: std::cell::RefCell<AdvanceState>,
 }
 
 #[godot_api]
 impl INode for SpectatorCollector {
     fn init(base: Base<Node>) -> Self {
-        Self { base }
+        Self {
+            base,
+            advance_state: std::cell::RefCell::new(AdvanceState::default()),
+        }
     }
 }
 
@@ -1106,6 +1123,140 @@ impl SpectatorCollector {
             delta,
         }
     }
+
+    /// Public wrapper for resolve_node (used by action_handler).
+    pub fn resolve_node_public(&self, path: &str) -> Result<Gd<Node>, String> {
+        self.resolve_node(path)
+    }
+
+    /// Perform a physics raycast from one point to another.
+    pub fn raycast(
+        &self,
+        from: Vector3,
+        to: Vector3,
+        collision_mask: Option<u32>,
+    ) -> Result<RaycastResponse, String> {
+        let tree = self.base().get_tree().ok_or("Not in scene tree")?;
+        let world = tree
+            .get_root()
+            .ok_or("No root")?
+            .get_world_3d()
+            .ok_or("No World3D — is this a 3D scene?")?;
+        let space = world.get_space();
+        let mut physics_server = PhysicsServer3D::singleton();
+        let mut direct_state = physics_server
+            .space_get_direct_state(space)
+            .ok_or("Could not get physics direct state")?;
+
+        let mut query =
+            PhysicsRayQueryParameters3D::create(from, to).ok_or("Could not create ray query")?;
+        if let Some(mask) = collision_mask {
+            query.set_collision_mask(mask);
+        }
+
+        let result = direct_state.intersect_ray(&query);
+        let total_distance = from.distance_to(to) as f64;
+
+        if result.is_empty() {
+            Ok(RaycastResponse {
+                clear: true,
+                blocked_by: None,
+                blocked_at: None,
+                total_distance,
+                clear_distance: total_distance,
+            })
+        } else {
+            let hit_pos: Vector3 = result
+                .get("position")
+                .map(|v| v.to::<Vector3>())
+                .unwrap_or(Vector3::ZERO);
+            let blocked_by = result.get("collider").and_then(|v| {
+                v.try_to::<Gd<godot::classes::Object>>()
+                    .ok()
+                    .and_then(|obj| obj.try_cast::<Node>().ok())
+                    .map(|n| self.get_relative_path(&n))
+            });
+
+            Ok(RaycastResponse {
+                clear: false,
+                blocked_by,
+                blocked_at: Some(vec![hit_pos.x as f64, hit_pos.y as f64, hit_pos.z as f64]),
+                total_distance,
+                clear_distance: from.distance_to(hit_pos) as f64,
+            })
+        }
+    }
+
+    /// Get navigation path distance between two points.
+    pub fn get_nav_path(
+        &self,
+        from: Vector3,
+        to: Vector3,
+    ) -> Result<NavPathResponse, String> {
+        let nav_server = NavigationServer3D::singleton();
+        let maps = nav_server.get_maps();
+        if maps.len() == 0 {
+            return Err(
+                "No navigation maps available. Is NavigationServer3D active?".into(),
+            );
+        }
+        let map = maps.get(0).ok_or("No navigation map at index 0")?;
+        let path = nav_server.map_get_path(map, from, to, true);
+        let traversable = path.len() > 0;
+        let nav_distance: f64 = if traversable {
+            let mut total = 0.0f32;
+            for i in 1..path.len() {
+                total += path[i - 1].distance_to(path[i]);
+            }
+            total as f64
+        } else {
+            0.0
+        };
+        let straight_distance = from.distance_to(to) as f64;
+
+        Ok(NavPathResponse {
+            nav_distance,
+            straight_distance,
+            path_ratio: if straight_distance > 0.0 {
+                nav_distance / straight_distance
+            } else {
+                1.0
+            },
+            path_points: path.len() as u32,
+            traversable,
+        })
+    }
+
+    /// Resolve a node path to its position, forward vector, and groups.
+    pub fn resolve_node_position(&self, path: &str) -> Result<ResolveNodeResponse, String> {
+        let node = self.resolve_node(path)?;
+        if let Ok(n3d) = node.clone().try_cast::<Node3D>() {
+            let pos = n3d.get_global_position();
+            // Forward in Godot is -Z; col_c() is the local +Z column
+            let fwd = -n3d.get_global_basis().col_c();
+            Ok(ResolveNodeResponse {
+                position: vec![pos.x as f64, pos.y as f64, pos.z as f64],
+                forward: vec![fwd.x as f64, fwd.y as f64, fwd.z as f64],
+                groups: self.get_groups(&node),
+            })
+        } else if let Ok(n2d) = node.clone().try_cast::<Node2D>() {
+            let pos = n2d.get_global_position();
+            Ok(ResolveNodeResponse {
+                position: vec![pos.x as f64, pos.y as f64],
+                forward: vec![1.0, 0.0],
+                groups: self.get_groups(&node),
+            })
+        } else {
+            Err(format!("Node '{path}' is not a Node3D or Node2D"))
+        }
+    }
+
+    /// Set the advance state for frame-stepping.
+    pub fn set_advance_state(&self, remaining: u32, pending_id: Option<String>) {
+        let mut state = self.advance_state.borrow_mut();
+        state.remaining = remaining;
+        state.pending_id = pending_id;
+    }
 }
 
 /// Convert a Godot `Vector3` to a `Vec<f64>`.
@@ -1136,7 +1287,7 @@ fn position_distance(a: &[f64], b: &[f64]) -> f64 {
 
 /// Convert a Godot Variant to a JSON value.
 /// Returns None for types we can't meaningfully represent.
-fn variant_to_json(v: &Variant) -> Option<serde_json::Value> {
+pub(crate) fn variant_to_json(v: &Variant) -> Option<serde_json::Value> {
     match v.get_type() {
         VariantType::NIL => Some(serde_json::Value::Null),
         VariantType::BOOL => Some(serde_json::Value::Bool(v.to::<bool>())),

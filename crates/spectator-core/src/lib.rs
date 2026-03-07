@@ -6,4 +6,5 @@
 pub mod bearing;
 pub mod budget;
 pub mod cluster;
+pub mod index;
 pub mod types;

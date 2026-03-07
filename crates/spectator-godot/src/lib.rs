@@ -1,5 +1,6 @@
 use godot::prelude::*;
 
+mod action_handler;
 mod collector;
 mod query_handler;
 mod tcp_server;

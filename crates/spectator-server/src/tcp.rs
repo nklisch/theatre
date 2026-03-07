@@ -1,5 +1,6 @@
 use anyhow::Result;
 use rmcp::model::ErrorData as McpError;
+use spectator_core::index::SpatialIndex;
 use spectator_protocol::{
     codec::async_io,
     handshake::{HandshakeAck, HandshakeError, PROTOCOL_VERSION},
@@ -40,6 +41,8 @@ pub struct SessionState {
     pub handshake_info: Option<HandshakeInfo>,
     /// Pending query response channels: request_id → sender.
     pub pending_queries: HashMap<String, oneshot::Sender<QueryResult>>,
+    /// Spatial index built from the most recent snapshot.
+    pub spatial_index: SpatialIndex,
 }
 
 impl Default for SessionState {
@@ -50,6 +53,7 @@ impl Default for SessionState {
             session_id: None,
             handshake_info: None,
             pending_queries: HashMap::new(),
+            spatial_index: SpatialIndex::empty(),
         }
     }
 }

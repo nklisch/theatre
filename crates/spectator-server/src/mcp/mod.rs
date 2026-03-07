@@ -1,4 +1,6 @@
+pub mod action;
 pub mod inspect;
+pub mod query;
 pub mod scene_tree;
 pub mod snapshot;
 
@@ -7,8 +9,15 @@ use rmcp::model::ErrorData as McpError;
 use rmcp::tool;
 use rmcp::tool_router;
 use serde::{Deserialize, Serialize};
-use spectator_core::{bearing, budget::SnapshotBudgetDefaults, budget::resolve_budget, types::{Position3, vec_to_array3}};
-use spectator_protocol::query::{DetailLevel, GetNodeInspectParams, GetSnapshotDataParams, NodeInspectResponse, SnapshotResponse};
+use spectator_core::{
+    bearing,
+    budget::{resolve_budget, SnapshotBudgetDefaults},
+    index::{IndexedEntity, SpatialIndex},
+    types::{vec_to_array3, Position3},
+};
+use spectator_protocol::query::{
+    DetailLevel, GetNodeInspectParams, GetSnapshotDataParams, NodeInspectResponse, SnapshotResponse,
+};
 
 use crate::server::SpectatorServer;
 use crate::tcp::query_addon;
@@ -50,7 +59,9 @@ fn inject_budget(response: &mut serde_json::Value, used: u32, limit: u32) {
         );
     }
 }
+use action::{SpatialActionParams, build_action_request};
 use inspect::{SpatialInspectParams, build_spatial_context, parse_include};
+use query::{SpatialQueryParams, handle_spatial_query};
 use scene_tree::{SceneTreeToolParams, build_scene_tree_params};
 use snapshot::{
     SpatialSnapshotParams, build_expand_response, build_full_response, build_perspective,
@@ -116,6 +127,22 @@ impl SpectatorServer {
                 .partial_cmp(&b.1.dist)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
+
+        // 6b. Rebuild spatial index from snapshot data
+        {
+            let indexed: Vec<IndexedEntity> = raw_data
+                .entities
+                .iter()
+                .map(|e| IndexedEntity {
+                    path: e.path.clone(),
+                    class: e.class.clone(),
+                    position: vec_to_array3(&e.position),
+                    groups: e.groups.clone(),
+                })
+                .collect();
+            let mut state = self.state.lock().await;
+            state.spatial_index = SpatialIndex::build(indexed);
+        }
 
         // 7. Resolve budget
         let tier_default = match detail {
@@ -214,5 +241,55 @@ impl SpectatorServer {
         inject_budget(&mut response, used, budget_limit);
 
         serialize_response(&response)
+    }
+
+    /// Manipulate game state for debugging. Actions: pause (pause/unpause scene),
+    /// advance_frames (step N physics frames while paused), advance_time (step N seconds
+    /// while paused), teleport (move node to position), set_property (change a property),
+    /// call_method (call a method), emit_signal (emit a signal), spawn_node (instantiate
+    /// a scene), remove_node (queue_free a node).
+    #[tool(description = "Manipulate game state for debugging. Actions: pause (pause/unpause scene), advance_frames (step N physics frames while paused), advance_time (step N seconds while paused), teleport (move node to position), set_property (change a property), call_method (call a method), emit_signal (emit a signal), spawn_node (instantiate a scene), remove_node (queue_free a node). Use return_delta=true to get a spatial delta after the action (M4 placeholder — use spatial_snapshot instead for now).")]
+    pub async fn spatial_action(
+        &self,
+        Parameters(params): Parameters<SpatialActionParams>,
+    ) -> Result<String, McpError> {
+        let action_request = build_action_request(&params)?;
+        let data = query_addon(
+            &self.state,
+            "execute_action",
+            serialize_params(&action_request)?,
+        )
+        .await?;
+
+        let mut response: serde_json::Value = data;
+
+        let json_bytes = serde_json::to_vec(&response).unwrap_or_default().len();
+        let used = spectator_core::budget::estimate_tokens(json_bytes);
+        inject_budget(&mut response, used, 500);
+
+        if params.return_delta {
+            if let serde_json::Value::Object(ref mut map) = response {
+                map.insert("delta".into(), serde_json::json!(null));
+                map.insert(
+                    "delta_note".into(),
+                    serde_json::json!(
+                        "return_delta requires the delta engine (M4). \
+                         Use spatial_snapshot after the action for now."
+                    ),
+                );
+            }
+        }
+
+        serialize_response(&response)
+    }
+
+    /// Targeted spatial questions: nearest nodes, radius search, raycast line-of-sight,
+    /// navigation path distance, or mutual relationship between two nodes.
+    #[tool(description = "Targeted spatial questions. Query types: 'nearest' (K nearest nodes to a point/node, requires prior spatial_snapshot), 'radius' (all nodes within radius, requires prior spatial_snapshot), 'raycast' (line-of-sight check between two points/nodes), 'path_distance' (navmesh distance), 'relationship' (mutual spatial relationship between two nodes), 'area' (alias for radius).")]
+    pub async fn spatial_query(
+        &self,
+        Parameters(params): Parameters<SpatialQueryParams>,
+    ) -> Result<String, McpError> {
+        handle_spatial_query(params, &self.state).await
     }
 }

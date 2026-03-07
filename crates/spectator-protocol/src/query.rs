@@ -328,6 +328,147 @@ pub struct SceneTreeResponse {
     pub data: serde_json::Value,
 }
 
+// --- spatial_action protocol types ---
+
+/// Parameters for action execution queries.
+/// The server sends one of these per spatial_action MCP call.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "action", rename_all = "snake_case")]
+pub enum ActionRequest {
+    Pause {
+        paused: bool,
+    },
+    AdvanceFrames {
+        frames: u32,
+    },
+    AdvanceTime {
+        seconds: f64,
+    },
+    Teleport {
+        path: String,
+        position: Vec<f64>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        rotation_deg: Option<f64>,
+    },
+    SetProperty {
+        path: String,
+        property: String,
+        value: serde_json::Value,
+    },
+    CallMethod {
+        path: String,
+        method: String,
+        #[serde(default)]
+        args: Vec<serde_json::Value>,
+    },
+    EmitSignal {
+        path: String,
+        signal: String,
+        #[serde(default)]
+        args: Vec<serde_json::Value>,
+    },
+    SpawnNode {
+        scene_path: String,
+        parent: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        name: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        position: Option<Vec<f64>>,
+    },
+    RemoveNode {
+        path: String,
+    },
+}
+
+/// Response from action execution.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActionResponse {
+    /// Which action was performed.
+    pub action: String,
+    /// "ok" or error description.
+    pub result: String,
+    /// Action-specific details (previous values, new values, etc.).
+    pub details: serde_json::Map<String, serde_json::Value>,
+    /// Frame number after action completed.
+    pub frame: u64,
+}
+
+// --- spatial_query protocol types ---
+
+/// Parameters for spatial queries executed by the addon.
+/// Only query types requiring Godot engine access go through TCP.
+/// nearest/radius/area are handled server-side from the spatial index.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "query_type", rename_all = "snake_case")]
+pub enum SpatialQueryRequest {
+    /// Physics raycast between two points/nodes.
+    Raycast {
+        from: QueryOrigin,
+        to: QueryOrigin,
+        #[serde(default)]
+        collision_mask: Option<u32>,
+    },
+    /// Navigation mesh path distance.
+    PathDistance {
+        from: QueryOrigin,
+        to: QueryOrigin,
+    },
+    /// Get position and forward vector for a node (for server-side queries).
+    ResolveNode {
+        path: String,
+    },
+}
+
+/// Origin for a spatial query — either a node path or a world position.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(untagged)]
+pub enum QueryOrigin {
+    /// A world-space coordinate.
+    Position(Vec<f64>),
+    /// A node path (server resolves to position via addon).
+    Node(String),
+}
+
+/// Response for raycast query.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RaycastResponse {
+    /// True if the ray reached the target unobstructed.
+    pub clear: bool,
+    /// Node that blocked the ray (if any).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blocked_by: Option<String>,
+    /// World position where the ray was blocked.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blocked_at: Option<Vec<f64>>,
+    /// Total distance from source to target.
+    pub total_distance: f64,
+    /// Distance from source to the hit point (or total if clear).
+    pub clear_distance: f64,
+}
+
+/// Response for navigation path distance query.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NavPathResponse {
+    /// Navigation mesh distance.
+    pub nav_distance: f64,
+    /// Straight-line distance for comparison.
+    pub straight_distance: f64,
+    /// Ratio of nav_distance / straight_distance.
+    pub path_ratio: f64,
+    /// Number of waypoints in the path.
+    pub path_points: u32,
+    /// Whether a path was found.
+    pub traversable: bool,
+}
+
+/// Response for resolving a node to its position and forward vector.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ResolveNodeResponse {
+    pub position: Vec<f64>,
+    pub forward: Vec<f64>,
+    pub groups: Vec<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -418,6 +559,67 @@ mod tests {
         let action = SceneTreeAction::Subtree;
         let json = serde_json::to_string(&action).unwrap();
         assert_eq!(json, r#""subtree""#);
+    }
+
+    #[test]
+    fn action_request_tagged_enum_serde() {
+        let req = ActionRequest::Teleport {
+            path: "enemy".into(),
+            position: vec![5.0, 0.0, -3.0],
+            rotation_deg: None,
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains(r#""action":"teleport""#), "got: {json}");
+        let parsed: ActionRequest = serde_json::from_str(&json).unwrap();
+        assert!(matches!(parsed, ActionRequest::Teleport { .. }));
+    }
+
+    #[test]
+    fn action_request_pause_serde() {
+        let req = ActionRequest::Pause { paused: true };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains(r#""action":"pause""#));
+        let parsed: ActionRequest = serde_json::from_str(&json).unwrap();
+        assert!(matches!(parsed, ActionRequest::Pause { paused: true }));
+    }
+
+    #[test]
+    fn action_response_round_trip() {
+        let resp = ActionResponse {
+            action: "teleport".into(),
+            result: "ok".into(),
+            details: serde_json::Map::from_iter([(
+                "previous_position".into(),
+                serde_json::json!([1.0, 2.0, 3.0]),
+            )]),
+            frame: 100,
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        let parsed: ActionResponse = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed.action, "teleport");
+        assert_eq!(parsed.frame, 100);
+    }
+
+    #[test]
+    fn query_origin_untagged_serde() {
+        let node: QueryOrigin = serde_json::from_str(r#""player""#).unwrap();
+        assert!(matches!(node, QueryOrigin::Node(s) if s == "player"));
+
+        let pos: QueryOrigin = serde_json::from_str(r#"[1.0, 2.0, 3.0]"#).unwrap();
+        assert!(matches!(pos, QueryOrigin::Position(v) if v.len() == 3));
+    }
+
+    #[test]
+    fn spatial_query_request_raycast_serde() {
+        let req = SpatialQueryRequest::Raycast {
+            from: QueryOrigin::Node("player".into()),
+            to: QueryOrigin::Position(vec![0.0, 0.0, 0.0]),
+            collision_mask: None,
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains(r#""query_type":"raycast""#));
+        let parsed: SpatialQueryRequest = serde_json::from_str(&json).unwrap();
+        assert!(matches!(parsed, SpatialQueryRequest::Raycast { .. }));
     }
 
     #[test]

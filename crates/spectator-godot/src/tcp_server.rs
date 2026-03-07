@@ -1,6 +1,7 @@
 use godot::obj::Gd;
 use godot::prelude::*;
 use spectator_protocol::{codec, handshake::Handshake, messages::Message};
+use spectator_protocol::query::ActionResponse;
 use std::io::ErrorKind;
 use std::net::{TcpListener, TcpStream};
 
@@ -74,6 +75,16 @@ impl SpectatorTCPServer {
     /// Poll for new connections and incoming messages. Call every _physics_process.
     #[func]
     pub fn poll(&mut self) {
+        // Check frame-advance state before processing new queries
+        if let Some(advance_msg) = self.check_frame_advance() {
+            self.send_response(advance_msg);
+            return; // Don't process new queries while advancing
+        }
+        // Still advancing (remaining > 0 but not done yet) — skip new queries
+        if self.is_advancing() {
+            return;
+        }
+
         if self.client.is_none() {
             self.try_accept();
         }
@@ -198,7 +209,10 @@ impl SpectatorTCPServer {
                         params,
                         &collector.bind(),
                     );
-                    self.send_response(response);
+                    // None means response is deferred (e.g., advance_frames)
+                    if let Some(msg) = response {
+                        self.send_response(msg);
+                    }
                 } else {
                     self.send_response(Message::Error {
                         id,
@@ -226,6 +240,66 @@ impl SpectatorTCPServer {
     fn disconnect_client(&mut self) {
         self.client = None;
         self.handshake_completed = false;
+    }
+
+    /// Returns true if a frame-advance is currently in progress (remaining > 0).
+    fn is_advancing(&self) -> bool {
+        self.collector
+            .as_ref()
+            .map(|c| c.bind().advance_state.borrow().remaining > 0)
+            .unwrap_or(false)
+    }
+
+    /// Decrement the advance counter. If it reaches zero, re-pauses the tree
+    /// and returns a deferred response message. Returns None if still advancing.
+    fn check_frame_advance(&mut self) -> Option<Message> {
+        let collector = self.collector.as_ref()?;
+        let remaining = collector.bind().advance_state.borrow().remaining;
+        if remaining == 0 {
+            return None;
+        }
+
+        let new_remaining = remaining - 1;
+        let (pending_id, frame) = {
+            let bound = collector.bind();
+            let mut state = bound.advance_state.borrow_mut();
+            state.remaining = new_remaining;
+            let id = if new_remaining == 0 {
+                state.pending_id.take()
+            } else {
+                None
+            };
+            let f = if new_remaining == 0 {
+                drop(state);
+                bound.get_frame_info().frame
+            } else {
+                0
+            };
+            (id, f)
+        };
+
+        if new_remaining == 0 {
+            // Re-pause the scene tree
+            if let Some(mut tree) = self.base().get_tree() {
+                tree.set_pause(true);
+            }
+            // Build and return the deferred response
+            if let Some(id) = pending_id {
+                let response = ActionResponse {
+                    action: "advance_frames".into(),
+                    result: "ok".into(),
+                    details: serde_json::Map::from_iter([(
+                        "new_frame".into(),
+                        serde_json::json!(frame),
+                    )]),
+                    frame,
+                };
+                let data = serde_json::to_value(&response).unwrap_or(serde_json::Value::Null);
+                return Some(Message::Response { id, data });
+            }
+        }
+
+        None
     }
 
     fn get_godot_version(&self) -> String {
