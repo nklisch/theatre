@@ -16,8 +16,8 @@ use serde::{Deserialize, Serialize};
 use spectator_core::{
     bearing,
     budget::{resolve_budget, SnapshotBudgetDefaults},
-    index::{IndexedEntity, SpatialIndex},
-    types::{vec_to_array3, Position3},
+    index::{IndexedEntity, IndexedEntity2D, SpatialIndex},
+    types::{vec_to_array2, vec_to_array3},
 };
 use spectator_protocol::query::{
     DetailLevel, GetNodeInspectParams, GetSnapshotDataParams, NodeInspectResponse, SnapshotResponse,
@@ -136,8 +136,18 @@ impl SpectatorServer {
             .entities
             .iter()
             .filter_map(|e| {
-                let pos: Position3 = vec_to_array3(&e.position);
-                let rel = bearing::relative_position(&persp, pos, !e.visible);
+                let rel = if e.position.len() == 2 {
+                    // 2D entity: use 2D bearing
+                    bearing::relative_position_2d(
+                        [persp.position[0], persp.position[1]],
+                        [persp.forward[0], persp.forward[1]],
+                        vec_to_array2(&e.position),
+                        !e.visible,
+                    )
+                } else {
+                    // 3D entity: use 3D bearing
+                    bearing::relative_position(&persp, vec_to_array3(&e.position), !e.visible)
+                };
                 if rel.dist > params.radius {
                     return None;
                 }
@@ -157,23 +167,45 @@ impl SpectatorServer {
 
         // 6b. Rebuild spatial index and store delta baseline
         {
-            let indexed: Vec<IndexedEntity> = raw_data
-                .entities
-                .iter()
-                .map(|e| IndexedEntity {
-                    path: e.path.clone(),
-                    class: e.class.clone(),
-                    position: vec_to_array3(&e.position),
-                    groups: e.groups.clone(),
-                })
-                .collect();
+            let scene_dimensions = {
+                let s = self.state.lock().await;
+                s.scene_dimensions
+            };
+
+            let new_index = if scene_dimensions.is_2d() {
+                let indexed: Vec<IndexedEntity2D> = raw_data
+                    .entities
+                    .iter()
+                    .map(|e| IndexedEntity2D {
+                        path: e.path.clone(),
+                        class: e.class.clone(),
+                        position: vec_to_array2(&e.position),
+                        groups: e.groups.clone(),
+                    })
+                    .collect();
+                SpatialIndex::build_2d(indexed)
+            } else {
+                // 3D or mixed: use R-tree (2D entities in mixed scenes get Z=0 via vec_to_array3)
+                let indexed: Vec<IndexedEntity> = raw_data
+                    .entities
+                    .iter()
+                    .map(|e| IndexedEntity {
+                        path: e.path.clone(),
+                        class: e.class.clone(),
+                        position: vec_to_array3(&e.position),
+                        groups: e.groups.clone(),
+                    })
+                    .collect();
+                SpatialIndex::build(indexed)
+            };
+
             let snapshots: Vec<spectator_core::delta::EntitySnapshot> = raw_data
                 .entities
                 .iter()
                 .map(snapshot::to_entity_snapshot)
                 .collect();
             let mut state = self.state.lock().await;
-            state.spatial_index = SpatialIndex::build(indexed);
+            state.spatial_index = new_index;
             // 6c. Store snapshot in delta engine for subsequent delta queries
             state.delta_engine.store_snapshot(raw_data.frame, snapshots);
         }

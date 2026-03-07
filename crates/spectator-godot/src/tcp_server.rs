@@ -395,7 +395,43 @@ impl SpectatorTCPServer {
     }
 
     fn detect_scene_dimensions(&self) -> u32 {
-        3
+        let Some(tree) = self.base().get_tree() else { return 3 };
+        let Some(root) = tree.get_current_scene() else { return 3 };
+        let root_node: godot::obj::Gd<godot::classes::Node> = root.upcast();
+
+        let has_2d = Self::has_node_type_recursive(&root_node, true);
+        let has_3d = Self::has_node_type_recursive(&root_node, false);
+
+        match (has_2d, has_3d) {
+            (true, false) => 2,
+            (false, true) => 3,
+            (true, true) => 0,   // mixed
+            (false, false) => 3, // default to 3D if no spatial nodes
+        }
+    }
+
+    /// Check if the scene tree contains Node2D (if `check_2d`) or Node3D nodes.
+    /// Stops at first match for efficiency.
+    fn has_node_type_recursive(
+        node: &godot::obj::Gd<godot::classes::Node>,
+        check_2d: bool,
+    ) -> bool {
+        if check_2d {
+            if node.clone().try_cast::<godot::classes::Node2D>().is_ok() {
+                return true;
+            }
+        } else if node.clone().try_cast::<godot::classes::Node3D>().is_ok() {
+            return true;
+        }
+        let count = node.get_child_count();
+        for i in 0..count {
+            if let Some(child) = node.get_child(i) {
+                if Self::has_node_type_recursive(&child, check_2d) {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     fn get_physics_ticks(&self) -> u32 {

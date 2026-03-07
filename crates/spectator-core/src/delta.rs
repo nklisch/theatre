@@ -466,4 +466,67 @@ mod tests {
             &serde_json::json!("patrol")
         ));
     }
+
+    #[test]
+    fn delta_detects_2d_movement() {
+        // 2D positions are stored as [x, y, 0.0] (zero-padded) in EntitySnapshot
+        let e_t0 = EntitySnapshot {
+            path: "player".into(),
+            class: "CharacterBody2D".into(),
+            position: [100.0, 200.0, 0.0],
+            rotation_deg: [45.0, 0.0, 0.0],
+            velocity: [5.0, 0.0, 0.0],
+            groups: vec![],
+            state: serde_json::Map::new(),
+            visible: true,
+        };
+        let e_t1 = EntitySnapshot {
+            path: "player".into(),
+            class: "CharacterBody2D".into(),
+            position: [105.0, 200.0, 0.0],
+            rotation_deg: [45.0, 0.0, 0.0],
+            velocity: [5.0, 0.0, 0.0],
+            groups: vec![],
+            state: serde_json::Map::new(),
+            visible: true,
+        };
+
+        let mut engine = DeltaEngine::new();
+        engine.store_snapshot(1, vec![e_t0]);
+
+        let result = engine.compute_delta(&[e_t1], 2);
+        assert_eq!(result.moved.len(), 1);
+        assert_eq!(result.moved[0].path, "player");
+        assert!((result.moved[0].delta_pos[0] - 5.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn delta_suppresses_2d_tiny_movement() {
+        let e_t0 = EntitySnapshot {
+            path: "player".into(),
+            class: "CharacterBody2D".into(),
+            position: [100.0, 200.0, 0.0],
+            rotation_deg: [0.0, 0.0, 0.0],
+            velocity: [0.0, 0.0, 0.0],
+            groups: vec![],
+            state: serde_json::Map::new(),
+            visible: true,
+        };
+        let e_t1 = EntitySnapshot {
+            path: "player".into(),
+            class: "CharacterBody2D".into(),
+            position: [100.005, 200.0, 0.0], // < POSITION_THRESHOLD
+            rotation_deg: [0.0, 0.0, 0.0],
+            velocity: [0.0, 0.0, 0.0],
+            groups: vec![],
+            state: serde_json::Map::new(),
+            visible: true,
+        };
+
+        let mut engine = DeltaEngine::new();
+        engine.store_snapshot(1, vec![e_t0]);
+
+        let result = engine.compute_delta(&[e_t1], 2);
+        assert!(result.moved.is_empty());
+    }
 }

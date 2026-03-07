@@ -65,6 +65,9 @@ pub struct OutputEntity {
     pub abs: Vec<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rot_y: Option<f64>,
+    /// 2D rotation angle in degrees (present only for 2D entities).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rot: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub velocity: Option<Vec<f64>>,
     pub groups: Vec<String>,
@@ -155,14 +158,32 @@ pub fn build_perspective_param(params: &SpatialSnapshotParams) -> Result<Perspec
 }
 
 pub fn build_perspective(data: &spectator_protocol::query::PerspectiveData) -> Perspective {
-    let position: Position3 = [data.position[0], data.position[1], data.position[2]];
-    let forward = [data.forward[0], data.forward[1], data.forward[2]];
-    let (facing, facing_deg) = bearing::compass_bearing(forward);
-    Perspective {
-        position,
-        forward,
-        facing,
-        facing_deg,
+    if data.position.len() == 2 {
+        // 2D perspective: pad position/forward to 3D, use XY-plane bearing
+        let position: Position3 = [data.position[0], data.position[1], 0.0];
+        let forward = [
+            data.forward.first().copied().unwrap_or(1.0),
+            data.forward.get(1).copied().unwrap_or(0.0),
+            0.0,
+        ];
+        // For 2D, compute facing from the 2D forward angle (X-axis = 0°)
+        let angle_deg = forward[1].atan2(forward[0]).to_degrees();
+        let facing_deg = ((angle_deg % 360.0) + 360.0) % 360.0;
+        let facing = bearing::to_cardinal(facing_deg);
+        Perspective { position, forward, facing, facing_deg }
+    } else {
+        let position: Position3 = [
+            data.position.first().copied().unwrap_or(0.0),
+            data.position.get(1).copied().unwrap_or(0.0),
+            data.position.get(2).copied().unwrap_or(0.0),
+        ];
+        let forward = [
+            data.forward.first().copied().unwrap_or(0.0),
+            data.forward.get(1).copied().unwrap_or(0.0),
+            data.forward.get(2).copied().unwrap_or(-1.0),
+        ];
+        let (facing, facing_deg) = bearing::compass_bearing(forward);
+        Perspective { position, forward, facing, facing_deg }
     }
 }
 
@@ -203,12 +224,15 @@ pub fn build_output_entity(entity: &EntityData, rel: &RelativePosition, full: bo
         None => entity.state.clone(),
     };
 
+    let is_2d = entity.position.len() == 2;
+
     OutputEntity {
         path: entity.path.clone(),
         class: entity.class.clone(),
         rel: format_rel(rel, config.bearing_format),
         abs: entity.position.clone(),
-        rot_y: entity.rotation_deg.get(1).copied(),
+        rot_y: if is_2d { None } else { entity.rotation_deg.get(1).copied() },
+        rot: if is_2d { entity.rotation_deg.first().copied() } else { None },
         velocity,
         groups: entity.groups.clone(),
         state,

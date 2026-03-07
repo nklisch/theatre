@@ -1,6 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-/// A 3D position in world space. (2D uses [x, y] — handled in M9.)
+/// A 2D position in world space.
+pub type Position2 = [f64; 2];
+
+/// A 3D position in world space.
 pub type Position3 = [f64; 3];
 
 /// Rotation in degrees (yaw for 3D standard output).
@@ -122,6 +125,14 @@ pub struct TransformData {
     pub origin: Position3,
     pub basis: [[f64; 3]; 3],
     pub scale: [f64; 3],
+}
+
+/// Convert a `Vec<f64>` slice to a fixed `[f64; 2]`, filling missing elements with `0.0`.
+pub fn vec_to_array2(v: &[f64]) -> [f64; 2] {
+    [
+        v.first().copied().unwrap_or(0.0),
+        v.get(1).copied().unwrap_or(0.0),
+    ]
 }
 
 /// Convert a `Vec<f64>` slice to a fixed `[f64; 3]`, filling missing elements with `0.0`.

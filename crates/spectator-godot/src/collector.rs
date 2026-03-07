@@ -1,8 +1,9 @@
 use godot::builtin::{Array, GString, StringName, Variant, VarDictionary, Vector2, Vector3};
 use godot::builtin::VariantType;
 use godot::classes::{
-    CharacterBody3D, Engine, NavigationServer3D, Node, Node2D, Node3D, PhysicsBody3D,
-    PhysicsRayQueryParameters3D, PhysicsServer3D, Resource, RigidBody3D,
+    CharacterBody2D, CharacterBody3D, Engine, NavigationServer3D, Node, Node2D, Node3D,
+    PhysicsBody2D, PhysicsBody3D, PhysicsRayQueryParameters3D, PhysicsServer3D, Resource,
+    RigidBody2D, RigidBody3D,
 };
 use godot::obj::Gd;
 use godot::prelude::*;
@@ -106,6 +107,7 @@ impl SpectatorCollector {
         match param {
             PerspectiveParam::Camera => {
                 if let Some(vp) = self.base().get_viewport() {
+                    // Try 3D camera first
                     if let Some(camera) = vp.get_camera_3d() {
                         let pos = camera.get_global_position();
                         let rot = camera.get_global_rotation_degrees();
@@ -117,6 +119,20 @@ impl SpectatorCollector {
                             forward: vec3(-fwd),
                         };
                     }
+                    // Try 2D camera
+                    if let Some(camera) = vp.get_camera_2d() {
+                        let pos = camera.get_global_position();
+                        let rot = camera.get_global_rotation_degrees();
+                        // 2D forward: facing right (+X) at 0°, rotate by camera angle
+                        let rad = (rot as f64).to_radians();
+                        let fx = rad.cos();
+                        let fy = rad.sin();
+                        return PerspectiveData {
+                            position: vec![pos.x as f64, pos.y as f64],
+                            rotation_deg: vec![rot as f64],
+                            forward: vec![fx, fy],
+                        };
+                    }
                 }
                 PerspectiveData {
                     position: vec![0.0, 0.0, 0.0],
@@ -125,6 +141,7 @@ impl SpectatorCollector {
                 }
             }
             PerspectiveParam::Node { path } => {
+                // Try Node3D first
                 if let Some(node) = self.base().try_get_node_as::<Node3D>(path.as_str()) {
                     let pos = node.get_global_position();
                     let rot = node.get_global_rotation_degrees();
@@ -135,17 +152,39 @@ impl SpectatorCollector {
                         forward: vec3(-fwd),
                     };
                 }
+                // Try Node2D
+                if let Some(node) = self.base().try_get_node_as::<Node2D>(path.as_str()) {
+                    let pos = node.get_global_position();
+                    let rot = node.get_global_rotation_degrees();
+                    let rad = (rot as f64).to_radians();
+                    return PerspectiveData {
+                        position: vec![pos.x as f64, pos.y as f64],
+                        rotation_deg: vec![rot as f64],
+                        forward: vec![rad.cos(), rad.sin()],
+                    };
+                }
                 PerspectiveData {
                     position: vec![0.0, 0.0, 0.0],
                     rotation_deg: vec![0.0, 0.0, 0.0],
                     forward: vec![0.0, 0.0, -1.0],
                 }
             }
-            PerspectiveParam::Point { position } => PerspectiveData {
-                position: position.clone(),
-                rotation_deg: vec![0.0, 0.0, 0.0],
-                forward: vec![0.0, 0.0, -1.0],
-            },
+            PerspectiveParam::Point { position } => {
+                let forward = if position.len() == 2 {
+                    vec![1.0, 0.0] // 2D default: facing right
+                } else {
+                    vec![0.0, 0.0, -1.0] // 3D default: facing -Z
+                };
+                PerspectiveData {
+                    position: position.clone(),
+                    rotation_deg: if position.len() == 2 {
+                        vec![0.0]
+                    } else {
+                        vec![0.0, 0.0, 0.0]
+                    },
+                    forward,
+                }
+            }
         }
     }
 
@@ -160,9 +199,15 @@ impl SpectatorCollector {
             return;
         }
 
+        // Try 3D first, then 2D (Node3D does NOT inherit from Node2D)
         if let Ok(node3d) = node.clone().try_cast::<Node3D>() {
-            if self.should_collect(&node3d, params) {
-                let entity = self.collect_single_entity(&node3d, params);
+            if self.should_collect_3d(&node3d, params) {
+                let entity = self.collect_single_entity_3d(&node3d, params);
+                entities.push(entity);
+            }
+        } else if let Ok(node2d) = node.clone().try_cast::<Node2D>() {
+            if self.should_collect_2d(&node2d, params) {
+                let entity = self.collect_single_entity_2d(&node2d, params);
                 entities.push(entity);
             }
         }
@@ -175,8 +220,8 @@ impl SpectatorCollector {
         }
     }
 
-    /// Check if a node should be collected based on filters.
-    fn should_collect(&self, node: &Gd<Node3D>, params: &GetSnapshotDataParams) -> bool {
+    /// Check if a 3D node should be collected based on filters.
+    fn should_collect_3d(&self, node: &Gd<Node3D>, params: &GetSnapshotDataParams) -> bool {
         let class_name = node.get_class().to_string();
 
         if !params.class_filter.is_empty() {
@@ -199,8 +244,32 @@ impl SpectatorCollector {
         true
     }
 
-    /// Collect data for a single entity.
-    fn collect_single_entity(&self, node: &Gd<Node3D>, params: &GetSnapshotDataParams) -> EntityData {
+    /// Check if a 2D node should be collected based on filters.
+    fn should_collect_2d(&self, node: &Gd<Node2D>, params: &GetSnapshotDataParams) -> bool {
+        let class_name = node.get_class().to_string();
+
+        if !params.class_filter.is_empty() {
+            if !params.class_filter.iter().any(|f| class_name == *f) {
+                return false;
+            }
+        }
+
+        if !params.groups.is_empty() {
+            let node_ref: Gd<Node> = node.clone().upcast();
+            let has_matching_group = params
+                .groups
+                .iter()
+                .any(|g| node_ref.is_in_group(g.as_str()));
+            if !has_matching_group {
+                return false;
+            }
+        }
+
+        true
+    }
+
+    /// Collect data for a single 3D entity.
+    fn collect_single_entity_3d(&self, node: &Gd<Node3D>, params: &GetSnapshotDataParams) -> EntityData {
         let pos = node.get_global_position();
         let rot = node.get_global_rotation_degrees();
         let class_name = node.get_class().to_string();
@@ -229,7 +298,6 @@ impl SpectatorCollector {
             all_exported_vars: None,
         };
 
-        // Full fields
         if params.detail == DetailLevel::Full {
             entity.children = self.get_children(&node_ref);
             entity.script = self.get_script_path(&node_ref);
@@ -242,7 +310,49 @@ impl SpectatorCollector {
         entity
     }
 
-    /// Get the velocity of a node, if it's a physics body.
+    /// Collect data for a single 2D entity.
+    fn collect_single_entity_2d(&self, node: &Gd<Node2D>, params: &GetSnapshotDataParams) -> EntityData {
+        let pos = node.get_global_position();
+        let rot = node.get_global_rotation_degrees();
+        let class_name = node.get_class().to_string();
+        let node_ref: Gd<Node> = node.clone().upcast();
+
+        let velocity = self.get_velocity_2d(node);
+        let groups = self.get_groups(&node_ref);
+        let visible = node.is_visible_in_tree();
+        let state = self.get_exported_state(&node_ref);
+
+        let mut entity = EntityData {
+            path: self.get_relative_path(&node_ref),
+            class: class_name,
+            position: vec![pos.x as f64, pos.y as f64],
+            rotation_deg: vec![rot as f64],
+            velocity,
+            groups,
+            visible,
+            state,
+            signals_recent: Vec::new(),
+            children: Vec::new(),
+            script: None,
+            signals_connected: Vec::new(),
+            physics: None,
+            transform: None,
+            all_exported_vars: None,
+        };
+
+        if params.detail == DetailLevel::Full {
+            entity.children = self.get_children(&node_ref);
+            entity.script = self.get_script_path(&node_ref);
+            entity.signals_connected = self.get_connected_signals(&node_ref);
+            entity.physics = self.get_physics_data_2d(node);
+            entity.transform = Some(self.get_transform_data_2d(node));
+            entity.all_exported_vars = Some(self.get_exported_state(&node_ref));
+        }
+
+        entity
+    }
+
+    /// Get the velocity of a 3D node, if it's a physics body.
     fn get_velocity(&self, node: &Gd<Node3D>) -> Vec<f64> {
         if let Ok(body) = node.clone().try_cast::<CharacterBody3D>() {
             return vec3(body.get_velocity());
@@ -251,6 +361,55 @@ impl SpectatorCollector {
             return vec3(body.get_linear_velocity());
         }
         vec![0.0, 0.0, 0.0]
+    }
+
+    /// Get the velocity of a 2D node, if it's a physics body.
+    fn get_velocity_2d(&self, node: &Gd<Node2D>) -> Vec<f64> {
+        if let Ok(body) = node.clone().try_cast::<CharacterBody2D>() {
+            let v = body.get_velocity();
+            return vec![v.x as f64, v.y as f64];
+        }
+        if let Ok(body) = node.clone().try_cast::<RigidBody2D>() {
+            let v = body.get_linear_velocity();
+            return vec![v.x as f64, v.y as f64];
+        }
+        vec![0.0, 0.0]
+    }
+
+    /// Get physics data for a 2D physics body.
+    fn get_physics_data_2d(&self, node: &Gd<Node2D>) -> Option<PhysicsEntityData> {
+        if let Ok(body) = node.clone().try_cast::<CharacterBody2D>() {
+            let v = body.get_velocity();
+            let on_floor = body.is_on_floor();
+            let floor_normal = if on_floor {
+                let n = body.get_floor_normal();
+                Some(vec![n.x as f64, n.y as f64])
+            } else {
+                None
+            };
+            let phys: Gd<PhysicsBody2D> = body.upcast();
+            return Some(PhysicsEntityData {
+                velocity: vec![v.x as f64, v.y as f64],
+                on_floor,
+                floor_normal,
+                collision_layer: phys.get_collision_layer(),
+                collision_mask: phys.get_collision_mask(),
+            });
+        }
+        None
+    }
+
+    /// Get full transform data for a 2D node.
+    fn get_transform_data_2d(&self, node: &Gd<Node2D>) -> TransformEntityData {
+        let t = node.get_global_transform();
+        let origin = t.origin;
+        let scale = node.get_scale();
+        let rot = node.get_global_rotation_degrees();
+        TransformEntityData {
+            origin: vec![origin.x as f64, origin.y as f64],
+            basis: vec![vec![rot as f64]], // single angle for 2D
+            scale: vec![scale.x as f64, scale.y as f64],
+        }
     }
 
     /// Get all groups a node belongs to (excluding internal Godot groups).
@@ -432,7 +591,8 @@ impl SpectatorCollector {
             spatial_context_raw: None,
         };
 
-        let is_3d = node.clone().try_cast::<Node3D>().is_ok();
+        let is_spatial = node.clone().try_cast::<Node3D>().is_ok()
+            || node.clone().try_cast::<Node2D>().is_ok();
 
         for cat in &params.include {
             match cat {
@@ -455,7 +615,7 @@ impl SpectatorCollector {
                     response.script = self.collect_inspect_script(&node);
                 }
                 InspectCategory::SpatialContext => {
-                    if is_3d {
+                    if is_spatial {
                         response.spatial_context_raw =
                             Some(self.collect_spatial_context_raw(&node));
                     }
@@ -477,6 +637,17 @@ impl SpectatorCollector {
                 global_rotation_deg: vec3(global_rot),
                 local_origin: vec3(local),
                 scale: vec3(scale),
+            }
+        } else if let Ok(n2d) = node.clone().try_cast::<Node2D>() {
+            let global = n2d.get_global_position();
+            let global_rot = n2d.get_global_rotation_degrees();
+            let local = n2d.get_position();
+            let scale = n2d.get_scale();
+            InspectTransform {
+                global_origin: vec![global.x as f64, global.y as f64],
+                global_rotation_deg: vec![global_rot as f64],
+                local_origin: vec![local.x as f64, local.y as f64],
+                scale: vec![scale.x as f64, scale.y as f64],
             }
         } else {
             InspectTransform {
@@ -518,6 +689,46 @@ impl SpectatorCollector {
             let phys: Gd<PhysicsBody3D> = body.upcast();
             return Some(InspectPhysics {
                 velocity: vec3(v),
+                speed,
+                on_floor: false,
+                on_wall: false,
+                on_ceiling: false,
+                floor_normal: None,
+                collision_layer: phys.get_collision_layer(),
+                collision_mask: phys.get_collision_mask(),
+            });
+        }
+        // 2D bodies
+        if let Ok(body) = node.clone().try_cast::<CharacterBody2D>() {
+            let v = body.get_velocity();
+            let speed = (v.x * v.x + v.y * v.y).sqrt() as f64;
+            let on_floor = body.is_on_floor();
+            let on_wall = body.is_on_wall();
+            let on_ceiling = body.is_on_ceiling();
+            let floor_normal = if on_floor {
+                let n = body.get_floor_normal();
+                Some(vec![n.x as f64, n.y as f64])
+            } else {
+                None
+            };
+            let phys: Gd<PhysicsBody2D> = body.upcast();
+            return Some(InspectPhysics {
+                velocity: vec![v.x as f64, v.y as f64],
+                speed,
+                on_floor,
+                on_wall,
+                on_ceiling,
+                floor_normal,
+                collision_layer: phys.get_collision_layer(),
+                collision_mask: phys.get_collision_mask(),
+            });
+        }
+        if let Ok(body) = node.clone().try_cast::<RigidBody2D>() {
+            let v = body.get_linear_velocity();
+            let speed = (v.x * v.x + v.y * v.y).sqrt() as f64;
+            let phys: Gd<PhysicsBody2D> = body.upcast();
+            return Some(InspectPhysics {
+                velocity: vec![v.x as f64, v.y as f64],
                 speed,
                 on_floor: false,
                 on_wall: false,
@@ -586,6 +797,40 @@ impl SpectatorCollector {
             }
             "Area3D" => {
                 if let Ok(area) = child.clone().try_cast::<godot::classes::Area3D>() {
+                    let bodies = area.get_overlapping_bodies();
+                    let names: Vec<serde_json::Value> = (0..bodies.len())
+                        .filter_map(|i| {
+                            bodies
+                                .get(i)
+                                .map(|b| serde_json::Value::String(b.get_name().to_string()))
+                        })
+                        .collect();
+                    props.insert(
+                        "overlapping_bodies".to_string(),
+                        serde_json::Value::Array(names),
+                    );
+                }
+            }
+            "CollisionShape2D" => {
+                if let Ok(cs) = child.clone().try_cast::<godot::classes::CollisionShape2D>() {
+                    if let Some(shape) = cs.get_shape() {
+                        props.insert(
+                            "shape".to_string(),
+                            serde_json::Value::String(shape.get_class().to_string()),
+                        );
+                    }
+                }
+            }
+            "Sprite2D" => {
+                if let Ok(s) = child.clone().try_cast::<Node2D>() {
+                    props.insert(
+                        "visible".to_string(),
+                        serde_json::Value::Bool(s.is_visible()),
+                    );
+                }
+            }
+            "Area2D" => {
+                if let Ok(area) = child.clone().try_cast::<godot::classes::Area2D>() {
                     let bodies = area.get_overlapping_bodies();
                     let names: Vec<serde_json::Value> = (0..bodies.len())
                         .filter_map(|i| {
@@ -700,20 +945,23 @@ impl SpectatorCollector {
 
     /// Collect raw spatial context data for a node.
     fn collect_spatial_context_raw(&self, node: &Gd<Node>) -> SpatialContextRaw {
-        let node3d = match node.clone().try_cast::<Node3D>() {
-            Ok(n) => n,
-            Err(_) => {
-                return SpatialContextRaw {
-                    nearby: Vec::new(),
-                    in_areas: Vec::new(),
-                    camera_visible: false,
-                    camera_distance: 0.0,
-                    node_position: Vec::new(),
-                    node_forward: Vec::new(),
-                }
-            }
-        };
+        if let Ok(node3d) = node.clone().try_cast::<Node3D>() {
+            return self.collect_spatial_context_raw_3d(&node3d, node);
+        }
+        if let Ok(node2d) = node.clone().try_cast::<Node2D>() {
+            return self.collect_spatial_context_raw_2d(&node2d, node);
+        }
+        SpatialContextRaw {
+            nearby: Vec::new(),
+            in_areas: Vec::new(),
+            camera_visible: false,
+            camera_distance: 0.0,
+            node_position: Vec::new(),
+            node_forward: Vec::new(),
+        }
+    }
 
+    fn collect_spatial_context_raw_3d(&self, node3d: &Gd<Node3D>, node: &Gd<Node>) -> SpatialContextRaw {
         let pos = node3d.get_global_position();
         let fwd_col = node3d.get_global_transform().basis.col_c();
         let node_position = vec3(pos);
@@ -745,7 +993,52 @@ impl SpectatorCollector {
             }
         }
 
-        let in_areas = self.collect_containing_areas(&node3d);
+        let in_areas = self.collect_containing_areas(node3d);
+
+        SpatialContextRaw {
+            nearby,
+            in_areas,
+            camera_visible,
+            camera_distance,
+            node_position,
+            node_forward,
+        }
+    }
+
+    fn collect_spatial_context_raw_2d(&self, node2d: &Gd<Node2D>, node: &Gd<Node>) -> SpatialContextRaw {
+        let pos = node2d.get_global_position();
+        let rot = node2d.get_global_rotation_degrees();
+        let rad = (rot as f64).to_radians();
+        let node_position = vec![pos.x as f64, pos.y as f64];
+        let node_forward = vec![rad.cos(), rad.sin()];
+
+        let (camera_visible, camera_distance) = if let Some(vp) = self.base().get_viewport() {
+            if let Some(camera) = vp.get_camera_2d() {
+                let cam_pos = camera.get_global_position();
+                let dist = pos.distance_to(cam_pos) as f64;
+                let visible = node2d.is_visible_in_tree();
+                (visible, dist)
+            } else {
+                (false, 0.0)
+            }
+        } else {
+            (false, 0.0)
+        };
+
+        let mut nearby = Vec::new();
+        if let Some(tree) = self.base().get_tree() {
+            if let Some(root) = tree.get_current_scene() {
+                self.collect_nearby_recursive_2d(&root, &pos, node, &mut nearby, 500.0);
+                nearby.sort_by(|a, b| {
+                    let da = position_distance(&a.position, &node_position);
+                    let db = position_distance(&b.position, &node_position);
+                    da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
+                });
+                nearby.truncate(10);
+            }
+        }
+
+        let in_areas = self.collect_containing_areas_2d(node2d);
 
         SpatialContextRaw {
             nearby,
@@ -793,6 +1086,51 @@ impl SpectatorCollector {
                 self.collect_nearby_recursive(&child, target_pos, exclude, result, radius);
             }
         }
+    }
+
+    /// Recursively find nearby Node2D nodes within radius.
+    fn collect_nearby_recursive_2d(
+        &self,
+        node: &Gd<Node>,
+        target_pos: &Vector2,
+        exclude: &Gd<Node>,
+        result: &mut Vec<NearbyEntityRaw>,
+        radius: f64,
+    ) {
+        if self.is_spectator_node(node) {
+            return;
+        }
+        if node.instance_id() == exclude.instance_id() {
+            return;
+        }
+
+        if let Ok(n2d) = node.clone().try_cast::<Node2D>() {
+            let pos = n2d.get_global_position();
+            let dist = pos.distance_to(*target_pos) as f64;
+            if dist <= radius {
+                let node_ref: Gd<Node> = n2d.clone().upcast();
+                result.push(NearbyEntityRaw {
+                    path: self.get_relative_path(&node_ref),
+                    class: node_ref.get_class().to_string(),
+                    position: vec![pos.x as f64, pos.y as f64],
+                    groups: self.get_groups(&node_ref),
+                });
+            }
+        }
+
+        let count = node.get_child_count();
+        for i in 0..count {
+            if let Some(child) = node.get_child(i) {
+                self.collect_nearby_recursive_2d(&child, target_pos, exclude, result, radius);
+            }
+        }
+    }
+
+    /// Find Area2D nodes that contain (overlap) the target node.
+    fn collect_containing_areas_2d(&self, _node: &Gd<Node2D>) -> Vec<String> {
+        // Area2D overlap detection requires physics queries; returning empty for now
+        // (same as 3D which uses body overlap queries via tree scan)
+        Vec::new()
     }
 
     /// Find Area3D nodes that contain (overlap) the target node.

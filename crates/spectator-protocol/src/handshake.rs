@@ -1,5 +1,39 @@
 use serde::{Deserialize, Serialize};
 
+/// Scene coordinate system type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SceneDimensions {
+    /// Pure 2D scene (Node2D root, Camera2D).
+    Two,
+    /// Pure 3D scene (Node3D root, Camera3D).
+    Three,
+    /// Mixed scene containing both Node2D and Node3D subtrees.
+    Mixed,
+}
+
+impl SceneDimensions {
+    pub fn is_2d(&self) -> bool {
+        matches!(self, Self::Two)
+    }
+
+    pub fn is_3d(&self) -> bool {
+        matches!(self, Self::Three)
+    }
+
+    pub fn is_mixed(&self) -> bool {
+        matches!(self, Self::Mixed)
+    }
+
+    pub fn from_u32(v: u32) -> Self {
+        match v {
+            2 => Self::Two,
+            3 => Self::Three,
+            _ => Self::Mixed,
+        }
+    }
+}
+
 /// Sent by the addon immediately after TCP connection is established.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Handshake {
@@ -67,6 +101,11 @@ impl Handshake {
             project_name,
         }
     }
+
+    /// Return the scene dimensions as a typed enum.
+    pub fn dimensions(&self) -> SceneDimensions {
+        SceneDimensions::from_u32(self.scene_dimensions)
+    }
 }
 
 impl HandshakeAck {
@@ -96,6 +135,30 @@ impl HandshakeError {
 mod tests {
     use super::*;
     use crate::messages::Message;
+
+    #[test]
+    fn scene_dimensions_from_u32() {
+        assert_eq!(SceneDimensions::from_u32(2), SceneDimensions::Two);
+        assert_eq!(SceneDimensions::from_u32(3), SceneDimensions::Three);
+        assert_eq!(SceneDimensions::from_u32(0), SceneDimensions::Mixed);
+        assert_eq!(SceneDimensions::from_u32(99), SceneDimensions::Mixed);
+    }
+
+    #[test]
+    fn scene_dimensions_predicates() {
+        assert!(SceneDimensions::Two.is_2d());
+        assert!(!SceneDimensions::Two.is_3d());
+        assert!(SceneDimensions::Three.is_3d());
+        assert!(SceneDimensions::Mixed.is_mixed());
+    }
+
+    #[test]
+    fn handshake_dimensions_helper() {
+        let h = Handshake::new("4.3".into(), 2, 60, "TestProject".into());
+        assert_eq!(h.dimensions(), SceneDimensions::Two);
+        let h3 = Handshake::new("4.3".into(), 3, 60, "TestProject".into());
+        assert_eq!(h3.dimensions(), SceneDimensions::Three);
+    }
 
     #[test]
     fn handshake_round_trip() {

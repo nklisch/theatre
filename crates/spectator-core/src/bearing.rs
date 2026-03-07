@@ -1,4 +1,4 @@
-use crate::types::{Cardinal, Elevation, Perspective, Position3, RelativePosition};
+use crate::types::{Cardinal, Elevation, Perspective, Position2, Position3, RelativePosition};
 
 /// Elevation threshold in meters (above/below).
 const ELEVATION_THRESHOLD: f64 = 2.0;
@@ -152,6 +152,64 @@ pub fn compass_bearing(forward: [f64; 3]) -> (Cardinal, f64) {
     (cardinal, deg)
 }
 
+/// Compute the relative position of a 2D target from a 2D perspective.
+/// No elevation in 2D.
+pub fn relative_position_2d(
+    perspective_pos: Position2,
+    perspective_forward: Position2,
+    target: Position2,
+    occluded: bool,
+) -> RelativePosition {
+    let dist = distance_2d(perspective_pos, target);
+    let bdeg = bearing_deg_2d(perspective_pos, perspective_forward, target);
+    let bearing = to_cardinal(bdeg);
+
+    RelativePosition {
+        dist,
+        bearing,
+        bearing_deg: bdeg,
+        elevation: None,
+        occluded,
+    }
+}
+
+/// 2D Euclidean distance.
+pub fn distance_2d(a: Position2, b: Position2) -> f64 {
+    let dx = b[0] - a[0];
+    let dy = b[1] - a[1];
+    (dx * dx + dy * dy).sqrt()
+}
+
+/// 2D bearing angle in degrees from perspective forward to target.
+/// 0 = ahead, clockwise.
+/// Godot 2D convention: X right, Y down. Rotation 0° = facing right (+X).
+pub fn bearing_deg_2d(
+    perspective_pos: Position2,
+    perspective_forward: Position2,
+    target: Position2,
+) -> f64 {
+    let dx = target[0] - perspective_pos[0];
+    let dy = target[1] - perspective_pos[1];
+
+    let fx = perspective_forward[0];
+    let fy = perspective_forward[1];
+
+    // 2D cross product: fx*dy - fy*dx (positive = target is clockwise from forward)
+    let cross = fx * dy - fy * dx;
+    let dot = fx * dx + fy * dy;
+
+    let angle = cross.atan2(dot).to_degrees();
+    ((angle % 360.0) + 360.0) % 360.0
+}
+
+/// Build a 2D perspective from position and rotation angle (degrees).
+/// Godot 2D: 0° = facing right (+X), positive = clockwise.
+pub fn perspective_from_angle_2d(position: Position2, angle_deg: f64) -> (Position2, Position2) {
+    let rad = angle_deg.to_radians();
+    let forward = [rad.cos(), rad.sin()];
+    (position, forward)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -244,5 +302,31 @@ mod tests {
         let persp = perspective_from_yaw([0.0, 0.0, 0.0], 90.0);
         assert!((persp.forward[0] + 1.0).abs() < 1e-6, "forward_x should be -1, got {}", persp.forward[0]);
         assert!((persp.forward[2]).abs() < 1e-6, "forward_z should be 0, got {}", persp.forward[2]);
+    }
+
+    #[test]
+    fn distance_2d_basic() {
+        assert!((distance_2d([0.0, 0.0], [3.0, 4.0]) - 5.0).abs() < 1e-10);
+    }
+
+    #[test]
+    fn bearing_2d_ahead() {
+        // Facing right (+X), target directly ahead
+        let bdeg = bearing_deg_2d([0.0, 0.0], [1.0, 0.0], [10.0, 0.0]);
+        assert!(bdeg < 1.0 || bdeg > 359.0, "Expected ~0°, got {bdeg}");
+    }
+
+    #[test]
+    fn bearing_2d_right() {
+        // Facing right (+X), target below (+Y in Godot 2D = clockwise = right)
+        let bdeg = bearing_deg_2d([0.0, 0.0], [1.0, 0.0], [0.0, 10.0]);
+        assert!((bdeg - 90.0).abs() < 1.0, "Expected ~90°, got {bdeg}");
+    }
+
+    #[test]
+    fn relative_position_2d_no_elevation() {
+        let rel = relative_position_2d([0.0, 0.0], [1.0, 0.0], [10.0, 0.0], false);
+        assert!(rel.elevation.is_none());
+        assert!(rel.dist > 9.9);
     }
 }

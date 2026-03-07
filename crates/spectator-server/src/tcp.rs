@@ -6,7 +6,7 @@ use spectator_core::index::SpatialIndex;
 use spectator_core::watch::WatchEngine;
 use spectator_protocol::{
     codec::async_io,
-    handshake::{HandshakeAck, HandshakeError, PROTOCOL_VERSION},
+    handshake::{HandshakeAck, HandshakeError, SceneDimensions, PROTOCOL_VERSION},
     messages::Message,
 };
 use std::collections::HashMap;
@@ -54,6 +54,8 @@ pub struct SessionState {
     pub config: SessionConfig,
     /// Cached filesystem path to recording storage (resolved from addon).
     pub recording_storage_path: Option<String>,
+    /// Scene dimensions from handshake.
+    pub scene_dimensions: SceneDimensions,
 }
 
 impl Default for SessionState {
@@ -69,14 +71,12 @@ impl Default for SessionState {
             watch_engine: WatchEngine::new(),
             config: SessionConfig::default(),
             recording_storage_path: None,
+            scene_dimensions: SceneDimensions::Three,
         }
     }
 }
 
 /// Information received from the addon during handshake.
-/// TODO: Use scene_dimensions for 2D/3D spatial index selection,
-///       expose via spatial_config "view current" output.
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct HandshakeInfo {
     pub spectator_version: String,
@@ -176,6 +176,7 @@ async fn handle_connection(stream: TcpStream, state: Arc<Mutex<SessionState>>) -
         s.tcp_writer = Some(TcpClientHandle { writer, next_id: 0 });
         s.connected = true;
         s.session_id = Some(session_id);
+        s.scene_dimensions = handshake.dimensions();
         s.handshake_info = Some(HandshakeInfo {
             spectator_version: handshake.spectator_version,
             godot_version: handshake.godot_version,
