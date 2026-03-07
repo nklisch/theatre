@@ -1,0 +1,282 @@
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+
+use crate::cluster::ClusterStrategy;
+
+/// Bearing output format preference.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BearingFormat {
+    Cardinal,
+    Degrees,
+    Both,
+}
+
+impl Default for BearingFormat {
+    fn default() -> Self {
+        Self::Both
+    }
+}
+
+/// Active session configuration.
+///
+/// Three sources with precedence: spatial_config (session) > spectator.toml (project) > Project Settings (machine).
+/// This struct holds the merged effective config.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SessionConfig {
+    /// Glob patterns for static node classification.
+    /// Nodes matching these patterns are treated as static regardless of class.
+    #[serde(default)]
+    pub static_patterns: Vec<String>,
+
+    /// Properties to include in state output, keyed by group name or class name.
+    /// Key "*" applies to all nodes. Empty map = include all exported vars (default).
+    #[serde(default)]
+    pub state_properties: HashMap<String, Vec<String>>,
+
+    /// How to cluster nodes in summary views.
+    #[serde(default)]
+    pub cluster_by: ClusterStrategy,
+
+    /// Bearing format preference.
+    #[serde(default)]
+    pub bearing_format: BearingFormat,
+
+    /// Whether to include non-exported (internal) variables in state output.
+    #[serde(default)]
+    pub expose_internals: bool,
+
+    /// Physics tick polling rate (every N physics frames). 1 = every frame.
+    #[serde(default = "default_poll_interval")]
+    pub poll_interval: u32,
+
+    /// Hard cap on token budget for any single response.
+    #[serde(default = "default_token_hard_cap")]
+    pub token_hard_cap: u32,
+}
+
+fn default_poll_interval() -> u32 {
+    1
+}
+fn default_token_hard_cap() -> u32 {
+    5000
+}
+
+impl Default for SessionConfig {
+    fn default() -> Self {
+        Self {
+            static_patterns: Vec::new(),
+            state_properties: HashMap::new(),
+            cluster_by: ClusterStrategy::default(),
+            bearing_format: BearingFormat::default(),
+            expose_internals: false,
+            poll_interval: default_poll_interval(),
+            token_hard_cap: default_token_hard_cap(),
+        }
+    }
+}
+
+impl SessionConfig {
+    /// Merge a partial config update (from spatial_config tool) into this config.
+    /// Only fields present in the update are overwritten.
+    pub fn apply_update(&mut self, update: &ConfigUpdate) {
+        if let Some(ref v) = update.static_patterns {
+            self.static_patterns = v.clone();
+        }
+        if let Some(ref v) = update.state_properties {
+            self.state_properties = v.clone();
+        }
+        if let Some(v) = update.cluster_by {
+            self.cluster_by = v;
+        }
+        if let Some(v) = update.bearing_format {
+            self.bearing_format = v;
+        }
+        if let Some(v) = update.expose_internals {
+            self.expose_internals = v;
+        }
+        if let Some(v) = update.poll_interval {
+            self.poll_interval = v;
+        }
+        if let Some(v) = update.token_hard_cap {
+            self.token_hard_cap = v;
+        }
+    }
+
+    /// Check if a node path matches any static pattern (glob-style).
+    /// Supports simple glob: "*" matches any segment, "walls/*" matches "walls/anything".
+    pub fn matches_static_pattern(&self, path: &str) -> bool {
+        self.static_patterns.iter().any(|pattern| glob_match(pattern, path))
+    }
+
+    /// Filter state properties for a node based on its groups and class.
+    /// Returns None if no filtering configured (include all exported vars).
+    /// Returns Some(list) if specific properties should be included.
+    pub fn filter_state_properties(
+        &self,
+        groups: &[String],
+        class: &str,
+    ) -> Option<Vec<String>> {
+        if self.state_properties.is_empty() {
+            return None; // No filtering — include all
+        }
+
+        let mut props = Vec::new();
+        let mut found = false;
+
+        // Check group-based entries
+        for group in groups {
+            if let Some(group_props) = self.state_properties.get(group) {
+                props.extend(group_props.iter().cloned());
+                found = true;
+            }
+        }
+
+        // Check class-based entry
+        if let Some(class_props) = self.state_properties.get(class) {
+            props.extend(class_props.iter().cloned());
+            found = true;
+        }
+
+        // Check wildcard
+        if let Some(wildcard_props) = self.state_properties.get("*") {
+            props.extend(wildcard_props.iter().cloned());
+            found = true;
+        }
+
+        if found {
+            props.sort();
+            props.dedup();
+            Some(props)
+        } else {
+            None // No matching rules — include all
+        }
+    }
+}
+
+/// Partial config update — all fields optional.
+/// Used by the spatial_config MCP tool.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct ConfigUpdate {
+    pub static_patterns: Option<Vec<String>>,
+    pub state_properties: Option<HashMap<String, Vec<String>>>,
+    pub cluster_by: Option<ClusterStrategy>,
+    pub bearing_format: Option<BearingFormat>,
+    pub expose_internals: Option<bool>,
+    pub poll_interval: Option<u32>,
+    pub token_hard_cap: Option<u32>,
+}
+
+/// Simple glob matching for static patterns.
+/// Supports: "walls/*" matches "walls/anything", "*" matches everything,
+/// "walls/*/door" matches "walls/foo/door".
+fn glob_match(pattern: &str, path: &str) -> bool {
+    let pat_parts: Vec<&str> = pattern.split('/').collect();
+    let path_parts: Vec<&str> = path.split('/').collect();
+    glob_match_parts(&pat_parts, &path_parts)
+}
+
+fn glob_match_parts(pattern: &[&str], path: &[&str]) -> bool {
+    match (pattern.first(), path.first()) {
+        (None, None) => true,
+        (Some(&"*"), Some(_)) if pattern.len() == 1 => true, // trailing * matches any non-empty segment(s)
+        (Some(&"*"), Some(_)) => {
+            // * matches this segment, continue
+            glob_match_parts(&pattern[1..], &path[1..])
+        }
+        (Some(p), Some(s)) if p == s => {
+            glob_match_parts(&pattern[1..], &path[1..])
+        }
+        _ => false,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_config() {
+        let config = SessionConfig::default();
+        assert!(config.static_patterns.is_empty());
+        assert!(config.state_properties.is_empty());
+        assert_eq!(config.cluster_by, ClusterStrategy::Group);
+        assert_eq!(config.bearing_format, BearingFormat::Both);
+        assert!(!config.expose_internals);
+        assert_eq!(config.poll_interval, 1);
+        assert_eq!(config.token_hard_cap, 5000);
+    }
+
+    #[test]
+    fn apply_partial_update() {
+        let mut config = SessionConfig::default();
+        let update = ConfigUpdate {
+            static_patterns: Some(vec!["walls/*".into()]),
+            ..Default::default()
+        };
+        config.apply_update(&update);
+        assert_eq!(config.static_patterns, vec!["walls/*"]);
+        // Other fields unchanged
+        assert_eq!(config.token_hard_cap, 5000);
+    }
+
+    #[test]
+    fn glob_match_simple() {
+        assert!(glob_match("walls/*", "walls/segment_01"));
+        assert!(glob_match("walls/*", "walls/door_02"));
+        assert!(!glob_match("walls/*", "enemies/scout"));
+        assert!(!glob_match("walls/*", "walls")); // no trailing segment
+    }
+
+    #[test]
+    fn glob_match_exact() {
+        assert!(glob_match("player", "player"));
+        assert!(!glob_match("player", "players"));
+    }
+
+    #[test]
+    fn glob_match_wildcard_all() {
+        assert!(glob_match("*", "anything"));
+        assert!(glob_match("*", "walls/segment_01"));
+    }
+
+    #[test]
+    fn filter_state_properties_empty_config() {
+        let config = SessionConfig::default();
+        assert!(config.filter_state_properties(&["enemies".into()], "CharacterBody3D").is_none());
+    }
+
+    #[test]
+    fn filter_state_properties_by_group() {
+        let mut config = SessionConfig::default();
+        config.state_properties.insert(
+            "enemies".into(),
+            vec!["health".into(), "alert_level".into()],
+        );
+        let result = config.filter_state_properties(
+            &["enemies".into()], "CharacterBody3D"
+        );
+        assert_eq!(result, Some(vec!["alert_level".into(), "health".into()]));
+    }
+
+    #[test]
+    fn filter_state_properties_wildcard() {
+        let mut config = SessionConfig::default();
+        config.state_properties.insert("*".into(), vec!["visible".into()]);
+        let result = config.filter_state_properties(&[], "Node3D");
+        assert_eq!(result, Some(vec!["visible".into()]));
+    }
+
+    #[test]
+    fn filter_state_properties_merged() {
+        let mut config = SessionConfig::default();
+        config.state_properties.insert("enemies".into(), vec!["health".into()]);
+        config.state_properties.insert("*".into(), vec!["visible".into()]);
+        let result = config.filter_state_properties(
+            &["enemies".into()], "CharacterBody3D"
+        );
+        let mut expected = vec!["health".into(), "visible".into()];
+        expected.sort();
+        assert_eq!(result, Some(expected));
+    }
+}

@@ -18,6 +18,9 @@ pub struct GetSnapshotDataParams {
     pub class_filter: Vec<String>,
     /// What detail to collect.
     pub detail: DetailLevel,
+    /// Whether to include internal (non-exported) variables.
+    #[serde(default)]
+    pub expose_internals: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -138,6 +141,9 @@ pub struct GetNodeInspectParams {
     pub path: String,
     /// Which data categories to collect.
     pub include: Vec<InspectCategory>,
+    /// Whether to include internal (non-exported) variables.
+    #[serde(default)]
+    pub expose_internals: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -498,6 +504,7 @@ mod tests {
             groups: vec!["enemies".to_string()],
             class_filter: vec![],
             detail: DetailLevel::Standard,
+            expose_internals: false,
         };
         let json = serde_json::to_string(&params).unwrap();
         let parsed: GetSnapshotDataParams = serde_json::from_str(&json).unwrap();
@@ -541,6 +548,7 @@ mod tests {
         let params = GetNodeInspectParams {
             path: "enemies/scout_02".to_string(),
             include: vec![InspectCategory::Transform, InspectCategory::Physics],
+            expose_internals: false,
         };
         let json = serde_json::to_string(&params).unwrap();
         let parsed: GetNodeInspectParams = serde_json::from_str(&json).unwrap();

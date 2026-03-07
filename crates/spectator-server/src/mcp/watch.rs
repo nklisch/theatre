@@ -83,6 +83,11 @@ pub async fn handle_spatial_watch(
     params: SpatialWatchParams,
     state: &std::sync::Arc<tokio::sync::Mutex<crate::tcp::SessionState>>,
 ) -> Result<String, McpError> {
+    let hard_cap = {
+        let s = state.lock().await;
+        s.config.token_hard_cap
+    };
+
     match params.action.as_str() {
         "add" => {
             let spec = params.watch.ok_or_else(|| {
@@ -139,7 +144,7 @@ pub async fn handle_spatial_watch(
 
             let json_bytes = serde_json::to_vec(&response).unwrap_or_default().len();
             let used = estimate_tokens(json_bytes);
-            inject_budget(&mut response, used, 200);
+            inject_budget(&mut response, used, 200, hard_cap);
 
             serialize_response(&response)
         }
@@ -160,7 +165,7 @@ pub async fn handle_spatial_watch(
 
             let json_bytes = serde_json::to_vec(&response).unwrap_or_default().len();
             let used = estimate_tokens(json_bytes);
-            inject_budget(&mut response, used, 200);
+            inject_budget(&mut response, used, 200, hard_cap);
 
             serialize_response(&response)
         }
@@ -203,7 +208,7 @@ pub async fn handle_spatial_watch(
 
             let json_bytes = serde_json::to_vec(&response).unwrap_or_default().len();
             let used = estimate_tokens(json_bytes);
-            inject_budget(&mut response, used, 200);
+            inject_budget(&mut response, used, 200, hard_cap);
 
             serialize_response(&response)
         }
@@ -220,7 +225,7 @@ pub async fn handle_spatial_watch(
 
             let json_bytes = serde_json::to_vec(&response).unwrap_or_default().len();
             let used = estimate_tokens(json_bytes);
-            inject_budget(&mut response, used, 200);
+            inject_budget(&mut response, used, 200, hard_cap);
 
             serialize_response(&response)
         }

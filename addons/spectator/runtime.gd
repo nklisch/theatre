@@ -9,6 +9,11 @@ func _ready() -> void:
 		push_error("[Spectator] GDExtension not loaded — SpectatorTCPServer class not found. Check that the spectator.gdextension binary exists for your platform.")
 		return
 
+	var auto_start: bool = ProjectSettings.get_setting(
+		"spectator/connection/auto_start", true)
+	if not auto_start:
+		return
+
 	collector = SpectatorCollector.new()
 	add_child(collector)
 

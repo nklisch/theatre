@@ -6,7 +6,7 @@ use tokio::sync::Mutex;
 
 use spectator_core::{
     bearing::{self, perspective_from_forward, perspective_from_yaw},
-    budget::{estimate_tokens, resolve_budget, SnapshotBudgetDefaults},
+    budget::{estimate_tokens, resolve_budget},
     index::NearestResult,
     types::{vec_to_array3, Position3},
 };
@@ -246,13 +246,18 @@ pub async fn handle_spatial_query(
     params: SpatialQueryParams,
     state: &Arc<Mutex<SessionState>>,
 ) -> Result<String, McpError> {
+    let config = {
+        let s = state.lock().await;
+        s.config.clone()
+    };
+
     let from_origin = parse_origin(&params.from)?;
     let groups = params.groups.as_deref().unwrap_or(&[]);
     let class_filter = params.class_filter.as_deref().unwrap_or(&[]);
     let budget_limit = resolve_budget(
         params.token_budget,
         500,
-        SnapshotBudgetDefaults::HARD_CAP,
+        config.token_hard_cap,
     );
 
     let mut response = match params.query_type.as_str() {
@@ -351,7 +356,7 @@ pub async fn handle_spatial_query(
     // Inject budget
     let json_bytes = serde_json::to_vec(&response).unwrap_or_default().len();
     let used = estimate_tokens(json_bytes);
-    inject_budget(&mut response, used, budget_limit);
+    inject_budget(&mut response, used, budget_limit, config.token_hard_cap);
 
     serialize_response(&response)
 }

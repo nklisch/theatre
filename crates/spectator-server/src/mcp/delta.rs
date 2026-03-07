@@ -3,7 +3,7 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 use spectator_core::{
-    budget::{estimate_tokens, resolve_budget, SnapshotBudgetDefaults},
+    budget::{estimate_tokens, resolve_budget},
     delta::EntitySnapshot,
     index::{IndexedEntity, SpatialIndex},
     types::vec_to_array3,
@@ -74,7 +74,12 @@ pub async fn handle_spatial_delta(
         _ => PerspectiveParam::Camera,
     };
 
-    // 3. Query addon for current state
+    // 3. Get config and query addon for current state
+    let config = {
+        let s = state.lock().await;
+        s.config.clone()
+    };
+
     let query_params = GetSnapshotDataParams {
         perspective: perspective_param,
         radius: params.radius,
@@ -82,6 +87,7 @@ pub async fn handle_spatial_delta(
         groups: params.groups.clone().unwrap_or_default(),
         class_filter: params.class_filter.clone().unwrap_or_default(),
         detail: DetailLevel::Standard,
+        expose_internals: config.expose_internals,
     };
 
     let raw_data: spectator_protocol::query::SnapshotResponse = {
@@ -199,10 +205,10 @@ pub async fn handle_spatial_delta(
     }
 
     // 7. Budget
-    let budget_limit = resolve_budget(params.token_budget, 1000, SnapshotBudgetDefaults::HARD_CAP);
+    let budget_limit = resolve_budget(params.token_budget, 1000, config.token_hard_cap);
     let json_bytes = serde_json::to_vec(&response).unwrap_or_default().len();
     let used = estimate_tokens(json_bytes);
-    inject_budget(&mut response, used, budget_limit);
+    inject_budget(&mut response, used, budget_limit, config.token_hard_cap);
 
     serialize_response(&response)
 }

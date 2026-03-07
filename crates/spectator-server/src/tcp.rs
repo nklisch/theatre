@@ -1,5 +1,6 @@
 use anyhow::Result;
 use rmcp::model::ErrorData as McpError;
+use spectator_core::config::SessionConfig;
 use spectator_core::delta::DeltaEngine;
 use spectator_core::index::SpatialIndex;
 use spectator_core::watch::WatchEngine;
@@ -49,6 +50,8 @@ pub struct SessionState {
     pub delta_engine: DeltaEngine,
     /// Watch engine: manages watch subscriptions and evaluates conditions.
     pub watch_engine: WatchEngine,
+    /// Active session configuration (merged from TOML defaults + spatial_config overrides).
+    pub config: SessionConfig,
 }
 
 impl Default for SessionState {
@@ -62,6 +65,7 @@ impl Default for SessionState {
             spatial_index: SpatialIndex::empty(),
             delta_engine: DeltaEngine::new(),
             watch_engine: WatchEngine::new(),
+            config: SessionConfig::default(),
         }
     }
 }

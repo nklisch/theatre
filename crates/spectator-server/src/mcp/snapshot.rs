@@ -5,6 +5,7 @@ use spectator_core::{
     bearing,
     budget::BudgetEnforcer,
     cluster::{self, Cluster},
+    config::{BearingFormat, SessionConfig},
     delta::EntitySnapshot,
     types::{Perspective, Position3, RawEntityData, RecentSignal, RelativePosition, vec_to_array3},
 };
@@ -63,7 +64,7 @@ fn default_detail() -> String { "standard".to_string() }
 pub struct OutputEntity {
     pub path: String,
     pub class: String,
-    pub rel: RelativePosition,
+    pub rel: serde_json::Value,
     pub abs: Vec<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rot_y: Option<f64>,
@@ -168,22 +169,52 @@ pub fn build_perspective(data: &spectator_protocol::query::PerspectiveData) -> P
     }
 }
 
-pub fn build_output_entity(entity: &EntityData, rel: &RelativePosition, full: bool) -> OutputEntity {
+/// Format relative position according to bearing format config.
+fn format_rel(rel: &RelativePosition, format: BearingFormat) -> serde_json::Value {
+    match format {
+        BearingFormat::Both => serde_json::to_value(rel).unwrap_or_default(),
+        BearingFormat::Cardinal => serde_json::json!({
+            "dist": rel.dist,
+            "bearing": rel.bearing,
+            "elevation": rel.elevation,
+            "occluded": rel.occluded,
+        }),
+        BearingFormat::Degrees => serde_json::json!({
+            "dist": rel.dist,
+            "bearing_deg": rel.bearing_deg,
+            "elevation": rel.elevation,
+            "occluded": rel.occluded,
+        }),
+    }
+}
+
+pub fn build_output_entity(entity: &EntityData, rel: &RelativePosition, full: bool, config: &SessionConfig) -> OutputEntity {
     let velocity = if entity.velocity.iter().any(|v| v.abs() > 0.01) {
         Some(entity.velocity.clone())
     } else {
         None
     };
 
+    // Filter state properties based on config
+    let state = match config.filter_state_properties(&entity.groups, &entity.class) {
+        Some(allowed_props) => entity
+            .state
+            .iter()
+            .filter(|(k, _)| allowed_props.contains(k))
+            .map(|(k, v)| (k.clone(), v.clone()))
+            .collect(),
+        None => entity.state.clone(),
+    };
+
     OutputEntity {
         path: entity.path.clone(),
         class: entity.class.clone(),
-        rel: rel.clone(),
+        rel: format_rel(rel, config.bearing_format),
         abs: entity.position.clone(),
         rot_y: entity.rotation_deg.get(1).copied(),
         velocity,
         groups: entity.groups.clone(),
-        state: entity.state.clone(),
+        state,
         signals_recent: entity
             .signals_recent
             .iter()
@@ -224,7 +255,7 @@ pub fn build_output_entity(entity: &EntityData, rel: &RelativePosition, full: bo
 }
 
 /// Convert EntityData to RawEntityData for use with the clustering engine.
-fn to_raw_entity(e: &EntityData) -> RawEntityData {
+fn to_raw_entity(e: &EntityData, config: &SessionConfig) -> RawEntityData {
     RawEntityData {
         path: e.path.clone(),
         class: e.class.clone(),
@@ -234,7 +265,7 @@ fn to_raw_entity(e: &EntityData) -> RawEntityData {
         groups: e.groups.clone(),
         state: e.state.clone(),
         visible: e.visible,
-        is_static: is_static_class(&e.class),
+        is_static: config.matches_static_pattern(&e.path) || is_static_class(&e.class),
         children: Vec::new(),
         script: e.script.clone(),
         signals_recent: e
@@ -265,13 +296,14 @@ pub fn build_summary_response(
     perspective: &Perspective,
     budget_limit: u32,
     hard_cap: u32,
+    config: &SessionConfig,
 ) -> serde_json::Value {
     let raw_entities: Vec<(RawEntityData, RelativePosition)> = entities
         .iter()
-        .map(|(e, rel)| (to_raw_entity(e), rel.clone()))
+        .map(|(e, rel)| (to_raw_entity(e, config), rel.clone()))
         .collect();
 
-    let clusters = cluster::cluster_by_group(&raw_entities);
+    let clusters = cluster::cluster_entities(&raw_entities, config.cluster_by);
 
     let total = entities.len();
     let visible = entities.iter().filter(|(e, _)| e.visible).count();
@@ -305,6 +337,7 @@ pub fn build_standard_response(
     perspective: &Perspective,
     budget_limit: u32,
     hard_cap: u32,
+    config: &SessionConfig,
 ) -> serde_json::Value {
     let mut enforcer = BudgetEnforcer::new(budget_limit, hard_cap);
     enforcer.try_add(200);
@@ -315,7 +348,8 @@ pub fn build_standard_response(
     let total = entities.len();
 
     for (entity, rel) in entities {
-        if is_static_class(&entity.class) {
+        let entity_is_static = config.matches_static_pattern(&entity.path) || is_static_class(&entity.class);
+        if entity_is_static {
             static_count += 1;
             let cat = classify_static_category(&entity.class).to_string();
             let counter = static_categories
@@ -327,7 +361,7 @@ pub fn build_standard_response(
             continue;
         }
 
-        let out = build_output_entity(entity, rel, false);
+        let out = build_output_entity(entity, rel, false, config);
         let bytes = serde_json::to_vec(&out).unwrap_or_default();
         if !enforcer.try_add(bytes.len()) {
             let pagination = PaginationBlock {
@@ -366,6 +400,7 @@ pub fn build_full_response(
     perspective: &Perspective,
     budget_limit: u32,
     hard_cap: u32,
+    config: &SessionConfig,
 ) -> serde_json::Value {
     let mut enforcer = BudgetEnforcer::new(budget_limit, hard_cap);
     enforcer.try_add(200);
@@ -375,7 +410,8 @@ pub fn build_full_response(
     let total = entities.len();
 
     for (entity, rel) in entities {
-        if is_static_class(&entity.class) {
+        let entity_is_static = config.matches_static_pattern(&entity.path) || is_static_class(&entity.class);
+        if entity_is_static {
             let node = serde_json::json!({
                 "path": entity.path,
                 "class": entity.class,
@@ -388,7 +424,7 @@ pub fn build_full_response(
             continue;
         }
 
-        let out = build_output_entity(entity, rel, true);
+        let out = build_output_entity(entity, rel, true, config);
         let bytes = serde_json::to_vec(&out).unwrap_or_default();
         if !enforcer.try_add(bytes.len()) {
             let pagination = PaginationBlock {
@@ -427,6 +463,7 @@ pub fn build_expand_response(
     raw: &SnapshotResponse,
     budget_limit: u32,
     hard_cap: u32,
+    config: &SessionConfig,
 ) -> Result<serde_json::Value, McpError> {
     let matching: Vec<&(EntityData, RelativePosition)> = entities
         .iter()
@@ -449,7 +486,7 @@ pub fn build_expand_response(
     let mut output_entities: Vec<OutputEntity> = Vec::new();
 
     for (entity, rel) in &matching {
-        let out = build_output_entity(entity, rel, false);
+        let out = build_output_entity(entity, rel, false, config);
         let bytes = serde_json::to_vec(&out).unwrap_or_default();
         if !enforcer.try_add(bytes.len()) {
             break;

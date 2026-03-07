@@ -1,3 +1,4 @@
+mod config;
 mod mcp;
 mod server;
 mod tcp;
@@ -27,13 +28,26 @@ async fn main() -> Result<()> {
     tracing::info!("spectator-server v{}", env!("CARGO_PKG_VERSION"));
 
     // Parse port from env or use default
-    let port: u16 = std::env::var("SPECTATOR_PORT")
+    let env_port: u16 = std::env::var("SPECTATOR_PORT")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(DEFAULT_PORT);
 
+    // Determine project directory for spectator.toml lookup
+    let project_dir = std::env::var("SPECTATOR_PROJECT_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
+
+    // Load TOML config (port override + session config defaults)
+    let toml_port = config::load_toml_port(&project_dir);
+    let port = toml_port.unwrap_or(env_port);
+    let base_config = config::load_toml_config(&project_dir);
+
     // Shared state between MCP handlers and TCP client
-    let state = Arc::new(Mutex::new(SessionState::default()));
+    let state = Arc::new(Mutex::new(SessionState {
+        config: base_config,
+        ..Default::default()
+    }));
 
     // Spawn TCP client background task (reconnects automatically)
     let tcp_state = state.clone();
