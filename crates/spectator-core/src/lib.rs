@@ -6,5 +6,7 @@
 pub mod bearing;
 pub mod budget;
 pub mod cluster;
+pub mod delta;
 pub mod index;
 pub mod types;
+pub mod watch;

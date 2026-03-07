@@ -469,6 +469,22 @@ pub struct ResolveNodeResponse {
     pub groups: Vec<String>,
 }
 
+// --- Signal subscription protocol types ---
+
+/// Request to subscribe to signal emissions on a node.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SubscribeSignalParams {
+    pub path: String,
+    pub signal: String,
+}
+
+/// Request to unsubscribe from signal emissions on a node.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnsubscribeSignalParams {
+    pub path: String,
+    pub signal: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

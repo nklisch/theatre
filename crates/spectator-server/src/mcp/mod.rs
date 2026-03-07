@@ -1,8 +1,10 @@
 pub mod action;
+pub mod delta;
 pub mod inspect;
 pub mod query;
 pub mod scene_tree;
 pub mod snapshot;
+pub mod watch;
 
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::ErrorData as McpError;
@@ -60,6 +62,7 @@ fn inject_budget(response: &mut serde_json::Value, used: u32, limit: u32) {
     }
 }
 use action::{SpatialActionParams, build_action_request};
+use delta::SpatialDeltaParams;
 use inspect::{SpatialInspectParams, build_spatial_context, parse_include};
 use query::{SpatialQueryParams, handle_spatial_query};
 use scene_tree::{SceneTreeToolParams, build_scene_tree_params};
@@ -67,6 +70,7 @@ use snapshot::{
     SpatialSnapshotParams, build_expand_response, build_full_response, build_perspective,
     build_perspective_param, build_standard_response, build_summary_response, parse_detail,
 };
+use watch::SpatialWatchParams;
 
 #[tool_router(vis = "pub")]
 impl SpectatorServer {
@@ -128,7 +132,7 @@ impl SpectatorServer {
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
-        // 6b. Rebuild spatial index from snapshot data
+        // 6b. Rebuild spatial index and store delta baseline
         {
             let indexed: Vec<IndexedEntity> = raw_data
                 .entities
@@ -140,8 +144,15 @@ impl SpectatorServer {
                     groups: e.groups.clone(),
                 })
                 .collect();
+            let snapshots: Vec<spectator_core::delta::EntitySnapshot> = raw_data
+                .entities
+                .iter()
+                .map(snapshot::to_entity_snapshot)
+                .collect();
             let mut state = self.state.lock().await;
             state.spatial_index = SpatialIndex::build(indexed);
+            // 6c. Store snapshot in delta engine for subsequent delta queries
+            state.delta_engine.store_snapshot(raw_data.frame, snapshots);
         }
 
         // 7. Resolve budget
@@ -248,7 +259,7 @@ impl SpectatorServer {
     /// while paused), teleport (move node to position), set_property (change a property),
     /// call_method (call a method), emit_signal (emit a signal), spawn_node (instantiate
     /// a scene), remove_node (queue_free a node).
-    #[tool(description = "Manipulate game state for debugging. Actions: pause (pause/unpause scene), advance_frames (step N physics frames while paused), advance_time (step N seconds while paused), teleport (move node to position), set_property (change a property), call_method (call a method), emit_signal (emit a signal), spawn_node (instantiate a scene), remove_node (queue_free a node). Use return_delta=true to get a spatial delta after the action (M4 placeholder — use spatial_snapshot instead for now).")]
+    #[tool(description = "Manipulate game state for debugging. Actions: pause (pause/unpause scene), advance_frames (step N physics frames while paused), advance_time (step N seconds while paused), teleport (move node to position), set_property (change a property), call_method (call a method), emit_signal (emit a signal), spawn_node (instantiate a scene), remove_node (queue_free a node). Use return_delta=true to get a spatial delta showing what changed as a result of the action.")]
     pub async fn spatial_action(
         &self,
         Parameters(params): Parameters<SpatialActionParams>,
@@ -268,15 +279,107 @@ impl SpectatorServer {
         inject_budget(&mut response, used, 500);
 
         if params.return_delta {
-            if let serde_json::Value::Object(ref mut map) = response {
-                map.insert("delta".into(), serde_json::json!(null));
-                map.insert(
-                    "delta_note".into(),
-                    serde_json::json!(
-                        "return_delta requires the delta engine (M4). \
-                         Use spatial_snapshot after the action for now."
-                    ),
-                );
+            let has_baseline = {
+                let s = self.state.lock().await;
+                s.delta_engine.has_baseline()
+            };
+
+            if has_baseline {
+                let query_params = spectator_protocol::query::GetSnapshotDataParams {
+                    perspective: spectator_protocol::query::PerspectiveParam::Camera,
+                    radius: 50.0,
+                    include_offscreen: true,
+                    groups: vec![],
+                    class_filter: vec![],
+                    detail: spectator_protocol::query::DetailLevel::Standard,
+                };
+
+                if let Ok(snap_data) = query_addon(
+                    &self.state,
+                    "get_snapshot_data",
+                    serialize_params(&query_params)?,
+                )
+                .await
+                {
+                    if let Ok(raw_data) = serde_json::from_value::<
+                        spectator_protocol::query::SnapshotResponse,
+                    >(snap_data)
+                    {
+                        let current_snapshots: Vec<spectator_core::delta::EntitySnapshot> =
+                            raw_data
+                                .entities
+                                .iter()
+                                .map(snapshot::to_entity_snapshot)
+                                .collect();
+
+                        let mut s = self.state.lock().await;
+                        let delta =
+                            s.delta_engine.compute_delta(&current_snapshots, raw_data.frame);
+                        let triggers = s.watch_engine.evaluate(
+                            s.delta_engine.last_snapshot_map(),
+                            &current_snapshots,
+                            raw_data.frame,
+                        );
+
+                        // Update baseline
+                        s.delta_engine
+                            .store_snapshot(raw_data.frame, current_snapshots);
+
+                        // Build inline delta
+                        let mut delta_json = serde_json::json!({
+                            "from_frame": delta.from_frame,
+                            "to_frame": delta.to_frame,
+                        });
+                        if let serde_json::Value::Object(ref mut map) = delta_json {
+                            if !delta.moved.is_empty() {
+                                map.insert(
+                                    "moved".into(),
+                                    serde_json::to_value(&delta.moved).unwrap_or_default(),
+                                );
+                            }
+                            if !delta.state_changed.is_empty() {
+                                map.insert(
+                                    "state_changed".into(),
+                                    serde_json::to_value(&delta.state_changed).unwrap_or_default(),
+                                );
+                            }
+                            if !delta.entered.is_empty() {
+                                map.insert(
+                                    "entered".into(),
+                                    serde_json::to_value(&delta.entered).unwrap_or_default(),
+                                );
+                            }
+                            if !delta.exited.is_empty() {
+                                map.insert(
+                                    "exited".into(),
+                                    serde_json::to_value(&delta.exited).unwrap_or_default(),
+                                );
+                            }
+                            if !triggers.is_empty() {
+                                map.insert(
+                                    "watch_triggers".into(),
+                                    serde_json::to_value(&triggers).unwrap_or_default(),
+                                );
+                            }
+                        }
+
+                        if let serde_json::Value::Object(ref mut map) = response {
+                            map.insert("delta".into(), delta_json);
+                        }
+                    }
+                }
+            } else {
+                // No baseline — can't compute delta
+                if let serde_json::Value::Object(ref mut map) = response {
+                    map.insert("delta".into(), serde_json::json!(null));
+                    map.insert(
+                        "delta_note".into(),
+                        serde_json::json!(
+                            "No baseline snapshot. Call spatial_snapshot first, \
+                             then use return_delta on actions."
+                        ),
+                    );
+                }
             }
         }
 
@@ -291,5 +394,25 @@ impl SpectatorServer {
         Parameters(params): Parameters<SpatialQueryParams>,
     ) -> Result<String, McpError> {
         handle_spatial_query(params, &self.state).await
+    }
+
+    /// See what changed since the last query. Returns moved entities, state
+    /// changes, new/removed nodes, emitted signals, and watch triggers.
+    #[tool(description = "See what changed since the last query. Returns moved entities, state changes, new/removed nodes, and watch triggers. Use after spatial_snapshot or spatial_action to see effects. Use since_frame to diff against a specific frame.")]
+    pub async fn spatial_delta(
+        &self,
+        Parameters(params): Parameters<SpatialDeltaParams>,
+    ) -> Result<String, McpError> {
+        delta::handle_spatial_delta(params, &self.state).await
+    }
+
+    /// Subscribe to changes on nodes or groups with optional conditions.
+    /// Watch triggers appear in spatial_delta responses.
+    #[tool(description = "Subscribe to changes on nodes or groups. Actions: 'add' (subscribe with optional conditions like health < 20), 'remove' (by watch_id), 'list' (show active watches), 'clear' (remove all). Watch triggers appear in spatial_delta responses under 'watch_triggers'.")]
+    pub async fn spatial_watch(
+        &self,
+        Parameters(params): Parameters<SpatialWatchParams>,
+    ) -> Result<String, McpError> {
+        watch::handle_spatial_watch(params, &self.state).await
     }
 }

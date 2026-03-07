@@ -1,6 +1,8 @@
 use anyhow::Result;
 use rmcp::model::ErrorData as McpError;
+use spectator_core::delta::DeltaEngine;
 use spectator_core::index::SpatialIndex;
+use spectator_core::watch::WatchEngine;
 use spectator_protocol::{
     codec::async_io,
     handshake::{HandshakeAck, HandshakeError, PROTOCOL_VERSION},
@@ -43,6 +45,10 @@ pub struct SessionState {
     pub pending_queries: HashMap<String, oneshot::Sender<QueryResult>>,
     /// Spatial index built from the most recent snapshot.
     pub spatial_index: SpatialIndex,
+    /// Delta engine: tracks entity state changes between queries.
+    pub delta_engine: DeltaEngine,
+    /// Watch engine: manages watch subscriptions and evaluates conditions.
+    pub watch_engine: WatchEngine,
 }
 
 impl Default for SessionState {
@@ -54,6 +60,8 @@ impl Default for SessionState {
             handshake_info: None,
             pending_queries: HashMap::new(),
             spatial_index: SpatialIndex::empty(),
+            delta_engine: DeltaEngine::new(),
+            watch_engine: WatchEngine::new(),
         }
     }
 }
@@ -89,6 +97,9 @@ pub async fn tcp_client_loop(state: Arc<Mutex<SessionState>>, port: u16) {
                     s.connected = false;
                     // Drop all pending senders — receivers will get RecvError
                     s.pending_queries.clear();
+                    // Clear delta baseline on disconnect (game state resets)
+                    s.delta_engine = DeltaEngine::new();
+                    // Watch engine persists — watches survive reconnect
                 }
 
                 tracing::info!("Addon disconnected, will retry in 2s");
@@ -177,6 +188,28 @@ async fn handle_connection(stream: TcpStream, state: Arc<Mutex<SessionState>>) -
                 let mut s = state.lock().await;
                 if let Some(sender) = s.pending_queries.remove(&id) {
                     let _ = sender.send(QueryResult::Err { code, message });
+                }
+            }
+            Ok(Message::Event { event, data }) => {
+                if event == "signal_emitted" {
+                    let mut s = state.lock().await;
+                    if let (Some(node), Some(signal), Some(frame)) = (
+                        data.get("node").and_then(|v| v.as_str()),
+                        data.get("signal").and_then(|v| v.as_str()),
+                        data.get("frame").and_then(|v| v.as_u64()),
+                    ) {
+                        s.delta_engine.push_event(spectator_core::delta::BufferedEvent {
+                            event_type: spectator_core::delta::BufferedEventType::SignalEmitted,
+                            path: node.to_string(),
+                            frame,
+                            data: serde_json::json!({
+                                "signal": signal,
+                                "args": data.get("args").cloned().unwrap_or(serde_json::json!([])),
+                            }),
+                        });
+                    }
+                } else {
+                    tracing::debug!("Received event from addon: {event}");
                 }
             }
             Ok(msg) => {
