@@ -34,10 +34,32 @@ impl INode for SpectatorTCPServer {
 
 #[godot_api]
 impl SpectatorTCPServer {
+    /// Emitted when an activity_log event is received from the server.
+    #[signal]
+    fn activity_received(entry_type: GString, summary: GString, tool_name: GString);
+
     /// Wire the collector into the TCP server.
     #[func]
     pub fn set_collector(&mut self, collector: Gd<SpectatorCollector>) {
         self.collector = Some(collector);
+    }
+
+    /// Returns "connected", "waiting", or "stopped".
+    #[func]
+    pub fn get_connection_status(&self) -> GString {
+        if self.handshake_completed {
+            "connected".into()
+        } else if self.listener.is_some() {
+            "waiting".into()
+        } else {
+            "stopped".into()
+        }
+    }
+
+    /// Returns the port the server is (or was) listening on.
+    #[func]
+    pub fn get_port(&self) -> i32 {
+        self.port
     }
 
     /// Start listening on the given port. Binds to localhost only.
@@ -220,6 +242,31 @@ impl SpectatorTCPServer {
                         message: "Collector not available".to_string(),
                     });
                 }
+            }
+            Message::Event { event, data } if event == "activity_log" => {
+                let entry_type = data
+                    .get("entry_type")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("query")
+                    .to_string();
+                let summary = data
+                    .get("summary")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                let tool_name = data
+                    .get("tool")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                self.base_mut().emit_signal(
+                    "activity_received",
+                    &[
+                        GString::from(entry_type.as_str()).to_variant(),
+                        GString::from(summary.as_str()).to_variant(),
+                        GString::from(tool_name.as_str()).to_variant(),
+                    ],
+                );
             }
             _ => {
                 godot_print!("[Spectator] Received unhandled message type");

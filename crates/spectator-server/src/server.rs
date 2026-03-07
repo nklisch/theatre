@@ -20,6 +20,16 @@ impl SpectatorServer {
             tool_router: Self::tool_router(),
         }
     }
+
+    /// Push an activity log event to the addon (best-effort, non-blocking).
+    pub(crate) async fn log_activity(&self, entry_type: &str, summary: &str, tool: &str) {
+        let event = crate::activity::build_activity_message(entry_type, summary, tool);
+        let mut s = self.state.lock().await;
+        if let Some(ref mut writer) = s.tcp_writer {
+            let _ = spectator_protocol::codec::async_io::write_message(&mut writer.writer, &event)
+                .await;
+        }
+    }
 }
 
 #[tool_handler]

@@ -85,6 +85,9 @@ impl SpectatorServer {
         &self,
         Parameters(params): Parameters<SpatialSnapshotParams>,
     ) -> Result<String, McpError> {
+        // Build activity summary up front before params are borrowed further
+        let activity_summary = crate::activity::snapshot_summary(&params);
+
         // 1. Parse detail level
         let detail = parse_detail(&params.detail)?;
 
@@ -183,7 +186,9 @@ impl SpectatorServer {
                 hard_cap,
                 &config,
             )?;
-            return serialize_response(&response);
+            let result = serialize_response(&response);
+            self.log_activity("query", &activity_summary, "spatial_snapshot").await;
+            return result;
         }
 
         // 9. Build response based on detail level
@@ -199,7 +204,9 @@ impl SpectatorServer {
             }
         };
 
-        serialize_response(&response)
+        let result = serialize_response(&response);
+        self.log_activity("query", &activity_summary, "spatial_snapshot").await;
+        result
     }
 
     /// Deep inspection of a single node — transform, physics, state, children,
@@ -210,6 +217,7 @@ impl SpectatorServer {
         &self,
         Parameters(params): Parameters<SpatialInspectParams>,
     ) -> Result<String, McpError> {
+        let activity_summary = crate::activity::inspect_summary(&params.node);
         let config = {
             let s = self.state.lock().await;
             s.config.clone()
@@ -246,7 +254,9 @@ impl SpectatorServer {
         let budget_limit = resolve_budget(None, 1500, config.token_hard_cap);
         inject_budget(&mut response, used, budget_limit, config.token_hard_cap);
 
-        serialize_response(&response)
+        let result = serialize_response(&response);
+        self.log_activity("query", &activity_summary, "spatial_inspect").await;
+        result
     }
 
     /// Navigate and query the Godot scene tree structure. Not spatial — this is
@@ -256,6 +266,7 @@ impl SpectatorServer {
         &self,
         Parameters(params): Parameters<SceneTreeToolParams>,
     ) -> Result<String, McpError> {
+        let activity_summary = crate::activity::scene_tree_summary(&params);
         let query_params = build_scene_tree_params(&params)?;
 
         let data = query_addon(&self.state, "get_scene_tree", serialize_params(&query_params)?)
@@ -273,7 +284,9 @@ impl SpectatorServer {
         let mut response = data;
         inject_budget(&mut response, used, budget_limit, config.token_hard_cap);
 
-        serialize_response(&response)
+        let result = serialize_response(&response);
+        self.log_activity("query", &activity_summary, "scene_tree").await;
+        result
     }
 
     /// Manipulate game state for debugging. Actions: pause (pause/unpause scene),
@@ -286,6 +299,7 @@ impl SpectatorServer {
         &self,
         Parameters(params): Parameters<SpatialActionParams>,
     ) -> Result<String, McpError> {
+        let activity_summary = crate::activity::action_summary(&params);
         let config = {
             let s = self.state.lock().await;
             s.config.clone()
@@ -412,7 +426,9 @@ impl SpectatorServer {
             }
         }
 
-        serialize_response(&response)
+        let result = serialize_response(&response);
+        self.log_activity("action", &activity_summary, "spatial_action").await;
+        result
     }
 
     /// Targeted spatial questions: nearest nodes, radius search, raycast line-of-sight,
@@ -422,7 +438,10 @@ impl SpectatorServer {
         &self,
         Parameters(params): Parameters<SpatialQueryParams>,
     ) -> Result<String, McpError> {
-        handle_spatial_query(params, &self.state).await
+        let summary = format!("Query: {}", params.query_type);
+        let result = handle_spatial_query(params, &self.state).await;
+        self.log_activity("query", &summary, "spatial_query").await;
+        result
     }
 
     /// See what changed since the last query. Returns moved entities, state
@@ -432,7 +451,9 @@ impl SpectatorServer {
         &self,
         Parameters(params): Parameters<SpatialDeltaParams>,
     ) -> Result<String, McpError> {
-        delta::handle_spatial_delta(params, &self.state).await
+        let result = delta::handle_spatial_delta(params, &self.state).await;
+        self.log_activity("query", &crate::activity::delta_summary(), "spatial_delta").await;
+        result
     }
 
     /// Subscribe to changes on nodes or groups with optional conditions.
@@ -442,7 +463,10 @@ impl SpectatorServer {
         &self,
         Parameters(params): Parameters<SpatialWatchParams>,
     ) -> Result<String, McpError> {
-        watch::handle_spatial_watch(params, &self.state).await
+        let summary = crate::activity::watch_summary(&params);
+        let result = watch::handle_spatial_watch(params, &self.state).await;
+        self.log_activity("watch", &summary, "spatial_watch").await;
+        result
     }
 
     /// Configure tracking behavior — static patterns, state properties,
@@ -453,6 +477,9 @@ impl SpectatorServer {
         &self,
         Parameters(params): Parameters<SpatialConfigParams>,
     ) -> Result<String, McpError> {
-        handle_spatial_config(params, &self.state).await
+        let summary = crate::activity::config_summary(&params);
+        let result = handle_spatial_config(params, &self.state).await;
+        self.log_activity("config", &summary, "spatial_config").await;
+        result
     }
 }

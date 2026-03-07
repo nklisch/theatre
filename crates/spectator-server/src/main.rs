@@ -1,3 +1,4 @@
+mod activity;
 mod config;
 mod mcp;
 mod server;

@@ -1,6 +1,20 @@
 @tool
 extends EditorPlugin
 
+var _dock: Control
+
+
+func _enter_tree() -> void:
+	_dock = preload("res://addons/spectator/dock.tscn").instantiate()
+	add_control_to_dock(DOCK_SLOT_RIGHT_BL, _dock)
+
+
+func _exit_tree() -> void:
+	if _dock:
+		remove_control_from_docks(_dock)
+		_dock.queue_free()
+		_dock = null
+
 
 func _enable_plugin() -> void:
 	_register_settings()

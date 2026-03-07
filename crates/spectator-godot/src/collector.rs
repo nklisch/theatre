@@ -30,6 +30,8 @@ pub struct AdvanceState {
 pub struct SpectatorCollector {
     base: Base<Node>,
     pub advance_state: std::cell::RefCell<AdvanceState>,
+    last_entity_count: std::cell::Cell<u32>,
+    last_group_count: std::cell::Cell<u32>,
 }
 
 #[godot_api]
@@ -38,6 +40,8 @@ impl INode for SpectatorCollector {
         Self {
             base,
             advance_state: std::cell::RefCell::new(AdvanceState::default()),
+            last_entity_count: std::cell::Cell::new(0),
+            last_group_count: std::cell::Cell::new(0),
         }
     }
 }
@@ -48,6 +52,18 @@ impl SpectatorCollector {
     #[func]
     pub fn collect_snapshot_dict(&self, _params_json: GString) -> VarDictionary {
         VarDictionary::new()
+    }
+
+    /// Returns the number of nodes tracked in the last snapshot.
+    #[func]
+    pub fn get_tracked_count(&self) -> u32 {
+        self.last_entity_count.get()
+    }
+
+    /// Returns the number of unique groups in the last snapshot.
+    #[func]
+    pub fn get_group_count(&self) -> u32 {
+        self.last_group_count.get()
     }
 }
 
@@ -68,6 +84,14 @@ impl SpectatorCollector {
 
         let mut entities = Vec::new();
         self.collect_entities_recursive(&root, params, &mut entities);
+
+        // Update tracked counts for dock display
+        let unique_groups: std::collections::HashSet<&str> = entities
+            .iter()
+            .flat_map(|e| e.groups.iter().map(|g| g.as_str()))
+            .collect();
+        self.last_entity_count.set(entities.len() as u32);
+        self.last_group_count.set(unique_groups.len() as u32);
 
         SnapshotResponse {
             frame: frame_info.frame,
