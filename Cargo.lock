@@ -1024,6 +1024,7 @@ dependencies = [
 name = "spectator-protocol"
 version = "0.1.0"
 dependencies = [
+ "rmp-serde",
  "serde",
  "serde_json",
  "tokio",
@@ -1035,6 +1036,8 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "rmcp",
+ "rmp-serde",
+ "rusqlite",
  "schemars",
  "serde",
  "serde_json",
