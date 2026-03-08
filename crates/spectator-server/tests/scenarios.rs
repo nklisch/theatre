@@ -1084,6 +1084,245 @@ async fn test_watches_can_be_re_added_after_clear() {
 // An entity returned by snapshot should be inspectable
 // ============================================================================
 
+// ============================================================================
+// Section 6: Dashcam and explicit recording coexistence
+// ============================================================================
+
+/// Dashcam status should report "buffering" even while an explicit recording
+/// is active. The two systems are orthogonal.
+#[tokio::test]
+async fn test_dashcam_independent_of_explicit_recording() {
+    let active_id: Arc<std::sync::Mutex<Option<String>>> =
+        Arc::new(std::sync::Mutex::new(None));
+    let aid = active_id.clone();
+
+    let handler: QueryHandler = Arc::new(move |method, _params| {
+        let mut id_guard = aid.lock().unwrap();
+        match method {
+            "recording_start" => {
+                let id = "rec_coexist_001".to_string();
+                *id_guard = Some(id.clone());
+                Ok(json!({
+                    "recording_id": id,
+                    "name": "coexist_test",
+                    "started_at_frame": 100
+                }))
+            }
+            "recording_stop" => {
+                let id = id_guard.take().unwrap_or_default();
+                Ok(json!({
+                    "recording_id": id,
+                    "frames_captured": 42,
+                    "duration_ms": 700
+                }))
+            }
+            "dashcam_status" => {
+                // Dashcam reports buffering regardless of explicit recording state
+                Ok(json!({
+                    "dashcam_enabled": true,
+                    "state": "buffering",
+                    "buffer_frames": 600,
+                    "buffer_kb": 4800,
+                    "config": {
+                        "capture_interval": 1,
+                        "pre_window_sec": { "system": 30, "deliberate": 60 },
+                        "post_window_sec": { "system": 10, "deliberate": 30 },
+                        "max_window_sec": 120,
+                        "min_after_sec": 5,
+                        "system_min_interval_sec": 2,
+                        "byte_cap_mb": 1024
+                    }
+                }))
+            }
+            _ => Err(("unknown".into(), format!("unexpected: {method}"))),
+        }
+    });
+
+    let harness = TestHarness::new(handler).await;
+
+    // 1. dashcam_status before recording — should be buffering
+    let status1 = harness
+        .call_tool("recording", json!({ "action": "dashcam_status" }))
+        .await
+        .unwrap();
+    assert_eq!(status1["state"], json!("buffering"));
+
+    // 2. Start explicit recording
+    let start = harness
+        .call_tool("recording", json!({ "action": "start" }))
+        .await
+        .unwrap();
+    assert!(start["recording_id"].as_str().is_some());
+
+    // 3. dashcam_status during recording — still buffering
+    let status2 = harness
+        .call_tool("recording", json!({ "action": "dashcam_status" }))
+        .await
+        .unwrap();
+    assert_eq!(status2["state"], json!("buffering"), "dashcam should keep buffering during explicit recording");
+
+    // 4. Stop explicit recording
+    let stop = harness
+        .call_tool("recording", json!({ "action": "stop" }))
+        .await
+        .unwrap();
+    assert!(stop["frames_captured"].as_u64().unwrap() > 0);
+
+    // 5. dashcam_status after recording — still buffering
+    let status3 = harness
+        .call_tool("recording", json!({ "action": "dashcam_status" }))
+        .await
+        .unwrap();
+    assert_eq!(status3["state"], json!("buffering"));
+}
+
+/// Dashcam clips appear in recording list alongside explicit recordings.
+/// Clips are distinguishable by the "dashcam" flag in their metadata.
+#[tokio::test]
+async fn test_dashcam_clips_in_recording_list() {
+    let flushed: Arc<std::sync::Mutex<bool>> = Arc::new(std::sync::Mutex::new(false));
+    let f = flushed.clone();
+
+    let handler: QueryHandler = Arc::new(move |method, _| match method {
+        "dashcam_flush" => {
+            *f.lock().unwrap() = true;
+            Ok(json!({
+                "recording_id": "dash_clip001",
+                "tier": "deliberate",
+                "frames": 300
+            }))
+        }
+        "recording_list" => {
+            let mut recordings = vec![
+                json!({
+                    "recording_id": "rec_explicit_001",
+                    "name": "manual_run",
+                    "frames_captured": 500,
+                    "dashcam": false
+                }),
+            ];
+            if *flushed.lock().unwrap() {
+                recordings.push(json!({
+                    "recording_id": "dash_clip001",
+                    "name": "dashcam_100",
+                    "frames_captured": 300,
+                    "dashcam": true,
+                    "tier": "deliberate"
+                }));
+            }
+            Ok(json!({ "recordings": recordings }))
+        }
+        _ => Err(("unknown".into(), format!("unexpected: {method}"))),
+    });
+
+    let harness = TestHarness::new(handler).await;
+
+    // List before flush — only explicit recordings
+    let list1 = harness
+        .call_tool("recording", json!({ "action": "list" }))
+        .await
+        .unwrap();
+    let recordings1 = list1["recordings"].as_array().unwrap();
+    assert_eq!(recordings1.len(), 1);
+
+    // Flush dashcam
+    let flush = harness
+        .call_tool(
+            "recording",
+            json!({ "action": "flush_dashcam", "marker_label": "test clip" }),
+        )
+        .await
+        .unwrap();
+    assert!(flush["recording_id"].as_str().unwrap().starts_with("dash_"));
+
+    // List after flush — should include dashcam clip
+    let list2 = harness
+        .call_tool("recording", json!({ "action": "list" }))
+        .await
+        .unwrap();
+    let recordings2 = list2["recordings"].as_array().unwrap();
+    assert_eq!(recordings2.len(), 2, "list should include dashcam clip after flush");
+
+    let dashcam_clip = recordings2
+        .iter()
+        .find(|r| r["dashcam"].as_bool() == Some(true))
+        .expect("dashcam clip should be flagged with dashcam=true");
+    assert_eq!(dashcam_clip["recording_id"], json!("dash_clip001"));
+}
+
+/// add_marker during buffering triggers a dashcam clip and returns
+/// the clip info. The marker is the trigger that transitions
+/// Buffering → PostCapture.
+#[tokio::test]
+async fn test_add_marker_triggers_dashcam_clip() {
+    let handler: QueryHandler = Arc::new(|method, params| match method {
+        "recording_marker" => {
+            let label = params.get("label").and_then(|v| v.as_str()).unwrap_or("");
+            let source = params.get("source").and_then(|v| v.as_str()).unwrap_or("");
+            Ok(json!({
+                "ok": true,
+                "frame": 4521,
+                "label": label,
+                "source": source,
+                "dashcam_triggered": true,
+                "dashcam_tier": "deliberate"
+            }))
+        }
+        _ => Err(("unknown".into(), format!("unexpected: {method}"))),
+    });
+
+    let harness = TestHarness::new(handler).await;
+    let result = harness
+        .call_tool(
+            "recording",
+            json!({ "action": "add_marker", "marker_label": "root cause" }),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(result["ok"], json!(true));
+    assert_eq!(result["source"], json!("agent"));
+    assert_eq!(result["dashcam_triggered"], json!(true));
+}
+
+/// After flushing a dashcam clip, the clip should be openable for M8 analysis.
+/// Since the mock addon can't produce real SQLite files, this test verifies the
+/// MCP parameter validation path — the server must attempt to open the SQLite
+/// file for the recording_id. If the file doesn't exist, we get a specific
+/// error (not a crash or panic).
+#[tokio::test]
+async fn test_dashcam_clip_analysis_validates_recording_id() {
+    let handler: QueryHandler = Arc::new(|method, _| match method {
+        "recording_resolve_path" => Ok(json!({ "path": "/tmp/spectator_test_nonexistent" })),
+        _ => Err(("unknown".into(), format!("unexpected: {method}"))),
+    });
+
+    let harness = TestHarness::new(handler).await;
+
+    // snapshot_at on a non-existent recording should return a clear error
+    let err = harness
+        .call_tool(
+            "recording",
+            json!({
+                "action": "snapshot_at",
+                "recording_id": "dash_nonexistent",
+                "at_frame": 100
+            }),
+        )
+        .await
+        .unwrap_err();
+
+    assert!(
+        err.message.contains("not found") || err.message.contains("unreadable"),
+        "expected 'not found' error for nonexistent dashcam clip, got: {err:?}"
+    );
+}
+
+// ============================================================================
+// Section 9: Inspect ↔ snapshot coherence
+// An entity returned by snapshot should be inspectable
+// ============================================================================
+
 /// Snapshot returns entity paths; inspect on one of those paths should succeed.
 #[tokio::test]
 async fn test_inspect_entity_returned_by_snapshot() {

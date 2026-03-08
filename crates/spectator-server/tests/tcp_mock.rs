@@ -983,6 +983,215 @@ async fn test_recording_delete() {
 }
 
 // ---------------------------------------------------------------------------
+// dashcam tests
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_dashcam_status() {
+    let handler: QueryHandler = Arc::new(|method, _| match method {
+        "dashcam_status" => Ok(json!({
+            "dashcam_enabled": true,
+            "state": "buffering",
+            "buffer_frames": 1800,
+            "buffer_kb": 14400,
+            "config": {
+                "capture_interval": 1,
+                "pre_window_sec": { "system": 30, "deliberate": 60 },
+                "post_window_sec": { "system": 10, "deliberate": 30 },
+                "max_window_sec": 120,
+                "min_after_sec": 5,
+                "system_min_interval_sec": 2,
+                "byte_cap_mb": 1024
+            }
+        })),
+        _ => Err(("unknown_method".into(), method.to_string())),
+    });
+
+    let harness = TestHarness::new(handler).await;
+    let result = harness
+        .call_tool("recording", json!({ "action": "dashcam_status" }))
+        .await
+        .unwrap();
+
+    assert_eq!(result["dashcam_enabled"], json!(true));
+    assert_eq!(result["state"], json!("buffering"));
+    assert!(result["buffer_frames"].as_u64().is_some());
+    assert!(result["config"].is_object());
+}
+
+#[tokio::test]
+async fn test_dashcam_status_post_capture() {
+    let handler: QueryHandler = Arc::new(|method, _| match method {
+        "dashcam_status" => Ok(json!({
+            "dashcam_enabled": true,
+            "state": "post_capture",
+            "buffer_frames": 1800,
+            "buffer_kb": 14400,
+            "open_clip": {
+                "tier": "system",
+                "frames_remaining": 300,
+                "markers": 2
+            },
+            "config": {
+                "capture_interval": 1,
+                "pre_window_sec": { "system": 30, "deliberate": 60 },
+                "post_window_sec": { "system": 10, "deliberate": 30 },
+                "max_window_sec": 120,
+                "min_after_sec": 5,
+                "system_min_interval_sec": 2,
+                "byte_cap_mb": 1024
+            }
+        })),
+        _ => Err(("unknown_method".into(), method.to_string())),
+    });
+
+    let harness = TestHarness::new(handler).await;
+    let result = harness
+        .call_tool("recording", json!({ "action": "dashcam_status" }))
+        .await
+        .unwrap();
+
+    assert_eq!(result["state"], json!("post_capture"));
+    assert!(result["open_clip"].is_object());
+    assert_eq!(result["open_clip"]["tier"], json!("system"));
+}
+
+#[tokio::test]
+async fn test_dashcam_flush() {
+    let handler: QueryHandler = Arc::new(|method, params| match method {
+        "dashcam_flush" => {
+            let label = params
+                .get("marker_label")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            Ok(json!({
+                "recording_id": "dash_abc12345",
+                "tier": "deliberate",
+                "frames": 1800,
+                "marker_label": label
+            }))
+        }
+        _ => Err(("unknown_method".into(), method.to_string())),
+    });
+
+    let harness = TestHarness::new(handler).await;
+    let result = harness
+        .call_tool(
+            "recording",
+            json!({ "action": "flush_dashcam", "marker_label": "suspected bug" }),
+        )
+        .await
+        .unwrap();
+
+    assert!(
+        result["recording_id"].as_str().unwrap().starts_with("dash_"),
+        "flush should return a dashcam recording_id: {result}"
+    );
+    assert_eq!(result["tier"], json!("deliberate"));
+    assert!(result["frames"].as_u64().unwrap() > 0);
+}
+
+#[tokio::test]
+async fn test_dashcam_flush_empty_buffer_returns_error() {
+    let handler: QueryHandler = Arc::new(|method, _| match method {
+        "dashcam_flush" => Err((
+            "empty_buffer".into(),
+            "Dashcam ring buffer is empty — no frames to save".into(),
+        )),
+        _ => Err(("unknown_method".into(), method.to_string())),
+    });
+
+    let harness = TestHarness::new(handler).await;
+    let err = harness
+        .call_tool(
+            "recording",
+            json!({ "action": "flush_dashcam", "marker_label": "test" }),
+        )
+        .await
+        .unwrap_err();
+
+    assert!(
+        err.message.contains("empty") || err.message.contains("buffer"),
+        "expected error about empty buffer, got: {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_dashcam_flush_when_disabled_returns_error() {
+    let handler: QueryHandler = Arc::new(|method, _| match method {
+        "dashcam_flush" => Err((
+            "dashcam_disabled".into(),
+            "Dashcam is not enabled".into(),
+        )),
+        _ => Err(("unknown_method".into(), method.to_string())),
+    });
+
+    let harness = TestHarness::new(handler).await;
+    let err = harness
+        .call_tool(
+            "recording",
+            json!({ "action": "flush_dashcam", "marker_label": "test" }),
+        )
+        .await
+        .unwrap_err();
+
+    assert!(
+        err.message.contains("not enabled") || err.message.contains("disabled"),
+        "expected error about disabled dashcam, got: {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_dashcam_flush_default_label() {
+    // When no marker_label is provided, the server sends "agent flush" as default.
+    let received_label: Arc<std::sync::Mutex<String>> =
+        Arc::new(std::sync::Mutex::new(String::new()));
+    let rl = received_label.clone();
+
+    let handler: QueryHandler = Arc::new(move |method, params| match method {
+        "dashcam_flush" => {
+            let label = params
+                .get("marker_label")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            *rl.lock().unwrap() = label;
+            Ok(json!({
+                "recording_id": "dash_default",
+                "tier": "deliberate",
+                "frames": 100
+            }))
+        }
+        _ => Err(("unknown_method".into(), method.to_string())),
+    });
+
+    let harness = TestHarness::new(handler).await;
+    let _ = harness
+        .call_tool("recording", json!({ "action": "flush_dashcam" }))
+        .await
+        .unwrap();
+
+    let label = received_label.lock().unwrap().clone();
+    assert_eq!(label, "agent flush", "default label should be 'agent flush'");
+}
+
+#[tokio::test]
+async fn test_recording_unknown_action_returns_error() {
+    let handler: QueryHandler = Arc::new(|_, _| Ok(json!({})));
+    let harness = TestHarness::new(handler).await;
+
+    let err = harness
+        .call_tool("recording", json!({ "action": "nonexistent" }))
+        .await
+        .unwrap_err();
+
+    assert!(
+        err.message.contains("Unknown recording action"),
+        "expected 'Unknown recording action' error, got: {err:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // advance_frames tests
 // ---------------------------------------------------------------------------
 

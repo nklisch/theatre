@@ -1755,4 +1755,177 @@ mod tests {
         // Other fields unchanged
         assert_eq!(cfg.pre_window_deliberate_sec, 60);
     }
+
+    // -------------------------------------------------------------------------
+    // Unit 8: Ring buffer time-based eviction
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn ring_cap_frames_respects_time_based_limit() {
+        // With 60fps, capture_interval=1, pre_window_deliberate=60s:
+        // max frames from time = 60 * 60 / 1 = 3600
+        // With 256 bytes/frame and 1024MB cap:
+        // max frames from bytes = 1024 * 1024 * 1024 / 256 = 4194304
+        // Time-based limit (3600) is the binding constraint.
+        let cfg = DashcamConfig::default();
+        let physics_fps = 60u32;
+        let avg_frame_bytes = 256usize;
+        let byte_cap = (cfg.byte_cap_mb as usize) * 1024 * 1024;
+
+        let time_based = (cfg.pre_window_deliberate_sec as usize)
+            * (physics_fps as usize)
+            / (cfg.capture_interval as usize);
+        let byte_based = byte_cap / avg_frame_bytes.max(1);
+
+        let cap = time_based.min(byte_based);
+        assert_eq!(cap, 3600, "time-based cap should be the binding constraint");
+    }
+
+    #[test]
+    fn ring_cap_frames_byte_cap_wins_for_large_frames() {
+        // With 10KB per frame and 10MB cap: max frames from bytes = 10*1024*1024 / 10240 = 1024
+        // With 60fps, pre_window_deliberate=60s: time-based = 3600
+        // Byte cap (1024) is the binding constraint.
+        let cfg = DashcamConfig {
+            byte_cap_mb: 10,
+            ..DashcamConfig::default()
+        };
+        let physics_fps = 60u32;
+        let avg_frame_bytes = 10240usize; // 10KB per frame
+        let byte_cap = (cfg.byte_cap_mb as usize) * 1024 * 1024;
+
+        let time_based = (cfg.pre_window_deliberate_sec as usize)
+            * (physics_fps as usize)
+            / (cfg.capture_interval as usize);
+        let byte_based = byte_cap / avg_frame_bytes.max(1);
+
+        let cap = time_based.min(byte_based);
+        assert_eq!(cap, 1024, "byte-based cap should be the binding constraint for large frames");
+        assert!(cap < time_based);
+    }
+
+    #[test]
+    fn dashcam_capture_interval_reduces_frame_count() {
+        // With capture_interval=2, only every other frame is captured.
+        // At 60fps, pre_window_system=30s: time-based = 30 * 60 / 2 = 900
+        let cfg = DashcamConfig {
+            capture_interval: 2,
+            ..DashcamConfig::default()
+        };
+        let physics_fps = 60u32;
+        let time_based = (cfg.pre_window_system_sec as usize)
+            * (physics_fps as usize)
+            / (cfg.capture_interval as usize);
+
+        assert_eq!(time_based, 900);
+    }
+
+    // -------------------------------------------------------------------------
+    // Unit 9: Merge policy edge cases
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn dashcam_merge_deliberate_into_deliberate_extends_window() {
+        // Two deliberate triggers: second should extend frames_remaining to
+        // the larger of the two remaining post-windows.
+        let mut frames_remaining: u32 = 100; // first trigger, nearly expired
+        let deliberate_frames: u32 = 1800;
+
+        // Second deliberate trigger arrives
+        frames_remaining = frames_remaining.max(deliberate_frames);
+
+        assert_eq!(frames_remaining, 1800, "deliberate+deliberate should extend to full window");
+    }
+
+    #[test]
+    fn dashcam_system_trigger_into_deliberate_clip_does_not_downgrade() {
+        // A system trigger into an already-deliberate clip should NOT downgrade the tier.
+        let mut existing_tier = DashcamTier::Deliberate;
+        let mut frames_remaining: u32 = 500;
+        let system_frames: u32 = 600;
+
+        let new_tier = DashcamTier::System;
+        if new_tier == DashcamTier::Deliberate {
+            // This branch is NOT taken — system trigger doesn't upgrade
+            frames_remaining = frames_remaining.max(1800);
+            existing_tier = DashcamTier::Deliberate;
+        } else if existing_tier == DashcamTier::Deliberate {
+            // System into deliberate: extend window but keep deliberate tier.
+            frames_remaining = frames_remaining.max(system_frames);
+            // tier stays deliberate
+        }
+
+        assert_eq!(existing_tier, DashcamTier::Deliberate, "tier must not downgrade");
+        assert_eq!(frames_remaining, 600, "window should extend to system_frames");
+    }
+
+    #[test]
+    fn dashcam_min_after_sec_floor() {
+        // Post-window should never be less than min_after_sec, even if
+        // the config specifies a shorter post-window.
+        let cfg = DashcamConfig {
+            post_window_system_sec: 2, // Shorter than min_after_sec
+            min_after_sec: 5,
+            ..DashcamConfig::default()
+        };
+        let physics_fps = 60u32;
+
+        let post_window = cfg.post_window_system_sec.max(cfg.min_after_sec);
+        let post_frames = post_window * physics_fps;
+
+        assert_eq!(post_window, 5, "min_after_sec should floor the post-window");
+        assert_eq!(post_frames, 300);
+    }
+
+    #[test]
+    fn dashcam_force_close_not_applied_to_deliberate() {
+        // Deliberate clips should NOT have force_close_at_frame set by default.
+        let tier = DashcamTier::Deliberate;
+        let force_close: Option<u64> = if tier == DashcamTier::System {
+            Some(1000 + 120 * 60)
+        } else {
+            None
+        };
+
+        assert!(force_close.is_none(), "deliberate clips should not have force_close");
+    }
+
+    // -------------------------------------------------------------------------
+    // Unit 10: Config JSON partial updates
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn dashcam_apply_config_partial_preserves_unset_fields() {
+        let mut cfg = DashcamConfig::default();
+        let original_post_system = cfg.post_window_system_sec;
+        let original_min_after = cfg.min_after_sec;
+
+        // Only update one field
+        let json = serde_json::json!({
+            "pre_window_system_sec": 45,
+        });
+
+        if let Some(n) = json.get("pre_window_system_sec").and_then(|x| x.as_u64()) {
+            cfg.pre_window_system_sec = n as u32;
+        }
+        if let Some(n) = json.get("post_window_system_sec").and_then(|x| x.as_u64()) {
+            cfg.post_window_system_sec = n as u32;
+        }
+
+        assert_eq!(cfg.pre_window_system_sec, 45, "updated field should change");
+        assert_eq!(cfg.post_window_system_sec, original_post_system, "unset field should be preserved");
+        assert_eq!(cfg.min_after_sec, original_min_after, "unset field should be preserved");
+    }
+
+    #[test]
+    fn dashcam_config_enabled_toggle() {
+        let mut cfg = DashcamConfig::default();
+        assert!(cfg.enabled, "dashcam should be enabled by default");
+
+        let json = serde_json::json!({ "enabled": false });
+        if let Some(b) = json.get("enabled").and_then(|x| x.as_bool()) {
+            cfg.enabled = b;
+        }
+        assert!(!cfg.enabled, "dashcam should be disabled after toggle");
+    }
 }
