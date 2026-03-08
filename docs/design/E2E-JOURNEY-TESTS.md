@@ -1,571 +1,635 @@
-# Design: E2E Journey Tests
+# Design: E2E Journey Tests (Real Godot)
 
 ## Overview
 
-Complex, multi-step integration tests that simulate real developer/agent
-debugging journeys. Each test exercises 5-10 tool calls in sequence, crossing
-boundaries between spatial indexing, delta tracking, watches, recording, config,
-and actions. The goal is to catch bugs that only appear when tools interact
-across shared state — the kind of bugs unit tests and single-tool integration
-tests miss.
+End-to-end tests that launch a real Godot binary in headless mode, connect
+`spectator-server` to the real addon, and exercise multi-step agent debugging
+journeys against a live scene tree. These test the boundaries that mock tests
+**cannot**: GDExtension collector accuracy, real physics/transform data, TCP
+wire fidelity under actual Godot timing, and the full handshake-to-tool-call
+pipeline.
 
-These tests are **few but deep**: 5 journey tests, each telling a story.
+The existing Layer 1 tests (tcp_mock, scenarios) verify server logic in
+isolation. These Layer 2 tests verify the **integration contract** — that the
+data the real addon sends matches what the server expects, that actions
+actually mutate Godot state, and that the full system works as a developer
+or agent would use it.
 
-## Key Design Decision: StatefulMockWorld
-
-The existing `QueryHandler` closure is stateless per-test or uses ad-hoc
-`Arc<Mutex<T>>` state. Journey tests need a richer simulation: entities that
-move, properties that change, signals that fire — all in response to actions
-the test takes. Rather than hand-rolling `Arc<Mutex<...>>` per test, we
-introduce a `StatefulMockWorld` that simulates evolving game state and produces
-a `QueryHandler` from it.
-
-This is the single biggest infrastructure addition. Everything else is test
-code.
+**Few but deep**: 4 journey tests, each 6-12 steps, each telling a real
+debugging story.
 
 ---
 
-## Implementation Units
+## What These Tests Catch That Mocks Can't
 
-### Unit 1: StatefulMockWorld
+| Bug class | Example | Why mocks miss it |
+|-----------|---------|-------------------|
+| Collector drift | Collector reports `position` as `[x, z, y]` instead of `[x, y, z]` | Mock fixtures use hardcoded correct data |
+| Property mapping | `@export var health: int` serialized as float by Godot variant system | Mock returns `json!(80)` directly |
+| Action side effects | `teleport` doesn't update physics state until next frame | Mock teleport is instant |
+| Scene tree shape | Real node paths include autoload nodes mock doesn't know about | Mock uses flat entity list |
+| Recording frame timing | Recorder captures frames only on `_physics_process` ticks | Mock returns hardcoded frame counts |
+| Transform accuracy | Camera transform → forward vector → bearing calculation chain | Mock hardcodes forward vectors |
+| Handshake data | Real `scene_dimensions` detection from scene root type | Mock sends hardcoded `3` |
 
-**File**: `crates/spectator-server/tests/support/world.rs`
+---
+
+## Infrastructure
+
+### Unit 1: GodotProcess — Headless Launcher
+
+**File**: `crates/spectator-server/tests/support/godot_process.rs`
 
 ```rust
-use super::fixtures::EntityData;
-use super::mock_addon::QueryHandler;
-use serde_json::{json, Value};
-use spectator_protocol::query::{PerspectiveData, SnapshotResponse};
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
+use std::path::PathBuf;
+use std::process::{Child, Command, Stdio};
+use tokio::net::TcpStream;
+use tokio::time::{Duration, Instant, sleep};
 
-/// Mutable game world for journey tests.
-/// Entities can be moved, properties changed, and signals queued.
-/// Produces a QueryHandler that serves live state for snapshot/inspect/action queries.
-pub struct StatefulMockWorld {
-    inner: Arc<Mutex<WorldState>>,
+/// Manages a headless Godot process for E2E tests.
+///
+/// Launches Godot with --headless --fixed-fps 60, sets SPECTATOR_PORT to
+/// an ephemeral port, and waits for the addon's TCP listener to be ready.
+pub struct GodotProcess {
+    child: Child,
+    port: u16,
+    stdout_log: PathBuf,
+    stderr_log: PathBuf,
 }
 
-struct WorldState {
-    frame: u64,
-    timestamp_ms: u64,
-    perspective: PerspectiveData,
-    entities: Vec<EntityData>,
-    /// Signals queued by set_signal(); drained on get_snapshot_data.
-    pending_signals: Vec<Value>,
-    /// Active recording state.
-    recording: Option<RecordingState>,
-    /// History of method calls received (for assertion).
-    call_log: Vec<(String, Value)>,
-}
-
-struct RecordingState {
-    id: String,
-    name: String,
-    started_at_frame: u64,
-    frames_captured: u32,
-}
-
-impl StatefulMockWorld {
-    /// Create a world from a fixture scene (e.g., mock_scene_3d()).
-    pub fn from_scene(scene: SnapshotResponse) -> Self { ... }
-
-    /// Move an entity to a new position. Panics if entity not found.
-    pub fn move_entity(&self, path: &str, position: Vec<f64>) { ... }
-
-    /// Set a state property on an entity.
-    pub fn set_state(&self, path: &str, key: &str, value: Value) { ... }
-
-    /// Queue a signal emission (will appear in next snapshot's signals_recent).
-    pub fn queue_signal(&self, node: &str, signal: &str, args: Vec<Value>) { ... }
-
-    /// Add a new entity to the world.
-    pub fn add_entity(&self, entity: EntityData) { ... }
-
-    /// Remove an entity by path.
-    pub fn remove_entity(&self, path: &str) { ... }
-
-    /// Advance the frame counter by N frames.
-    pub fn advance_frames(&self, n: u64) { ... }
-
-    /// Get the current frame number.
-    pub fn frame(&self) -> u64 { ... }
-
-    /// Get the call log for assertions ("what methods did the server ask for?").
-    pub fn call_log(&self) -> Vec<(String, Value)> { ... }
-
-    /// Clear the call log.
-    pub fn clear_call_log(&self) { ... }
-
-    /// Build a QueryHandler that serves live state from this world.
+impl GodotProcess {
+    /// Launch Godot headless with the test project and a specific scene.
     ///
-    /// Handles: get_snapshot_data, get_node_inspect, execute_action,
-    /// recording_start, recording_stop, recording_status, get_scene_tree.
-    pub fn handler(&self) -> QueryHandler { ... }
+    /// Binds to an ephemeral port (OS-assigned via port 0 trick).
+    /// Waits up to 15 seconds for the TCP listener to accept connections.
+    /// Captures stdout/stderr to temp files for debugging on failure.
+    pub async fn start(scene: &str) -> anyhow::Result<Self> { ... }
+
+    /// Launch with the 3D test scene.
+    pub async fn start_3d() -> anyhow::Result<Self> {
+        Self::start("res://test_scene_3d.tscn").await
+    }
+
+    /// Launch with the 2D test scene.
+    pub async fn start_2d() -> anyhow::Result<Self> {
+        Self::start("res://test_scene_2d.tscn").await
+    }
+
+    pub fn port(&self) -> u16 { self.port }
+
+    /// Read captured stderr (Godot's debug output).
+    /// Useful for debugging when a test fails.
+    pub fn stderr_output(&self) -> String { ... }
+
+    /// Kill the Godot process and return captured output.
+    pub fn kill_and_dump(&mut self) -> String { ... }
+}
+
+impl Drop for GodotProcess {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
 }
 ```
 
 **Implementation Notes**:
 
-The handler closure captures `Arc<Mutex<WorldState>>` and dispatches on method:
+Ephemeral port allocation: Bind a `TcpListener` to port 0 to get a free port,
+immediately close it, pass that port via `SPECTATOR_PORT` env var. There's a
+small TOCTOU window but it's fine for test environments.
 
-- `get_snapshot_data` → builds `SnapshotResponse` from current entities, drains
-  pending signals into `signals_recent`, advances frame by 1.
-- `get_node_inspect` → finds entity by path, returns `NodeInspectResponse` with
-  current state.
-- `execute_action` → dispatches on `params["action"]`:
-  - `"teleport"` → updates entity position, returns previous position
-  - `"set_property"` → updates entity state, returns previous value
-  - `"pause"` / `"unpause"` → toggles a paused flag, returns ack
-  - `"call_method"` → returns `json!({"result": "ok"})`
-- `get_scene_tree` → returns flat tree of entity paths and classes.
-- `recording_start` → creates RecordingState, returns id.
-- `recording_stop` → clears RecordingState, returns frame count.
-- `recording_status` → returns active state.
-- Unknown methods → `Err(("unknown_method", ...))`
+The Godot binary path comes from `GODOT_BIN` env var (default: `godot`).
+The test project path is `{manifest_dir}/../../tests/godot-project` (relative
+to the spectator-server crate).
 
-All method calls are logged to `call_log` for assertion.
+Wait-for-ready: Poll `TcpStream::connect()` every 100ms up to 15 seconds.
+If it times out, dump Godot's stderr for debugging.
 
-**Acceptance Criteria**:
-- [ ] `move_entity` changes position visible in next `get_snapshot_data`
-- [ ] `set_state` changes property visible in next `get_node_inspect`
-- [ ] `execute_action(teleport)` mutates world state
-- [ ] `call_log` records all method+params received
-- [ ] Multiple tests can create independent `StatefulMockWorld` instances
-
----
-
-### Unit 2: Journey Test — Bug Investigation
-
-**File**: `crates/spectator-server/tests/journeys.rs`
-
-**Story**: An agent is told "the enemy clips through the east wall." It takes a
-snapshot, inspects the scene tree, queries the spatial relationship between the
-enemy and wall, teleports the enemy to reproduce, takes another snapshot to
-confirm, then checks delta to see the movement.
-
-```rust
-/// Journey: Investigating an enemy clipping through a wall.
-///
-/// Tool sequence:
-///   1. spatial_snapshot(standard) → get entity positions
-///   2. scene_tree(root: "walls") → find wall nodes
-///   3. spatial_query(relationship, enemy ↔ wall) → check distance
-///   4. spatial_action(teleport enemy to wall position) → reproduce clip
-///   5. spatial_snapshot(standard) → confirm new position
-///   6. spatial_delta() → verify enemy shows as "moved"
-///   7. spatial_inspect(enemy) → check physics state at wall
-#[tokio::test]
-async fn journey_investigate_wall_clip() { ... }
+Scene is passed as the last positional argument:
+```
+godot --headless --fixed-fps 60 --path <project_dir> <scene>
 ```
 
-**Implementation Notes**:
-
-Setup: `StatefulMockWorld::from_scene(mock_scene_3d())`. Scout starts at
-`[0, 0, -5]`, EastWall at `[3, 0, 0]`.
-
-Step-by-step with assertions:
-
-1. **Snapshot**: Assert Scout and EastWall both present. Assert Scout's
-   distance from origin is ~5.0.
-
-2. **Scene tree** with root filter: Assert wall paths returned.
-
-3. **Spatial query** (radius from wall position): Assert Scout is NOT within
-   radius 1.0 of the wall (they're 5.8m apart).
-
-4. **Teleport** Scout to `[3.0, 0.0, 0.0]` (same as wall): Assert success,
-   assert previous_position returned. World state updates.
-
-5. **Snapshot**: Assert Scout now at `[3, 0, 0]`. Assert Scout is within 0.5m
-   of EastWall.
-
-6. **Delta**: Assert Scout appears in `moved` array. Assert position change
-   from `[0, 0, -5]` to `[3, 0, 0]`.
-
-7. **Inspect** Scout: Assert path, class, position match. Assert state dict
-   contains `health: 80`.
-
-Key boundary tested: **action → snapshot → delta coherence**. The spatial index
-must update after teleport; delta must compare against the pre-teleport
-baseline.
-
 **Acceptance Criteria**:
-- [ ] All 7 tool calls succeed in sequence
-- [ ] Teleport mutates world state visible in subsequent snapshot
-- [ ] Delta correctly reflects the teleport as movement
-- [ ] Spatial query uses the updated index after snapshot refresh
+- [ ] Godot starts headless and TCP port becomes connectable
+- [ ] SPECTATOR_PORT env var overrides default 9077
+- [ ] Drop kills the child process
+- [ ] stderr is capturable for debugging
 
 ---
 
-### Unit 3: Journey Test — Recording and Playback Analysis
+### Unit 2: E2EHarness — Real Godot Test Harness
 
-**Story**: The developer says "the enemy's health drops to zero but it doesn't
-die." The agent starts recording, the world evolves (health decreases over
-frames), the agent stops recording, then queries the recording to find the
-frame where health hit zero.
+**File**: `crates/spectator-server/tests/support/e2e_harness.rs`
 
 ```rust
-/// Journey: Recording a health drain and analyzing the timeline.
+use super::godot_process::GodotProcess;
+use spectator_server::{server::SpectatorServer, tcp::{SessionState, tcp_client_loop}};
+use std::sync::Arc;
+use tokio::sync::Mutex;
+use tokio::task::JoinHandle;
+use rmcp::model::ErrorData as McpError;
+
+/// Full-stack E2E harness: real Godot + real SpectatorServer.
 ///
-/// Tool sequence:
-///   1. recording(start) → begin capture
-///   2. spatial_snapshot(standard) → baseline (health=80)
-///   3. [world evolves: health drops 80→60→40→20→0 across frames]
-///   4. spatial_snapshot(standard) → mid-session check (health=20)
-///   5. spatial_delta() → see health in state_changed
-///   6. recording(stop) → end capture
-///   7. recording(status) → confirm not active
-///   8. spatial_config(read) → verify session state not corrupted
-#[tokio::test]
-async fn journey_recording_health_drain() { ... }
-```
-
-**Implementation Notes**:
-
-Between tool calls, the test mutates world state via
-`world.set_state("enemies/Scout", "health", ...)` and
-`world.advance_frames(10)` to simulate time passing.
-
-The key boundary: **recording lifecycle ↔ snapshot ↔ delta ↔ config** all
-sharing the same session state. A bug in recording start/stop could corrupt
-the SessionState mutex, breaking subsequent snapshot or config calls.
-
-After recording stop, the test calls `spatial_config` (read mode) to verify
-the session state is still intact — not corrupted by the recording lifecycle.
-
-**Acceptance Criteria**:
-- [ ] Recording start returns an id; status shows active=true
-- [ ] Snapshots during recording reflect evolving state
-- [ ] Delta between snapshots detects health change in state_changed
-- [ ] Recording stop returns frame count > 0
-- [ ] Post-recording status shows active=false
-- [ ] Post-recording spatial_config returns valid config (state not corrupted)
-
----
-
-### Unit 4: Journey Test — Watch-Driven Debugging Loop
-
-**Story**: The agent sets up watches on multiple entities, then polls delta
-repeatedly as the world evolves. It tests that watches accumulate correctly,
-that clearing one watch doesn't affect others, and that the delta event stream
-stays coherent across watch modifications.
-
-```rust
-/// Journey: Setting up watches, evolving world, checking deltas.
-///
-/// Tool sequence:
-///   1. spatial_snapshot(standard) → establish baseline
-///   2. spatial_watch(add, Player state) → watch_id_1
-///   3. spatial_watch(add, Scout state) → watch_id_2
-///   4. spatial_watch(list) → verify 2 watches
-///   5. [world: Scout health 80→50, Player moves]
-///   6. spatial_delta() → Scout state_changed + Player moved
-///   7. spatial_watch(remove, watch_id_1) → remove Player watch
-///   8. spatial_watch(list) → verify 1 watch remaining
-///   9. [world: Scout health 50→10]
-///  10. spatial_delta() → Scout state_changed, Player NOT in moved (no change)
-///  11. spatial_watch(clear) → remove all
-///  12. spatial_watch(list) → verify 0 watches
-///  13. spatial_delta() → still works, no crash
-#[tokio::test]
-async fn journey_watch_driven_debug_loop() { ... }
-```
-
-**Implementation Notes**:
-
-The key boundary: **watch lifecycle ↔ delta accumulation ↔ snapshot baseline**.
-Watch add/remove/clear must not corrupt the delta engine's baseline state. A
-common bug: removing a watch while delta is tracking changes for that entity
-causes a panic or stale data.
-
-Between steps 5-6 and 9-10, the test uses `world.move_entity()` and
-`world.set_state()` to evolve state, then asserts delta correctly reports
-the changes.
-
-Step 13 (delta after clearing all watches) tests that delta still functions
-even with zero watches — watches are optional overlays, not required for delta.
-
-**Acceptance Criteria**:
-- [ ] Watch add returns unique IDs
-- [ ] Watch list reflects current watch set after add/remove/clear
-- [ ] Delta reports state changes for watched entities
-- [ ] Removing a watch does not corrupt delta baseline
-- [ ] Delta works correctly with zero watches
-- [ ] 13 sequential tool calls complete without error
-
----
-
-### Unit 5: Journey Test — Error Recovery Under Load
-
-**Story**: The agent is mid-workflow when things go wrong. It gets an error
-from inspect (node not found), retries with a different node, gets another
-error from a bad action, then recovers and continues with snapshots and
-deltas. The session state must remain consistent throughout.
-
-```rust
-/// Journey: Errors mid-workflow don't corrupt session state.
-///
-/// Tool sequence:
-///   1. spatial_snapshot(standard) → establish baseline
-///   2. spatial_inspect(node: "/Ghost") → ERROR: node_not_found
-///   3. spatial_inspect(node: "enemies/Scout") → SUCCESS
-///   4. spatial_action(teleport, "/Ghost", [0,0,0]) → ERROR: node_not_found
-///   5. spatial_snapshot(standard) → must still work (state not corrupted)
-///   6. spatial_watch(add, Player) → must still work
-///   7. spatial_action(teleport, "Player", [10,0,0]) → SUCCESS
-///   8. spatial_snapshot(standard) → Player at [10,0,0]
-///   9. spatial_delta() → Player moved
-///  10. spatial_config(read) → session config intact
-#[tokio::test]
-async fn journey_error_recovery_under_load() { ... }
-```
-
-**Implementation Notes**:
-
-The handler in `StatefulMockWorld` returns errors for unknown paths (like
-"/Ghost"). Steps 2 and 4 produce McpError results. The test asserts
-`is_err()` for those, then asserts that subsequent calls still succeed.
-
-The key boundary: **error propagation isolation**. An error in the TCP
-query/response cycle must not leave the `SessionState` mutex poisoned, the
-`oneshot` channels dangling, or the spatial index in a half-updated state.
-
-Steps 5-10 after the errors verify every major subsystem still works:
-snapshot (spatial index), watch (watch engine), action (TCP query), delta
-(delta engine), config (session state).
-
-**Acceptance Criteria**:
-- [ ] Inspect of missing node returns error, does not panic
-- [ ] Action on missing node returns error, does not panic
-- [ ] Snapshot after errors returns valid entities
-- [ ] Watch after errors creates watch successfully
-- [ ] Action after errors mutates world state correctly
-- [ ] Delta after errors detects movement correctly
-- [ ] Config after errors returns valid configuration
-
----
-
-### Unit 6: Journey Test — 2D/3D Session Isolation
-
-**Story**: Two separate sessions — one 2D, one 3D — run independently. This
-tests that the server correctly adapts to scene dimensions from the handshake
-and doesn't mix up 2D and 3D logic.
-
-```rust
-/// Journey: 2D and 3D sessions behave correctly in isolation.
-///
-/// This test runs two parallel harnesses to verify that scene dimension
-/// detection correctly configures bearings, spatial index, and position
-/// format independently.
-///
-/// Tool sequences (both run sequentially within one test):
-///   3D session:
-///     1. spatial_snapshot(standard) → entities have [x,y,z] positions
-///     2. spatial_query(radius from origin, r=5) → uses R-tree index
-///     3. spatial_inspect(Player) → 3D transform
-///   2D session:
-///     4. spatial_snapshot(standard) → entities have [x,y] positions
-///     5. spatial_query(radius from [100,300], r=50) → uses grid index
-///     6. spatial_inspect(Player) → 2D transform
-#[tokio::test]
-async fn journey_2d_3d_session_isolation() { ... }
-```
-
-**Implementation Notes**:
-
-Uses `TestHarness::new()` for 3D and `TestHarness::new_2d()` for 2D, each
-with their own `StatefulMockWorld`. This tests that the server reads
-`scene_dimensions` from the handshake and configures the correct spatial
-index type.
-
-The 2D assertions check that positions are 2-element arrays and that no
-elevation field appears in bearing data. The 3D assertions check for
-3-element positions.
-
-**Acceptance Criteria**:
-- [ ] 3D snapshot returns [x,y,z] positions
-- [ ] 2D snapshot returns [x,y] positions
-- [ ] 3D query uses R-tree spatial index
-- [ ] 2D query returns correct entities within radius
-- [ ] No cross-contamination between sessions
-
----
-
-### Unit 7: DebugContext Helper
-
-**File**: `crates/spectator-server/tests/support/debug.rs`
-
-```rust
-/// Wrapper around TestHarness that logs every tool call and result for
-/// easy debugging when journey tests fail.
-///
-/// On test failure, the full call trace is included in the panic message.
-pub struct DebugContext {
-    harness: TestHarness,
-    trace: Vec<TraceEntry>,
+/// Provides the same `call_tool(name, params)` interface as TestHarness,
+/// but against a real running Godot scene. Additionally provides a
+/// step-based trace log for debugging multi-step journey failures.
+pub struct E2EHarness {
+    pub godot: GodotProcess,
+    pub server: SpectatorServer,
+    pub state: Arc<Mutex<SessionState>>,
+    _tcp_task: JoinHandle<()>,
+    trace: Vec<StepTrace>,
 }
 
-struct TraceEntry {
+struct StepTrace {
     step: usize,
     tool: String,
-    params: Value,
-    result: Result<Value, String>,
+    params: serde_json::Value,
+    result: Result<serde_json::Value, String>,
     elapsed_ms: u64,
 }
 
-impl DebugContext {
-    pub fn new(harness: TestHarness) -> Self { ... }
+impl E2EHarness {
+    /// Launch Godot with the 3D test scene and connect.
+    pub async fn start_3d() -> anyhow::Result<Self> { ... }
 
-    /// Call a tool and log the call + result. On error, includes full trace
-    /// in the error message for debugging.
-    pub async fn call(
+    /// Launch Godot with the 2D test scene and connect.
+    pub async fn start_2d() -> anyhow::Result<Self> { ... }
+
+    /// Launch Godot with a specific scene, create server, connect, handshake.
+    pub async fn start(scene: &str) -> anyhow::Result<Self> { ... }
+
+    /// Call a tool, logging the step for trace output.
+    /// Returns the parsed JSON result.
+    pub async fn step(
         &mut self,
-        step: usize,
+        n: usize,
         tool: &str,
-        params: Value,
-    ) -> Result<Value, McpError> { ... }
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value, McpError> { ... }
 
-    /// Call a tool expecting success. Panics with full trace on failure.
+    /// Call a tool expecting success. Panics with full journey trace on failure.
     pub async fn expect(
         &mut self,
-        step: usize,
+        n: usize,
         tool: &str,
-        params: Value,
-    ) -> Value { ... }
+        params: serde_json::Value,
+    ) -> serde_json::Value { ... }
 
-    /// Call a tool expecting failure. Panics with full trace if it succeeds.
+    /// Call a tool expecting failure. Panics with trace if it succeeds.
     pub async fn expect_err(
         &mut self,
-        step: usize,
+        n: usize,
         tool: &str,
-        params: Value,
+        params: serde_json::Value,
     ) -> McpError { ... }
 
-    /// Format the full trace for inclusion in assertion messages.
-    pub fn trace_summary(&self) -> String { ... }
+    /// Format the full trace for debugging.
+    /// On failure, also includes Godot's stderr output.
+    pub fn trace_dump(&self) -> String { ... }
 
-    /// Access the underlying harness (for mock event injection, etc.)
-    pub fn harness(&self) -> &TestHarness { ... }
-    pub fn mock(&self) -> &MockAddon { ... }
+    /// Wait for N physics frames to elapse (polls frame counter via snapshot).
+    /// Useful for letting actions take effect.
+    pub async fn wait_frames(&mut self, n: u32) {
+        tokio::time::sleep(Duration::from_millis(
+            (n as u64 * 1000) / 60 + 50  // frame time + margin
+        )).await;
+    }
 }
 
-impl std::fmt::Display for DebugContext {
-    /// Prints the trace in a readable format:
-    /// ```
-    /// Step 1: spatial_snapshot({detail: "standard"}) → OK (23ms)
-    ///   entities: 5, budget.used: 320
-    /// Step 2: spatial_inspect({node: "/Ghost"}) → ERR (2ms)
-    ///   node_not_found: Node '/Ghost' not found
-    /// ```
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { ... }
+impl Drop for E2EHarness {
+    fn drop(&mut self) {
+        self._tcp_task.abort();
+        // GodotProcess::drop kills godot
+    }
 }
 ```
 
 **Implementation Notes**:
 
-Every `expect()` call wraps `harness.call_tool()` with timing and logging.
-On failure, the panic message includes:
+`start()` calls `GodotProcess::start(scene)`, creates `SessionState`,
+spawns `tcp_client_loop` connecting to `godot.port()`, waits for
+`state.connected == true` (same pattern as mock TestHarness), then creates
+`SpectatorServer::new(state)`.
+
+The `step()` method wraps `call_tool()` with timing (`Instant::now()`) and
+stores the result in `trace`. On assertion failure, `trace_dump()` prints:
 
 ```
-journey_investigate_wall_clip failed at step 4:
-  Expected OK but got: node_not_found
+E2E Journey Trace (test_scene_3d.tscn):
+  Step 1: spatial_snapshot({detail:"standard"}) → OK (45ms)
+  Step 2: spatial_inspect({node:"Enemies/Scout"}) → OK (12ms)
+  Step 3: spatial_action({action:"teleport",...}) → OK (8ms)
+  Step 4: spatial_snapshot({detail:"standard"}) → OK (38ms)
+  Step 5: spatial_delta({}) → ERR (5ms)  ← FAILED
+    Error: internal_error — delta baseline not established
 
-Full trace:
-  Step 1: spatial_snapshot({detail:"standard"}) → OK (15ms)
-  Step 2: scene_tree({}) → OK (8ms)
-  Step 3: spatial_query({query_type:"radius",...}) → OK (5ms)
-  Step 4: spatial_action({action:"teleport",...}) → ERR (3ms)  ← FAILED HERE
-    node_not_found: Node 'enemies/Scout' not found
+Godot stderr (last 20 lines):
+  [Spectator] TCP: client connected from 127.0.0.1:54321
+  [Spectator] Handshake: protocol_version=1, dimensions=3
+  ...
 ```
 
-This makes debugging journey test failures trivial — you see the full
-conversation history at a glance.
+The `wait_frames()` helper sleeps for `(n/60)*1000 + 50` ms. At
+`--fixed-fps 60`, each physics frame is ~16.7ms. The 50ms margin accounts
+for scheduling jitter. This is simpler and more reliable than polling the
+frame counter.
+
+Tool dispatch reuses the same `call_tool` routing as the mock TestHarness
+(spatial_snapshot, spatial_inspect, etc. → `server.spatial_snapshot(Parameters(p))`).
+Factor this into a shared trait or function in `support/mod.rs` to avoid
+duplication.
 
 **Acceptance Criteria**:
-- [ ] `expect()` returns value on success
-- [ ] `expect()` panics with full trace on failure
-- [ ] `expect_err()` panics with full trace on unexpected success
-- [ ] Trace includes step number, tool, params, result, and timing
-- [ ] `trace_summary()` produces human-readable output
+- [ ] `start_3d()` connects to real Godot and completes handshake
+- [ ] `expect()` returns real scene data from Godot
+- [ ] `expect()` panics with full trace + Godot stderr on failure
+- [ ] `wait_frames()` allows physics frames to advance
+
+---
+
+### Unit 3: Shared Tool Dispatch
+
+**File**: `crates/spectator-server/tests/support/mod.rs` (modify existing)
+
+```rust
+pub mod fixtures;
+pub mod harness;
+pub mod mock_addon;
+
+#[cfg(feature = "e2e-tests")]
+pub mod godot_process;
+#[cfg(feature = "e2e-tests")]
+pub mod e2e_harness;
+
+/// Shared tool dispatch: routes tool name + JSON params to SpectatorServer
+/// handler methods. Used by both TestHarness and E2EHarness.
+pub async fn dispatch_tool(
+    server: &SpectatorServer,
+    name: &str,
+    params: serde_json::Value,
+) -> Result<serde_json::Value, McpError> { ... }
+```
+
+**Implementation Notes**:
+
+Extract the match block from `TestHarness::call_tool` into this standalone
+function. Both `TestHarness::call_tool` and `E2EHarness::step` call it.
+
+**Acceptance Criteria**:
+- [ ] Existing TestHarness tests still pass (refactor, not behavior change)
+- [ ] E2EHarness uses the same dispatch function
+
+---
+
+### Unit 4: Journey — Agent Investigates a Scene
+
+**File**: `crates/spectator-server/tests/e2e_journeys.rs`
+
+**Story**: An agent connects to a running game and explores the scene to
+understand its structure. This is the most common first interaction — the
+agent needs situational awareness before it can help debug anything.
+
+```rust
+/// Journey: Agent connects and explores a 3D scene.
+///
+/// Tests the real handshake, real collector data, real scene tree,
+/// and real spatial indexing against actual Godot transforms.
+///
+/// Steps:
+///   1. Verify handshake: session connected, dimensions=3, project="SpectatorTests"
+///   2. scene_tree() → real hierarchy (TestScene3D, Camera3D, Player, Enemies/Scout, ...)
+///   3. spatial_snapshot(summary) → clustered groups, correct entity count
+///   4. spatial_snapshot(standard) → per-entity data with real positions
+///        Assert: Player at ~(0,0,0), Scout at ~(5,0,-3), Tank at ~(-4,0,2)
+///   5. spatial_inspect(Enemies/Scout) → real transform, class, health=80
+///   6. spatial_query(nearest, from Player position, k=2) → two closest entities
+///        Assert: results exist and distances are geometrically plausible
+#[tokio::test]
+async fn journey_explore_scene() { ... }
+```
+
+**Implementation Notes**:
+
+This is the foundational E2E test — if this passes, the core data pipeline
+(collector → TCP → server → spatial processing) is working.
+
+Position assertions use approximate comparison (`(a - b).abs() < 1.0`)
+because real transforms may have small offsets from physics settling,
+collision shape positions, etc.
+
+Scene tree assertions check for known node paths but don't assert exact
+structure (autoload nodes, editor nodes may vary). Check that `Player`,
+`Enemies/Scout`, `Camera3D` exist in the tree.
+
+Step 1 verifies the handshake by reading `SessionState` directly — this
+catches protocol version mismatches, incorrect dimension detection, and
+GDExtension loading failures that would be invisible to tool calls.
+
+**Acceptance Criteria**:
+- [ ] Handshake completes with correct project name and dimensions
+- [ ] Scene tree contains expected nodes (Player, Enemies/Scout, etc.)
+- [ ] Snapshot returns entities with positions matching the .tscn file
+- [ ] Inspect returns real exported vars (health=80)
+- [ ] Spatial query returns geometrically correct nearest neighbors
+
+---
+
+### Unit 5: Journey — Agent Debugs a Spatial Bug
+
+**File**: `crates/spectator-server/tests/e2e_journeys.rs`
+
+**Story**: An agent teleports an enemy to a new position, verifies the move
+with a snapshot, checks that the delta engine tracks the movement, and then
+inspects the enemy at its new location to verify physics state.
+
+This tests the most critical cross-boundary interaction: **actions mutate
+real Godot state, and that mutation is visible through all observation tools**.
+
+```rust
+/// Journey: Teleport an enemy, verify through snapshot + delta + inspect.
+///
+/// Steps:
+///   1. spatial_snapshot(standard) → baseline: Scout at ~(5, 0, -3)
+///   2. spatial_action(teleport, Enemies/Scout, [0, 0, 0]) → ack + previous position
+///   3. wait_frames(5) → let physics settle
+///   4. spatial_snapshot(standard) → Scout now at ~(0, 0, 0)
+///        Assert: position changed from step 1
+///   5. spatial_delta() → Scout in "moved" array
+///        Assert: moved contains Scout with meaningful displacement
+///   6. spatial_inspect(Enemies/Scout) → transform at new position, health still 80
+///   7. spatial_action(set_property, Enemies/Scout, health, 25) → ack + old value
+///   8. wait_frames(2)
+///   9. spatial_inspect(Enemies/Scout) → health now 25
+///  10. spatial_delta() → Scout in state_changed (health went 80→25)
+#[tokio::test]
+async fn journey_debug_spatial_bug() { ... }
+```
+
+**Implementation Notes**:
+
+`wait_frames(5)` between teleport and snapshot is critical. In real Godot,
+`teleport_node` sets `global_position` but the physics server may not update
+collision state until the next `_physics_process`. The `--fixed-fps 60` flag
+ensures deterministic timing.
+
+The delta between steps 1 and 4 should show Scout as "moved" with a distance
+of roughly `sqrt(5² + 3²) ≈ 5.83` units. Assert `> 4.0` to be safe.
+
+Step 7 tests `set_property` against a real exported var. The GDExtension must
+correctly map the `health` string to the Godot property path and set it via
+`Object::set()`. Step 9 verifies the value persisted.
+
+Step 10's delta should detect `health` changing from 80 to 25 in
+`state_changed`. This crosses: MCP handler → TCP → GDExtension collector
+(which must re-read the property) → TCP → server delta engine.
+
+**Acceptance Criteria**:
+- [ ] Teleport moves Scout to new position in real Godot
+- [ ] Post-teleport snapshot shows new position (within tolerance)
+- [ ] Delta detects movement between pre/post teleport snapshots
+- [ ] set_property changes real Godot exported var
+- [ ] Post-set_property inspect shows new value
+- [ ] Delta detects state change in exported var
+
+---
+
+### Unit 6: Journey — Recording During Live Session
+
+**File**: `crates/spectator-server/tests/e2e_journeys.rs`
+
+**Story**: An agent starts a recording, takes snapshots while the game runs,
+adds a marker, stops the recording, then verifies the recording metadata.
+This tests the recorder GDExtension class, the TCP recording protocol, and
+session state coherence between recording and spatial tools.
+
+```rust
+/// Journey: Record game state, verify recording lifecycle.
+///
+/// Steps:
+///   1. spatial_snapshot(standard) → baseline, note frame number
+///   2. recording(start) → recording_id returned
+///   3. recording(status) → active=true, recording_id matches
+///   4. wait_frames(30) → let recorder capture ~30 frames
+///   5. spatial_snapshot(standard) → mid-recording snapshot still works
+///        Assert: frame number advanced from step 1
+///   6. recording(add_marker, source="agent", label="mid_test") → ack
+///   7. wait_frames(30) → more frames
+///   8. recording(stop) → frames_captured > 0
+///   9. recording(status) → active=false
+///  10. spatial_snapshot(standard) → post-recording snapshot still works
+///        Assert: session state not corrupted by recording lifecycle
+#[tokio::test]
+async fn journey_recording_lifecycle() { ... }
+```
+
+**Implementation Notes**:
+
+The GDExtension `SpectatorRecorder` captures frames in `_physics_process`.
+With `--fixed-fps 60`, waiting 30 frames ≈ 500ms. After stop, the
+`frames_captured` count should be between 20 and 60 (timing is approximate
+in headless mode).
+
+Step 5 tests that spatial tools work concurrently with an active recording.
+The collector serves both the recorder (frame capture) and the TCP server
+(query responses) — this tests their coexistence on the main thread.
+
+Step 10 verifies that stopping a recording doesn't corrupt the session state.
+This catches a real class of bug: if the recorder's stop handler holds a
+mutex while the TCP server tries to respond to a query, the session deadlocks.
+
+Frame number assertions: step 1 captures `frame_0`, step 5 captures
+`frame_mid`. Assert `frame_mid > frame_0` (frames are advancing).
+
+**Acceptance Criteria**:
+- [ ] Recording start returns a non-empty recording_id
+- [ ] Recording status shows active=true with matching id
+- [ ] Spatial snapshot works during active recording
+- [ ] Frame counter advances between snapshots
+- [ ] Marker add succeeds during recording
+- [ ] Recording stop reports frames_captured > 0
+- [ ] Post-recording snapshot works (session not corrupted)
+
+---
+
+### Unit 7: Journey — 2D Scene Verification
+
+**File**: `crates/spectator-server/tests/e2e_journeys.rs`
+
+**Story**: An agent connects to a 2D scene and verifies that position format,
+bearing system, and spatial indexing all adapt correctly. This catches
+dimension-detection bugs that only manifest with a real 2D scene root.
+
+```rust
+/// Journey: 2D scene returns correct position format and bearings.
+///
+/// Steps:
+///   1. Verify handshake: dimensions=2
+///   2. spatial_snapshot(standard) → entities have [x, y] positions (2 elements)
+///        Assert: Player at ~(0, 0), Scout2D at ~(200, 100)
+///   3. spatial_query(nearest, from [0,0], k=2) → nearest entities
+///        Assert: results have 2-element positions
+///   4. spatial_inspect(Player) → 2D transform (no z component)
+///   5. spatial_action(teleport, Player, [100, 50]) → ack
+///   6. wait_frames(3)
+///   7. spatial_snapshot(standard) → Player now at ~(100, 50)
+#[tokio::test]
+async fn journey_2d_scene() { ... }
+```
+
+**Implementation Notes**:
+
+Uses `E2EHarness::start_2d()`. The handshake `scene_dimensions` should be
+`2` based on the scene root being `Node2D`.
+
+Position arrays in 2D must have exactly 2 elements. The server's bearing
+calculation must use 2D math (no elevation). If the collector incorrectly
+sends `[x, y, 0]` for a 2D scene, this test catches it because the bearing
+would include an elevation field that shouldn't exist.
+
+Teleport in 2D sends a 2-element position array. The GDExtension must handle
+this correctly (set `global_position` as `Vector2`, not `Vector3`).
+
+**Acceptance Criteria**:
+- [ ] Handshake reports dimensions=2
+- [ ] Snapshot positions are 2-element arrays
+- [ ] Spatial query works with 2D spatial index
+- [ ] Teleport works with 2-element position
+- [ ] No 3D-specific fields (elevation) in 2D responses
+
+---
+
+## Cargo.toml Changes
+
+**File**: `crates/spectator-server/Cargo.toml`
+
+```toml
+[features]
+integration-tests = []
+e2e-tests = []           # ← NEW
+
+[[test]]
+name = "e2e_journeys"
+path = "tests/e2e_journeys.rs"
+required-features = ["e2e-tests"]
+```
+
+No new dependencies needed — `tokio`, `serde_json`, `anyhow` are already
+dev-dependencies or workspace deps.
+
+---
+
+## Test Scene Changes
+
+### 3D Scene Groups
+
+The existing `test_scene_3d.tscn` has `enemies` group on Scout and Tank but
+no groups on Player, Items, or Floor. Add groups to make group-filtering
+testable:
+
+**File**: `tests/godot-project/test_scene_3d.tscn` (modify)
+
+Add group `player` to Player node.
+Add group `items` to HealthPack and Ammo nodes.
+
+### 2D Scene Groups
+
+**File**: `tests/godot-project/test_scene_2d.tscn` (modify)
+
+Add group `player` to Player node.
+Add group `enemies` to Scout2D node.
 
 ---
 
 ## Implementation Order
 
-1. **`support/debug.rs`** — DebugContext wrapper (no dependencies)
-2. **`support/world.rs`** — StatefulMockWorld (depends on fixtures, mock_addon)
-3. **`support/mod.rs`** — add `pub mod debug; pub mod world;`
-4. **`journeys.rs`** — all 5 journey tests (depends on all support modules)
+1. **GodotProcess** — headless launcher with ephemeral port + stderr capture
+2. **Shared dispatch** — extract tool routing from TestHarness
+3. **E2EHarness** — wires GodotProcess + SpectatorServer + trace logging
+4. **Scene groups** — add missing groups to test scenes
+5. **Cargo.toml** — add `e2e-tests` feature + `[[test]]` entry
+6. **Journey tests** — all 4 journeys in `e2e_journeys.rs`
 
-Units 1-2 can be implemented in parallel. Unit 4 depends on both.
+Steps 1-3 are infrastructure (can be tested with a smoke test).
+Step 4 is a trivial .tscn edit.
+Step 6 depends on all prior steps.
 
-## Testing
+---
 
-### Unit Tests: `support/world.rs` (inline)
-
-```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn move_entity_updates_position() {
-        let world = StatefulMockWorld::from_scene(mock_scene_3d());
-        world.move_entity("Player", vec![10.0, 0.0, 5.0]);
-        // Verify via internal state access
-    }
-
-    #[test]
-    fn set_state_updates_property() {
-        let world = StatefulMockWorld::from_scene(mock_scene_3d());
-        world.set_state("enemies/Scout", "health", json!(50));
-    }
-
-    #[test]
-    fn handler_serves_current_state() {
-        // Call handler with "get_snapshot_data", verify positions match
-    }
-
-    #[test]
-    fn handler_teleport_mutates_world() {
-        // Call handler with "execute_action" teleport, then "get_snapshot_data"
-    }
-}
-```
-
-### Integration Tests: `journeys.rs`
-
-5 journey tests, each exercising 7-13 sequential tool calls. Run with:
+## Running the Tests
 
 ```bash
-cargo test -p spectator-server --features integration-tests journeys
+# Prerequisites: Godot 4.x on PATH (or set GODOT_BIN), GDExtension built
+spectator-deploy ~/dev/spectator/tests/godot-project  # or copy .so manually
+
+# Run E2E journey tests
+cargo test -p spectator-server --features e2e-tests -- --nocapture
+
+# Run specific journey
+cargo test -p spectator-server --features e2e-tests journey_explore_scene -- --nocapture
+
+# Run all tests (unit + mock integration + E2E)
+cargo test -p spectator-server --features integration-tests,e2e-tests
 ```
 
-Each test should complete in <2 seconds (mock TCP, no real Godot).
+### Environment Variables
+
+| Variable | Purpose | Default |
+|----------|---------|---------|
+| `GODOT_BIN` | Path to Godot binary | `godot` |
+| `E2E_TIMEOUT_SECS` | Max seconds to wait for Godot startup | `15` |
+
+---
+
+## Debugging Failures
+
+When a journey test fails, the trace dump provides:
+
+1. **Step-by-step log**: Every tool call with params, result (OK/ERR), and
+   timing. Shows exactly which step failed and what the server saw.
+
+2. **Godot stderr**: The addon's `tracing` output including TCP connection
+   events, collector activity, and any GDScript errors.
+
+3. **Assertion context**: Each assert includes the full JSON result so you
+   can see the actual data, not just "assertion failed."
+
+Example failure output:
+
+```
+---- journey_debug_spatial_bug stdout ----
+E2E Journey Trace (test_scene_3d.tscn, port 54321):
+  Step 1: spatial_snapshot({detail:"standard"}) → OK (52ms)
+    entities: 7, frame: 142
+  Step 2: spatial_action({action:"teleport",node:"Enemies/Scout",position:[0,0,0]}) → OK (11ms)
+  Step 3: [wait 5 frames, 133ms]
+  Step 4: spatial_snapshot({detail:"standard"}) → OK (48ms)
+    entities: 7, frame: 147
+  Step 5: spatial_delta({}) → OK (6ms)
+    moved: 1, state_changed: 0
+
+thread 'journey_debug_spatial_bug' panicked at 'Step 5: expected Scout in moved
+array but found: [{"path":"Player","displacement":0.003}]
+
+Full result: {"moved":[...],"state_changed":[],"entered":[],"exited":[]}
+'
+```
 
 ## Verification Checklist
 
 ```bash
-# Build
-cargo build -p spectator-server --features integration-tests
-
-# Run journey tests
-cargo test -p spectator-server --features integration-tests journeys -- --nocapture
-
-# Run all integration tests (existing + new)
-cargo test -p spectator-server --features integration-tests
+# Build (ensures e2e support code compiles)
+cargo build -p spectator-server --features e2e-tests --tests
 
 # Lint
-cargo clippy -p spectator-server --features integration-tests
+cargo clippy -p spectator-server --features e2e-tests --tests
+
+# Run (requires Godot)
+cargo test -p spectator-server --features e2e-tests -- --nocapture
+
+# Existing tests still pass
+cargo test -p spectator-server --features integration-tests
 ```
-
-## File Summary
-
-| File | Purpose |
-|------|---------|
-| `tests/support/world.rs` | StatefulMockWorld — mutable game simulation |
-| `tests/support/debug.rs` | DebugContext — trace-logging test wrapper |
-| `tests/support/mod.rs` | Add module exports |
-| `tests/journeys.rs` | 5 journey tests |
-| `Cargo.toml` | Add `[[test]]` entry for journeys |
