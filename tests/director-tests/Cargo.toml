@@ -1,0 +1,16 @@
+[package]
+name = "director-tests"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# These tests require a Godot binary (GODOT_BIN env var or `godot` in PATH).
+# Run with: cargo test -p director-tests -- --include-ignored
+
+[lib]
+name = "director_tests"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"

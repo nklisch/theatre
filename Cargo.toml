@@ -5,15 +5,18 @@ members = [
     "crates/spectator-godot",
     "crates/spectator-protocol",
     "crates/spectator-core",
+    "crates/director",
     "tests/wire-tests",
+    "tests/director-tests",
 ]
 
-# Exclude wire-tests from `cargo build --workspace` (they need Godot at runtime).
+# Exclude wire-tests and director-tests from `cargo build --workspace` (they need Godot at runtime).
 default-members = [
     "crates/spectator-server",
     "crates/spectator-godot",
     "crates/spectator-protocol",
     "crates/spectator-core",
+    "crates/director",
 ]
 
 [workspace.package]
