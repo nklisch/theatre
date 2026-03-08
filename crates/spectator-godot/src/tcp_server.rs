@@ -240,7 +240,7 @@ impl SpectatorTCPServer {
                 self.disconnect_client();
             }
             Message::Query { id, method, params } => {
-                if method.starts_with("recording_") {
+                if method.starts_with("recording_") || method.starts_with("dashcam_") {
                     let response_msg = if let Some(ref mut recorder) = self.recorder {
                         match crate::recording_handler::handle_recording_query(
                             recorder, &method, &params,

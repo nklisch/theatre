@@ -19,6 +19,9 @@ pub fn handle_recording_query(
         "recording_marker" => handle_marker(recorder, params),
         "recording_markers" => handle_get_markers(recorder, params),
         "recording_resolve_path" => handle_resolve_path(params),
+        "dashcam_status" => handle_dashcam_status(recorder),
+        "dashcam_flush" => handle_dashcam_flush(recorder, params),
+        "dashcam_config" => handle_dashcam_config(recorder, params),
         _ => Err((
             "method_not_found".into(),
             format!("Unknown recording method: {method}"),
@@ -221,4 +224,64 @@ fn handle_get_markers(
         .collect();
 
     Ok(json!({ "recording_id": id, "markers": list }))
+}
+
+fn handle_dashcam_status(recorder: &mut Gd<SpectatorRecorder>) -> Result<Value, (String, String)> {
+    let rec = recorder.bind();
+    let state_str = rec.get_dashcam_state().to_string();
+    let buffer_frames = rec.get_dashcam_buffer_frames();
+    let buffer_kb = rec.get_dashcam_buffer_kb();
+    let dashcam_enabled = rec.is_dashcam_active() || state_str == "buffering" || state_str == "post_capture";
+    let config_json_str = rec.get_dashcam_config_json().to_string();
+    drop(rec);
+
+    let config: Value = serde_json::from_str(&config_json_str).unwrap_or(json!({}));
+
+    Ok(json!({
+        "dashcam_enabled": dashcam_enabled,
+        "state": state_str,
+        "buffer_frames": buffer_frames,
+        "buffer_kb": buffer_kb,
+        "config": config,
+    }))
+}
+
+fn handle_dashcam_flush(
+    recorder: &mut Gd<SpectatorRecorder>,
+    params: &Value,
+) -> Result<Value, (String, String)> {
+    let label = params
+        .get("marker_label")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+
+    let recording_id = recorder.bind_mut().flush_dashcam_clip(label.into()).to_string();
+
+    if recording_id.is_empty() {
+        Err((
+            "dashcam_not_active".into(),
+            "Dashcam is not active or flush failed".into(),
+        ))
+    } else {
+        Ok(json!({
+            "result": "ok",
+            "recording_id": recording_id,
+        }))
+    }
+}
+
+fn handle_dashcam_config(
+    recorder: &mut Gd<SpectatorRecorder>,
+    params: &Value,
+) -> Result<Value, (String, String)> {
+    let config_json = params.to_string();
+    let ok = recorder.bind_mut().apply_dashcam_config(config_json.as_str().into());
+    if ok {
+        Ok(json!({ "result": "ok" }))
+    } else {
+        Err((
+            "invalid_params".into(),
+            "Failed to apply dashcam config".into(),
+        ))
+    }
 }

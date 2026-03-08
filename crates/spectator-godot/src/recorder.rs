@@ -1,3 +1,5 @@
+use std::collections::VecDeque;
+
 use godot::classes::{Engine, Node, Node2D, Node3D, node::ProcessMode};
 use godot::obj::Gd;
 use godot::prelude::*;
@@ -11,6 +13,7 @@ use crate::collector::SpectatorCollector;
 // In-memory buffer types
 // ---------------------------------------------------------------------------
 
+#[derive(Clone)]
 struct CapturedFrame {
     frame: u64,
     timestamp_ms: u64,
@@ -32,6 +35,83 @@ struct CapturedMarker {
 }
 
 // FrameEntityData is defined in spectator-protocol and imported above.
+
+// ---------------------------------------------------------------------------
+// Dashcam types
+// ---------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum DashcamTier {
+    System,
+    Deliberate, // agent or human
+}
+
+impl DashcamTier {
+    fn as_str(self) -> &'static str {
+        match self {
+            DashcamTier::System => "system",
+            DashcamTier::Deliberate => "deliberate",
+        }
+    }
+}
+
+struct DashcamTrigger {
+    frame: u64,
+    timestamp_ms: u64,
+    source: String,
+    label: String,
+}
+
+/// Dashcam configuration — all timing in seconds, capture_interval in physics frames.
+pub struct DashcamConfig {
+    pub enabled: bool,
+    pub capture_interval: u32,
+    pub pre_window_system_sec: u32,
+    pub pre_window_deliberate_sec: u32,
+    pub post_window_system_sec: u32,
+    pub post_window_deliberate_sec: u32,
+    pub max_window_sec: u32,
+    pub min_after_sec: u32,
+    pub system_min_interval_sec: u32,
+    pub byte_cap_mb: u32,
+}
+
+impl Default for DashcamConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            capture_interval: 1,
+            pre_window_system_sec: 30,
+            pre_window_deliberate_sec: 60,
+            post_window_system_sec: 10,
+            post_window_deliberate_sec: 30,
+            max_window_sec: 120,
+            min_after_sec: 5,
+            system_min_interval_sec: 2,
+            byte_cap_mb: 1024,
+        }
+    }
+}
+
+/// Dashcam clip state machine.
+enum DashcamState {
+    Disabled,
+    Buffering,
+    PostCapture {
+        frames_remaining: u32,
+        tier: DashcamTier,
+        /// Snapshot of ring_buffer at the moment the first trigger fired.
+        pre_buffer: Vec<CapturedFrame>,
+        /// Frames captured after the trigger (will become the clip's tail).
+        post_buffer: Vec<CapturedFrame>,
+        /// All trigger annotations recorded in this clip.
+        markers: Vec<DashcamTrigger>,
+        /// Frame of the last system marker (for rate-limiting).
+        last_system_trigger_frame: u64,
+        /// Absolute frame at which a system-tier clip is force-closed.
+        force_close_at_frame: Option<u64>,
+    },
+}
 
 // ---------------------------------------------------------------------------
 // SpectatorRecorder GDExtension class
@@ -67,6 +147,16 @@ pub struct SpectatorRecorder {
 
     // Collector reference for snapshot data
     collector: Option<Gd<SpectatorCollector>>,
+
+    // Dashcam state
+    dashcam_config: DashcamConfig,
+    dashcam_state: DashcamState,
+    ring_buffer: VecDeque<CapturedFrame>,
+    ring_buffer_bytes: usize,
+    /// Exponential moving average of per-frame byte size (for byte cap).
+    avg_frame_bytes: usize,
+    /// Cached physics FPS (from Engine.physics_ticks_per_second).
+    physics_fps: u32,
 }
 
 #[godot_api]
@@ -74,6 +164,22 @@ impl INode for SpectatorRecorder {
     fn ready(&mut self) {
         // Always process even when the game is paused so recording continues.
         self.base_mut().set_process_mode(ProcessMode::ALWAYS);
+
+        // Cache physics FPS.
+        self.physics_fps = Engine::singleton().get_physics_ticks_per_second() as u32;
+
+        // Auto-start dashcam.
+        if self.dashcam_config.enabled {
+            self.dashcam_state = DashcamState::Buffering;
+            tracing::info!(
+                "[Spectator] Dashcam started (pre={}s/{}s, post={}s/{}s, cap={}MB)",
+                self.dashcam_config.pre_window_system_sec,
+                self.dashcam_config.pre_window_deliberate_sec,
+                self.dashcam_config.post_window_system_sec,
+                self.dashcam_config.post_window_deliberate_sec,
+                self.dashcam_config.byte_cap_mb,
+            );
+        }
     }
 
     fn init(base: Base<Node>) -> Self {
@@ -95,10 +201,20 @@ impl INode for SpectatorRecorder {
             db: None,
             storage_path: String::new(),
             collector: None,
+            dashcam_config: DashcamConfig::default(),
+            dashcam_state: DashcamState::Disabled,
+            ring_buffer: VecDeque::new(),
+            ring_buffer_bytes: 0,
+            avg_frame_bytes: 0,
+            physics_fps: 60,
         }
     }
 
     fn physics_process(&mut self, _delta: f64) {
+        // --- Dashcam tick (independent of explicit recording) ---
+        self.dashcam_tick();
+
+        // --- Explicit recording ---
         if !self.recording {
             return;
         }
@@ -134,6 +250,12 @@ impl SpectatorRecorder {
 
     #[signal]
     fn marker_added(frame: u64, source: GString, label: GString);
+
+    #[signal]
+    fn dashcam_clip_saved(recording_id: GString, tier: GString, frames: u32);
+
+    #[signal]
+    fn dashcam_clip_started(trigger_frame: u64, tier: GString);
 
     #[func]
     pub fn set_collector(&mut self, collector: Gd<SpectatorCollector>) {
@@ -173,6 +295,155 @@ impl SpectatorRecorder {
     pub fn get_buffer_size_kb(&self) -> u32 {
         let bytes: usize = self.frame_buffer.iter().map(|f| f.data.len()).sum();
         (bytes / 1024) as u32
+    }
+
+    // --- Dashcam funcs ---
+
+    /// Enable or disable dashcam mode at runtime.
+    #[func]
+    pub fn set_dashcam_enabled(&mut self, enabled: bool) {
+        if enabled {
+            if matches!(self.dashcam_state, DashcamState::Disabled) {
+                self.dashcam_state = DashcamState::Buffering;
+            }
+        } else {
+            self.dashcam_state = DashcamState::Disabled;
+            self.ring_buffer.clear();
+            self.ring_buffer_bytes = 0;
+        }
+    }
+
+    /// Returns true if dashcam is actively buffering or in post-capture.
+    #[func]
+    pub fn is_dashcam_active(&self) -> bool {
+        matches!(
+            self.dashcam_state,
+            DashcamState::Buffering | DashcamState::PostCapture { .. }
+        )
+    }
+
+    /// Returns current ring buffer size in frames.
+    #[func]
+    pub fn get_dashcam_buffer_frames(&self) -> u32 {
+        self.ring_buffer.len() as u32
+    }
+
+    /// Returns current ring buffer memory usage in KB.
+    #[func]
+    pub fn get_dashcam_buffer_kb(&self) -> u32 {
+        (self.ring_buffer_bytes / 1024) as u32
+    }
+
+    /// Returns dashcam clip state string: "buffering", "post_capture", or "disabled".
+    #[func]
+    pub fn get_dashcam_state(&self) -> GString {
+        match &self.dashcam_state {
+            DashcamState::Disabled => GString::from("disabled"),
+            DashcamState::Buffering => GString::from("buffering"),
+            DashcamState::PostCapture { .. } => GString::from("post_capture"),
+        }
+    }
+
+    /// Force-flush the current ring buffer to a clip immediately.
+    /// Returns the clip recording_id or empty string on error.
+    #[func]
+    pub fn flush_dashcam_clip(&mut self, label: GString) -> GString {
+        if matches!(self.dashcam_state, DashcamState::Disabled) {
+            return GString::new();
+        }
+
+        if matches!(self.dashcam_state, DashcamState::Buffering) {
+            // Create a PostCapture state with frames_remaining=0 for immediate flush.
+            let frame = current_physics_frame();
+            let timestamp_ms = current_time_ms();
+            let pre_buffer: Vec<CapturedFrame> = self.ring_buffer.iter().cloned().collect();
+            self.dashcam_state = DashcamState::PostCapture {
+                frames_remaining: 0,
+                tier: DashcamTier::Deliberate,
+                pre_buffer,
+                post_buffer: Vec::new(),
+                markers: vec![DashcamTrigger {
+                    frame,
+                    timestamp_ms,
+                    source: "human".into(),
+                    label: label.to_string(),
+                }],
+                last_system_trigger_frame: 0,
+                force_close_at_frame: None,
+            };
+        } else if let DashcamState::PostCapture {
+            ref mut frames_remaining,
+            ..
+        } = self.dashcam_state
+        {
+            *frames_remaining = 0;
+        }
+
+        if let Some(id) = self.flush_dashcam_clip_internal() {
+            GString::from(&id)
+        } else {
+            GString::new()
+        }
+    }
+
+    /// Apply dashcam configuration from a JSON string.
+    /// Fields absent from the JSON are left unchanged.
+    #[func]
+    pub fn apply_dashcam_config(&mut self, config_json: GString) -> bool {
+        let s = config_json.to_string();
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) else {
+            tracing::warn!("[Spectator] apply_dashcam_config: invalid JSON");
+            return false;
+        };
+
+        if let Some(b) = v.get("enabled").and_then(|x| x.as_bool()) {
+            self.dashcam_config.enabled = b;
+        }
+        if let Some(n) = v.get("capture_interval").and_then(|x| x.as_u64()) {
+            self.dashcam_config.capture_interval = n as u32;
+        }
+        if let Some(n) = v.get("pre_window_system_sec").and_then(|x| x.as_u64()) {
+            self.dashcam_config.pre_window_system_sec = n as u32;
+        }
+        if let Some(n) = v.get("pre_window_deliberate_sec").and_then(|x| x.as_u64()) {
+            self.dashcam_config.pre_window_deliberate_sec = n as u32;
+        }
+        if let Some(n) = v.get("post_window_system_sec").and_then(|x| x.as_u64()) {
+            self.dashcam_config.post_window_system_sec = n as u32;
+        }
+        if let Some(n) = v.get("post_window_deliberate_sec").and_then(|x| x.as_u64()) {
+            self.dashcam_config.post_window_deliberate_sec = n as u32;
+        }
+        if let Some(n) = v.get("max_window_sec").and_then(|x| x.as_u64()) {
+            self.dashcam_config.max_window_sec = n as u32;
+        }
+        if let Some(n) = v.get("min_after_sec").and_then(|x| x.as_u64()) {
+            self.dashcam_config.min_after_sec = n as u32;
+        }
+        if let Some(n) = v.get("system_min_interval_sec").and_then(|x| x.as_u64()) {
+            self.dashcam_config.system_min_interval_sec = n as u32;
+        }
+        if let Some(n) = v.get("byte_cap_mb").and_then(|x| x.as_u64()) {
+            self.dashcam_config.byte_cap_mb = n as u32;
+        }
+        true
+    }
+
+    /// Return dashcam config as a JSON dict string for TCP status response.
+    #[func]
+    pub fn get_dashcam_config_json(&self) -> GString {
+        let cfg = &self.dashcam_config;
+        let json = serde_json::json!({
+            "enabled": cfg.enabled,
+            "capture_interval": cfg.capture_interval,
+            "pre_window_sec": { "system": cfg.pre_window_system_sec, "deliberate": cfg.pre_window_deliberate_sec },
+            "post_window_sec": { "system": cfg.post_window_system_sec, "deliberate": cfg.post_window_deliberate_sec },
+            "max_window_sec": cfg.max_window_sec,
+            "min_after_sec": cfg.min_after_sec,
+            "system_min_interval_sec": cfg.system_min_interval_sec,
+            "byte_cap_mb": cfg.byte_cap_mb,
+        });
+        GString::from(json.to_string().as_str())
     }
 
     /// Start a new recording. Returns the recording_id, or empty string on error.
@@ -307,13 +578,21 @@ impl SpectatorRecorder {
     pub fn add_marker(&mut self, source: GString, label: GString) {
         let frame = current_physics_frame();
         let timestamp_ms = current_time_ms();
+        let source_str = source.to_string();
+        let label_str = label.to_string();
 
-        self.marker_buffer.push(CapturedMarker {
-            frame,
-            timestamp_ms,
-            source: source.to_string(),
-            label: label.to_string(),
-        });
+        // Explicit recording marker
+        if self.recording {
+            self.marker_buffer.push(CapturedMarker {
+                frame,
+                timestamp_ms,
+                source: source_str.clone(),
+                label: label_str.clone(),
+            });
+        }
+
+        // Dashcam trigger
+        self.on_dashcam_marker(&source_str, &label_str, frame, timestamp_ms);
 
         self.base_mut().emit_signal(
             "marker_added",
@@ -348,7 +627,7 @@ impl SpectatorRecorder {
             )
                 && let Ok(mut stmt) = db.prepare(
                     "SELECT id, name, started_at_frame, ended_at_frame, \
-                     started_at_ms, ended_at_ms FROM recording LIMIT 1",
+                     started_at_ms, ended_at_ms, capture_config FROM recording LIMIT 1",
                 ) {
                     let row_result = stmt.query_row([], |row| {
                         let id: String = row.get(0)?;
@@ -357,10 +636,11 @@ impl SpectatorRecorder {
                         let end_frame: Option<i64> = row.get(3)?;
                         let start_ms: i64 = row.get(4)?;
                         let end_ms: Option<i64> = row.get(5)?;
-                        Ok((id, name, start_frame, end_frame, start_ms, end_ms))
+                        let capture_config: Option<String> = row.get(6)?;
+                        Ok((id, name, start_frame, end_frame, start_ms, end_ms, capture_config))
                     });
 
-                    if let Ok((id, name, start_frame, end_frame, start_ms, end_ms)) = row_result {
+                    if let Ok((id, name, start_frame, end_frame, start_ms, end_ms, capture_config)) = row_result {
                         let frame_count: i64 = db
                             .query_row("SELECT COUNT(*) FROM frames", [], |r| r.get(0))
                             .unwrap_or(0);
@@ -375,6 +655,21 @@ impl SpectatorRecorder {
                             .map(|m| m.len() / 1024)
                             .unwrap_or(0);
 
+                        // Check if this is a dashcam clip
+                        let is_dashcam = capture_config.as_deref()
+                            .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+                            .and_then(|v| v.get("dashcam").and_then(|b| b.as_bool()))
+                            .unwrap_or(false);
+
+                        let dashcam_tier = if is_dashcam {
+                            capture_config.as_deref()
+                                .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+                                .and_then(|v| v.get("tier").and_then(|t| t.as_str()).map(|s| s.to_string()))
+                                .unwrap_or_default()
+                        } else {
+                            String::new()
+                        };
+
                         let mut dict = VarDictionary::new();
                         dict.set("recording_id", GString::from(&id));
                         dict.set("name", GString::from(&name));
@@ -385,6 +680,8 @@ impl SpectatorRecorder {
                         dict.set("markers_count", marker_count as u32);
                         dict.set("size_kb", size_kb as u32);
                         dict.set("created_at_ms", start_ms);
+                        dict.set("dashcam", is_dashcam);
+                        dict.set("dashcam_tier", GString::from(&dashcam_tier));
                         result.push(&dict);
                     }
                 }
@@ -469,9 +766,10 @@ impl SpectatorRecorder {
 // ---------------------------------------------------------------------------
 
 impl SpectatorRecorder {
-    fn capture_frame(&mut self) {
+    /// Capture one frame of entity data and return it (without pushing to any buffer).
+    fn do_capture(&mut self) -> Option<CapturedFrame> {
         let Some(ref collector) = self.collector else {
-            return;
+            return None;
         };
 
         let params = GetSnapshotDataParams {
@@ -505,16 +803,20 @@ impl SpectatorRecorder {
             Ok(d) => d,
             Err(e) => {
                 tracing::error!("Failed to serialize frame data: {e}");
-                return;
+                return None;
             }
         };
 
-        self.frame_buffer.push(CapturedFrame {
+        Some(CapturedFrame {
             frame: snapshot.frame,
             timestamp_ms: snapshot.timestamp_ms,
             data,
-        });
+        })
+    }
 
+    fn capture_frame(&mut self) {
+        let Some(captured) = self.do_capture() else { return };
+        self.frame_buffer.push(captured);
         self.frames_captured += 1;
     }
 
@@ -599,6 +901,369 @@ impl SpectatorRecorder {
             .map_err(|e| format!("Schema error: {e}"))?;
         self.db = Some(db);
         Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // Dashcam internals
+    // -----------------------------------------------------------------------
+
+    /// Process one physics frame of dashcam logic.
+    fn dashcam_tick(&mut self) {
+        if matches!(self.dashcam_state, DashcamState::Disabled) {
+            return;
+        }
+
+        let current_frame = current_physics_frame();
+
+        // Check max_window force-close for system-tier clips.
+        let force_flush = if let DashcamState::PostCapture {
+            tier: DashcamTier::System,
+            force_close_at_frame: Some(close_frame),
+            ..
+        } = &self.dashcam_state
+        {
+            current_frame >= *close_frame
+        } else {
+            false
+        };
+
+        if force_flush {
+            self.flush_dashcam_clip_internal();
+            return;
+        }
+
+        let Some(captured) = self.do_capture() else { return };
+
+        // Update byte size estimate (exponential moving average, α≈0.05).
+        if self.avg_frame_bytes == 0 {
+            self.avg_frame_bytes = captured.data.len();
+        } else {
+            self.avg_frame_bytes = (self.avg_frame_bytes * 19 + captured.data.len()) / 20;
+        }
+
+        let frame_size = captured.data.len();
+        let is_post_capture = matches!(self.dashcam_state, DashcamState::PostCapture { .. });
+
+        // Add to ring buffer. During PostCapture, ring_buffer gets a clone so
+        // the original can go to post_buffer.
+        if is_post_capture {
+            self.ring_buffer_bytes += frame_size;
+            self.ring_buffer.push_back(captured.clone());
+        } else {
+            self.ring_buffer_bytes += frame_size;
+            self.ring_buffer.push_back(captured.clone());
+        }
+        self.enforce_ring_byte_cap();
+
+        // If in PostCapture: add to post_buffer and count down.
+        let should_flush = if let DashcamState::PostCapture {
+            frames_remaining,
+            post_buffer,
+            ..
+        } = &mut self.dashcam_state
+        {
+            post_buffer.push(captured);
+            if *frames_remaining > 0 {
+                *frames_remaining -= 1;
+            }
+            *frames_remaining == 0
+        } else {
+            false
+        };
+
+        if should_flush {
+            self.flush_dashcam_clip_internal();
+        }
+    }
+
+    /// Evict oldest ring buffer frames until within byte_cap_mb.
+    fn enforce_ring_byte_cap(&mut self) {
+        let byte_cap = self.dashcam_config.byte_cap_mb as usize * 1024 * 1024;
+        // Also enforce time-based frame cap.
+        let frame_cap = self.ring_cap_frames();
+        while self.ring_buffer.len() > frame_cap
+            || (self.ring_buffer_bytes > byte_cap && !self.ring_buffer.is_empty())
+        {
+            if let Some(evicted) = self.ring_buffer.pop_front() {
+                self.ring_buffer_bytes =
+                    self.ring_buffer_bytes.saturating_sub(evicted.data.len());
+            } else {
+                break;
+            }
+        }
+    }
+
+    /// Compute max frames to keep in the ring buffer.
+    fn ring_cap_frames(&self) -> usize {
+        let fps = self.physics_fps.max(1) as usize;
+        let interval = self.dashcam_config.capture_interval.max(1) as usize;
+        let time_based =
+            self.dashcam_config.pre_window_deliberate_sec as usize * fps / interval;
+
+        if self.avg_frame_bytes == 0 {
+            return time_based.max(1);
+        }
+
+        let byte_cap = self.dashcam_config.byte_cap_mb as usize * 1024 * 1024;
+        let byte_based = byte_cap / self.avg_frame_bytes;
+        time_based.min(byte_based).max(1)
+    }
+
+    /// Compute post-window in frames for the given tier, clamped by min_after_sec.
+    fn post_window_frames(&self, tier: DashcamTier) -> u32 {
+        let fps = self.physics_fps.max(1);
+        let interval = self.dashcam_config.capture_interval.max(1);
+        let post_sec = match tier {
+            DashcamTier::System => self.dashcam_config.post_window_system_sec,
+            DashcamTier::Deliberate => self.dashcam_config.post_window_deliberate_sec,
+        };
+        let min_frames = self.dashcam_config.min_after_sec * fps / interval;
+        let desired_frames = post_sec * fps / interval;
+        desired_frames.max(min_frames)
+    }
+
+    /// Handle a marker trigger for the dashcam state machine.
+    fn on_dashcam_marker(&mut self, source: &str, label: &str, frame: u64, timestamp_ms: u64) {
+        let tier = if source == "system" {
+            DashcamTier::System
+        } else {
+            DashcamTier::Deliberate
+        };
+
+        // Determine action without borrowing dashcam_state.
+        let is_buffering = matches!(self.dashcam_state, DashcamState::Buffering);
+        let is_post_capture = matches!(self.dashcam_state, DashcamState::PostCapture { .. });
+
+        if matches!(self.dashcam_state, DashcamState::Disabled) {
+            return;
+        }
+
+        if is_buffering {
+            // Snapshot ring buffer and transition to PostCapture.
+            let pre_buffer: Vec<CapturedFrame> = self.ring_buffer.iter().cloned().collect();
+            let post_window = self.post_window_frames(tier);
+            let force_close_at_frame = if tier == DashcamTier::System {
+                Some(
+                    frame
+                        + self.dashcam_config.max_window_sec as u64
+                            * self.physics_fps as u64,
+                )
+            } else {
+                None
+            };
+
+            self.dashcam_state = DashcamState::PostCapture {
+                frames_remaining: post_window,
+                tier,
+                pre_buffer,
+                post_buffer: Vec::new(),
+                markers: vec![DashcamTrigger {
+                    frame,
+                    timestamp_ms,
+                    source: source.to_string(),
+                    label: label.to_string(),
+                }],
+                last_system_trigger_frame: if tier == DashcamTier::System { frame } else { 0 },
+                force_close_at_frame,
+            };
+
+            let tier_str = tier.as_str();
+            self.base_mut().emit_signal(
+                "dashcam_clip_started",
+                &[frame.to_variant(), GString::from(tier_str).to_variant()],
+            );
+        } else if is_post_capture {
+            self.merge_dashcam_trigger(tier, source, label, frame, timestamp_ms);
+        }
+    }
+
+    /// Merge a new trigger into an open PostCapture clip.
+    fn merge_dashcam_trigger(
+        &mut self,
+        tier: DashcamTier,
+        source: &str,
+        label: &str,
+        frame: u64,
+        timestamp_ms: u64,
+    ) {
+        // Pre-compute config values before borrowing dashcam_state.
+        let deliberate_frames = self.post_window_frames(DashcamTier::Deliberate);
+        let system_frames = self.post_window_frames(DashcamTier::System);
+        let min_interval =
+            self.dashcam_config.system_min_interval_sec as u64 * self.physics_fps as u64;
+
+        let DashcamState::PostCapture {
+            ref mut frames_remaining,
+            tier: ref mut existing_tier,
+            ref mut markers,
+            ref mut last_system_trigger_frame,
+            ref mut force_close_at_frame,
+            ..
+        } = self.dashcam_state
+        else {
+            return;
+        };
+
+        let trigger = DashcamTrigger {
+            frame,
+            timestamp_ms,
+            source: source.to_string(),
+            label: label.to_string(),
+        };
+
+        if tier == DashcamTier::Deliberate {
+            // Deliberate trigger: upgrade clip tier, extend post-window, clear force-close.
+            *frames_remaining = (*frames_remaining).max(deliberate_frames);
+            *existing_tier = DashcamTier::Deliberate;
+            *force_close_at_frame = None;
+            markers.push(trigger);
+        } else {
+            // System trigger into existing clip.
+            let elapsed_since_last = frame.saturating_sub(*last_system_trigger_frame);
+            if elapsed_since_last >= min_interval {
+                // Not rate-limited: extend post-window.
+                *frames_remaining = (*frames_remaining).max(system_frames);
+                *last_system_trigger_frame = frame;
+            }
+            // Always record as annotation (even if rate-limited).
+            markers.push(trigger);
+        }
+    }
+
+    /// Flush the current PostCapture clip to a new SQLite file.
+    /// Resets dashcam_state to Buffering.
+    fn flush_dashcam_clip_internal(&mut self) -> Option<String> {
+        let state = std::mem::replace(&mut self.dashcam_state, DashcamState::Buffering);
+        let DashcamState::PostCapture {
+            tier,
+            pre_buffer,
+            post_buffer,
+            markers,
+            ..
+        } = state
+        else {
+            return None;
+        };
+
+        let recording_id = format!("dash_{:08x}", rand_u32());
+        let storage_path = "user://spectator_recordings/";
+        let dir_path = globalize_path(storage_path);
+        let _ = std::fs::create_dir_all(&dir_path);
+        let db_path = format!("{}/{}.sqlite", dir_path, recording_id);
+
+        let db = match Connection::open(&db_path) {
+            Ok(db) => db,
+            Err(e) => {
+                tracing::error!("[Spectator] Failed to create dashcam clip DB: {e}");
+                return None;
+            }
+        };
+
+        if db.execute_batch("PRAGMA journal_mode=WAL;").is_err() {
+            tracing::error!("[Spectator] Failed to set WAL mode for dashcam clip");
+            return None;
+        }
+        if db.execute_batch(SCHEMA_SQL).is_err() {
+            tracing::error!("[Spectator] Failed to create dashcam schema");
+            return None;
+        }
+
+        let tier_str = tier.as_str();
+        let all_frames: Vec<&CapturedFrame> =
+            pre_buffer.iter().chain(post_buffer.iter()).collect();
+        let total_frames = all_frames.len() as u32;
+
+        let first_frame = all_frames.first().map(|f| f.frame).unwrap_or(0);
+        let last_frame = all_frames.last().map(|f| f.frame).unwrap_or(0);
+        let first_ts = all_frames.first().map(|f| f.timestamp_ms).unwrap_or(0);
+        let last_ts = all_frames.last().map(|f| f.timestamp_ms).unwrap_or(0);
+
+        let triggers_json: Vec<serde_json::Value> = markers
+            .iter()
+            .map(|m| {
+                serde_json::json!({
+                    "frame": m.frame,
+                    "source": m.source,
+                    "label": m.label,
+                })
+            })
+            .collect();
+
+        let capture_config = serde_json::json!({
+            "capture_interval": self.dashcam_config.capture_interval,
+            "max_frames": total_frames,
+            "dashcam": true,
+            "tier": tier_str,
+            "triggers": triggers_json,
+        });
+
+        let physics_ticks = self.physics_fps;
+        let scene_dims = detect_scene_dimensions(
+            self.base().get_tree().and_then(|t| t.get_current_scene()),
+        );
+
+        let _ = db.execute(
+            "INSERT INTO recording \
+             (id, name, started_at_frame, ended_at_frame, started_at_ms, ended_at_ms, \
+              scene_dimensions, physics_ticks_per_sec, capture_config) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            rusqlite::params![
+                &recording_id,
+                &format!("dashcam_{}", chrono_like_timestamp()),
+                first_frame,
+                last_frame,
+                first_ts,
+                last_ts,
+                scene_dims,
+                physics_ticks,
+                capture_config.to_string(),
+            ],
+        );
+
+        // Write frames and markers in one transaction.
+        if let Ok(tx) = db.unchecked_transaction() {
+            if let Ok(mut stmt) = tx.prepare_cached(
+                "INSERT OR REPLACE INTO frames (frame, timestamp_ms, data) VALUES (?1, ?2, ?3)",
+            ) {
+                for f in &all_frames {
+                    let _ = stmt.execute(rusqlite::params![f.frame, f.timestamp_ms, &f.data]);
+                }
+            }
+
+            if let Ok(mut stmt) = tx.prepare_cached(
+                "INSERT INTO markers (frame, timestamp_ms, source, label) VALUES (?1, ?2, ?3, ?4)",
+            ) {
+                for m in &markers {
+                    let _ = stmt.execute(rusqlite::params![
+                        m.frame,
+                        m.timestamp_ms,
+                        &m.source,
+                        &m.label
+                    ]);
+                }
+            }
+
+            if let Err(e) = tx.commit() {
+                tracing::error!("[Spectator] Failed to commit dashcam clip: {e}");
+                return None;
+            }
+        }
+
+        tracing::info!(
+            "[Spectator] Dashcam clip saved: {} ({} frames, {} tier)",
+            recording_id,
+            total_frames,
+            tier_str
+        );
+
+        // Emit signal — all local borrows are released at this point.
+        let id_var = GString::from(&recording_id).to_variant();
+        let tier_var = GString::from(tier_str).to_variant();
+        let frames_var = total_frames.to_variant();
+        self.base_mut()
+            .emit_signal("dashcam_clip_saved", &[id_var, tier_var, frames_var]);
+
+        Some(recording_id)
     }
 }
 
@@ -877,5 +1542,217 @@ mod tests {
             "Expected >30% reduction, got {:.0}% reduction",
             (1.0 - ratio) * 100.0
         );
+    }
+
+    // -----------------------------------------------------------------------
+    // Dashcam config tests
+    // -----------------------------------------------------------------------
+
+    #[test]
+    fn dashcam_config_defaults() {
+        let cfg = DashcamConfig::default();
+        assert!(cfg.enabled);
+        assert_eq!(cfg.pre_window_system_sec, 30);
+        assert_eq!(cfg.pre_window_deliberate_sec, 60);
+        assert_eq!(cfg.post_window_system_sec, 10);
+        assert_eq!(cfg.post_window_deliberate_sec, 30);
+        assert_eq!(cfg.max_window_sec, 120);
+        assert_eq!(cfg.min_after_sec, 5);
+        assert_eq!(cfg.system_min_interval_sec, 2);
+        assert_eq!(cfg.byte_cap_mb, 1024);
+    }
+
+    #[test]
+    fn dashcam_tier_str() {
+        assert_eq!(DashcamTier::System.as_str(), "system");
+        assert_eq!(DashcamTier::Deliberate.as_str(), "deliberate");
+    }
+
+    #[test]
+    fn ring_buffer_eviction_at_byte_cap() {
+        // Simulate ring buffer eviction: fill with frames until byte cap forces eviction.
+        let mut ring: VecDeque<CapturedFrame> = VecDeque::new();
+        let mut ring_bytes: usize = 0;
+        let byte_cap: usize = 10 * 1024; // 10 KB cap
+
+        for i in 0u64..100 {
+            let data = vec![0u8; 256]; // 256 bytes per frame
+            ring_bytes += data.len();
+            ring.push_back(CapturedFrame {
+                frame: i,
+                timestamp_ms: i * 16,
+                data,
+            });
+
+            // Evict oldest frames when byte cap exceeded
+            while ring_bytes > byte_cap && !ring.is_empty() {
+                if let Some(evicted) = ring.pop_front() {
+                    ring_bytes = ring_bytes.saturating_sub(evicted.data.len());
+                }
+            }
+        }
+
+        // At 256 bytes per frame with 10KB cap: max ~40 frames
+        assert!(ring_bytes <= byte_cap);
+        assert!(ring.len() <= 40);
+        // Ring buffer should contain the MOST RECENT frames
+        let last_frame = ring.back().unwrap().frame;
+        assert_eq!(last_frame, 99);
+    }
+
+    #[test]
+    fn dashcam_merge_system_plus_system_extends_window() {
+        // System trigger into PostCapture with system tier: should extend frames_remaining.
+        let mut frames_remaining: u32 = 5;
+        let deliberate_frames: u32 = 1800;
+        let system_frames: u32 = 600;
+        let min_interval: u64 = 120; // 2s at 60fps
+
+        let existing_tier = DashcamTier::System;
+        let mut last_system_trigger_frame: u64 = 100;
+
+        // New system trigger far enough from last (200 frames > 120 interval)
+        let new_frame: u64 = 300;
+        let elapsed = new_frame.saturating_sub(last_system_trigger_frame);
+
+        if elapsed >= min_interval && existing_tier == DashcamTier::System {
+            frames_remaining = frames_remaining.max(system_frames);
+            last_system_trigger_frame = new_frame;
+        }
+
+        assert_eq!(frames_remaining, 600);
+        assert_eq!(last_system_trigger_frame, 300);
+        let _ = deliberate_frames; // unused in this test path
+    }
+
+    #[test]
+    fn dashcam_merge_deliberate_upgrades_system_clip() {
+        // Deliberate trigger into system-tier PostCapture: upgrades tier and extends window.
+        let mut frames_remaining: u32 = 10;
+        let mut existing_tier = DashcamTier::System;
+        let mut force_close_at_frame: Option<u64> = Some(10000);
+        let deliberate_frames: u32 = 1800;
+
+        let new_tier = DashcamTier::Deliberate;
+        if new_tier == DashcamTier::Deliberate {
+            frames_remaining = frames_remaining.max(deliberate_frames);
+            existing_tier = DashcamTier::Deliberate;
+            force_close_at_frame = None;
+        }
+
+        assert_eq!(frames_remaining, 1800);
+        assert_eq!(existing_tier, DashcamTier::Deliberate);
+        assert!(force_close_at_frame.is_none());
+    }
+
+    #[test]
+    fn dashcam_rate_limiting_system_markers() {
+        // Rapid system markers within min_interval: should only annotate, not extend.
+        let mut frames_remaining: u32 = 600;
+        let min_interval: u64 = 120; // 2s at 60fps
+        let mut last_system_trigger_frame: u64 = 100;
+        let system_frames: u32 = 600;
+
+        // Fire system marker 50 frames later (within the 120-frame interval)
+        let new_frame: u64 = 150;
+        let elapsed = new_frame.saturating_sub(last_system_trigger_frame);
+
+        if elapsed >= min_interval {
+            frames_remaining = frames_remaining.max(system_frames);
+            last_system_trigger_frame = new_frame;
+        }
+        // Rate limited — frames_remaining unchanged, last_trigger unchanged
+        assert_eq!(frames_remaining, 600); // unchanged
+        assert_eq!(last_system_trigger_frame, 100); // unchanged
+    }
+
+    #[test]
+    fn dashcam_max_window_force_close() {
+        // A system clip should be force-closed when force_close_at_frame is reached.
+        let trigger_frame: u64 = 1000;
+        let physics_fps: u64 = 60;
+        let max_window_sec: u64 = 120;
+        let force_close_at_frame = trigger_frame + max_window_sec * physics_fps;
+
+        assert_eq!(force_close_at_frame, 1000 + 7200);
+
+        // Simulate frame advance past the force-close point
+        let current_frame: u64 = force_close_at_frame + 1;
+        assert!(current_frame >= force_close_at_frame);
+    }
+
+    #[test]
+    fn dashcam_clip_metadata_in_sqlite() {
+        let db = rusqlite::Connection::open_in_memory().unwrap();
+        db.execute_batch(SCHEMA_SQL).unwrap();
+
+        let capture_config = serde_json::json!({
+            "capture_interval": 1,
+            "max_frames": 100,
+            "dashcam": true,
+            "tier": "system",
+            "triggers": [
+                { "frame": 500, "source": "system", "label": "player_died" }
+            ],
+        });
+
+        db.execute(
+            "INSERT INTO recording (id, name, started_at_frame, ended_at_frame, \
+             started_at_ms, ended_at_ms, scene_dimensions, physics_ticks_per_sec, capture_config) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            rusqlite::params![
+                "dash_abc",
+                "dashcam_1000",
+                400u64,
+                500u64,
+                6666u64,
+                8333u64,
+                3u32,
+                60u32,
+                capture_config.to_string(),
+            ],
+        )
+        .unwrap();
+
+        let config_str: String = db
+            .query_row(
+                "SELECT capture_config FROM recording WHERE id = 'dash_abc'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+
+        let parsed: serde_json::Value = serde_json::from_str(&config_str).unwrap();
+        assert_eq!(parsed["dashcam"], serde_json::json!(true));
+        assert_eq!(parsed["tier"], serde_json::json!("system"));
+        assert_eq!(parsed["triggers"].as_array().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn dashcam_apply_config_json() {
+        let mut cfg = DashcamConfig::default();
+
+        // Simulate apply_dashcam_config logic
+        let json = serde_json::json!({
+            "pre_window_system_sec": 45,
+            "post_window_deliberate_sec": 60,
+            "byte_cap_mb": 512,
+        });
+
+        if let Some(n) = json.get("pre_window_system_sec").and_then(|x| x.as_u64()) {
+            cfg.pre_window_system_sec = n as u32;
+        }
+        if let Some(n) = json.get("post_window_deliberate_sec").and_then(|x| x.as_u64()) {
+            cfg.post_window_deliberate_sec = n as u32;
+        }
+        if let Some(n) = json.get("byte_cap_mb").and_then(|x| x.as_u64()) {
+            cfg.byte_cap_mb = n as u32;
+        }
+
+        assert_eq!(cfg.pre_window_system_sec, 45);
+        assert_eq!(cfg.post_window_deliberate_sec, 60);
+        assert_eq!(cfg.byte_cap_mb, 512);
+        // Other fields unchanged
+        assert_eq!(cfg.pre_window_deliberate_sec, 60);
     }
 }

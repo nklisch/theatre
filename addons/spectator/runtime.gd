@@ -12,6 +12,7 @@ var _pause_label: Label
 var _toast_container: VBoxContainer
 var _toasts: Array[Control] = []
 var _recording_dot: ColorRect
+var _dashcam_label: Label
 
 const MAX_TOASTS := 3
 const TOAST_DURATION := 3.0
@@ -45,6 +46,8 @@ func _ready() -> void:
 	recorder.recording_started.connect(_on_recording_started)
 	recorder.recording_stopped.connect(_on_recording_stopped)
 	recorder.marker_added.connect(_on_marker_added)
+	recorder.dashcam_clip_saved.connect(_on_dashcam_clip_saved)
+	recorder.dashcam_clip_started.connect(_on_dashcam_clip_started)
 
 	tcp_server.set_recorder(recorder)
 
@@ -92,10 +95,26 @@ func _setup_overlay() -> void:
 	_recording_dot.visible = false
 	_overlay.add_child(_recording_dot)
 
+	_dashcam_label = Label.new()
+	_dashcam_label.add_theme_font_size_override("font_size", 12)
+	_dashcam_label.modulate = Color(0.6, 0.9, 1.0, 0.85)
+	_dashcam_label.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_dashcam_label.offset_left = 32
+	_dashcam_label.offset_top = 8
+	_dashcam_label.visible = false
+	_overlay.add_child(_dashcam_label)
+
+
+var _dashcam_label_tick: int = 0
 
 func _physics_process(_delta: float) -> void:
 	if tcp_server:
 		tcp_server.poll()
+	# Update dashcam status label every ~60 frames (≈1 s at 60 fps).
+	_dashcam_label_tick += 1
+	if _dashcam_label_tick >= 60:
+		_dashcam_label_tick = 0
+		_update_dashcam_label()
 
 
 func _shortcut_input(event: InputEvent) -> void:
@@ -140,15 +159,22 @@ func _toggle_recording() -> void:
 
 
 func _drop_marker() -> void:
-	if not recorder or not recorder.is_recording():
+	if not recorder:
 		return
-	recorder.add_marker("human", "")
-	if _recording_dot:
-		_recording_dot.color = Color.YELLOW
-		get_tree().create_timer(0.3).timeout.connect(func() -> void:
-			if _recording_dot:
-				_recording_dot.color = Color(0.9, 0.1, 0.1)
-		)
+	# Explicit recording takes priority for F9.
+	if recorder.is_recording():
+		recorder.add_marker("human", "")
+		if _recording_dot:
+			_recording_dot.color = Color.YELLOW
+			get_tree().create_timer(0.3).timeout.connect(func() -> void:
+				if _recording_dot:
+					_recording_dot.color = Color(0.9, 0.1, 0.1)
+			)
+	elif recorder.is_dashcam_active():
+		# Dashcam-only mode: flush ring buffer as a human clip.
+		var clip_id: String = recorder.flush_dashcam_clip("human")
+		if not clip_id.is_empty():
+			_show_toast("Dashcam clip saved")
 
 
 func _set_recording_indicator(visible: bool) -> void:
@@ -157,6 +183,22 @@ func _set_recording_indicator(visible: bool) -> void:
 		return
 	if _recording_dot:
 		_recording_dot.visible = visible
+
+
+func _update_dashcam_label() -> void:
+	if not recorder or not _dashcam_label:
+		return
+	var state: String = recorder.get_dashcam_state()
+	if state == "disabled":
+		_dashcam_label.visible = false
+		return
+	var kb: int = recorder.get_dashcam_buffer_kb()
+	var mb_str: String = "%.1f MB" % (kb / 1024.0)
+	if state == "buffering":
+		_dashcam_label.text = "● Dashcam: buffering (%s)" % mb_str
+	elif state == "post_capture":
+		_dashcam_label.text = "◉ Dashcam: saving clip…"
+	_dashcam_label.visible = true
 
 
 func _on_recording_started(_id: String, _name: String) -> void:
@@ -179,6 +221,18 @@ func _on_marker_added(_frame: int, source: String, label: String) -> void:
 			if _recording_dot:
 				_recording_dot.color = Color(0.9, 0.1, 0.1)
 		)
+
+
+func _on_dashcam_clip_saved(recording_id: String, tier: String, frames: int) -> void:
+	_show_toast("[dashcam] Clip saved (%s, %d frames)" % [tier, frames])
+	_update_dashcam_label()
+	var _ = recording_id  # used by dock library list in future
+
+
+func _on_dashcam_clip_started(_trigger_frame: int, tier: String) -> void:
+	_update_dashcam_label()
+	if ProjectSettings.get_setting("spectator/display/show_agent_notifications", true):
+		_show_toast("[dashcam] Capturing clip (%s)…" % tier)
 
 
 func _on_activity_received(entry_type: String, summary: String, _tool: String, _active_watches: int) -> void:

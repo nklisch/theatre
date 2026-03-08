@@ -48,6 +48,38 @@ pub struct SessionConfig {
     /// Hard cap on token budget for any single response.
     #[serde(default = "default_token_hard_cap")]
     pub token_hard_cap: u32,
+
+    // --- Dashcam config (M11) ---
+
+    #[serde(default = "default_dashcam_enabled")]
+    pub dashcam_enabled: bool,
+
+    #[serde(default = "default_dashcam_capture_interval")]
+    pub dashcam_capture_interval: u32,
+
+    #[serde(default = "default_pre_window_system")]
+    pub dashcam_pre_window_system_sec: u32,
+
+    #[serde(default = "default_pre_window_deliberate")]
+    pub dashcam_pre_window_deliberate_sec: u32,
+
+    #[serde(default = "default_post_window_system")]
+    pub dashcam_post_window_system_sec: u32,
+
+    #[serde(default = "default_post_window_deliberate")]
+    pub dashcam_post_window_deliberate_sec: u32,
+
+    #[serde(default = "default_max_window")]
+    pub dashcam_max_window_sec: u32,
+
+    #[serde(default = "default_min_after")]
+    pub dashcam_min_after_sec: u32,
+
+    #[serde(default = "default_system_min_interval")]
+    pub dashcam_system_min_interval_sec: u32,
+
+    #[serde(default = "default_byte_cap_mb")]
+    pub dashcam_byte_cap_mb: u32,
 }
 
 fn default_poll_interval() -> u32 {
@@ -55,6 +87,36 @@ fn default_poll_interval() -> u32 {
 }
 fn default_token_hard_cap() -> u32 {
     5000
+}
+fn default_dashcam_enabled() -> bool {
+    true
+}
+fn default_dashcam_capture_interval() -> u32 {
+    1
+}
+fn default_pre_window_system() -> u32 {
+    30
+}
+fn default_pre_window_deliberate() -> u32 {
+    60
+}
+fn default_post_window_system() -> u32 {
+    10
+}
+fn default_post_window_deliberate() -> u32 {
+    30
+}
+fn default_max_window() -> u32 {
+    120
+}
+fn default_min_after() -> u32 {
+    5
+}
+fn default_system_min_interval() -> u32 {
+    2
+}
+fn default_byte_cap_mb() -> u32 {
+    1024
 }
 
 impl Default for SessionConfig {
@@ -67,6 +129,16 @@ impl Default for SessionConfig {
             expose_internals: false,
             poll_interval: default_poll_interval(),
             token_hard_cap: default_token_hard_cap(),
+            dashcam_enabled: default_dashcam_enabled(),
+            dashcam_capture_interval: default_dashcam_capture_interval(),
+            dashcam_pre_window_system_sec: default_pre_window_system(),
+            dashcam_pre_window_deliberate_sec: default_pre_window_deliberate(),
+            dashcam_post_window_system_sec: default_post_window_system(),
+            dashcam_post_window_deliberate_sec: default_post_window_deliberate(),
+            dashcam_max_window_sec: default_max_window(),
+            dashcam_min_after_sec: default_min_after(),
+            dashcam_system_min_interval_sec: default_system_min_interval(),
+            dashcam_byte_cap_mb: default_byte_cap_mb(),
         }
     }
 }
@@ -95,6 +167,36 @@ impl SessionConfig {
         }
         if let Some(v) = update.token_hard_cap {
             self.token_hard_cap = v;
+        }
+        if let Some(v) = update.dashcam_enabled {
+            self.dashcam_enabled = v;
+        }
+        if let Some(v) = update.dashcam_capture_interval {
+            self.dashcam_capture_interval = v;
+        }
+        if let Some(v) = update.dashcam_pre_window_system_sec {
+            self.dashcam_pre_window_system_sec = v;
+        }
+        if let Some(v) = update.dashcam_pre_window_deliberate_sec {
+            self.dashcam_pre_window_deliberate_sec = v;
+        }
+        if let Some(v) = update.dashcam_post_window_system_sec {
+            self.dashcam_post_window_system_sec = v;
+        }
+        if let Some(v) = update.dashcam_post_window_deliberate_sec {
+            self.dashcam_post_window_deliberate_sec = v;
+        }
+        if let Some(v) = update.dashcam_max_window_sec {
+            self.dashcam_max_window_sec = v;
+        }
+        if let Some(v) = update.dashcam_min_after_sec {
+            self.dashcam_min_after_sec = v;
+        }
+        if let Some(v) = update.dashcam_system_min_interval_sec {
+            self.dashcam_system_min_interval_sec = v;
+        }
+        if let Some(v) = update.dashcam_byte_cap_mb {
+            self.dashcam_byte_cap_mb = v;
         }
     }
 
@@ -160,6 +262,18 @@ pub struct ConfigUpdate {
     pub expose_internals: Option<bool>,
     pub poll_interval: Option<u32>,
     pub token_hard_cap: Option<u32>,
+
+    // Dashcam config overrides (M11)
+    pub dashcam_enabled: Option<bool>,
+    pub dashcam_capture_interval: Option<u32>,
+    pub dashcam_pre_window_system_sec: Option<u32>,
+    pub dashcam_pre_window_deliberate_sec: Option<u32>,
+    pub dashcam_post_window_system_sec: Option<u32>,
+    pub dashcam_post_window_deliberate_sec: Option<u32>,
+    pub dashcam_max_window_sec: Option<u32>,
+    pub dashcam_min_after_sec: Option<u32>,
+    pub dashcam_system_min_interval_sec: Option<u32>,
+    pub dashcam_byte_cap_mb: Option<u32>,
 }
 
 /// Simple glob matching for static patterns.

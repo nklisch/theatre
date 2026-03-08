@@ -61,6 +61,8 @@ impl SpatialConfigParams {
             expose_internals: self.expose_internals,
             poll_interval: self.poll_interval,
             token_hard_cap: self.token_hard_cap,
+            // Dashcam config fields are not exposed via spatial_config (set via dashcam_config TCP method).
+            ..Default::default()
         })
     }
 }

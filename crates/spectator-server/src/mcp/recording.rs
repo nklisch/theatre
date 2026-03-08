@@ -22,10 +22,12 @@ pub struct RecordingParams {
     /// "start" — begin recording.
     /// "stop" — end recording.
     /// "status" — check if recording.
-    /// "list" — list saved recordings.
+    /// "list" — list saved recordings (includes dashcam clips).
     /// "delete" — remove a recording.
     /// "markers" — list markers in a recording.
-    /// "add_marker" — add an agent marker to the active recording.
+    /// "add_marker" — add an agent marker to the active recording or trigger a dashcam clip.
+    /// "dashcam_status" — return dashcam ring buffer state and config.
+    /// "flush_dashcam" — force-save whatever is in the ring buffer right now as an agent clip.
     pub action: String,
 
     /// Name for the recording (start only). Auto-generated if omitted.
@@ -118,10 +120,19 @@ pub async fn handle_recording(
         "diff_frames" => handle_diff_frames(&params, state, budget_limit, hard_cap).await,
         "find_event" => handle_find_event(&params, state, budget_limit, hard_cap).await,
 
+        // --- M11 dashcam actions ---
+        "dashcam_status" => {
+            query_and_finalize(state, "dashcam_status", json!({}), budget_limit, hard_cap).await
+        }
+        "flush_dashcam" => {
+            handle_flush_dashcam(&params, state, budget_limit, hard_cap).await
+        }
+
         other => Err(McpError::invalid_params(
             format!(
                 "Unknown recording action: '{other}'. Valid: start, stop, status, list, delete, \
-                 markers, add_marker, snapshot_at, query_range, diff_frames, find_event"
+                 markers, add_marker, snapshot_at, query_range, diff_frames, find_event, \
+                 dashcam_status, flush_dashcam"
             ),
             None,
         )),
@@ -199,6 +210,24 @@ async fn handle_add_marker(
         query["frame"] = json!(frame);
     }
     let data = query_addon(state, "recording_marker", query).await?;
+    let mut response = data;
+    finalize_response(&mut response, budget_limit, hard_cap)
+}
+
+// ---------------------------------------------------------------------------
+// M11 dashcam handlers
+// ---------------------------------------------------------------------------
+
+async fn handle_flush_dashcam(
+    params: &RecordingParams,
+    state: &Arc<Mutex<SessionState>>,
+    budget_limit: u32,
+    hard_cap: u32,
+) -> Result<String, McpError> {
+    let query = json!({
+        "marker_label": params.marker_label.as_deref().unwrap_or("agent flush"),
+    });
+    let data = query_addon(state, "dashcam_flush", query).await?;
     let mut response = data;
     finalize_response(&mut response, budget_limit, hard_cap)
 }
@@ -417,5 +446,23 @@ mod tests {
         let params: RecordingParams = serde_json::from_value(json).unwrap();
         assert_eq!(params.event_type.as_deref(), Some("signal"));
         assert_eq!(params.event_filter.as_deref(), Some("health_changed"));
+    }
+
+    #[test]
+    fn recording_params_dashcam_status() {
+        let json = serde_json::json!({ "action": "dashcam_status" });
+        let params: RecordingParams = serde_json::from_value(json).unwrap();
+        assert_eq!(params.action, "dashcam_status");
+    }
+
+    #[test]
+    fn recording_params_flush_dashcam() {
+        let json = serde_json::json!({
+            "action": "flush_dashcam",
+            "marker_label": "suspected physics glitch",
+        });
+        let params: RecordingParams = serde_json::from_value(json).unwrap();
+        assert_eq!(params.action, "flush_dashcam");
+        assert_eq!(params.marker_label.as_deref(), Some("suspected physics glitch"));
     }
 }

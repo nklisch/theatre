@@ -6,11 +6,25 @@ use std::path::Path;
 
 /// TOML file shape — maps to the documented spectator.toml format.
 /// All sections and fields are optional.
-// [recording] and [display] sections parsed when M7 lands
 #[derive(Debug, Default, Deserialize)]
 pub struct SpectatorToml {
     pub connection: Option<ConnectionConfig>,
     pub tracking: Option<TrackingConfig>,
+    pub recording: Option<RecordingConfig>,
+}
+
+#[derive(Debug, Default, Deserialize)]
+pub struct RecordingConfig {
+    pub dashcam_enabled: Option<bool>,
+    pub dashcam_capture_interval: Option<u32>,
+    pub dashcam_pre_window_system_sec: Option<u32>,
+    pub dashcam_pre_window_deliberate_sec: Option<u32>,
+    pub dashcam_post_window_system_sec: Option<u32>,
+    pub dashcam_post_window_deliberate_sec: Option<u32>,
+    pub dashcam_max_window_sec: Option<u32>,
+    pub dashcam_min_after_sec: Option<u32>,
+    pub dashcam_system_min_interval_sec: Option<u32>,
+    pub dashcam_byte_cap_mb: Option<u32>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -85,6 +99,38 @@ fn toml_to_session_config(toml: &SpectatorToml) -> SessionConfig {
             config.token_hard_cap = v;
         }
     }
+    if let Some(ref rec) = toml.recording {
+        if let Some(v) = rec.dashcam_enabled {
+            config.dashcam_enabled = v;
+        }
+        if let Some(v) = rec.dashcam_capture_interval {
+            config.dashcam_capture_interval = v;
+        }
+        if let Some(v) = rec.dashcam_pre_window_system_sec {
+            config.dashcam_pre_window_system_sec = v;
+        }
+        if let Some(v) = rec.dashcam_pre_window_deliberate_sec {
+            config.dashcam_pre_window_deliberate_sec = v;
+        }
+        if let Some(v) = rec.dashcam_post_window_system_sec {
+            config.dashcam_post_window_system_sec = v;
+        }
+        if let Some(v) = rec.dashcam_post_window_deliberate_sec {
+            config.dashcam_post_window_deliberate_sec = v;
+        }
+        if let Some(v) = rec.dashcam_max_window_sec {
+            config.dashcam_max_window_sec = v;
+        }
+        if let Some(v) = rec.dashcam_min_after_sec {
+            config.dashcam_min_after_sec = v;
+        }
+        if let Some(v) = rec.dashcam_system_min_interval_sec {
+            config.dashcam_system_min_interval_sec = v;
+        }
+        if let Some(v) = rec.dashcam_byte_cap_mb {
+            config.dashcam_byte_cap_mb = v;
+        }
+    }
     config
 }
 
@@ -157,5 +203,56 @@ cluster_by = "class"
         std::fs::write(&toml_path, "not valid toml !!!{{").unwrap();
         let config = load_toml_config(dir.path());
         assert_eq!(config.token_hard_cap, 5000);
+    }
+
+    #[test]
+    fn load_dashcam_recording_config() {
+        let dir = TempDir::new().unwrap();
+        let toml_path = dir.path().join("spectator.toml");
+        let mut f = std::fs::File::create(&toml_path).unwrap();
+        writeln!(
+            f,
+            r#"
+[recording]
+dashcam_enabled = true
+dashcam_pre_window_system_sec = 45
+dashcam_pre_window_deliberate_sec = 90
+dashcam_post_window_system_sec = 15
+dashcam_post_window_deliberate_sec = 45
+dashcam_max_window_sec = 180
+dashcam_min_after_sec = 3
+dashcam_system_min_interval_sec = 5
+dashcam_byte_cap_mb = 512
+dashcam_capture_interval = 2
+"#
+        )
+        .unwrap();
+
+        let config = load_toml_config(dir.path());
+        assert!(config.dashcam_enabled);
+        assert_eq!(config.dashcam_pre_window_system_sec, 45);
+        assert_eq!(config.dashcam_pre_window_deliberate_sec, 90);
+        assert_eq!(config.dashcam_post_window_system_sec, 15);
+        assert_eq!(config.dashcam_post_window_deliberate_sec, 45);
+        assert_eq!(config.dashcam_max_window_sec, 180);
+        assert_eq!(config.dashcam_min_after_sec, 3);
+        assert_eq!(config.dashcam_system_min_interval_sec, 5);
+        assert_eq!(config.dashcam_byte_cap_mb, 512);
+        assert_eq!(config.dashcam_capture_interval, 2);
+    }
+
+    #[test]
+    fn dashcam_config_defaults_when_recording_section_absent() {
+        let dir = TempDir::new().unwrap();
+        let config = load_toml_config(dir.path());
+        assert!(config.dashcam_enabled);
+        assert_eq!(config.dashcam_pre_window_system_sec, 30);
+        assert_eq!(config.dashcam_pre_window_deliberate_sec, 60);
+        assert_eq!(config.dashcam_post_window_system_sec, 10);
+        assert_eq!(config.dashcam_post_window_deliberate_sec, 30);
+        assert_eq!(config.dashcam_max_window_sec, 120);
+        assert_eq!(config.dashcam_min_after_sec, 5);
+        assert_eq!(config.dashcam_system_min_interval_sec, 2);
+        assert_eq!(config.dashcam_byte_cap_mb, 1024);
     }
 }
