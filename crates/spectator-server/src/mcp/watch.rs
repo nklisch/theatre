@@ -120,9 +120,9 @@ pub async fn handle_spatial_watch(
 
             let mut response = serde_json::json!({
                 "watch_id": watch.id,
-                "watching": watch.node,
+                "node": watch.node,
                 "conditions": format_conditions(&watch.conditions),
-                "tracking": watch.track,
+                "track": watch.track,
             });
 
             finalize_response(&mut response, 200, hard_cap)
@@ -155,7 +155,7 @@ pub async fn handle_spatial_watch(
                             "watch_id": w.id,
                             "node": w.node,
                             "conditions": format_conditions(&w.conditions),
-                            "tracking": w.track,
+                            "track": w.track,
                         })
                     })
                     .collect::<Vec<_>>()

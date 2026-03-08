@@ -52,6 +52,20 @@ If a feature is not yet implemented:
 - Remove the field from the struct, or
 - Return an explicit error when the field is set, explaining it is unimplemented.
 
+## Echo Fields Must Match Input Field Names
+
+When a response confirms or echoes back a value the caller submitted, the
+response field name must match the input parameter name exactly.
+
+```
+Input:  { "watch": { "node": "player", "track": ["position"] } }
+Output: { "watch_id": "w1", "node": "player", "track": ["position"] }   ✓
+Output: { "watch_id": "w1", "watching": "player", "tracking": [...] }   ✗
+```
+
+This means an agent can read a response using the same field names it used
+to write the request, with no renaming or aliasing required.
+
 ## Consistent Envelope: `result` vs `results`
 
 - Use `"results"` (plural array) for queries that return a ranked/filtered list:

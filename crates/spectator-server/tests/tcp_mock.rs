@@ -934,8 +934,8 @@ async fn test_recording_list() {
     let handler: QueryHandler = Arc::new(|method, _| match method {
         "recording_list" => Ok(json!({
             "recordings": [
-                { "recording_id": "rec-001", "name": "run_a", "frames": 100 },
-                { "recording_id": "rec-002", "name": "run_b", "frames": 200 },
+                { "recording_id": "rec-001", "name": "run_a", "frames_captured": 100 },
+                { "recording_id": "rec-002", "name": "run_b", "frames_captured": 200 },
             ]
         })),
         _ => Err(("unknown_method".into(), method.to_string())),

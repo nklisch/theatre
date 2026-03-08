@@ -122,7 +122,7 @@ fn handle_list(
             json!({
                 "recording_id": dict.get("id").map(|v| v.to_string()).unwrap_or_default(),
                 "name": dict.get("name").map(|v| v.to_string()).unwrap_or_default(),
-                "frames": dict.get("frames").map(|v: godot::builtin::Variant| v.to::<u32>()).unwrap_or(0),
+                "frames_captured": dict.get("frames_captured").map(|v: godot::builtin::Variant| v.to::<u32>()).unwrap_or(0),
                 "duration_ms": dict.get("duration_ms").map(|v: godot::builtin::Variant| v.to::<i64>()).unwrap_or(0),
                 "frame_range": [
                     dict.get("frame_range_start").map(|v: godot::builtin::Variant| v.to::<i64>()).unwrap_or(0),

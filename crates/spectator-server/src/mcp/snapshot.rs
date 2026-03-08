@@ -375,7 +375,7 @@ fn build_snapshot_body(
                 let node = serde_json::json!({
                     "path": entity.path,
                     "class": entity.class,
-                    "pos": entity.position,
+                    "position": entity.position,
                 });
                 let bytes = serde_json::to_vec(&node).unwrap_or_default();
                 if enforcer.try_add(bytes.len()) {
