@@ -1,17 +1,8 @@
-mod activity;
-mod config;
-mod mcp;
-mod recording_analysis;
-mod server;
-mod tcp;
-
 use anyhow::Result;
 use rmcp::{ServiceExt, transport::stdio};
+use spectator_server::{config, server::SpectatorServer, tcp};
 use std::sync::Arc;
 use tokio::sync::Mutex;
-
-use server::SpectatorServer;
-use tcp::SessionState;
 
 /// Default TCP port for connecting to the Godot addon.
 const DEFAULT_PORT: u16 = 9077;
@@ -46,7 +37,7 @@ async fn main() -> Result<()> {
     let base_config = config::load_toml_config(&project_dir);
 
     // Shared state between MCP handlers and TCP client
-    let state = Arc::new(Mutex::new(SessionState {
+    let state = Arc::new(Mutex::new(tcp::SessionState {
         config: base_config,
         ..Default::default()
     }));
