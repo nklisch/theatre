@@ -1,0 +1,16 @@
+pub mod harness;
+
+#[cfg(test)]
+mod test_actions;
+#[cfg(test)]
+mod test_handshake;
+#[cfg(test)]
+mod test_inspect;
+#[cfg(test)]
+mod test_recording;
+#[cfg(test)]
+mod test_scene_tree;
+#[cfg(test)]
+mod test_snapshot;
+#[cfg(test)]
+mod test_spatial_query;

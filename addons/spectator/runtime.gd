@@ -46,7 +46,12 @@ func _ready() -> void:
 
 	tcp_server.set_recorder(recorder)
 
-	var port: int = ProjectSettings.get_setting("spectator/connection/port", 9077)
+	var port: int = 0
+	var env_port := OS.get_environment("SPECTATOR_PORT")
+	if not env_port.is_empty():
+		port = env_port.to_int()
+	if port == 0:
+		port = ProjectSettings.get_setting("spectator/connection/port", 9077)
 	tcp_server.start(port)
 
 	_setup_overlay()
