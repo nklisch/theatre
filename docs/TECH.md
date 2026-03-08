@@ -265,11 +265,10 @@ SpectatorTCPServer : Node
   - fn poll()
 
 SpectatorRecorder : Node
-  - fn start_recording(config: Dictionary) -> String
-  - fn stop_recording() -> Dictionary
-  - fn is_recording() -> bool
+  - fn flush_dashcam_clip(label: String) -> String   // returns clip_id or ""
   - fn add_marker(label: String, frame: i32)
   - fn get_frame(index: i32) -> Dictionary
+  // signals: dashcam_clip_saved(clip_id, tier, frames), dashcam_clip_started(frame, tier), marker_added(frame, source, label)
 ```
 
 ### Threading Model
@@ -284,10 +283,10 @@ Godot's scene tree is **not thread-safe**. All scene tree access must happen on 
 
 This is single-threaded and frame-locked. For 60fps physics, each frame has ~16ms. Property collection for ~100 nodes takes <1ms in Rust. TCP I/O is non-blocking. No threading complexity needed.
 
-For recording at 60fps:
-1. `SpectatorRecorder` is called every `_physics_process` (if recording)
-2. Snapshots tracked nodes into an in-memory ring buffer
-3. Buffer is flushed to the MCP server (or directly to SQLite) on stop
+For dashcam capture at 60fps:
+1. `SpectatorRecorder` captures frames every `_physics_process` into a ring buffer
+2. On trigger (marker, F9, agent `save`), the ring buffer window is written to SQLite
+3. Clip is identified by a `clip_id` (e.g. `clip_001a2b3c`)
 
 ## MCP Server Architecture
 

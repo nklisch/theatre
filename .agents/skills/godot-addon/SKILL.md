@@ -103,27 +103,16 @@ func _physics_process(_delta: float) -> void:
     # Pump the TCP server each physics frame (non-blocking)
     tcp_server.poll()
 
-    # Capture frame if recording
-    if recorder.is_recording():
-        recorder.capture_frame(collector)
-
 func _shortcut_input(event: InputEvent) -> void:
     if not event is InputEventKey or not event.pressed:
         return
     match event.keycode:
-        KEY_F8: _toggle_recording()
         KEY_F9: _drop_marker()
-        KEY_F10: _toggle_pause()
-
-func _toggle_recording() -> void:
-    if recorder.is_recording():
-        recorder.stop_recording()
-    else:
-        recorder.start_recording({})
+        KEY_F11: _toggle_pause()
 
 func _drop_marker() -> void:
-    if recorder.is_recording():
-        recorder.add_marker("", -1)   # -1 = current frame
+    # Flush dashcam clip — captures the ring buffer around this moment
+    recorder.flush_dashcam_clip("human marker")
 
 func _toggle_pause() -> void:
     get_tree().paused = not get_tree().paused
@@ -209,10 +198,11 @@ func _update_ui() -> void:
     var is_connected: bool = runtime.tcp_server.is_connected()
     connection_label.text = "Connected" if is_connected else "Disconnected"
 
-func _on_record_pressed() -> void:
+func _on_save_clip_pressed() -> void:
     var runtime = get_node("/root/SpectatorRuntime")
-    runtime.recorder.start_recording({})
-    _update_recording_ui(true)
+    var clip_id: String = runtime.recorder.flush_dashcam_clip("manual save")
+    if not clip_id.is_empty():
+        _update_clip_ui(clip_id)
 
 func add_activity_entry(text: String) -> void:
     activity_list.add_item(text)

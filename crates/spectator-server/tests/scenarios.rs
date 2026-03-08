@@ -1096,7 +1096,7 @@ async fn test_add_marker_triggers_dashcam_clip() {
 /// After flushing a dashcam clip, the clip should be openable for M8 analysis.
 /// Since the mock addon can't produce real SQLite files, this test verifies the
 /// MCP parameter validation path — the server must attempt to open the SQLite
-/// file for the recording_id. If the file doesn't exist, we get a specific
+/// file for the clip_id. If the file doesn't exist, we get a specific
 /// error (not a crash or panic).
 #[tokio::test]
 async fn test_dashcam_clip_analysis_validates_clip_id() {
