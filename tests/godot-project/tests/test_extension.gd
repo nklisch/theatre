@@ -27,16 +27,22 @@ func test_recorder_instantiates() -> String:
 
 
 func test_tcp_server_starts_and_stops() -> String:
+	## Note: get_port() returns the configured port (0 for ephemeral), not the
+	## OS-assigned port — so we only verify status transitions, not the port number.
 	var s := SpectatorTCPServer.new()
-	s.start(0)  # port 0 → OS assigns ephemeral port
-	var err := Assert.true_(s.get_port() > 0, "port assigned after start(0)")
-	if err:
-		return err
-	err = Assert.eq(s.get_connection_status(), "waiting", "status after start")
+	s.start(0)  # port 0 → OS assigns an ephemeral port; status goes to "waiting"
+	var err := Assert.eq(s.get_connection_status(), "waiting", "status after start")
 	if err:
 		return err
 	s.stop()
 	return Assert.eq(s.get_connection_status(), "stopped", "status after stop")
+
+
+func test_tcp_server_set_idle_timeout() -> String:
+	var s := SpectatorTCPServer.new()
+	s.set_idle_timeout(30)
+	s.set_idle_timeout(0)   # 0 = disabled
+	return ""  # no crash = pass
 
 
 func test_tcp_server_has_activity_signal() -> String:

@@ -13,17 +13,37 @@ use std::net::{TcpListener, TcpStream};
 use crate::collector::SpectatorCollector;
 use crate::recorder::SpectatorRecorder;
 
+const MAX_CLIENTS: usize = 8;
+
+struct ClientSlot {
+    stream: TcpStream,
+    handshake_complete: bool,
+    last_activity_at: Option<std::time::Instant>,
+}
+
+/// Tracks which client slot initiated the current frame advance.
+struct PendingAdvance {
+    slot_idx: usize,
+}
+
 #[derive(GodotClass)]
 #[class(base = Node)]
 pub struct SpectatorTCPServer {
     base: Base<Node>,
     listener: Option<TcpListener>,
-    client: Option<TcpStream>,
+    /// Sparse vec of client slots; None = empty slot.
+    clients: Vec<Option<ClientSlot>>,
     port: i32,
-    /// Pure connection state machine (handshake lifecycle + frame-advance tracking).
+    /// Frame-advance state machine. The connected/handshake_completed fields are
+    /// unused — per-slot state in `clients` is authoritative for connection status.
     conn_state: ConnectionState,
+    /// Which client slot owns the current deferred frame-advance response.
+    pending_advance: Option<PendingAdvance>,
     collector: Option<Gd<SpectatorCollector>>,
     recorder: Option<Gd<SpectatorRecorder>>,
+    /// Seconds of silence on a handshaked connection before treating it as a zombie.
+    /// 0 = disabled.
+    client_idle_timeout_secs: u64,
 }
 
 #[godot_api]
@@ -32,11 +52,13 @@ impl INode for SpectatorTCPServer {
         Self {
             base,
             listener: None,
-            client: None,
+            clients: Vec::new(),
             port: 9077,
             conn_state: ConnectionState::default(),
+            pending_advance: None,
             collector: None,
             recorder: None,
+            client_idle_timeout_secs: 10,
         }
     }
 }
@@ -60,10 +82,17 @@ impl SpectatorTCPServer {
         self.recorder = Some(recorder);
     }
 
-    /// Returns "connected", "waiting", or "stopped".
+    /// Set the client idle timeout in seconds. 0 disables the timeout. Default: 10.
+    #[func]
+    pub fn set_idle_timeout(&mut self, secs: i64) {
+        self.client_idle_timeout_secs = secs.max(0) as u64;
+    }
+
+    /// Returns "connected" if any slot has completed handshake, "waiting" if the
+    /// listener is active but no connected clients, or "stopped".
     #[func]
     pub fn get_connection_status(&self) -> GString {
-        if self.conn_state.handshake_completed {
+        if self.any_connected() {
             "connected".into()
         } else if self.listener.is_some() {
             "waiting".into()
@@ -95,40 +124,63 @@ impl SpectatorTCPServer {
         }
     }
 
-    /// Stop listening and close any active connection.
+    /// Stop listening and close all active connections.
     #[func]
     pub fn stop(&mut self) {
-        self.client = None;
+        self.clients.clear();
         self.listener = None;
+        self.pending_advance = None;
         self.conn_state.on_disconnect();
         godot_print!("[Spectator] TCP server stopped");
     }
 
-    /// Returns true if a client is connected and handshake is complete.
+    /// Returns true if at least one client has completed the handshake.
     #[func]
     pub fn is_connected(&self) -> bool {
-        self.conn_state.handshake_completed
+        self.any_connected()
     }
 
     /// Poll for new connections and incoming messages. Call every _physics_process.
     #[func]
     pub fn poll(&mut self) {
-        // Check frame-advance state before processing new queries
+        // Phase 1: frame-advance completion
         if let Some(advance_msg) = self.check_frame_advance() {
-            self.send_response(advance_msg);
-            return; // Don't process new queries while advancing
+            if let Some(pa) = self.pending_advance.take() {
+                self.send_response_to_slot(pa.slot_idx, advance_msg);
+            }
+            return;
         }
-        // Still advancing (remaining > 0 but not done yet) — skip new queries
+        // Skip new queries while a frame advance is in progress
         if self.is_advancing() {
             return;
         }
 
-        if self.client.is_none() {
-            self.try_accept();
-        }
+        // Phase 2: accept new connections (unconditional — up to MAX_CLIENTS)
+        self.try_accept();
 
-        if self.client.is_some() {
-            self.try_read();
+        // Phase 3: per-slot I/O — at most one query dispatched per tick
+        let mut query_processed = false;
+        for slot_idx in 0..self.clients.len() {
+            if self.clients[slot_idx].is_none() {
+                continue;
+            }
+            let handshake_complete = self.clients[slot_idx]
+                .as_ref()
+                .map(|s| s.handshake_complete)
+                .unwrap_or(false);
+
+            if !handshake_complete {
+                self.try_read_handshake(slot_idx);
+            } else if !query_processed {
+                if self.try_read_query(slot_idx) {
+                    query_processed = true;
+                } else {
+                    self.check_idle_timeout(slot_idx);
+                }
+            } else {
+                // Already processed a query this tick — still check idle timeout
+                self.check_idle_timeout(slot_idx);
+            }
         }
     }
 }
@@ -137,7 +189,7 @@ impl SpectatorTCPServer {
 ///
 /// Using a closure means the mutable borrow of the stream is contained inside
 /// `f` and released before the caller handles the result — NLL then allows
-/// `self.disconnect_client()` to be called immediately after.
+/// `self.disconnect_slot()` to be called immediately after.
 fn with_blocking_io<F, R>(stream: &mut TcpStream, f: F) -> R
 where
     F: FnOnce(&mut TcpStream) -> R,
@@ -150,7 +202,18 @@ where
 
 // Private implementation methods (not exposed to GDScript)
 impl SpectatorTCPServer {
+    fn any_connected(&self) -> bool {
+        self.clients
+            .iter()
+            .any(|s| s.as_ref().map(|c| c.handshake_complete).unwrap_or(false))
+    }
+
     fn try_accept(&mut self) {
+        let filled = self.clients.iter().filter(|s| s.is_some()).count();
+        if filled >= MAX_CLIENTS {
+            return;
+        }
+
         let listener = match &self.listener {
             Some(l) => l,
             None => return,
@@ -158,11 +221,24 @@ impl SpectatorTCPServer {
 
         match listener.accept() {
             Ok((stream, addr)) => {
-                godot_print!("[Spectator] Client connected from {}", addr);
                 stream.set_nonblocking(true).ok();
-                self.client = Some(stream);
-                self.conn_state.on_client_connected();
-                self.send_handshake();
+                let slot = ClientSlot {
+                    stream,
+                    handshake_complete: false,
+                    last_activity_at: None,
+                };
+                let slot_idx = match self.clients.iter().position(|s| s.is_none()) {
+                    Some(i) => {
+                        self.clients[i] = Some(slot);
+                        i
+                    }
+                    None => {
+                        self.clients.push(Some(slot));
+                        self.clients.len() - 1
+                    }
+                };
+                godot_print!("[Spectator] Client connected from {} (slot {})", addr, slot_idx);
+                self.send_handshake_to_slot(slot_idx);
             }
             Err(ref e) if e.kind() == ErrorKind::WouldBlock => {}
             Err(e) => {
@@ -171,7 +247,7 @@ impl SpectatorTCPServer {
         }
     }
 
-    fn send_handshake(&mut self) {
+    fn send_handshake_to_slot(&mut self, slot_idx: usize) {
         let handshake = Handshake::new(
             self.get_godot_version(),
             self.detect_scene_dimensions(),
@@ -180,65 +256,114 @@ impl SpectatorTCPServer {
         );
         let msg = Message::Handshake(handshake);
 
-        if let Some(stream) = &mut self.client {
-            let result = with_blocking_io(stream, |s| codec::write_message(s, &msg));
-            match result {
-                Ok(()) => godot_print!("[Spectator] Handshake sent"),
-                Err(e) => {
-                    godot_error!("[Spectator] Failed to send handshake: {}", e);
-                    self.disconnect_client();
-                }
+        let result = match self.clients.get_mut(slot_idx).and_then(|s| s.as_mut()) {
+            Some(slot) => with_blocking_io(&mut slot.stream, |s| codec::write_message(s, &msg)),
+            None => return,
+        };
+
+        match result {
+            Ok(()) => godot_print!("[Spectator] Handshake sent to slot {}", slot_idx),
+            Err(e) => {
+                godot_error!("[Spectator] Failed to send handshake to slot {}: {}", slot_idx, e);
+                self.disconnect_slot(slot_idx);
             }
         }
     }
 
-    fn try_read(&mut self) {
-        let stream = match &mut self.client {
-            Some(s) => s,
+    fn try_read_handshake(&mut self, slot_idx: usize) {
+        let result = match self.clients.get_mut(slot_idx).and_then(|s| s.as_mut()) {
+            Some(slot) => with_blocking_io(&mut slot.stream, |s| {
+                s.set_read_timeout(Some(std::time::Duration::from_millis(1))).ok();
+                codec::read_message::<Message>(s)
+            }),
             None => return,
         };
 
-        let result = with_blocking_io(stream, |s| {
-            s.set_read_timeout(Some(std::time::Duration::from_millis(1))).ok();
-            codec::read_message::<Message>(s)
-        });
+        match result {
+            Ok(Message::HandshakeAck(ack)) => {
+                godot_print!(
+                    "[Spectator] Handshake ACK from slot {} — session {}",
+                    slot_idx,
+                    ack.session_id
+                );
+                if let Some(Some(slot)) = self.clients.get_mut(slot_idx) {
+                    slot.handshake_complete = true;
+                    slot.last_activity_at = Some(std::time::Instant::now());
+                }
+            }
+            Ok(Message::HandshakeError(err)) => {
+                godot_error!(
+                    "[Spectator] Handshake rejected by slot {}: {}",
+                    slot_idx,
+                    err.message
+                );
+                self.disconnect_slot(slot_idx);
+            }
+            Err(codec::CodecError::Io(ref e))
+                if e.kind() == ErrorKind::WouldBlock || e.kind() == ErrorKind::TimedOut => {}
+            Err(codec::CodecError::Io(ref e))
+                if e.kind() == ErrorKind::UnexpectedEof
+                    || e.kind() == ErrorKind::ConnectionReset =>
+            {
+                godot_print!("[Spectator] Slot {} disconnected during handshake", slot_idx);
+                self.disconnect_slot(slot_idx);
+            }
+            Err(e) => {
+                godot_error!("[Spectator] Handshake read error on slot {}: {}", slot_idx, e);
+                self.disconnect_slot(slot_idx);
+            }
+            Ok(_) => {
+                godot_error!(
+                    "[Spectator] Unexpected message before handshake on slot {}",
+                    slot_idx
+                );
+                self.disconnect_slot(slot_idx);
+            }
+        }
+    }
+
+    /// Try to read one query from a post-handshake slot.
+    /// Returns `true` if a query was dispatched, `false` if no data was available.
+    fn try_read_query(&mut self, slot_idx: usize) -> bool {
+        let result = match self.clients.get_mut(slot_idx).and_then(|s| s.as_mut()) {
+            Some(slot) => with_blocking_io(&mut slot.stream, |s| {
+                s.set_read_timeout(Some(std::time::Duration::from_millis(1))).ok();
+                codec::read_message::<Message>(s)
+            }),
+            None => return false,
+        };
 
         match result {
             Ok(msg) => {
-                self.handle_message(msg);
+                if let Some(Some(slot)) = self.clients.get_mut(slot_idx) {
+                    slot.last_activity_at = Some(std::time::Instant::now());
+                }
+                self.handle_query_message(slot_idx, msg);
+                true
             }
             Err(codec::CodecError::Io(ref e))
                 if e.kind() == ErrorKind::WouldBlock || e.kind() == ErrorKind::TimedOut =>
             {
-                // No data available — normal
+                false
             }
             Err(codec::CodecError::Io(ref e))
                 if e.kind() == ErrorKind::UnexpectedEof
                     || e.kind() == ErrorKind::ConnectionReset =>
             {
-                godot_print!("[Spectator] Client disconnected");
-                self.disconnect_client();
+                godot_print!("[Spectator] Client in slot {} disconnected", slot_idx);
+                self.disconnect_slot(slot_idx);
+                false
             }
             Err(e) => {
-                godot_error!("[Spectator] Read error: {}", e);
-                self.disconnect_client();
+                godot_error!("[Spectator] Read error on slot {}: {}", slot_idx, e);
+                self.disconnect_slot(slot_idx);
+                false
             }
         }
     }
 
-    fn handle_message(&mut self, msg: Message) {
+    fn handle_query_message(&mut self, slot_idx: usize, msg: Message) {
         match msg {
-            Message::HandshakeAck(ack) => {
-                godot_print!(
-                    "[Spectator] Handshake ACK received — session {}",
-                    ack.session_id
-                );
-                self.conn_state.on_handshake_ack();
-            }
-            Message::HandshakeError(err) => {
-                godot_error!("[Spectator] Handshake rejected: {}", err.message);
-                self.disconnect_client();
-            }
             Message::Query { id, method, params } => {
                 if method.starts_with("recording_") || method.starts_with("dashcam_") {
                     let response_msg = if let Some(ref mut recorder) = self.recorder {
@@ -255,7 +380,7 @@ impl SpectatorTCPServer {
                             message: "Recorder not available".to_string(),
                         }
                     };
-                    self.send_response(response_msg);
+                    self.send_response_to_slot(slot_idx, response_msg);
                 } else if let Some(ref collector) = self.collector {
                     let response = crate::query_handler::handle_query(
                         id,
@@ -264,17 +389,22 @@ impl SpectatorTCPServer {
                         &collector.bind(),
                     );
                     match response {
-                        Some(msg) => self.send_response(msg),
-                        // None means deferred (advance_frames): sync advance state
-                        // from the collector into ConnectionState.
-                        None => self.sync_advance_from_collector(),
+                        Some(msg) => self.send_response_to_slot(slot_idx, msg),
+                        // None = deferred (advance_frames): record which slot owns the response
+                        None => {
+                            self.pending_advance = Some(PendingAdvance { slot_idx });
+                            self.sync_advance_from_collector();
+                        }
                     }
                 } else {
-                    self.send_response(Message::Error {
-                        id,
-                        code: "scene_not_loaded".to_string(),
-                        message: "Collector not available".to_string(),
-                    });
+                    self.send_response_to_slot(
+                        slot_idx,
+                        Message::Error {
+                            id,
+                            code: "scene_not_loaded".to_string(),
+                            message: "Collector not available".to_string(),
+                        },
+                    );
                 }
             }
             Message::Event { event, data } if event == "activity_log" => {
@@ -309,33 +439,70 @@ impl SpectatorTCPServer {
                 );
             }
             _ => {
-                godot_print!("[Spectator] Received unhandled message type");
+                godot_print!(
+                    "[Spectator] Received unhandled message type on slot {}",
+                    slot_idx
+                );
             }
         }
     }
 
-    fn send_response(&mut self, msg: Message) {
-        if let Some(stream) = &mut self.client {
-            let result = with_blocking_io(stream, |s| codec::write_message(s, &msg));
-            if let Err(e) = result {
-                godot_error!("[Spectator] Failed to send response: {}", e);
-                self.disconnect_client();
-            }
+    fn send_response_to_slot(&mut self, slot_idx: usize, msg: Message) {
+        let result = match self.clients.get_mut(slot_idx).and_then(|s| s.as_mut()) {
+            Some(slot) => with_blocking_io(&mut slot.stream, |s| codec::write_message(s, &msg)),
+            None => return,
+        };
+        if let Err(e) = result {
+            godot_error!(
+                "[Spectator] Failed to send response to slot {}: {}",
+                slot_idx,
+                e
+            );
+            self.disconnect_slot(slot_idx);
         }
     }
 
-    fn disconnect_client(&mut self) {
-        self.client = None;
-        self.conn_state.on_disconnect();
+    fn disconnect_slot(&mut self, slot_idx: usize) {
+        if slot_idx < self.clients.len() {
+            self.clients[slot_idx] = None;
+        }
+        // If this slot owned a pending frame advance, cancel it
+        if self.pending_advance.as_ref().map(|pa| pa.slot_idx) == Some(slot_idx) {
+            self.pending_advance = None;
+            self.conn_state.on_disconnect();
+            godot_print!(
+                "[Spectator] Slot {} disconnected during frame advance — advance cancelled",
+                slot_idx
+            );
+        }
     }
 
-    /// Returns true if a frame-advance is currently in progress.
+    fn check_idle_timeout(&mut self, slot_idx: usize) {
+        if self.client_idle_timeout_secs == 0 {
+            return;
+        }
+        let timed_out = self
+            .clients
+            .get(slot_idx)
+            .and_then(|s| s.as_ref())
+            .and_then(|slot| slot.last_activity_at)
+            .map(|last| last.elapsed().as_secs() > self.client_idle_timeout_secs)
+            .unwrap_or(false);
+        if timed_out {
+            godot_print!(
+                "[Spectator] Slot {} idle timeout — dropping zombie connection",
+                slot_idx
+            );
+            self.disconnect_slot(slot_idx);
+        }
+    }
+
     fn is_advancing(&self) -> bool {
         self.conn_state.is_advancing()
     }
 
-    /// Tick the advance counter via ConnectionState. If the advance just
-    /// completed, re-pauses the scene tree and returns the deferred response.
+    /// Tick the advance counter. If the advance just completed, re-pauses the
+    /// scene tree and returns the deferred response message.
     fn check_frame_advance(&mut self) -> Option<Message> {
         let current_frame = self
             .collector
@@ -345,7 +512,6 @@ impl SpectatorTCPServer {
 
         match self.conn_state.tick_advance(current_frame) {
             ConnectionAction::AdvanceComplete { response_id, frame } => {
-                // Re-pause the scene tree
                 if let Some(mut tree) = self.base().get_tree() {
                     tree.set_pause(true);
                 }
@@ -411,8 +577,6 @@ impl SpectatorTCPServer {
         }
     }
 
-    /// Check if the scene tree contains Node2D (if `check_2d`) or Node3D nodes.
-    /// Stops at first match for efficiency.
     fn has_node_type_recursive(
         node: &godot::obj::Gd<godot::classes::Node>,
         check_2d: bool,
@@ -427,9 +591,10 @@ impl SpectatorTCPServer {
         let count = node.get_child_count();
         for i in 0..count {
             if let Some(child) = node.get_child(i)
-                && Self::has_node_type_recursive(&child, check_2d) {
-                    return true;
-                }
+                && Self::has_node_type_recursive(&child, check_2d)
+            {
+                return true;
+            }
         }
         false
     }

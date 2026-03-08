@@ -1,8 +1,5 @@
 extends Node
 
-## Class-level reference for dock access (set in _ready, cleared in _exit_tree).
-static var instance: Node = null
-
 var tcp_server: SpectatorTCPServer
 var collector: SpectatorCollector
 var recorder: SpectatorRecorder
@@ -13,15 +10,22 @@ var _toast_container: VBoxContainer
 var _toasts: Array[Control] = []
 var _recording_dot: ColorRect
 var _dashcam_label: Label
+var _marker_btn: Button
 
 const MAX_TOASTS := 3
 const TOAST_DURATION := 3.0
 
+# Configurable shortcut keycodes (resolved from project settings in _ready).
+var _record_keycode: int = KEY_F12
+var _marker_keycode: int = KEY_F9
+var _pause_keycode: int = KEY_F11
+
 
 func _ready() -> void:
-	instance = self
 	# Run even when the game tree is paused so TCP polling and recording continue.
 	process_mode = Node.PROCESS_MODE_ALWAYS
+
+	_resolve_shortcut_keys()
 
 	if not ClassDB.class_exists(&"SpectatorTCPServer"):
 		push_error("[Spectator] GDExtension not loaded — SpectatorTCPServer class not found. Check that the spectator.gdextension binary exists for your platform.")
@@ -58,8 +62,83 @@ func _ready() -> void:
 	if port == 0:
 		port = ProjectSettings.get_setting("spectator/connection/port", 9077)
 	tcp_server.start(port)
+	var idle_timeout: int = ProjectSettings.get_setting(
+		"spectator/connection/client_idle_timeout_secs", 10)
+	tcp_server.set_idle_timeout(idle_timeout)
 
 	_setup_overlay()
+
+	# Push status to editor dock every 2s via EngineDebugger (only active in editor play mode).
+	if EngineDebugger.is_active():
+		EngineDebugger.register_message_capture("spectator", _on_debugger_command)
+		var status_timer := Timer.new()
+		status_timer.wait_time = 2.0
+		status_timer.autostart = true
+		status_timer.process_mode = Node.PROCESS_MODE_ALWAYS
+		status_timer.timeout.connect(_push_status_to_editor)
+		add_child(status_timer)
+
+
+func _push_status_to_editor() -> void:
+	if not EngineDebugger.is_active():
+		return
+	var status := "stopped"
+	var port := 9077
+	var tracked := 0
+	var groups := 0
+	if tcp_server:
+		status = tcp_server.get_connection_status()
+		port = tcp_server.get_port()
+	if collector and tcp_server and tcp_server.is_connected():
+		tracked = collector.get_tracked_count()
+		groups = collector.get_group_count()
+	EngineDebugger.send_message("spectator:status",
+		[status, port, tracked, groups,
+		 Engine.get_physics_frames(), Engine.get_frames_per_second()])
+	var is_rec: bool = recorder != null and recorder.is_recording()
+	var elapsed_ms: int = recorder.get_elapsed_ms() if is_rec else 0
+	var frames: int = recorder.get_frames_captured() if is_rec else 0
+	var kb: int = recorder.get_buffer_size_kb() if is_rec else 0
+	EngineDebugger.send_message("spectator:recording", [is_rec, elapsed_ms, frames, kb])
+
+
+func _on_debugger_command(message: String, data: Array) -> bool:
+	if message != "spectator:command" or data.is_empty():
+		return false
+	match data[0]:
+		"start_recording": _toggle_recording()
+		"stop_recording":
+			if recorder and recorder.is_recording():
+				recorder.stop_recording()
+		"add_marker": _drop_marker()
+	return true
+
+
+func _resolve_shortcut_keys() -> void:
+	_record_keycode = _key_name_to_code(ProjectSettings.get_setting(
+		"spectator/shortcuts/record_key", "F12"))
+	_marker_keycode = _key_name_to_code(ProjectSettings.get_setting(
+		"spectator/shortcuts/marker_key", "F9"))
+	_pause_keycode = _key_name_to_code(ProjectSettings.get_setting(
+		"spectator/shortcuts/pause_key", "F11"))
+
+
+static func _key_name_to_code(name: String) -> int:
+	match name.to_upper().strip_edges():
+		"F1": return KEY_F1
+		"F2": return KEY_F2
+		"F3": return KEY_F3
+		"F4": return KEY_F4
+		"F5": return KEY_F5
+		"F6": return KEY_F6
+		"F7": return KEY_F7
+		"F8": return KEY_F8
+		"F9": return KEY_F9
+		"F10": return KEY_F10
+		"F11": return KEY_F11
+		"F12": return KEY_F12
+	push_warning("[Spectator] Unknown shortcut key name '%s', defaulting to F12" % name)
+	return KEY_F12
 
 
 func _setup_overlay() -> void:
@@ -104,6 +183,18 @@ func _setup_overlay() -> void:
 	_dashcam_label.visible = false
 	_overlay.add_child(_dashcam_label)
 
+	# In-game marker button (works when dock buttons can't — dock runs in editor process).
+	_marker_btn = Button.new()
+	_marker_btn.text = "⚑"
+	_marker_btn.tooltip_text = "Drop marker / save dashcam clip"
+	_marker_btn.custom_minimum_size = Vector2(32, 32)
+	_marker_btn.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_marker_btn.offset_left = 10
+	_marker_btn.offset_top = 32
+	_marker_btn.modulate = Color(1.0, 1.0, 1.0, 0.7)
+	_marker_btn.pressed.connect(_drop_marker)
+	_overlay.add_child(_marker_btn)
+
 
 var _dashcam_label_tick: int = 0
 
@@ -121,16 +212,16 @@ func _shortcut_input(event: InputEvent) -> void:
 	if not event.is_pressed() or event.is_echo():
 		return
 	if event is InputEventKey:
-		match event.keycode:
-			KEY_F8:
-				_toggle_recording()
-				get_viewport().set_input_as_handled()
-			KEY_F9:
-				_drop_marker()
-				get_viewport().set_input_as_handled()
-			KEY_F10:
-				_toggle_pause()
-				get_viewport().set_input_as_handled()
+		var code: int = event.keycode
+		if code == _record_keycode:
+			_toggle_recording()
+			get_viewport().set_input_as_handled()
+		elif code == _marker_keycode:
+			_drop_marker()
+			get_viewport().set_input_as_handled()
+		elif code == _pause_keycode:
+			_toggle_pause()
+			get_viewport().set_input_as_handled()
 
 
 func _toggle_pause() -> void:
@@ -161,7 +252,7 @@ func _toggle_recording() -> void:
 func _drop_marker() -> void:
 	if not recorder:
 		return
-	# Explicit recording takes priority for F9.
+	# Explicit recording takes priority.
 	if recorder.is_recording():
 		recorder.add_marker("human", "")
 		if _recording_dot:
@@ -204,10 +295,14 @@ func _update_dashcam_label() -> void:
 func _on_recording_started(_id: String, _name: String) -> void:
 	_set_recording_indicator(true)
 	_show_toast("Recording started")
+	if EngineDebugger.is_active():
+		EngineDebugger.send_message("spectator:recording", [true, 0, 0, 0])
 
 
-func _on_recording_stopped(_id: String, _frames: int) -> void:
+func _on_recording_stopped(_id: String, frames: int) -> void:
 	_set_recording_indicator(false)
+	if EngineDebugger.is_active():
+		EngineDebugger.send_message("spectator:recording", [false, 0, frames, 0])
 
 
 func _on_marker_added(_frame: int, source: String, label: String) -> void:
@@ -235,9 +330,12 @@ func _on_dashcam_clip_started(_trigger_frame: int, tier: String) -> void:
 		_show_toast("[dashcam] Capturing clip (%s)…" % tier)
 
 
-func _on_activity_received(entry_type: String, summary: String, _tool: String, _active_watches: int) -> void:
+func _on_activity_received(entry_type: String, summary: String, tool: String, active_watches: int) -> void:
 	if entry_type == "action":
 		_show_toast(summary)
+	if EngineDebugger.is_active():
+		EngineDebugger.send_message("spectator:activity",
+			[entry_type, summary, tool, active_watches])
 
 
 func _show_toast(text: String) -> void:
@@ -272,7 +370,6 @@ func _show_toast(text: String) -> void:
 
 
 func _exit_tree() -> void:
-	instance = null
 	if recorder and recorder.is_recording():
 		recorder.stop_recording()
 	if tcp_server:

@@ -70,14 +70,6 @@ visible = false
 
 [node name="HSeparator3" type="HSeparator" parent="."]
 
-[node name="RecordingsHeader" type="Label" parent="."]
-text = "Recordings"
-
-[node name="RecordingLibrary" type="VBoxContainer" parent="."]
-unique_name_in_owner = true
-
-[node name="HSeparator4" type="HSeparator" parent="."]
-
 [node name="ActivitySection" type="VBoxContainer" parent="."]
 size_flags_vertical = 3
 

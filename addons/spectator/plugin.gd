@@ -2,14 +2,23 @@
 extends EditorPlugin
 
 var _dock: Control
+var _debugger_plugin: EditorDebuggerPlugin
 
 
 func _enter_tree() -> void:
 	_dock = preload("res://addons/spectator/dock.tscn").instantiate()
 	add_control_to_dock(DOCK_SLOT_RIGHT_BL, _dock)
 
+	_debugger_plugin = preload("res://addons/spectator/debugger_plugin.gd").new()
+	_debugger_plugin._dock = _dock
+	_dock._debugger_plugin = _debugger_plugin
+	add_debugger_plugin(_debugger_plugin)
+
 
 func _exit_tree() -> void:
+	if _debugger_plugin:
+		remove_debugger_plugin(_debugger_plugin)
+		_debugger_plugin = null
 	if _dock:
 		remove_control_from_docks(_dock)
 		_dock.queue_free()
@@ -29,6 +38,8 @@ func _register_settings() -> void:
 	_add_setting("spectator/connection/port", TYPE_INT, 9077,
 		PROPERTY_HINT_RANGE, "1024,65535")
 	_add_setting("spectator/connection/auto_start", TYPE_BOOL, true)
+	_add_setting("spectator/connection/client_idle_timeout_secs", TYPE_INT, 10,
+		PROPERTY_HINT_RANGE, "0,3600")
 	_add_setting("spectator/recording/storage_path", TYPE_STRING,
 		"user://spectator_recordings/")
 	_add_setting("spectator/recording/max_frames", TYPE_INT, 36000,
@@ -37,6 +48,12 @@ func _register_settings() -> void:
 		PROPERTY_HINT_RANGE, "1,60")
 	_add_setting("spectator/display/show_agent_notifications", TYPE_BOOL, true)
 	_add_setting("spectator/display/show_recording_indicator", TYPE_BOOL, true)
+	_add_setting("spectator/shortcuts/record_key", TYPE_STRING, "F12",
+		PROPERTY_HINT_NONE, "Key name for toggling recording (e.g. F12). Avoid F5-F11 (Godot editor shortcuts).")
+	_add_setting("spectator/shortcuts/marker_key", TYPE_STRING, "F9",
+		PROPERTY_HINT_NONE, "Key name for marker/dashcam clip (e.g. F9). Avoid F5-F11 (Godot editor shortcuts).")
+	_add_setting("spectator/shortcuts/pause_key", TYPE_STRING, "F11",
+		PROPERTY_HINT_NONE, "Key name for pausing the game tree (e.g. F11). Avoid F5-F10 (Godot editor shortcuts).")
 	_add_setting("spectator/tracking/default_static_patterns",
 		TYPE_PACKED_STRING_ARRAY, PackedStringArray())
 	_add_setting("spectator/tracking/token_hard_cap", TYPE_INT, 5000,

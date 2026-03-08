@@ -50,14 +50,16 @@ func test_recorder_emits_recording_stopped() -> String:
 	recorder.start_recording("test_signal_stop", "/tmp/spectator-gdtest/", 1, 100)
 	await _root.get_tree().process_frame
 
-	var stopped := false
-	recorder.recording_stopped.connect(func(_id, _frames): stopped = true)
+	# Use a Dictionary (ref type) to avoid closure-scope issues with primitives
+	# when the test runs as a coroutine called via await Callable.call().
+	var result := {"stopped": false}
+	recorder.recording_stopped.connect(func(_id, _frames): result["stopped"] = true)
 	recorder.stop_recording()
 	await _root.get_tree().process_frame
 
 	recorder.queue_free()
 	collector.queue_free()
-	return Assert.true_(stopped, "recording_stopped fired")
+	return Assert.true_(result["stopped"], "recording_stopped fired")
 
 
 func test_recorder_emits_marker_added() -> String:

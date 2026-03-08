@@ -73,20 +73,18 @@ func _run_test_script(path: String) -> void:
 		_test_count += 1
 		var err: String = ""
 
-		var result = instance.call(name)
+		# Use Callable + await so both sync and async (coroutine) test functions
+		# work correctly. For synchronous functions, await returns the value
+		# immediately. For coroutine functions, it waits for completion and
+		# captures the actual return value (the String error message or "").
+		var result = await Callable(instance, name).call()
+
 		if result == null:
 			err = ""
 		elif result is String:
 			err = result
 		else:
 			err = str(result)
-
-		# Handle async tests (methods that return a Signal/awaitable)
-		if result != null and not (result is String):
-			# If the method returned something non-string, it might be a coroutine
-			# GDScript 4 async tests: if result is a signal, await it
-			if result is Signal:
-				await result
 
 		_record(err == "", path, name, err)
 

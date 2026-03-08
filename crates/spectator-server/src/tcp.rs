@@ -126,10 +126,14 @@ pub async fn tcp_client_loop(state: Arc<Mutex<SessionState>>, port: u16) {
 async fn handle_connection(stream: TcpStream, state: Arc<Mutex<SessionState>>) -> Result<()> {
     let (mut reader, writer) = tokio::io::split(stream);
 
-    // Step 1: Read handshake from addon
-    let msg: Message = async_io::read_message(&mut reader)
-        .await
-        .map_err(|e| anyhow::anyhow!("Failed to read handshake: {}", e))?;
+    // Step 1: Read handshake from addon (timeout: Godot may have another client active)
+    let msg: Message = tokio::time::timeout(
+        Duration::from_secs(10),
+        async_io::read_message(&mut reader),
+    )
+    .await
+    .map_err(|_| anyhow::anyhow!("Handshake timeout after 10s — Godot may have another active client"))?
+    .map_err(|e| anyhow::anyhow!("Failed to read handshake: {}", e))?;
 
     let handshake = match msg {
         Message::Handshake(h) => h,
@@ -311,5 +315,79 @@ fn make_spectator_error(code: &str, message: &str) -> McpError {
         "node_not_found" => McpError::invalid_params(message.to_string(), None),
         "scene_not_loaded" => McpError::internal_error(message.to_string(), None),
         _ => McpError::internal_error(format!("{code}: {message}"), None),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::TcpListener;
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+
+    /// Regression for Bug 3A: handle_connection must time out and return an error
+    /// if Godot accepts the TCP connection but never sends the handshake message.
+    ///
+    /// This simulates the case where the GDExtension already has an active client
+    /// and accepts the new TCP connection at OS level (completing the 3-way handshake)
+    /// but never calls accept() and thus never sends the Spectator handshake.
+    ///
+    /// The timeout must be ≤12s so CI doesn't hang.
+    #[tokio::test]
+    async fn handshake_timeout_returns_error_within_12s() {
+        // Bind a real TCP listener that accepts connections but never writes data
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        // Accept connections in a background thread but never write anything
+        std::thread::spawn(move || {
+            if let Ok((_stream, _)) = listener.accept() {
+                // Deliberately hold the stream open without writing — simulates a
+                // Godot process that has another active client and won't send the
+                // handshake to the queued connection.
+                std::thread::sleep(Duration::from_secs(30));
+            }
+        });
+
+        let state = Arc::new(Mutex::new(SessionState::default()));
+        let start = std::time::Instant::now();
+
+        // tcp_client_loop is hard to test directly (it loops forever), so test
+        // handle_connection directly — it should fail with timeout ~10s.
+        let stream = tokio::net::TcpStream::connect(format!("127.0.0.1:{port}"))
+            .await
+            .expect("must connect to mock listener");
+
+        let result = handle_connection(stream, state).await;
+
+        let elapsed = start.elapsed();
+
+        assert!(
+            result.is_err(),
+            "handle_connection must return error when no handshake arrives"
+        );
+        assert!(
+            elapsed >= Duration::from_secs(9),
+            "must wait at least 9s for timeout (got {elapsed:?})"
+        );
+        assert!(
+            elapsed < Duration::from_secs(12),
+            "must time out within 12s (got {elapsed:?})"
+        );
+
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("timeout") || err_msg.contains("10s"),
+            "error must mention timeout: {err_msg}"
+        );
+    }
+
+    /// Verify SessionState default has no active connection.
+    #[tokio::test]
+    async fn session_state_default_not_connected() {
+        let state = SessionState::default();
+        assert!(!state.connected, "default state should not be connected");
+        assert!(state.tcp_writer.is_none(), "default state should have no writer");
+        assert!(state.pending_queries.is_empty(), "default state should have no pending queries");
     }
 }

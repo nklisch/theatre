@@ -211,31 +211,55 @@ impl INode for SpectatorRecorder {
     }
 
     fn physics_process(&mut self, _delta: f64) {
-        // --- Dashcam tick (independent of explicit recording) ---
-        self.dashcam_tick();
+        // --- Dashcam force-close check (no capture needed) ---
+        self.dashcam_check_force_close();
 
-        // --- Explicit recording ---
-        if !self.recording {
+        // --- Determine which systems need a frame this tick ---
+        let dashcam_wants = !matches!(self.dashcam_state, DashcamState::Disabled);
+
+        let mut recording_wants = false;
+        if self.recording {
+            self.frame_counter += 1;
+            if self.frame_counter.is_multiple_of(self.capture_interval) {
+                if self.frames_captured >= self.max_frames {
+                    self.stop_recording();
+                    tracing::warn!(
+                        "Recording stopped: max_frames ({}) reached",
+                        self.max_frames
+                    );
+                } else {
+                    recording_wants = true;
+                }
+            }
+        }
+
+        if !dashcam_wants && !recording_wants {
             return;
         }
-        self.frame_counter += 1;
 
-        if !self.frame_counter.is_multiple_of(self.capture_interval) {
+        // --- Capture scene tree at most once per frame ---
+        let Some(captured) = self.do_capture() else {
             return;
+        };
+
+        if dashcam_wants && recording_wants {
+            self.dashcam_ingest(captured.clone());
+            self.frame_buffer.push(captured);
+            self.frames_captured += 1;
+        } else if dashcam_wants {
+            self.dashcam_ingest(captured);
+        } else {
+            self.frame_buffer.push(captured);
+            self.frames_captured += 1;
         }
 
-        if self.frames_captured >= self.max_frames {
-            self.stop_recording();
-            tracing::warn!("Recording stopped: max_frames ({}) reached", self.max_frames);
-            return;
-        }
-
-        self.capture_frame();
-
-        self.flush_counter += 1;
-        if self.flush_counter >= 60 {
-            self.flush_to_db();
-            self.flush_counter = 0;
+        // --- Recording flush ---
+        if recording_wants {
+            self.flush_counter += 1;
+            if self.flush_counter >= 60 {
+                self.flush_to_db();
+                self.flush_counter = 0;
+            }
         }
     }
 }
@@ -826,12 +850,6 @@ impl SpectatorRecorder {
         })
     }
 
-    fn capture_frame(&mut self) {
-        let Some(captured) = self.do_capture() else { return };
-        self.frame_buffer.push(captured);
-        self.frames_captured += 1;
-    }
-
     fn flush_to_db(&mut self) {
         let Some(ref db) = self.db else {
             return;
@@ -919,33 +937,21 @@ impl SpectatorRecorder {
     // Dashcam internals
     // -----------------------------------------------------------------------
 
-    /// Process one physics frame of dashcam logic.
-    fn dashcam_tick(&mut self) {
-        if matches!(self.dashcam_state, DashcamState::Disabled) {
-            return;
-        }
-
-        let current_frame = current_physics_frame();
-
-        // Check max_window force-close for system-tier clips.
-        let force_flush = if let DashcamState::PostCapture {
+    /// Check if a system-tier dashcam clip should be force-closed (max_window exceeded).
+    fn dashcam_check_force_close(&mut self) {
+        if let DashcamState::PostCapture {
             tier: DashcamTier::System,
             force_close_at_frame: Some(close_frame),
             ..
         } = &self.dashcam_state
+            && current_physics_frame() >= *close_frame
         {
-            current_frame >= *close_frame
-        } else {
-            false
-        };
-
-        if force_flush {
             self.flush_dashcam_clip_internal();
-            return;
         }
+    }
 
-        let Some(captured) = self.do_capture() else { return };
-
+    /// Ingest a captured frame into the dashcam ring buffer and post-capture state.
+    fn dashcam_ingest(&mut self, captured: CapturedFrame) {
         // Update byte size estimate (exponential moving average, α≈0.05).
         if self.avg_frame_bytes == 0 {
             self.avg_frame_bytes = captured.data.len();
@@ -953,18 +959,9 @@ impl SpectatorRecorder {
             self.avg_frame_bytes = (self.avg_frame_bytes * 19 + captured.data.len()) / 20;
         }
 
-        let frame_size = captured.data.len();
-        let is_post_capture = matches!(self.dashcam_state, DashcamState::PostCapture { .. });
-
-        // Add to ring buffer. During PostCapture, ring_buffer gets a clone so
-        // the original can go to post_buffer.
-        if is_post_capture {
-            self.ring_buffer_bytes += frame_size;
-            self.ring_buffer.push_back(captured.clone());
-        } else {
-            self.ring_buffer_bytes += frame_size;
-            self.ring_buffer.push_back(captured.clone());
-        }
+        // Add to ring buffer (clone needed if PostCapture also wants the original).
+        self.ring_buffer_bytes += captured.data.len();
+        self.ring_buffer.push_back(captured.clone());
         self.enforce_ring_byte_cap();
 
         // If in PostCapture: add to post_buffer and count down.
