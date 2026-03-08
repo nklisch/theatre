@@ -12,7 +12,10 @@ use crate::resolve::{resolve_godot_bin, validate_project_path};
 use crate::server::DirectorServer;
 
 use node::{NodeAddParams, NodeRemoveParams, NodeReparentParams, NodeSetPropertiesParams};
-use resource::ResourceReadParams;
+use resource::{
+    MaterialCreateParams, ResourceDuplicateParams, ResourceReadParams, ShapeCreateParams,
+    StyleBoxCreateParams,
+};
 use scene::{SceneAddInstanceParams, SceneCreateParams, SceneListParams, SceneReadParams};
 
 // ---------------------------------------------------------------------------
@@ -187,6 +190,66 @@ impl DirectorServer {
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
         let data = run_operation(&self.backend, &params.project_path, "resource_read", &op_params).await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "material_create",
+        description = "Create a Godot material resource (.tres). Supports StandardMaterial3D, \
+            ORMMaterial3D, ShaderMaterial, CanvasItemMaterial, ParticleProcessMaterial, and \
+            any ClassDB Material subclass. Always use this instead of hand-writing .tres files."
+    )]
+    pub async fn material_create(
+        &self,
+        Parameters(params): Parameters<MaterialCreateParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(&self.backend, &params.project_path, "material_create", &op_params).await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "shape_create",
+        description = "Create a Godot collision shape resource. Supports 3D shapes (BoxShape3D, \
+            SphereShape3D, CapsuleShape3D, etc.) and 2D shapes (CircleShape2D, RectangleShape2D, \
+            etc.). Can save as .tres and/or attach directly to a CollisionShape node in a scene. \
+            At least one of save_path or scene attachment (scene_path + node_path) is required."
+    )]
+    pub async fn shape_create(
+        &self,
+        Parameters(params): Parameters<ShapeCreateParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(&self.backend, &params.project_path, "shape_create", &op_params).await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "style_box_create",
+        description = "Create a Godot StyleBox resource (.tres) for UI theming. Supports \
+            StyleBoxFlat, StyleBoxTexture, StyleBoxLine, and StyleBoxEmpty. Always use this \
+            instead of hand-writing .tres files."
+    )]
+    pub async fn style_box_create(
+        &self,
+        Parameters(params): Parameters<StyleBoxCreateParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(&self.backend, &params.project_path, "style_box_create", &op_params).await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "resource_duplicate",
+        description = "Duplicate a Godot resource file (.tres, .res) to a new path, optionally \
+            applying property overrides. Use deep_copy to make nested sub-resources independent."
+    )]
+    pub async fn resource_duplicate(
+        &self,
+        Parameters(params): Parameters<ResourceDuplicateParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(&self.backend, &params.project_path, "resource_duplicate", &op_params).await?;
         serialize_response(&data)
     }
 }

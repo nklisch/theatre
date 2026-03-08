@@ -35,6 +35,14 @@ func _init():
 			result = SceneOps.op_scene_add_instance(args.params)
 		"resource_read":
 			result = ResourceOps.op_resource_read(args.params)
+		"material_create":
+			result = ResourceOps.op_material_create(args.params)
+		"shape_create":
+			result = ResourceOps.op_shape_create(args.params)
+		"style_box_create":
+			result = ResourceOps.op_style_box_create(args.params)
+		"resource_duplicate":
+			result = ResourceOps.op_resource_duplicate(args.params)
 		_:
 			result = {"success": false, "error": "Unknown operation: " + args.operation, "operation": args.operation, "context": {}}
 

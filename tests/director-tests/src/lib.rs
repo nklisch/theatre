@@ -13,6 +13,8 @@ mod test_reparent;
 #[cfg(test)]
 mod test_resource;
 #[cfg(test)]
+mod test_resource_create;
+#[cfg(test)]
 mod test_scene;
 #[cfg(test)]
 mod test_scene_list;

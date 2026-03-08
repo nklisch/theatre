@@ -169,6 +169,14 @@ func _dispatch(operation: String, params: Dictionary) -> Dictionary:
 			return SceneOps.op_scene_add_instance(params)
 		"resource_read":
 			return ResourceOps.op_resource_read(params)
+		"material_create":
+			return ResourceOps.op_material_create(params)
+		"shape_create":
+			return ResourceOps.op_shape_create(params)
+		"style_box_create":
+			return ResourceOps.op_style_box_create(params)
+		"resource_duplicate":
+			return ResourceOps.op_resource_duplicate(params)
 		"ping":
 			return {"success": true, "data": {"status": "ok"}, "operation": "ping"}
 		_:
