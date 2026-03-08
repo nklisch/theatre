@@ -5,7 +5,7 @@
 ///   - GDExtension built and deployed to tests/godot-project/addons/spectator/
 ///     Run: spectator-deploy ~/dev/spectator/tests/godot-project
 ///
-/// Run: cargo test -p spectator-server --features e2e-tests -- --nocapture
+/// Run: cargo test -p spectator-server --test e2e_journeys -- --nocapture
 mod support;
 
 use serde_json::json;

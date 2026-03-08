@@ -3,7 +3,7 @@
 //! These tests focus on scenarios where bugs hide — sequences of tool calls that share
 //! state, ordering constraints, and interactions between tools that appear independent.
 //!
-//! Run with: cargo test -p spectator-server --features integration-tests
+//! Run with: cargo test -p spectator-server --test scenarios
 
 mod support;
 

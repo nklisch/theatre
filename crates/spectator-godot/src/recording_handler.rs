@@ -123,7 +123,7 @@ fn handle_list(
         .iter_shared()
         .map(|dict| {
             json!({
-                "recording_id": dict.get("id").map(|v| v.to_string()).unwrap_or_default(),
+                "recording_id": dict.get("recording_id").map(|v| v.to_string()).unwrap_or_default(),
                 "name": dict.get("name").map(|v| v.to_string()).unwrap_or_default(),
                 "frames_captured": dict.get("frames_captured").map(|v: godot::builtin::Variant| v.to::<u32>()).unwrap_or(0),
                 "duration_ms": dict.get("duration_ms").map(|v: godot::builtin::Variant| v.to::<i64>()).unwrap_or(0),
@@ -134,6 +134,8 @@ fn handle_list(
                 "markers_count": dict.get("markers_count").map(|v: godot::builtin::Variant| v.to::<u32>()).unwrap_or(0),
                 "size_kb": dict.get("size_kb").map(|v: godot::builtin::Variant| v.to::<u32>()).unwrap_or(0),
                 "created_at_ms": dict.get("created_at_ms").map(|v: godot::builtin::Variant| v.to::<i64>()).unwrap_or(0),
+                "dashcam": dict.get("dashcam").map(|v: godot::builtin::Variant| v.to::<bool>()).unwrap_or(false),
+                "tier": dict.get("dashcam_tier").map(|v| v.to_string()).unwrap_or_default(),
             })
         })
         .collect();
@@ -170,10 +172,16 @@ fn handle_marker(
     recorder: &mut Gd<SpectatorRecorder>,
     params: &Value,
 ) -> Result<Value, (String, String)> {
-    if !recorder.bind().is_recording() {
+    let is_recording = recorder.bind().is_recording();
+    let dashcam_active = {
+        let state = recorder.bind().get_dashcam_state().to_string();
+        state == "buffering" || state == "post_capture"
+    };
+
+    if !is_recording && !dashcam_active {
         return Err((
             "no_recording_active".into(),
-            "No recording is active to add a marker to".into(),
+            "No recording or dashcam is active to add a marker to".into(),
         ));
     }
 
@@ -183,14 +191,34 @@ fn handle_marker(
         .unwrap_or("agent");
     let label = params.get("label").and_then(|v| v.as_str()).unwrap_or("");
 
-    recorder.bind_mut().add_marker(source.into(), label.into());
+    // Add marker to explicit recording if active
+    if is_recording {
+        recorder.bind_mut().add_marker(source.into(), label.into());
+    }
+
+    // Trigger dashcam clip only when NO explicit recording is active.
+    // When explicit recording is running, markers go to it instead.
+    let mut dashcam_triggered = false;
+    let mut dashcam_tier = String::new();
+    if !is_recording && dashcam_active {
+        let tier = if source == "agent" || source == "human" {
+            "deliberate"
+        } else {
+            "system"
+        };
+        recorder.bind_mut().trigger_dashcam_clip(source.into(), label.into(), tier.into());
+        dashcam_triggered = true;
+        dashcam_tier = tier.to_string();
+    }
 
     let frame = godot::classes::Engine::singleton().get_physics_frames();
     Ok(json!({
-        "result": "ok",
+        "ok": true,
         "frame": frame,
         "source": source,
         "label": label,
+        "dashcam_triggered": dashcam_triggered,
+        "dashcam_tier": dashcam_tier,
     }))
 }
 
@@ -255,6 +283,9 @@ fn handle_dashcam_flush(
         .and_then(|v| v.as_str())
         .unwrap_or("");
 
+    // Capture buffer frame count before flush (flush drains the buffer)
+    let buffer_frames = recorder.bind().get_dashcam_buffer_frames();
+
     let recording_id = recorder.bind_mut().flush_dashcam_clip(label.into()).to_string();
 
     if recording_id.is_empty() {
@@ -266,6 +297,8 @@ fn handle_dashcam_flush(
         Ok(json!({
             "result": "ok",
             "recording_id": recording_id,
+            "tier": "deliberate",
+            "frames": buffer_frames,
         }))
     }
 }

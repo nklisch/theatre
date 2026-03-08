@@ -2,9 +2,7 @@ pub mod fixtures;
 pub mod harness;
 pub mod mock_addon;
 
-#[cfg(feature = "e2e-tests")]
 pub mod godot_process;
-#[cfg(feature = "e2e-tests")]
 pub mod e2e_harness;
 
 /// Shared tool dispatch: routes tool name + JSON params to SpectatorServer handler methods.

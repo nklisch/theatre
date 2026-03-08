@@ -1,6 +1,6 @@
 //! Layer 1 integration tests: real SpectatorServer handlers against a mock TCP addon.
 //!
-//! Run with:  cargo test -p spectator-server --features integration-tests
+//! Run with:  cargo test -p spectator-server --test tcp_mock
 
 mod support;
 

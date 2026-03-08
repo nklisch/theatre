@@ -29,8 +29,12 @@ cargo build --workspace
 cargo build -p spectator-server
 cargo build -p spectator-godot
 
-# Run tests
+# Run ALL tests — unit + integration + scenarios + E2E journeys
+# No feature flags — all tests run unconditionally
+# E2E tests require deploying GDExtension first:
+spectator-deploy ~/dev/spectator/tests/godot-project
 cargo test --workspace
+# IMPORTANT: All test layers must pass. Never skip E2E journey tests.
 
 # Lint
 cargo clippy --workspace

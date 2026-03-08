@@ -344,6 +344,15 @@ impl SpectatorRecorder {
         }
     }
 
+    /// Trigger a dashcam clip from an external marker (TCP handler).
+    /// Transitions Buffering → PostCapture or merges into existing clip.
+    #[func]
+    pub fn trigger_dashcam_clip(&mut self, source: GString, label: GString, _tier: GString) {
+        let frame = current_physics_frame();
+        let timestamp_ms = current_time_ms();
+        self.on_dashcam_marker(&source.to_string(), &label.to_string(), frame, timestamp_ms);
+    }
+
     /// Force-flush the current ring buffer to a clip immediately.
     /// Returns the clip recording_id or empty string on error.
     #[func]
@@ -591,8 +600,11 @@ impl SpectatorRecorder {
             });
         }
 
-        // Dashcam trigger
-        self.on_dashcam_marker(&source_str, &label_str, frame, timestamp_ms);
+        // Dashcam trigger — only when no explicit recording is active.
+        // When explicit recording is running, markers go to it instead.
+        if !self.recording {
+            self.on_dashcam_marker(&source_str, &label_str, frame, timestamp_ms);
+        }
 
         self.base_mut().emit_signal(
             "marker_added",

@@ -226,7 +226,7 @@ func _on_marker_added(_frame: int, source: String, label: String) -> void:
 func _on_dashcam_clip_saved(recording_id: String, tier: String, frames: int) -> void:
 	_show_toast("[dashcam] Clip saved (%s, %d frames)" % [tier, frames])
 	_update_dashcam_label()
-	var _ = recording_id  # used by dock library list in future
+	var _unused = recording_id  # used by dock library list in future
 
 
 func _on_dashcam_clip_started(_trigger_frame: int, tier: String) -> void:
