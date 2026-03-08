@@ -1054,7 +1054,8 @@ CREATE TABLE IF NOT EXISTS recording (
     started_at_ms INTEGER NOT NULL,
     ended_at_ms INTEGER,
     scene_dimensions INTEGER,
-    physics_ticks_per_sec INTEGER
+    physics_ticks_per_sec INTEGER,
+    capture_config TEXT
 );
 CREATE TABLE IF NOT EXISTS frames (
     frame INTEGER PRIMARY KEY,

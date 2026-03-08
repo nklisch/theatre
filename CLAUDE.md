@@ -36,9 +36,60 @@ cargo test --workspace
 cargo clippy --workspace
 cargo fmt --check
 
-# Copy GDExtension to addon (Linux)
-cp target/debug/libspectator_godot.so addons/spectator/bin/linux/
+# Copy GDExtension to addon dir within this repo (Linux)
+./scripts/copy-gdext.sh          # debug
+./scripts/copy-gdext.sh release  # release
 ```
+
+## Deploying to a Godot Project
+
+Use the `spectator-deploy` shell script (`~/.local/bin/spectator-deploy`) to
+build and copy the `.so` into one or more Godot projects in one step:
+
+```bash
+# Debug build → default target (~/godot/test-harness)
+spectator-deploy
+
+# Release build → default target
+spectator-deploy --release
+
+# Debug build → specific project
+spectator-deploy ~/godot/my-game
+
+# Release build → multiple projects
+spectator-deploy --release ~/godot/test-harness ~/godot/my-game
+```
+
+The script runs `cargo build -p spectator-godot` then copies
+`target/<mode>/libspectator_godot.so` to
+`<project>/addons/spectator/bin/linux/libspectator_godot.so`.
+
+### Verifying the deployed build
+
+```bash
+godot --headless --quit --path ~/godot/test-harness 2>&1
+```
+
+Expected: no `SCRIPT ERROR` or `[panic]` lines; Spectator TCP server starts
+and stops cleanly.
+
+## GDExtension Compatibility
+
+- `spectator-godot` targets `api-4-5` with `lazy-function-tables` enabled.
+- `lazy-function-tables` defers method hash validation to first call, allowing
+  the extension to load on Godot 4.2–4.6+ without panicking on method hash
+  changes in classes spectator never uses.
+- `compatibility_minimum = "4.2"` in `spectator.gdextension` remains accurate.
+- To target a newer API, bump `api-4-5` to `api-4-6` (etc.) in
+  `crates/spectator-godot/Cargo.toml` once godot-rust adds that feature flag.
+
+## GDScript Adapter Notes
+
+`addons/spectator/runtime.gd` avoids static type annotations for GDExtension
+types (`SpectatorTCPServer`, `SpectatorCollector`, `SpectatorRecorder`) and
+uses `ClassDB.instantiate(&"ClassName")` instead of `ClassName.new()`. This
+prevents GDScript parse errors when the extension fails to load. The
+`ClassDB.class_exists` guard provides the runtime safety check.
 
 ## Key Constraints
 

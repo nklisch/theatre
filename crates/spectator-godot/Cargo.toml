@@ -9,7 +9,7 @@ crate-type = ["cdylib"]
 
 [dependencies]
 spectator-protocol.workspace = true
-godot = { version = "0.4", features = ["api-4-2", "experimental-godot-api"] }
+godot = { version = "0.4", features = ["api-4-5", "experimental-godot-api", "lazy-function-tables"] }
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true

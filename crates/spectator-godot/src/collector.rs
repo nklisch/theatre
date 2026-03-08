@@ -1,4 +1,8 @@
-use godot::builtin::{Array, GString, StringName, Variant, VarDictionary, Vector2, Vector3};
+use godot::builtin::{
+    Array, Color, GString, PackedByteArray, PackedColorArray, PackedFloat32Array,
+    PackedFloat64Array, PackedInt32Array, PackedInt64Array, PackedStringArray, PackedVector2Array,
+    PackedVector3Array, StringName, Variant, VarDictionary, Vector2, Vector3,
+};
 use godot::builtin::VariantType;
 use godot::classes::{
     CharacterBody2D, CharacterBody3D, Engine, NavigationServer3D, Node, Node2D, Node3D,
@@ -1613,7 +1617,7 @@ impl SpectatorCollector {
         from: Vector3,
         to: Vector3,
     ) -> Result<NavPathResponse, String> {
-        let nav_server = NavigationServer3D::singleton();
+        let mut nav_server = NavigationServer3D::singleton();
         let maps = nav_server.get_maps();
         if maps.is_empty() {
             return Err(
@@ -1728,15 +1732,22 @@ pub(crate) fn variant_to_json(v: &Variant) -> Option<serde_json::Value> {
             Some(serde_json::json!([vec.x, vec.y, vec.z]))
         }
         VariantType::COLOR => {
-            let c = v.to::<godot::builtin::Color>();
+            let c = v.to::<Color>();
             Some(serde_json::json!([c.r, c.g, c.b, c.a]))
         }
         VariantType::ARRAY => {
-            let arr = v.to::<Array<Variant>>();
-            let items: Vec<serde_json::Value> = (0..arr.len())
-                .filter_map(|i| arr.get(i).and_then(|v| variant_to_json(&v)))
-                .collect();
-            Some(serde_json::Value::Array(items))
+            // Untyped arrays convert directly. Typed arrays (Array[float], Array[Color], etc.)
+            // carry element-type metadata that makes try_to::<Array<Variant>>() fail, so we
+            // probe common element types before falling back to a string.
+            match v.try_to::<Array<Variant>>() {
+                Ok(arr) => {
+                    let items: Vec<serde_json::Value> = (0..arr.len())
+                        .filter_map(|i| arr.get(i).and_then(|v| variant_to_json(&v)))
+                        .collect();
+                    Some(serde_json::Value::Array(items))
+                }
+                Err(_) => typed_array_to_json(v),
+            }
         }
         VariantType::DICTIONARY => {
             let dict = v.to::<VarDictionary>();
@@ -1749,6 +1760,130 @@ pub(crate) fn variant_to_json(v: &Variant) -> Option<serde_json::Value> {
             }
             Some(serde_json::Value::Object(map))
         }
+        VariantType::PACKED_BYTE_ARRAY => {
+            let arr = v.to::<PackedByteArray>();
+            Some(serde_json::Value::Array(
+                arr.as_slice().iter().map(|&b| serde_json::json!(b)).collect(),
+            ))
+        }
+        VariantType::PACKED_INT32_ARRAY => {
+            let arr = v.to::<PackedInt32Array>();
+            Some(serde_json::Value::Array(
+                arr.as_slice().iter().map(|&i| serde_json::json!(i)).collect(),
+            ))
+        }
+        VariantType::PACKED_INT64_ARRAY => {
+            let arr = v.to::<PackedInt64Array>();
+            Some(serde_json::Value::Array(
+                arr.as_slice().iter().map(|&i| serde_json::json!(i)).collect(),
+            ))
+        }
+        VariantType::PACKED_FLOAT32_ARRAY => {
+            let arr = v.to::<PackedFloat32Array>();
+            Some(serde_json::Value::Array(
+                arr.as_slice()
+                    .iter()
+                    .filter_map(|&f| serde_json::Number::from_f64(f as f64).map(serde_json::Value::Number))
+                    .collect(),
+            ))
+        }
+        VariantType::PACKED_FLOAT64_ARRAY => {
+            let arr = v.to::<PackedFloat64Array>();
+            Some(serde_json::Value::Array(
+                arr.as_slice()
+                    .iter()
+                    .filter_map(|&f| serde_json::Number::from_f64(f).map(serde_json::Value::Number))
+                    .collect(),
+            ))
+        }
+        VariantType::PACKED_STRING_ARRAY => {
+            let arr = v.to::<PackedStringArray>();
+            Some(serde_json::Value::Array(
+                arr.to_vec()
+                    .into_iter()
+                    .map(|s| serde_json::Value::String(s.to_string()))
+                    .collect(),
+            ))
+        }
+        VariantType::PACKED_VECTOR2_ARRAY => {
+            let arr = v.to::<PackedVector2Array>();
+            Some(serde_json::Value::Array(
+                arr.as_slice()
+                    .iter()
+                    .map(|v| serde_json::json!([v.x, v.y]))
+                    .collect(),
+            ))
+        }
+        VariantType::PACKED_VECTOR3_ARRAY => {
+            let arr = v.to::<PackedVector3Array>();
+            Some(serde_json::Value::Array(
+                arr.as_slice()
+                    .iter()
+                    .map(|v| serde_json::json!([v.x, v.y, v.z]))
+                    .collect(),
+            ))
+        }
+        VariantType::PACKED_COLOR_ARRAY => {
+            let arr = v.to::<PackedColorArray>();
+            Some(serde_json::Value::Array(
+                arr.as_slice()
+                    .iter()
+                    .map(|c| serde_json::json!([c.r, c.g, c.b, c.a]))
+                    .collect(),
+            ))
+        }
         _ => Some(serde_json::Value::String(format!("{v}"))),
     }
+}
+
+/// Handle typed GDScript arrays (Array[float], Array[int], Array[Color], etc.).
+/// Probes common element types so structure is preserved in JSON rather than falling back to string.
+fn typed_array_to_json(v: &Variant) -> Option<serde_json::Value> {
+    if let Ok(arr) = v.try_to::<Array<f64>>() {
+        return Some(serde_json::Value::Array(
+            arr.iter_shared()
+                .filter_map(|f| serde_json::Number::from_f64(f).map(serde_json::Value::Number))
+                .collect(),
+        ));
+    }
+    if let Ok(arr) = v.try_to::<Array<i64>>() {
+        return Some(serde_json::Value::Array(
+            arr.iter_shared().map(|i| serde_json::json!(i)).collect(),
+        ));
+    }
+    if let Ok(arr) = v.try_to::<Array<bool>>() {
+        return Some(serde_json::Value::Array(
+            arr.iter_shared().map(serde_json::Value::Bool).collect(),
+        ));
+    }
+    if let Ok(arr) = v.try_to::<Array<GString>>() {
+        return Some(serde_json::Value::Array(
+            arr.iter_shared()
+                .map(|s| serde_json::Value::String(s.to_string()))
+                .collect(),
+        ));
+    }
+    if let Ok(arr) = v.try_to::<Array<Vector2>>() {
+        return Some(serde_json::Value::Array(
+            arr.iter_shared()
+                .map(|v| serde_json::json!([v.x, v.y]))
+                .collect(),
+        ));
+    }
+    if let Ok(arr) = v.try_to::<Array<Vector3>>() {
+        return Some(serde_json::Value::Array(
+            arr.iter_shared()
+                .map(|v| serde_json::json!([v.x, v.y, v.z]))
+                .collect(),
+        ));
+    }
+    if let Ok(arr) = v.try_to::<Array<Color>>() {
+        return Some(serde_json::Value::Array(
+            arr.iter_shared()
+                .map(|c| serde_json::json!([c.r, c.g, c.b, c.a]))
+                .collect(),
+        ));
+    }
+    // Unknown typed array element type – fall back to Godot's string representation.
+    Some(serde_json::Value::String(format!("{v}")))
 }

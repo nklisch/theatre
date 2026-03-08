@@ -1,3 +1,4 @@
+use godot::classes::{Engine, Node, Node2D, Node3D, node::ProcessMode};
 use godot::obj::Gd;
 use godot::prelude::*;
 use rusqlite::Connection;
@@ -70,6 +71,11 @@ pub struct SpectatorRecorder {
 
 #[godot_api]
 impl INode for SpectatorRecorder {
+    fn ready(&mut self) {
+        // Always process even when the game is paused so recording continues.
+        self.base_mut().set_process_mode(ProcessMode::ALWAYS);
+    }
+
     fn init(base: Base<Node>) -> Self {
         Self {
             base,
@@ -203,6 +209,8 @@ impl SpectatorRecorder {
 
         let now_ms = current_time_ms();
         let now_frame = current_physics_frame();
+        let physics_ticks = Engine::singleton().get_physics_ticks_per_second() as u32;
+        let scene_dims = detect_scene_dimensions(self.base().get_tree().and_then(|t| t.get_current_scene()));
 
         if let Some(ref db) = self.db {
             let config_json = serde_json::json!({
@@ -210,13 +218,17 @@ impl SpectatorRecorder {
                 "max_frames": max_frames,
             });
             let _ = db.execute(
-                "INSERT INTO recording (id, name, started_at_frame, started_at_ms, capture_config) \
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                "INSERT INTO recording \
+                 (id, name, started_at_frame, started_at_ms, scene_dimensions, \
+                  physics_ticks_per_sec, capture_config) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
                 rusqlite::params![
                     &recording_id,
                     &recording_name,
                     now_frame,
                     now_ms,
+                    scene_dims,
+                    physics_ticks,
                     config_json.to_string(),
                 ],
             );
@@ -640,6 +652,38 @@ CREATE INDEX IF NOT EXISTS idx_markers_frame ON markers(frame);
 // ---------------------------------------------------------------------------
 // Helper functions
 // ---------------------------------------------------------------------------
+
+/// Detect whether the current scene is 2D or 3D by walking the scene tree.
+/// Returns 2 for 2D-only scenes, 3 for 3D or unknown.
+fn detect_scene_dimensions(root: Option<Gd<Node>>) -> u32 {
+    let Some(root) = root else { return 3 };
+    let root_node: Gd<Node> = root.upcast();
+    let has_2d = has_node_type_recursive(&root_node, true);
+    let has_3d = has_node_type_recursive(&root_node, false);
+    match (has_2d, has_3d) {
+        (true, false) => 2,
+        _ => 3,
+    }
+}
+
+fn has_node_type_recursive(node: &Gd<Node>, check_2d: bool) -> bool {
+    if check_2d {
+        if node.clone().try_cast::<Node2D>().is_ok() {
+            return true;
+        }
+    } else if node.clone().try_cast::<Node3D>().is_ok() {
+        return true;
+    }
+    let count = node.get_child_count();
+    for i in 0..count {
+        if let Some(child) = node.get_child(i)
+            && has_node_type_recursive(&child, check_2d)
+        {
+            return true;
+        }
+    }
+    false
+}
 
 fn current_physics_frame() -> u64 {
     godot::classes::Engine::singleton().get_physics_frames()

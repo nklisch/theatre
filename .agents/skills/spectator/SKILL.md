@@ -74,24 +74,25 @@ Never start with `detail: "full"` on the full scene — that's expensive and usu
 - `class_filter: ["CharacterBody3D"]` — only that class
 - `radius: 20.0` — only within 20 units
 
-**Pagination:** If the response includes `pagination.truncated: true`, pass `cursor` back to get more:
-```jsonc
-{ "cursor": "snap_2847_p2" }
-```
-
 ## spatial_delta — What Changed?
 
-Use after taking an action or advancing time to see what happened:
+Use after taking an action or advancing time to see what happened. Always compares against
+the baseline from the most recent `spatial_snapshot` or `spatial_action`.
 
 ```jsonc
-// See what changed since last query
+// See what changed since last snapshot (all defaults)
 {}
 
-// See what changed since a specific frame
-{ "since_frame": 2847 }
+// Filtered delta (reduces tokens)
+{
+  "groups": ["enemies"],
+  "radius": 30.0
+}
 ```
 
-Response includes: `moved`, `state_changed`, `entered`, `exited`, `signals_emitted`, `watch_triggers`.
+Parameters: `perspective` (camera/point), `radius` (default 50.0), `groups`, `class_filter`, `token_budget`.
+
+Response includes: `from_frame`, `to_frame`, and any non-empty of: `moved`, `state_changed`, `entered`, `exited`, `signals_emitted`, `watch_triggers`.
 
 **The act-then-delta pattern** — use `return_delta: true` on actions instead of a separate delta call:
 ```jsonc
@@ -160,7 +161,7 @@ Response includes: `moved`, `state_changed`, `entered`, `exited`, `signals_emitt
 }
 
 // Available categories:
-// transform, physics, state, children, signals, script, spatial_context, resources
+// transform, physics, state, children, signals, script, spatial_context
 ```
 
 **Useful include combos:**
@@ -168,8 +169,7 @@ Response includes: `moved`, `state_changed`, `entered`, `exited`, `signals_emitt
 - `["state"]` — all exported vars → logic/AI state debugging
 - `["children"]` — immediate children with key properties → hierarchy check
 - `["signals"]` — connected signals + recent emissions → event flow debugging
-- `["spatial_context"]` — nearby entities, areas, navmesh edge → spatial context
-- `["resources"]` — mesh, materials, animations, collision shapes → visual/animation debugging
+- `["spatial_context"]` — nearby entities, areas, camera visibility → spatial context
 
 ## spatial_watch — Subscribe to Changes
 
@@ -314,6 +314,18 @@ The recording workflow: human reproduces the bug, agent analyzes the timeline.
 // Start recording (or the human hits F8)
 { "action": "start", "recording_name": "wall_clip_repro" }
 
+// Start with custom capture config
+{
+  "action": "start",
+  "recording_name": "detailed_run",
+  "capture": {
+    "capture_interval": 1,    // capture every N physics frames (default 1)
+    "max_frames": 36000,      // max frames to capture (default 36000)
+    "include_signals": true,  // capture signal emissions (default true)
+    "include_input": false    // capture input events (default false)
+  }
+}
+
 // List available recordings
 { "action": "list" }
 
@@ -342,8 +354,12 @@ The recording workflow: human reproduces the bug, agent analyzes the timeline.
 {
   "action": "find_event",
   "recording_id": "rec_001",
-  "event_type": "signal",
-  "event_filter": "health_changed"
+  "event_type": "signal",           // signal, property_change, collision, area_enter,
+                                    // area_exit, node_added, node_removed, marker, input
+  "event_filter": "health_changed", // substring match on event data (optional)
+  "node": "enemies/guard_01",       // filter by node path (optional)
+  "from_frame": 4500,               // optional frame range bounds
+  "to_frame": 5000
 }
 
 // Mark your findings for the human to review
@@ -397,15 +413,6 @@ The recording workflow: human reproduces the bug, agent analyzes the timeline.
 3. spatial_action(action: "advance_frames", frames: 1)
 4. spatial_delta() → see exactly what changed in that one frame
 5. Repeat steps 3-4 to step frame-by-frame
-```
-
-### Visual / Resource Bug
-```
-1. spatial_inspect(node: "enemies/scout_02", include: ["resources"])
-   → current_animation, mesh, material_overrides, shader_params
-   → "why is it invisible?" → check material, visible flag
-   → "why T-posing?" → check animation_player.current_animation
-   → "wrong collider?" → check collision_shape dimensions
 ```
 
 ## Reading the Spatial Output

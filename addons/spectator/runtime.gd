@@ -19,6 +19,8 @@ const TOAST_DURATION := 3.0
 
 func _ready() -> void:
 	instance = self
+	# Run even when the game tree is paused so TCP polling and recording continue.
+	process_mode = Node.PROCESS_MODE_ALWAYS
 
 	if not ClassDB.class_exists(&"SpectatorTCPServer"):
 		push_error("[Spectator] GDExtension not loaded — SpectatorTCPServer class not found. Check that the spectator.gdextension binary exists for your platform.")
