@@ -279,38 +279,51 @@ When additional properties are requested:
 
 ---
 
-### Unit 4: Add `include_input` to clips `list` response
+### Unit 4: Enrich clip list metadata for agent context
 
-**File**: `crates/spectator-server/src/clip_analysis.rs` (list response building)
-**File**: `crates/spectator-godot/src/recorder.rs` (capture_config storage)
+**File**: `crates/spectator-godot/src/recorder.rs` (write wall-clock time + build list)
+**File**: `crates/spectator-godot/src/recording_handler.rs` (list response building)
 
-The agent couldn't tell whether input events were captured in a clip. The dashcam
-`capture_config` JSON is already stored in the `recording` table. Surface the
-relevant fields in `list` output.
+Three problems with the current clip list:
 
-**Current list entry shape** (from `clips.rs` list handler):
+1. **No wall-clock timestamp**: `created_at_ms` is engine time (physics frames),
+   not a real timestamp. When the user says "the clip I just made" or "the one
+   from earlier today", the agent can't correlate without wall-clock time.
+2. **No marker preview**: `markers_count: 4` tells you markers exist but not what
+   they say. The first human marker label is the most useful signal — it's
+   typically why the clip was saved ("clipped through wall!", "zoom bug repro").
+3. **No capture config visibility**: the agent can't tell if input was captured.
+
+**Current list entry** (from `recording_handler.rs:46-63`):
 ```json
 {
-  "clip_id": "...",
-  "name": "...",
+  "clip_id": "clip_abc12345",
+  "name": "dashcam_1741456800",
+  "frames_captured": 340,
   "duration_ms": 5667,
-  "frames": 340,
-  "frame_range": [2800, 3140],
-  "markers_count": 4,
-  "size_kb": 420
-}
-```
-
-**New list entry shape**:
-```json
-{
-  "clip_id": "...",
-  "name": "...",
-  "duration_ms": 5667,
-  "frames": 340,
   "frame_range": [2800, 3140],
   "markers_count": 4,
   "size_kb": 420,
+  "created_at_ms": 46667,
+  "dashcam": true,
+  "tier": "deliberate"
+}
+```
+
+**New list entry**:
+```json
+{
+  "clip_id": "clip_abc12345",
+  "name": "dashcam_1741456800",
+  "frames_captured": 340,
+  "duration_ms": 5667,
+  "frame_range": [2800, 3140],
+  "markers_count": 4,
+  "size_kb": 420,
+  "created_at": "2026-03-08T14:20:00Z",
+  "trigger_label": "clipped through wall!",
+  "dashcam": true,
+  "tier": "deliberate",
   "capture": {
     "include_input": false,
     "include_signals": true,
@@ -319,14 +332,135 @@ relevant fields in `list` output.
 }
 ```
 
+**Changes**:
+
+#### 4a. Add `created_at` as ISO 8601 wall-clock timestamp
+
+**File**: `crates/spectator-godot/src/recorder.rs`
+
+Add a `created_at_unix_ms` column to the recording table schema, populated with
+`current_time_ms()` (which is already wall-clock) at clip save time.
+
+```sql
+-- Add to CREATE TABLE recording:
+created_at_unix_ms INTEGER
+```
+
+```rust
+// In flush_dashcam_to_disk, add to INSERT:
+let wall_clock_ms = current_time_ms();
+// ... params: [..., wall_clock_ms]
+```
+
+In `list_recordings`, read `created_at_unix_ms` from the DB and format as ISO 8601:
+
+```rust
+// In list_recordings:
+let created_unix_ms: i64 = row.get(N)?;  // new column
+// ...
+dict.set("created_at_unix_ms", created_unix_ms);
+```
+
+In `recording_handler.rs`, convert to ISO 8601 string:
+
+```rust
+// Format unix ms as ISO 8601 for the JSON response
+fn unix_ms_to_iso8601(ms: i64) -> String {
+    let secs = ms / 1000;
+    let rem_ms = ms % 1000;
+    // Use chrono-free approach: format as UTC manually
+    // Or use the time crate if available
+    // Simplest: return Unix seconds and let the consumer format
+    // But ISO 8601 is more agent-friendly
+    format_unix_to_iso(secs, rem_ms)
+}
+
+// In handle_list, replace created_at_ms with:
+"created_at": unix_ms_to_iso8601(created_at_unix_ms),
+```
+
 **Implementation Notes**:
-- The `capture_config` column in the `recording` table is a JSON string. Parse it
-  with `serde_json::from_str` and extract the relevant boolean fields.
-- If `capture_config` is NULL or unparseable, omit the `capture` block (don't error).
-- Only include the 3 most agent-relevant fields; don't dump the entire config.
+- The clip `name` field already contains the unix timestamp (`dashcam_{secs}`) but
+  it's not structured. We need a dedicated field.
+- `current_time_ms()` already exists in recorder.rs and returns wall-clock Unix ms.
+- For existing clips that don't have `created_at_unix_ms`, fall back to the file's
+  filesystem modification time (`std::fs::metadata(&path).modified()`), which
+  `list_recordings` already reads for sorting.
+- Replace the confusing `created_at_ms` field (engine time) with `created_at`
+  (ISO 8601 string). This is a breaking change to the list response but the old
+  field was misleading and nobody should be relying on engine-time for calendar
+  correlation.
+- For the ISO 8601 formatting without pulling in chrono: use a small helper that
+  computes UTC from Unix seconds. The `time` crate is lightweight but may not be
+  in the dependency tree — check first. If not available, a manual formatter for
+  `YYYY-MM-DDTHH:MM:SSZ` from Unix seconds is ~15 lines.
+
+#### 4b. Add `trigger_label` — the first human/agent marker label
+
+**File**: `crates/spectator-godot/src/recorder.rs`
+
+When building the list, query the first marker in the clip that was set by a human
+or agent (not system). This is typically the reason the clip was saved.
+
+```rust
+// In list_recordings, after opening the DB:
+let trigger_label: Option<String> = db
+    .query_row(
+        "SELECT label FROM markers WHERE source IN ('human', 'agent') \
+         ORDER BY frame ASC LIMIT 1",
+        [],
+        |row| row.get(0),
+    )
+    .ok();
+```
+
+```rust
+// In the dict:
+if let Some(label) = trigger_label {
+    dict.set("trigger_label", GString::from(&label));
+}
+```
+
+In `recording_handler.rs`, forward it:
+
+```rust
+// Only include if present:
+"trigger_label": dict.get("trigger_label").map(|v| v.to_string()),
+```
+
+**Implementation Notes**:
+- `trigger_label` is the first non-system marker's label. For dashcam clips
+  triggered by `add_marker`, this is the label the agent or human provided.
+- If the clip was triggered by a system event (velocity spike) with no human
+  markers, `trigger_label` is omitted (the agent can call `markers` for details).
+- This answers "what is this clip about?" at a glance without calling `markers`.
+
+#### 4c. Add `capture` block with input/signal/interval info
+
+Surface the `capture_config` JSON as a structured `capture` block.
+
+```rust
+// In recording_handler.rs handle_list, parse capture_config:
+let capture_block = capture_config.as_deref()
+    .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
+    .map(|v| json!({
+        "include_input": v.get("include_input").and_then(|b| b.as_bool()).unwrap_or(false),
+        "include_signals": v.get("include_signals").and_then(|b| b.as_bool()).unwrap_or(true),
+        "capture_interval": v.get("capture_interval").and_then(|n| n.as_u64()).unwrap_or(1),
+    }));
+
+// Include in response:
+"capture": capture_block,
+```
 
 **Acceptance Criteria**:
-- [ ] `clips(action: "list")` entries include `capture.include_input` boolean
+- [ ] `clips(action: "list")` entries include `created_at` as ISO 8601 string
+- [ ] `created_at` reflects wall-clock time, not engine time
+- [ ] Existing clips without `created_at_unix_ms` column fall back to file mtime
+- [ ] Old `created_at_ms` field (engine time) is removed
+- [ ] `trigger_label` shows the first human/agent marker label when present
+- [ ] `trigger_label` is omitted when no human/agent markers exist
+- [ ] `capture.include_input` boolean is present
 - [ ] `capture.include_signals` and `capture.capture_interval` are present
 - [ ] Missing or NULL `capture_config` → no `capture` field (no error)
 
@@ -702,12 +836,36 @@ fn test_moved_is_valid_condition_type() {
 }
 ```
 
-**Test for list capture info** (in `clips.rs` tests):
+**Tests for clip list metadata** (in `clips.rs` or `recording_handler` tests):
 ```rust
+#[test]
+fn test_list_includes_created_at_iso8601() {
+    // Setup: clip with created_at_unix_ms in recording table
+    // Expected: list entry has "created_at" as ISO 8601 string
+}
+
+#[test]
+fn test_list_includes_trigger_label() {
+    // Setup: clip with human marker "zoom bug repro"
+    // Expected: list entry has trigger_label: "zoom bug repro"
+}
+
+#[test]
+fn test_list_omits_trigger_label_when_no_human_markers() {
+    // Setup: clip with only system markers
+    // Expected: list entry has no trigger_label field
+}
+
 #[test]
 fn test_list_includes_capture_config() {
     // Setup: clip with capture_config JSON in recording table
     // Expected: list entry has capture.include_input field
+}
+
+#[test]
+fn test_list_fallback_mtime_for_old_clips() {
+    // Setup: clip without created_at_unix_ms column
+    // Expected: created_at falls back to file modification time
 }
 ```
 
