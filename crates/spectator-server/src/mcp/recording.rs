@@ -89,10 +89,6 @@ pub struct CaptureConfig {
     pub capture_interval: Option<u32>,
     /// Maximum frames to capture. Default 36000.
     pub max_frames: Option<u32>,
-    /// Whether to capture signal emissions. Default true.
-    pub include_signals: Option<bool>,
-    /// Whether to capture input events. Default false.
-    pub include_input: Option<bool>,
 }
 
 // ---------------------------------------------------------------------------

@@ -120,7 +120,7 @@ fn handle_list(
         .iter_shared()
         .map(|dict| {
             json!({
-                "id": dict.get("id").map(|v| v.to_string()).unwrap_or_default(),
+                "recording_id": dict.get("id").map(|v| v.to_string()).unwrap_or_default(),
                 "name": dict.get("name").map(|v| v.to_string()).unwrap_or_default(),
                 "frames": dict.get("frames").map(|v: godot::builtin::Variant| v.to::<u32>()).unwrap_or(0),
                 "duration_ms": dict.get("duration_ms").map(|v: godot::builtin::Variant| v.to::<i64>()).unwrap_or(0),
@@ -154,7 +154,7 @@ fn handle_delete(
     let ok = recorder.bind().delete_recording(storage_path.into(), id.into());
 
     if ok {
-        Ok(json!({ "result": "ok", "deleted": id }))
+        Ok(json!({ "result": "ok", "recording_id": id }))
     } else {
         Err((
             "recording_not_found".into(),

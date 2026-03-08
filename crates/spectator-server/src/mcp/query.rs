@@ -117,7 +117,7 @@ fn query_result_entry(r: &NearestResult, perspective: &Perspective) -> serde_jso
     let rel = bearing::relative_position(perspective, r.position, false);
     serde_json::json!({
         "path": r.path,
-        "dist": (r.distance * 10.0).round() / 10.0,
+        "distance": (r.distance * 10.0).round() / 10.0,
         "bearing": rel.bearing,
         "class": r.class,
     })

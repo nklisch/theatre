@@ -65,7 +65,7 @@ pub fn build_spatial_context(raw: &SpatialContextRaw) -> serde_json::Value {
             let rel = bearing::relative_position(&perspective, target_pos, false);
             let mut entry = serde_json::json!({
                 "path": e.path,
-                "dist": rel.dist,
+                "distance": rel.dist,
                 "bearing": rel.bearing,
                 "class": e.class,
             });

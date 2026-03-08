@@ -376,7 +376,7 @@ impl SpectatorRecorder {
                             .unwrap_or(0);
 
                         let mut dict = VarDictionary::new();
-                        dict.set("id", GString::from(&id));
+                        dict.set("recording_id", GString::from(&id));
                         dict.set("name", GString::from(&name));
                         dict.set("frames", frame_count as u32);
                         dict.set("duration_ms", duration_ms);

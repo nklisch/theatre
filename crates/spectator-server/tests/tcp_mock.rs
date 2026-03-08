@@ -113,10 +113,10 @@ async fn test_snapshot_summary_returns_clusters() {
         .await
         .unwrap();
 
-    // Summary should have either a 'groups' or 'clusters' block
+    // Summary should have a 'clusters' block
     assert!(
-        result.get("groups").is_some() || result.get("clusters").is_some(),
-        "summary response should contain groups or clusters: {result}"
+        result.get("clusters").is_some(),
+        "summary response should contain 'clusters': {result}"
     );
 }
 
@@ -820,7 +820,7 @@ async fn test_config_set_static_patterns() {
 async fn test_recording_status() {
     let handler: QueryHandler = Arc::new(|method, _| {
         if method == "recording_status" {
-            Ok(json!({ "recording": false }))
+            Ok(json!({ "recording_active": false }))
         } else {
             Err(("unknown_method".into(), method.to_string()))
         }
@@ -833,8 +833,8 @@ async fn test_recording_status() {
         .unwrap();
 
     assert!(
-        result.get("recording").is_some() || result.get("active").is_some(),
-        "status result: {result}"
+        result.get("recording_active").is_some(),
+        "status result should contain 'recording_active': {result}"
     );
 }
 

@@ -653,10 +653,7 @@ async fn test_recording_lifecycle_ids_consistent() {
         .call_tool("recording", json!({ "action": "status" }))
         .await
         .unwrap();
-    let status_active = status["recording_active"]
-        .as_bool()
-        .or_else(|| status["active"].as_bool())
-        .unwrap_or(false);
+    let status_active = status["recording_active"].as_bool().unwrap_or(false);
     let status_id = status["recording_id"].as_str().unwrap_or("");
     assert!(status_active, "status should show active=true after start: {status}");
     assert_eq!(
@@ -679,10 +676,7 @@ async fn test_recording_lifecycle_ids_consistent() {
         .call_tool("recording", json!({ "action": "status" }))
         .await
         .unwrap();
-    let active_after = status_after["recording_active"]
-        .as_bool()
-        .or_else(|| status_after["active"].as_bool())
-        .unwrap_or(true);
+    let active_after = status_after["recording_active"].as_bool().unwrap_or(true);
     assert!(!active_after, "status should show active=false after stop: {status_after}");
 }
 
