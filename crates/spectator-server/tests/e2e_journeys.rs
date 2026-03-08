@@ -168,6 +168,63 @@ async fn journey_explore_scene() {
             "Distance should be non-negative, got {dist}"
         );
     }
+
+    // Step 7: resource inspection — Scout has a CapsuleShape3D collision shape
+    let resources = h
+        .expect(
+            7,
+            "spatial_inspect",
+            json!({
+                "node": "Enemies/Scout",
+                "include": ["resources"]
+            }),
+        )
+        .await;
+
+    // resources key must be present when explicitly requested
+    assert!(
+        resources.get("resources").is_some(),
+        "resources field missing from inspect response"
+    );
+
+    // Scout has exactly one CollisionShape3D child with a CapsuleShape3D
+    let shapes = resources["resources"]["collision_shapes"]
+        .as_array()
+        .expect("collision_shapes should be an array");
+    assert!(!shapes.is_empty(), "Scout should have at least one collision shape");
+
+    let shape = &shapes[0];
+    assert_eq!(
+        shape["type"].as_str().unwrap_or(""),
+        "CapsuleShape3D",
+        "Scout's collision shape should be CapsuleShape3D"
+    );
+
+    // Dimensions should match the scene file (radius=0.4, height=1.8)
+    let dims = shape["dimensions"].as_object().expect("dimensions map missing");
+    let radius = dims["radius"].as_f64().unwrap_or(0.0);
+    let height = dims["height"].as_f64().unwrap_or(0.0);
+    assert!(
+        (radius - 0.4).abs() < 0.05,
+        "Scout capsule radius should be ~0.4, got {radius}"
+    );
+    assert!(
+        (height - 1.8).abs() < 0.05,
+        "Scout capsule height should be ~1.8, got {height}"
+    );
+
+    // resources should NOT appear in a default inspect (no include specified)
+    let default_inspect = h
+        .expect(
+            7,
+            "spatial_inspect",
+            json!({ "node": "Enemies/Scout" }),
+        )
+        .await;
+    assert!(
+        default_inspect.get("resources").is_none(),
+        "resources should be absent from default inspect"
+    );
 }
 
 /// Journey: Teleport an enemy, verify through snapshot + delta + inspect.
