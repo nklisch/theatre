@@ -8,8 +8,8 @@ use crate::query::{
 /// Used to validate method names and deserialize params before reaching Godot.
 /// This is the authoritative list — adding a new method requires updating this enum.
 ///
-/// Methods prefixed `Recording*` are routed through `recording_handler.rs` rather
-/// than `query_handler.rs`, but they are still valid wire methods.
+/// Methods prefixed `Recording*` are clip management methods routed through
+/// `recording_handler.rs` rather than `query_handler.rs`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QueryMethod {
     // Spatial query methods (routed through query_handler.rs)
@@ -19,15 +19,15 @@ pub enum QueryMethod {
     GetSceneTree,
     ExecuteAction,
     SpatialQuery,
-    // Recording methods (routed through recording_handler.rs)
-    RecordingStart,
-    RecordingStop,
-    RecordingStatus,
+    // Clip management methods (routed through recording_handler.rs)
     RecordingMarker,
     RecordingMarkers,
     RecordingList,
     RecordingDelete,
     RecordingResolvePath,
+    DashcamStatus,
+    DashcamFlush,
+    DashcamConfig,
 }
 
 impl QueryMethod {
@@ -40,14 +40,14 @@ impl QueryMethod {
             "get_scene_tree" => Some(Self::GetSceneTree),
             "execute_action" => Some(Self::ExecuteAction),
             "spatial_query" => Some(Self::SpatialQuery),
-            "recording_start" => Some(Self::RecordingStart),
-            "recording_stop" => Some(Self::RecordingStop),
-            "recording_status" => Some(Self::RecordingStatus),
             "recording_marker" => Some(Self::RecordingMarker),
             "recording_markers" => Some(Self::RecordingMarkers),
             "recording_list" => Some(Self::RecordingList),
             "recording_delete" => Some(Self::RecordingDelete),
             "recording_resolve_path" => Some(Self::RecordingResolvePath),
+            "dashcam_status" => Some(Self::DashcamStatus),
+            "dashcam_flush" => Some(Self::DashcamFlush),
+            "dashcam_config" => Some(Self::DashcamConfig),
             _ => None,
         }
     }
@@ -61,36 +61,36 @@ impl QueryMethod {
             Self::GetSceneTree => "get_scene_tree",
             Self::ExecuteAction => "execute_action",
             Self::SpatialQuery => "spatial_query",
-            Self::RecordingStart => "recording_start",
-            Self::RecordingStop => "recording_stop",
-            Self::RecordingStatus => "recording_status",
             Self::RecordingMarker => "recording_marker",
             Self::RecordingMarkers => "recording_markers",
             Self::RecordingList => "recording_list",
             Self::RecordingDelete => "recording_delete",
             Self::RecordingResolvePath => "recording_resolve_path",
+            Self::DashcamStatus => "dashcam_status",
+            Self::DashcamFlush => "dashcam_flush",
+            Self::DashcamConfig => "dashcam_config",
         }
     }
 
     /// Returns true if this method is routed through `recording_handler.rs`.
-    pub fn is_recording_method(self) -> bool {
+    pub fn is_clip_method(self) -> bool {
         matches!(
             self,
-            Self::RecordingStart
-                | Self::RecordingStop
-                | Self::RecordingStatus
-                | Self::RecordingMarker
+            Self::RecordingMarker
                 | Self::RecordingMarkers
                 | Self::RecordingList
                 | Self::RecordingDelete
                 | Self::RecordingResolvePath
+                | Self::DashcamStatus
+                | Self::DashcamFlush
+                | Self::DashcamConfig
         )
     }
 
     /// Validate that `params` deserialize correctly for this method.
     /// Returns `Ok(())` or a human-readable error string.
     ///
-    /// Recording methods use ad-hoc JSON parsing in `recording_handler.rs` rather
+    /// Clip methods use ad-hoc JSON parsing in `recording_handler.rs` rather
     /// than typed structs, so only minimal structural validation is done for them.
     pub fn validate_params(self, params: &serde_json::Value) -> Result<(), String> {
         match self {
@@ -114,22 +114,17 @@ impl QueryMethod {
             Self::SpatialQuery => serde_json::from_value::<SpatialQueryRequest>(params.clone())
                 .map(|_| ())
                 .map_err(|e| e.to_string()),
-            // Recording methods: must be a JSON object (handler does field-level parsing)
-            Self::RecordingStart => {
-                if !params.is_object() {
-                    return Err("recording_start params must be an object".into());
-                }
-                Ok(())
-            }
-            Self::RecordingStop
-            | Self::RecordingStatus
-            | Self::RecordingResolvePath => Ok(()), // no required params
+            // Clip methods: must be a JSON object (handler does field-level parsing)
             Self::RecordingMarker => {
                 if !params.is_object() {
                     return Err("recording_marker params must be an object".into());
                 }
                 Ok(())
             }
+            Self::RecordingResolvePath
+            | Self::DashcamStatus
+            | Self::DashcamFlush
+            | Self::DashcamConfig => Ok(()), // no required params or ad-hoc object
             Self::RecordingMarkers | Self::RecordingList | Self::RecordingDelete => {
                 if !params.is_null() && !params.is_object() {
                     return Err(format!("{} params must be an object or null", self.as_str()));
@@ -156,14 +151,14 @@ mod tests {
             ("get_scene_tree", QueryMethod::GetSceneTree),
             ("execute_action", QueryMethod::ExecuteAction),
             ("spatial_query", QueryMethod::SpatialQuery),
-            ("recording_start", QueryMethod::RecordingStart),
-            ("recording_stop", QueryMethod::RecordingStop),
-            ("recording_status", QueryMethod::RecordingStatus),
             ("recording_marker", QueryMethod::RecordingMarker),
             ("recording_markers", QueryMethod::RecordingMarkers),
             ("recording_list", QueryMethod::RecordingList),
             ("recording_delete", QueryMethod::RecordingDelete),
             ("recording_resolve_path", QueryMethod::RecordingResolvePath),
+            ("dashcam_status", QueryMethod::DashcamStatus),
+            ("dashcam_flush", QueryMethod::DashcamFlush),
+            ("dashcam_config", QueryMethod::DashcamConfig),
         ];
         for (name, expected) in cases {
             assert_eq!(QueryMethod::from_str(name), Some(expected), "failed for {name}");
@@ -186,14 +181,14 @@ mod tests {
             QueryMethod::GetSceneTree,
             QueryMethod::ExecuteAction,
             QueryMethod::SpatialQuery,
-            QueryMethod::RecordingStart,
-            QueryMethod::RecordingStop,
-            QueryMethod::RecordingStatus,
             QueryMethod::RecordingMarker,
             QueryMethod::RecordingMarkers,
             QueryMethod::RecordingList,
             QueryMethod::RecordingDelete,
             QueryMethod::RecordingResolvePath,
+            QueryMethod::DashcamStatus,
+            QueryMethod::DashcamFlush,
+            QueryMethod::DashcamConfig,
         ];
         for method in methods {
             let name = method.as_str();
@@ -201,47 +196,32 @@ mod tests {
         }
     }
 
-    // --- recording method dispatch ---
+    // --- clip method dispatch ---
 
     #[test]
-    fn recording_methods_are_flagged_correctly() {
-        assert!(QueryMethod::RecordingStart.is_recording_method());
-        assert!(QueryMethod::RecordingStop.is_recording_method());
-        assert!(QueryMethod::RecordingStatus.is_recording_method());
-        assert!(QueryMethod::RecordingMarker.is_recording_method());
-        assert!(QueryMethod::RecordingMarkers.is_recording_method());
-        assert!(QueryMethod::RecordingList.is_recording_method());
-        assert!(QueryMethod::RecordingDelete.is_recording_method());
-        assert!(QueryMethod::RecordingResolvePath.is_recording_method());
+    fn clip_methods_are_flagged_correctly() {
+        assert!(QueryMethod::RecordingMarker.is_clip_method());
+        assert!(QueryMethod::RecordingMarkers.is_clip_method());
+        assert!(QueryMethod::RecordingList.is_clip_method());
+        assert!(QueryMethod::RecordingDelete.is_clip_method());
+        assert!(QueryMethod::RecordingResolvePath.is_clip_method());
+        assert!(QueryMethod::DashcamStatus.is_clip_method());
+        assert!(QueryMethod::DashcamFlush.is_clip_method());
+        assert!(QueryMethod::DashcamConfig.is_clip_method());
     }
 
     #[test]
-    fn spatial_methods_are_not_recording_methods() {
-        assert!(!QueryMethod::GetSnapshotData.is_recording_method());
-        assert!(!QueryMethod::ExecuteAction.is_recording_method());
-        assert!(!QueryMethod::SpatialQuery.is_recording_method());
+    fn spatial_methods_are_not_clip_methods() {
+        assert!(!QueryMethod::GetSnapshotData.is_clip_method());
+        assert!(!QueryMethod::ExecuteAction.is_clip_method());
+        assert!(!QueryMethod::SpatialQuery.is_clip_method());
     }
 
     #[test]
-    fn recording_start_params_accept_object() {
-        assert!(QueryMethod::RecordingStart.validate_params(&json!({"name": "test"})).is_ok());
-    }
-
-    #[test]
-    fn recording_start_params_reject_non_object() {
-        assert!(QueryMethod::RecordingStart.validate_params(&json!("bad")).is_err());
-        assert!(QueryMethod::RecordingStart.validate_params(&json!(42)).is_err());
-    }
-
-    #[test]
-    fn recording_stop_accepts_empty_params() {
-        assert!(QueryMethod::RecordingStop.validate_params(&json!({})).is_ok());
-        assert!(QueryMethod::RecordingStop.validate_params(&json!(null)).is_ok());
-    }
-
-    #[test]
-    fn recording_status_accepts_empty_params() {
-        assert!(QueryMethod::RecordingStatus.validate_params(&json!({})).is_ok());
+    fn recording_start_is_unknown_method() {
+        assert_eq!(QueryMethod::from_str("recording_start"), None);
+        assert_eq!(QueryMethod::from_str("recording_stop"), None);
+        assert_eq!(QueryMethod::from_str("recording_status"), None);
     }
 
     #[test]
@@ -253,6 +233,13 @@ mod tests {
     #[test]
     fn recording_marker_rejects_non_object() {
         assert!(QueryMethod::RecordingMarker.validate_params(&json!("bad")).is_err());
+    }
+
+    #[test]
+    fn dashcam_methods_accept_empty_params() {
+        assert!(QueryMethod::DashcamStatus.validate_params(&json!({})).is_ok());
+        assert!(QueryMethod::DashcamFlush.validate_params(&json!({})).is_ok());
+        assert!(QueryMethod::DashcamConfig.validate_params(&json!({})).is_ok());
     }
 
     // --- validate_params: get_snapshot_data ---

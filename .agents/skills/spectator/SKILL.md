@@ -1,11 +1,11 @@
 ---
 name: spectator
-description: Use Spectator's MCP tools to spatially debug a running Godot game. Invoke when the user is asking about game state, node positions, spatial bugs, physics, pathfinding, signals, or anything that requires understanding what's happening in the running game world. Also invoke when the user wants to set up recording sessions, watch for changes, or manipulate game state for debugging.
+description: Use Spectator's MCP tools to spatially debug a running Godot game. Invoke when the user is asking about game state, node positions, spatial bugs, physics, pathfinding, signals, or anything that requires understanding what's happening in the running game world. Also invoke when the user wants to analyze clips, watch for changes, or manipulate game state for debugging.
 ---
 
 # Spectator — Spatial Debugging for Godot
 
-Spectator gives you 9 MCP tools to observe and interact with a running Godot game. These tools see the game's spatial reality: positions, distances, relationships, physics, signals — organized in space, not as code.
+Spectator gives you 9 MCP tools to observe and interact with a running Godot game: 8 spatial tools + the `clips` tool for capturing and analyzing gameplay moments. These tools see the game's spatial reality: positions, distances, relationships, physics, signals — organized in space, not as code.
 
 **Prerequisite:** Spectator addon must be enabled in the Godot project and the game must be running (Play mode). If tools return `not_connected`, the game isn't running yet.
 
@@ -20,7 +20,7 @@ Spectator gives you 9 MCP tools to observe and interact with a running Godot gam
 "Teleport/pause/set property"             → spatial_action
 "How is this scene structured?"           → scene_tree
 "Configure what to track"                 → spatial_config
-"Record while I reproduce the bug"        → recording
+"Mark this moment / save a clip"          → clips
 ```
 
 ## Standard Opening Move
@@ -303,42 +303,33 @@ Call this at the start of a session to tune what Spectator tracks:
 
 `state_properties` controls which exported vars appear in snapshot `state` blocks. Without this, you see all exported vars — often noisy. Configure per-group or per-class.
 
-## recording — Human-Drives, Agent-Analyzes
+## clips — Mark, Save, Analyze
 
-The recording workflow: human reproduces the bug, agent analyzes the timeline.
+Clips are captured automatically by the dashcam ring buffer. The human (or agent) marks an interesting moment; the dashcam saves the surrounding context as a clip. The agent then analyzes the clip.
 
 ```jsonc
-// Check if recording is active (human may have started it with F8)
+// Check dashcam buffer state
 { "action": "status" }
 
-// Start recording (or the human hits F8)
-{ "action": "start", "recording_name": "wall_clip_repro" }
+// Mark the current moment — triggers automatic clip save with pre/post window
+{ "action": "add_marker", "marker_label": "wall_clip_repro" }
 
-// Start with custom capture config
-{
-  "action": "start",
-  "recording_name": "detailed_run",
-  "capture": {
-    "capture_interval": 1,   // capture every N physics frames (default 1)
-    "max_frames": 36000      // max frames to capture (default 36000)
-  }
-}
+// Force-save the current buffer as a clip immediately (no marker required)
+{ "action": "save", "marker_label": "manual save" }
 
-// List available recordings
+// List saved clips
 { "action": "list" }
 
-// After human stops recording, analyze:
+// See markers in a clip (F9 = human marker, system = auto-detected anomalies)
+{ "action": "markers", "clip_id": "clip_001a2b3c" }
 
-// See markers (F9 = human marker, system = auto-detected anomalies)
-{ "action": "markers", "recording_id": "rec_001" }
-
-// Spatial state at the marked frame
+// Spatial state at the marked frame (omit clip_id to use most recent clip)
 { "action": "snapshot_at", "at_frame": 4582, "detail": "standard" }
 
 // Find when enemy got within 0.5m of wall (across frame range)
 {
   "action": "query_range",
-  "recording_id": "rec_001",
+  "clip_id": "clip_001a2b3c",
   "from_frame": 4570,
   "to_frame": 4600,
   "node": "enemies/guard_01",
@@ -351,7 +342,7 @@ The recording workflow: human reproduces the bug, agent analyzes the timeline.
 // Search for specific events
 {
   "action": "find_event",
-  "recording_id": "rec_001",
+  "clip_id": "clip_001a2b3c",
   "event_type": "signal",           // signal, property_change, collision, area_enter,
                                     // area_exit, node_added, node_removed, marker, input
   "event_filter": "health_changed", // substring match on event data (optional)
@@ -375,8 +366,8 @@ The recording workflow: human reproduces the bug, agent analyzes the timeline.
 1. spatial_config(static_patterns: ["walls/*"])
 2. spatial_watch(node: "enemies/guard_01", track: ["position", "physics"])
 3. [human reproduces bug, presses F9 at clip moment]
-4. recording(action: "markers") → find the marked frame
-5. recording(action: "query_range", condition: { type: "proximity", target: "walls/*", threshold: 0.5 })
+4. clips(action: "markers") → find the marked frame
+5. clips(action: "query_range", condition: { type: "proximity", target: "walls/*", threshold: 0.5 })
 6. spatial_inspect(node: "enemies/guard_01", include: ["physics"])
    → check collision_layer / collision_mask for mismatch
 ```
@@ -443,5 +434,5 @@ ahead, ahead_left, ahead_right, left, right, behind, behind_left, behind_right
 | `scene_not_loaded` | Between scene transitions | Wait for scene to finish loading |
 | `node_not_found` | Path doesn't exist | Use `scene_tree(action: "find")` to locate the node |
 | `timeout` | Game frozen or at a breakpoint | Check if game is paused/broken |
-| `recording_active` | Already recording | Stop current recording first |
+| `dashcam_disabled` | Dashcam not active | Check spatial_config dashcam settings |
 | `budget_exceeded` | Too many nodes, too large | Reduce radius, add group filter, or use summary detail |

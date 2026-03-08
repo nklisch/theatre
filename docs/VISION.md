@@ -46,7 +46,7 @@ LLM context windows are finite and expensive. Every response is budgeted. Summar
 
 ### 3. Human-Agent Collaboration
 
-The human and agent are partners. The human drives the game — they know how to reproduce the bug, when it happens, what looks wrong. The agent analyzes — it can scrub timelines, compute spatial relationships, cross-reference collision layers and navmesh edges. The recording system is the collaboration surface: human records, marks interesting moments; agent reviews, annotates, diagnoses.
+The human and agent are partners. The human drives the game — they know how to reproduce the bug, when it happens, what looks wrong. The agent analyzes — it can scrub timelines, compute spatial relationships, cross-reference collision layers and navmesh edges. The dashcam captures context automatically around interesting moments; the agent scrubs through saved clips to diagnose what went wrong.
 
 ### 4. Observational by Default
 

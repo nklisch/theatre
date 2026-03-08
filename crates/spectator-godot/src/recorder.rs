@@ -189,7 +189,7 @@ impl SpectatorRecorder {
     fn marker_added(frame: u64, source: GString, label: GString);
 
     #[signal]
-    fn dashcam_clip_saved(recording_id: GString, tier: GString, frames: u32);
+    fn dashcam_clip_saved(clip_id: GString, tier: GString, frames: u32);
 
     #[signal]
     fn dashcam_clip_started(trigger_frame: u64, tier: GString);
@@ -256,7 +256,7 @@ impl SpectatorRecorder {
     }
 
     /// Force-flush the current ring buffer to a clip immediately.
-    /// Returns the clip recording_id or empty string on error.
+    /// Returns the clip_id or empty string on error.
     #[func]
     pub fn flush_dashcam_clip(&mut self, label: GString) -> GString {
         if matches!(self.dashcam_state, DashcamState::Disabled) {
@@ -463,23 +463,23 @@ impl SpectatorRecorder {
         result
     }
 
-    /// Delete the recording file for the given recording_id. Returns true on success.
+    /// Delete the clip file for the given clip_id. Returns true on success.
     #[func]
-    pub fn delete_recording(&self, storage_path: GString, recording_id: GString) -> bool {
+    pub fn delete_recording(&self, storage_path: GString, clip_id: GString) -> bool {
         let dir_path = globalize_path(&storage_path.to_string());
-        let file_path = format!("{}/{}.sqlite", dir_path, recording_id);
+        let file_path = format!("{}/{}.sqlite", dir_path, clip_id);
         std::fs::remove_file(&file_path).is_ok()
     }
 
-    /// Return all markers for a recording by reading its SQLite file.
+    /// Return all markers for a clip by reading its SQLite file.
     #[func]
     pub fn get_recording_markers(
         &self,
         storage_path: GString,
-        recording_id: GString,
+        clip_id: GString,
     ) -> Array<VarDictionary> {
         let dir_path = globalize_path(&storage_path.to_string());
-        let file_path = format!("{}/{}.sqlite", dir_path, recording_id);
+        let file_path = format!("{}/{}.sqlite", dir_path, clip_id);
         let mut result = Array::new();
 
         let db = match Connection::open_with_flags(
@@ -795,11 +795,11 @@ impl SpectatorRecorder {
             return None;
         };
 
-        let recording_id = format!("clip_{:08x}", rand_u32());
+        let clip_id = format!("clip_{:08x}", rand_u32());
         let storage_path = "user://spectator_recordings/";
         let dir_path = globalize_path(storage_path);
         let _ = std::fs::create_dir_all(&dir_path);
-        let db_path = format!("{}/{}.sqlite", dir_path, recording_id);
+        let db_path = format!("{}/{}.sqlite", dir_path, clip_id);
 
         let db = match Connection::open(&db_path) {
             Ok(db) => db,
@@ -858,7 +858,7 @@ impl SpectatorRecorder {
               scene_dimensions, physics_ticks_per_sec, capture_config) \
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             rusqlite::params![
-                &recording_id,
+                &clip_id,
                 &format!("dashcam_{}", chrono_like_timestamp()),
                 first_frame,
                 last_frame,
@@ -901,19 +901,19 @@ impl SpectatorRecorder {
 
         tracing::info!(
             "[Spectator] Dashcam clip saved: {} ({} frames, {} tier)",
-            recording_id,
+            clip_id,
             total_frames,
             tier_str
         );
 
         // Emit signal — all local borrows are released at this point.
-        let id_var = GString::from(&recording_id).to_variant();
+        let id_var = GString::from(&clip_id).to_variant();
         let tier_var = GString::from(tier_str).to_variant();
         let frames_var = total_frames.to_variant();
         self.base_mut()
             .emit_signal("dashcam_clip_saved", &[id_var, tier_var, frames_var]);
 
-        Some(recording_id)
+        Some(clip_id)
     }
 }
 
@@ -1351,7 +1351,7 @@ mod tests {
              started_at_ms, ended_at_ms, scene_dimensions, physics_ticks_per_sec, capture_config) \
              VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             rusqlite::params![
-                "dash_abc",
+                "clip_abc12345",
                 "dashcam_1000",
                 400u64,
                 500u64,
@@ -1366,7 +1366,7 @@ mod tests {
 
         let config_str: String = db
             .query_row(
-                "SELECT capture_config FROM recording WHERE id = 'dash_abc'",
+                "SELECT capture_config FROM recording WHERE id = 'clip_abc12345'",
                 [],
                 |r| r.get(0),
             )

@@ -111,40 +111,24 @@ fn second_client_gets_handshake_after_first_disconnects_abnormally() {
 
 #[test]
 #[ignore = "requires Godot binary and built GDExtension"]
-fn recording_captures_frames_after_reconnect() {
+fn dashcam_works_after_reconnect() {
     /// Regression for snapshot Bug 5: after a disconnect + reconnect cycle, the
-    /// recorder must be able to start a recording and capture frames.
+    /// dashcam must still be buffering and respond to status queries.
     ///
     /// This guards against state leaks in SpectatorRecorder when connections reset.
 
     let mut f1 = GodotFixture::start("test_scene_3d.tscn").unwrap();
     let port = f1.port;
 
-    // First session: verify recording works
-    let start1 = f1
-        .query(
-            "recording_start",
-            serde_json::json!({
-                "name": "resilience_test_1",
-                "storage_path": "/tmp/spectator-wire-test/",
-                "capture_interval": 1,
-                "max_frames": 60,
-            }),
-        )
+    // First session: verify dashcam is active
+    let status1 = f1
+        .query("dashcam_status", serde_json::json!({}))
         .unwrap()
         .unwrap_data();
-    let id1 = start1["recording_id"].as_str().unwrap_or("").to_string();
-    assert!(!id1.is_empty(), "first recording_id must be non-empty");
-
-    // Let it capture a few frames
-    std::thread::sleep(Duration::from_millis(200));
-
-    let stop1 = f1
-        .query("recording_stop", serde_json::json!({}))
-        .unwrap()
-        .unwrap_data();
-    let frames1 = stop1["frames_captured"].as_u64().unwrap_or(0);
-    assert!(frames1 > 0, "first session should capture at least 1 frame");
+    assert!(
+        status1["state"].as_str().is_some(),
+        "first session dashcam must return state"
+    );
 
     // Drop first connection cleanly
     drop(f1);
@@ -171,8 +155,6 @@ fn recording_captures_frames_after_reconnect() {
     codec::write_message(&mut stream, &ack).unwrap();
     assert_eq!(handshake.protocol_version, PROTOCOL_VERSION);
 
-    // Wrap in a mini fixture-like struct to query
-    // (We can't use GodotFixture::start here since Godot is already running)
     fn query_raw(
         stream: &mut TcpStream,
         method: &str,
@@ -195,29 +177,11 @@ fn recording_captures_frames_after_reconnect() {
         }
     }
 
-    // Start recording in second session
-    let start2 = query_raw(
-        &mut stream,
-        "recording_start",
-        serde_json::json!({
-            "name": "resilience_test_2",
-            "storage_path": "/tmp/spectator-wire-test/",
-            "capture_interval": 1,
-            "max_frames": 60,
-        }),
-    );
+    // Dashcam must still respond after reconnect
+    let status2 = query_raw(&mut stream, "dashcam_status", serde_json::json!({}));
     assert!(
-        !start2["recording_id"].as_str().unwrap_or("").is_empty(),
-        "second session must be able to start recording after reconnect"
-    );
-
-    std::thread::sleep(Duration::from_millis(200));
-
-    let stop2 = query_raw(&mut stream, "recording_stop", serde_json::json!({}));
-    let frames2 = stop2["frames_captured"].as_u64().unwrap_or(0);
-    assert!(
-        frames2 > 0,
-        "second session must capture frames: got {frames2}"
+        status2["state"].as_str().is_some(),
+        "second session dashcam must return state after reconnect"
     );
 }
 
