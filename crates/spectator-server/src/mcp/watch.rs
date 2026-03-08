@@ -152,7 +152,7 @@ pub async fn handle_spatial_watch(
                     .iter()
                     .map(|w| {
                         serde_json::json!({
-                            "id": w.id,
+                            "watch_id": w.id,
                             "node": w.node,
                             "conditions": format_conditions(&w.conditions),
                             "tracking": w.track,

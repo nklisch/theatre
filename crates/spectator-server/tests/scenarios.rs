@@ -773,10 +773,9 @@ async fn test_error_isolation_watches_survive_failed_action() {
         .unwrap();
     let watches = list["watches"].as_array().unwrap();
     assert_eq!(watches.len(), 2, "both watches should survive the failed action: {list}");
-    // In list responses the id field is "id"; in add responses it's "watch_id"
     let watch_ids: Vec<&str> = watches
         .iter()
-        .filter_map(|w| w["id"].as_str().or_else(|| w["watch_id"].as_str()))
+        .filter_map(|w| w["watch_id"].as_str())
         .collect();
     assert!(watch_ids.contains(&id1.as_str()), "watch 1 should still exist");
     assert!(watch_ids.contains(&id2.as_str()), "watch 2 should still exist");
@@ -1080,11 +1079,8 @@ async fn test_watches_can_be_re_added_after_clear() {
         .unwrap();
     let watches = list["watches"].as_array().unwrap();
     assert_eq!(watches.len(), 1, "should have exactly 1 watch after re-add");
-    // In list responses the id field is "id"; in add responses it's "watch_id"
     assert!(
-        watches
-            .iter()
-            .any(|w| w["id"].as_str() == Some(id) || w["watch_id"].as_str() == Some(id)),
+        watches.iter().any(|w| w["watch_id"].as_str() == Some(id)),
         "re-added watch should appear in list: {list}"
     );
 }

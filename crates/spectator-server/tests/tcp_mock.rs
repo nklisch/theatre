@@ -817,7 +817,7 @@ async fn test_recording_add_marker() {
     let result = harness
         .call_tool(
             "recording",
-            json!({ "action": "marker", "marker_label": "checkpoint_1" }),
+            json!({ "action": "add_marker", "marker_label": "checkpoint_1" }),
         )
         .await
         .unwrap();
