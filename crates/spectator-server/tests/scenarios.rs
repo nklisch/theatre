@@ -400,8 +400,8 @@ async fn test_teleport_reflected_in_subsequent_snapshot() {
         .expect("Player should appear in snapshot");
 
     // The absolute position should reflect the teleport destination
-    let abs = player["abs"].as_array().expect("Player should have abs position");
-    let x = abs[0].as_f64().unwrap_or(f64::NAN);
+    let pos = player["global_position"].as_array().expect("Player should have global_position");
+    let x = pos[0].as_f64().unwrap_or(f64::NAN);
     assert!(
         (x - 20.0).abs() < 0.5,
         "Player x should be ~20.0 after teleport, got {x}: {player}"

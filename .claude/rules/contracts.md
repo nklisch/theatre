@@ -52,6 +52,26 @@ If a feature is not yet implemented:
 - Remove the field from the struct, or
 - Return an explicit error when the field is set, explaining it is unimplemented.
 
+## Field Names Follow Godot Naming Where a Godot Equivalent Exists
+
+When a field maps to a Godot property or method, use the Godot name (or its
+direct derivative per the rules below). Do not invent a different name.
+
+```
+global_position   ✓    abs              ✗   (Godot: global_position)
+rotation_deg      ✓    rot              ✗   (Godot: rotation_degrees → rotation_deg)
+rotation_y_deg    ✓    rot_y            ✗   (Y component of rotation_degrees)
+position          ✓    local_origin     ✗   (Godot: position)
+```
+
+**Derivation rules** (see `docs/design/GODOT-NAMING.md` for the full dictionary):
+- Godot property → use exact name: `velocity`, `scale`, `visible`, `collision_layer`
+- Godot `get_X()` method → drop `get_`: `get_class()` → `class`, `get_path()` → `path`
+- Godot `is_X()` method → drop `is_`: `is_on_floor()` → `on_floor`
+- `rotation_degrees` → `rotation_deg` (Spectator abbreviation convention — the only allowed abbreviation)
+- Spectator-computed fields (no Godot equivalent) → descriptive snake_case, no abbreviations:
+  `relative`, `bearing`, `bearing_deg`, `distance`, `occluded`, `timestamp_ms`
+
 ## Echo Fields Must Match Input Field Names
 
 When a response confirms or echoes back a value the caller submitted, the

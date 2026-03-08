@@ -655,9 +655,9 @@ impl SpectatorCollector {
             let local = n3d.get_position();
             let scale = n3d.get_scale();
             InspectTransform {
-                global_origin: vec3(global),
+                global_position: vec3(global),
                 global_rotation_deg: vec3(global_rot),
-                local_origin: vec3(local),
+                position: vec3(local),
                 scale: vec3(scale),
             }
         } else if let Ok(n2d) = node.clone().try_cast::<Node2D>() {
@@ -666,16 +666,16 @@ impl SpectatorCollector {
             let local = n2d.get_position();
             let scale = n2d.get_scale();
             InspectTransform {
-                global_origin: vec![global.x as f64, global.y as f64],
+                global_position: vec![global.x as f64, global.y as f64],
                 global_rotation_deg: vec![global_rot as f64],
-                local_origin: vec![local.x as f64, local.y as f64],
+                position: vec![local.x as f64, local.y as f64],
                 scale: vec![scale.x as f64, scale.y as f64],
             }
         } else {
             InspectTransform {
-                global_origin: vec![],
+                global_position: vec![],
                 global_rotation_deg: vec![],
-                local_origin: vec![],
+                position: vec![],
                 scale: vec![],
             }
         }

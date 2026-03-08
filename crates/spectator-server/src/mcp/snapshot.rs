@@ -63,13 +63,13 @@ fn default_detail() -> String { "standard".to_string() }
 pub struct OutputEntity {
     pub path: String,
     pub class: String,
-    pub rel: serde_json::Value,
-    pub abs: Vec<f64>,
+    pub relative: serde_json::Value,
+    pub global_position: Vec<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub rot_y: Option<f64>,
+    pub rotation_y_deg: Option<f64>,
     /// 2D rotation angle in degrees (present only for 2D entities).
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub rot: Option<f64>,
+    pub rotation_deg: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub velocity: Option<Vec<f64>>,
     pub groups: Vec<String>,
@@ -102,7 +102,7 @@ pub struct PaginationBlock {
     pub showing: usize,
     pub total: usize,
     pub cursor: String,
-    pub omitted_nearest_dist: f64,
+    pub omitted_nearest_distance: f64,
 }
 
 /// Convert protocol EntityData to a delta-compatible EntitySnapshot.
@@ -217,10 +217,10 @@ pub fn build_output_entity(entity: &EntityData, rel: &RelativePosition, full: bo
     OutputEntity {
         path: entity.path.clone(),
         class: entity.class.clone(),
-        rel: format_rel(rel, config.bearing_format),
-        abs: entity.position.clone(),
-        rot_y: if is_2d { None } else { entity.rotation_deg.get(1).copied() },
-        rot: if is_2d { entity.rotation_deg.first().copied() } else { None },
+        relative: format_rel(rel, config.bearing_format),
+        global_position: entity.position.clone(),
+        rotation_y_deg: if is_2d { None } else { entity.rotation_deg.get(1).copied() },
+        rotation_deg: if is_2d { entity.rotation_deg.first().copied() } else { None },
         velocity,
         groups: entity.groups.clone(),
         state,
@@ -402,7 +402,7 @@ fn build_snapshot_body(
                 showing: dynamic_entities.len(),
                 total,
                 cursor: format!("snap_{}_p{}", raw.frame, dynamic_entities.len()),
-                omitted_nearest_dist: rel.dist,
+                omitted_nearest_distance: rel.dist,
             };
             let mut resp = serde_json::json!({
                 "frame": raw.frame,

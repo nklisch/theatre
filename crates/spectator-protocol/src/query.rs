@@ -321,9 +321,9 @@ pub struct ParticleData {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InspectTransform {
-    pub global_origin: Vec<f64>,
+    pub global_position: Vec<f64>,
     pub global_rotation_deg: Vec<f64>,
-    pub local_origin: Vec<f64>,
+    pub position: Vec<f64>,
     pub scale: Vec<f64>,
 }
 

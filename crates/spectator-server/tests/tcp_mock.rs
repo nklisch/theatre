@@ -86,7 +86,7 @@ async fn test_snapshot_standard_returns_entities() {
     let first = &arr[0];
     assert!(first.get("path").is_some());
     assert!(first.get("class").is_some());
-    assert!(first.get("rel").is_some());
+    assert!(first.get("relative").is_some());
 }
 
 #[tokio::test]
@@ -180,8 +180,8 @@ async fn test_snapshot_2d_scene() {
     assert!(!entities.is_empty());
     // 2D entities should have 2-element position arrays
     let player = entities.iter().find(|e| e["path"] == "Player").unwrap();
-    let abs = player["abs"].as_array().unwrap();
-    assert_eq!(abs.len(), 2);
+    let pos = player["global_position"].as_array().unwrap();
+    assert_eq!(pos.len(), 2);
 }
 
 // ---------------------------------------------------------------------------

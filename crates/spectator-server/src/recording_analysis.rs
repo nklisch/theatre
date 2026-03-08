@@ -260,12 +260,12 @@ pub fn snapshot_at(
             });
 
             if detail != "summary" {
-                entry["rel"] = json!({
+                entry["relative"] = json!({
                     "distance": rel.dist,
                     "bearing": rel.bearing,
                     "bearing_deg": rel.bearing_deg,
                 });
-                entry["rot_y"] = json!(e.rotation_deg.get(1).copied().unwrap_or(0.0));
+                entry["rotation_y_deg"] = json!(e.rotation_deg.get(1).copied().unwrap_or(0.0));
                 let vel_mag: f64 = e.velocity.iter().map(|v| v * v).sum::<f64>().sqrt();
                 if vel_mag > 0.01 {
                     entry["velocity"] = json!(e.velocity);
