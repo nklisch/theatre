@@ -1,6 +1,8 @@
 mod harness;
 
 #[cfg(test)]
+mod test_daemon;
+#[cfg(test)]
 mod test_instance;
 #[cfg(test)]
 mod test_journey;

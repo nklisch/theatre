@@ -1,3 +1,4 @@
+use crate::daemon::DaemonError;
 use crate::oneshot::OperationError;
 use crate::resolve::ResolveError;
 use rmcp::model::ErrorData as McpError;
@@ -6,6 +7,13 @@ use rmcp::model::ErrorData as McpError;
 impl From<ResolveError> for McpError {
     fn from(e: ResolveError) -> Self {
         McpError::invalid_params(e.to_string(), None)
+    }
+}
+
+/// Convert DaemonError to McpError for use in tool handlers.
+impl From<DaemonError> for McpError {
+    fn from(e: DaemonError) -> Self {
+        McpError::internal_error(e.to_string(), None)
     }
 }
 

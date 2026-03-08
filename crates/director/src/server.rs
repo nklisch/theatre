@@ -1,17 +1,23 @@
+use std::sync::Arc;
+
 use rmcp::handler::server::tool::ToolRouter;
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::{Implementation, ServerCapabilities, ServerInfo};
 use rmcp::tool_handler;
 
+use crate::backend::Backend;
+
 #[derive(Clone)]
 pub struct DirectorServer {
     pub tool_router: ToolRouter<Self>,
+    pub backend: Arc<Backend>,
 }
 
 impl DirectorServer {
     pub fn new() -> Self {
         Self {
             tool_router: Self::tool_router(),
+            backend: Arc::new(Backend::new()),
         }
     }
 }

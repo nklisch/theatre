@@ -1,3 +1,5 @@
+pub mod backend;
+pub mod daemon;
 pub mod error;
 pub mod mcp;
 pub mod oneshot;

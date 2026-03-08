@@ -7,7 +7,7 @@ use rmcp::model::ErrorData as McpError;
 use rmcp::tool;
 use rmcp::tool_router;
 
-use crate::oneshot::run_oneshot;
+use crate::backend::Backend;
 use crate::resolve::{resolve_godot_bin, validate_project_path};
 use crate::server::DirectorServer;
 
@@ -19,9 +19,10 @@ use scene::{SceneAddInstanceParams, SceneCreateParams, SceneListParams, SceneRea
 // Shared MCP helpers
 // ---------------------------------------------------------------------------
 
-/// Run an operation via headless Godot and return the parsed result data.
-/// Handles godot resolution, project validation, subprocess, and JSON parsing.
+/// Run an operation via the best available backend and return the parsed result data.
+/// Handles godot resolution, project validation, and backend routing.
 async fn run_operation(
+    backend: &Backend,
     project_path: &str,
     operation: &str,
     params: &serde_json::Value,
@@ -30,7 +31,8 @@ async fn run_operation(
     let project = std::path::Path::new(project_path);
     validate_project_path(project).map_err(McpError::from)?;
 
-    let result = run_oneshot(&godot, project, operation, params)
+    let result = backend
+        .run_operation(&godot, project, operation, params)
         .await
         .map_err(McpError::from)?;
 
@@ -66,7 +68,7 @@ impl DirectorServer {
         Parameters(params): Parameters<SceneCreateParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&params.project_path, "scene_create", &op_params).await?;
+        let data = run_operation(&self.backend, &params.project_path, "scene_create", &op_params).await?;
         serialize_response(&data)
     }
 
@@ -81,7 +83,7 @@ impl DirectorServer {
         Parameters(params): Parameters<SceneReadParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&params.project_path, "scene_read", &op_params).await?;
+        let data = run_operation(&self.backend, &params.project_path, "scene_read", &op_params).await?;
         serialize_response(&data)
     }
 
@@ -96,7 +98,7 @@ impl DirectorServer {
         Parameters(params): Parameters<NodeAddParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&params.project_path, "node_add", &op_params).await?;
+        let data = run_operation(&self.backend, &params.project_path, "node_add", &op_params).await?;
         serialize_response(&data)
     }
 
@@ -111,7 +113,7 @@ impl DirectorServer {
         Parameters(params): Parameters<NodeSetPropertiesParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&params.project_path, "node_set_properties", &op_params).await?;
+        let data = run_operation(&self.backend, &params.project_path, "node_set_properties", &op_params).await?;
         serialize_response(&data)
     }
 
@@ -125,7 +127,7 @@ impl DirectorServer {
         Parameters(params): Parameters<NodeRemoveParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&params.project_path, "node_remove", &op_params).await?;
+        let data = run_operation(&self.backend, &params.project_path, "node_remove", &op_params).await?;
         serialize_response(&data)
     }
 
@@ -139,7 +141,7 @@ impl DirectorServer {
         Parameters(params): Parameters<SceneListParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&params.project_path, "scene_list", &op_params).await?;
+        let data = run_operation(&self.backend, &params.project_path, "scene_list", &op_params).await?;
         serialize_response(&data)
     }
 
@@ -154,7 +156,7 @@ impl DirectorServer {
         Parameters(params): Parameters<SceneAddInstanceParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&params.project_path, "scene_add_instance", &op_params).await?;
+        let data = run_operation(&self.backend, &params.project_path, "scene_add_instance", &op_params).await?;
         serialize_response(&data)
     }
 
@@ -169,7 +171,7 @@ impl DirectorServer {
         Parameters(params): Parameters<NodeReparentParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&params.project_path, "node_reparent", &op_params).await?;
+        let data = run_operation(&self.backend, &params.project_path, "node_reparent", &op_params).await?;
         serialize_response(&data)
     }
 
@@ -184,7 +186,7 @@ impl DirectorServer {
         Parameters(params): Parameters<ResourceReadParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&params.project_path, "resource_read", &op_params).await?;
+        let data = run_operation(&self.backend, &params.project_path, "resource_read", &op_params).await?;
         serialize_response(&data)
     }
 }
