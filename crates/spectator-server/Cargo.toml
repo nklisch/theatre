@@ -26,6 +26,7 @@ rmp-serde.workspace = true
 
 [features]
 integration-tests = []
+e2e-tests = []
 
 [dev-dependencies]
 tempfile = "3"
@@ -39,3 +40,8 @@ required-features = ["integration-tests"]
 name = "scenarios"
 path = "tests/scenarios.rs"
 required-features = ["integration-tests"]
+
+[[test]]
+name = "e2e_journeys"
+path = "tests/e2e_journeys.rs"
+required-features = ["e2e-tests"]

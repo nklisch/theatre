@@ -1,5 +1,4 @@
 /// Test harness: connects a real SpectatorServer to a MockAddon.
-use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::ErrorData as McpError;
 use spectator_server::{
     server::SpectatorServer,
@@ -62,8 +61,7 @@ impl TestHarness {
         name: &str,
         params: serde_json::Value,
     ) -> Result<serde_json::Value, McpError> {
-        let s = self.call_tool_raw(name, params).await?;
-        Ok(serde_json::from_str(&s).unwrap())
+        super::dispatch_tool(&self.server, name, params).await
     }
 
     /// Call a tool and return the raw JSON string.
@@ -72,48 +70,7 @@ impl TestHarness {
         name: &str,
         params: serde_json::Value,
     ) -> Result<String, McpError> {
-        match name {
-            "spatial_snapshot" => {
-                let p = from_value(params)?;
-                self.server.spatial_snapshot(Parameters(p)).await
-            }
-            "spatial_inspect" => {
-                let p = from_value(params)?;
-                self.server.spatial_inspect(Parameters(p)).await
-            }
-            "scene_tree" => {
-                let p = from_value(params)?;
-                self.server.scene_tree(Parameters(p)).await
-            }
-            "spatial_action" => {
-                let p = from_value(params)?;
-                self.server.spatial_action(Parameters(p)).await
-            }
-            "spatial_query" => {
-                let p = from_value(params)?;
-                self.server.spatial_query(Parameters(p)).await
-            }
-            "spatial_delta" => {
-                let p = from_value(params)?;
-                self.server.spatial_delta(Parameters(p)).await
-            }
-            "spatial_watch" => {
-                let p = from_value(params)?;
-                self.server.spatial_watch(Parameters(p)).await
-            }
-            "spatial_config" => {
-                let p = from_value(params)?;
-                self.server.spatial_config(Parameters(p)).await
-            }
-            "recording" => {
-                let p = from_value(params)?;
-                self.server.recording(Parameters(p)).await
-            }
-            _ => Err(McpError::invalid_params(
-                format!("Unknown tool: {name}"),
-                None,
-            )),
-        }
+        super::dispatch_tool_raw(&self.server, name, params).await
     }
 }
 
@@ -123,11 +80,7 @@ impl Drop for TestHarness {
     }
 }
 
-fn from_value<T: for<'de> serde::Deserialize<'de>>(v: serde_json::Value) -> Result<T, McpError> {
-    serde_json::from_value(v).map_err(|e| McpError::invalid_params(e.to_string(), None))
-}
-
-async fn wait_for_connected(state: &Arc<Mutex<SessionState>>) {
+pub(super) async fn wait_for_connected(state: &Arc<Mutex<SessionState>>) {
     for _ in 0..100 {
         if state.lock().await.connected {
             return;

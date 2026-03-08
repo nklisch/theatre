@@ -25,7 +25,7 @@ script = ExtResource("1_root")
 [node name="Camera3D" type="Camera3D" parent="."]
 transform = Transform3D(1, 0, 0, 0, 0.866025, 0.5, 0, -0.5, 0.866025, 0, 8, 12)
 
-[node name="Player" type="CharacterBody3D" parent="."]
+[node name="Player" type="CharacterBody3D" parent="." groups=["player"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
 script = ExtResource("2_player")
 
@@ -53,10 +53,10 @@ shape = SubResource("CapsuleShape3D_tank")
 
 [node name="Items" type="Node3D" parent="."]
 
-[node name="HealthPack" type="Node3D" parent="Items"]
+[node name="HealthPack" type="Node3D" parent="Items" groups=["items"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 3)
 
-[node name="Ammo" type="Node3D" parent="Items"]
+[node name="Ammo" type="Node3D" parent="Items" groups=["items"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, 1)
 
 [node name="Floor" type="StaticBody3D" parent="."]

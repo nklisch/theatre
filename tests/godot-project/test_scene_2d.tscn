@@ -13,7 +13,7 @@ script = ExtResource("1_root")
 position = Vector2(0, 0)
 zoom = Vector2(1, 1)
 
-[node name="Player" type="CharacterBody2D" parent="."]
+[node name="Player" type="CharacterBody2D" parent="." groups=["player"]]
 position = Vector2(0, 0)
 
 [node name="CollisionShape2D" type="CollisionShape2D" parent="Player"]
@@ -21,7 +21,7 @@ shape = SubResource("CapsuleShape2D_player")
 
 [node name="Enemies" type="Node2D" parent="."]
 
-[node name="Scout2D" type="CharacterBody2D" parent="Enemies"]
+[node name="Scout2D" type="CharacterBody2D" parent="Enemies" groups=["enemies"]]
 position = Vector2(200, 100)
 
 [node name="Items" type="Node2D" parent="."]
