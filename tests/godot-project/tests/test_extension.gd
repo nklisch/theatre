@@ -41,13 +41,13 @@ func test_tcp_server_starts_and_stops() -> String:
 
 func test_tcp_server_has_activity_signal() -> String:
 	var s := SpectatorTCPServer.new()
-	return Assert.has_signal(s, "activity_received")
+	return Assert.obj_has_signal(s, "activity_received")
 
 
 func test_recorder_has_signals() -> String:
 	var r := SpectatorRecorder.new()
 	for sig in ["recording_started", "recording_stopped", "marker_added"]:
-		var err := Assert.has_signal(r, sig)
+		var err := Assert.obj_has_signal(r, sig)
 		if err:
 			return err
 	return ""

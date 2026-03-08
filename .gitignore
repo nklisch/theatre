@@ -1,1 +1,5 @@
 /target/
+
+# Godot editor-generated files
+.godot/
+*.uid

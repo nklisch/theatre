@@ -64,13 +64,13 @@ func test_f8_toggles_recording() -> String:
 		rt.queue_free()
 		return "runtime has no recorder — cannot test F8"
 
-	var was_recording := recorder.is_recording()
+	var was_recording: bool = recorder.is_recording()
 
 	# F8 should start recording if not recording
 	rt._shortcut_input(_make_key_event(KEY_F8))
 	await _root.get_tree().process_frame
 
-	var is_recording := recorder.is_recording()
+	var is_recording: bool = recorder.is_recording()
 
 	# Clean up
 	if is_recording:

@@ -62,7 +62,7 @@ func _run_test_script(path: String) -> void:
 	if instance.has_method("setup"):
 		instance.setup(get_root())
 
-	var method_list := instance.get_method_list()
+	var method_list: Array[Dictionary] = instance.get_method_list()
 	method_list.sort_custom(func(a, b): return a["name"] < b["name"])
 
 	for method in method_list:

@@ -103,4 +103,4 @@ func test_recorder_emits_marker_added() -> String:
 
 func test_tcp_server_emits_activity_received() -> String:
 	var server := SpectatorTCPServer.new()
-	return Assert.has_signal(server, "activity_received")
+	return Assert.obj_has_signal(server, "activity_received")

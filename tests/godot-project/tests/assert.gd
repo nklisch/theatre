@@ -49,13 +49,13 @@ static func approx(actual: float, expected: float,
 		" (%s)" % label if label else ""]
 
 
-static func has_method(obj: Object, method: String) -> String:
+static func obj_has_method(obj: Object, method: String) -> String:
 	if obj != null and obj.has_method(method):
 		return ""
 	return "object missing method: %s" % method
 
 
-static func has_signal(obj: Object, sig: String) -> String:
+static func obj_has_signal(obj: Object, sig: String) -> String:
 	if obj != null and obj.has_signal(sig):
 		return ""
 	return "object missing signal: %s" % sig
