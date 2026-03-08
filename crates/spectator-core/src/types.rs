@@ -44,6 +44,7 @@ pub enum Elevation {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RelativePosition {
     /// Straight-line distance in world units.
+    #[serde(rename = "distance")]
     pub dist: f64,
     /// 8-direction cardinal bearing.
     pub bearing: Cardinal,

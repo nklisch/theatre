@@ -180,13 +180,13 @@ fn format_rel(rel: &RelativePosition, format: BearingFormat) -> serde_json::Valu
     match format {
         BearingFormat::Both => serde_json::to_value(rel).unwrap_or_default(),
         BearingFormat::Cardinal => serde_json::json!({
-            "dist": rel.dist,
+            "distance": rel.dist,
             "bearing": rel.bearing,
             "elevation": rel.elevation,
             "occluded": rel.occluded,
         }),
         BearingFormat::Degrees => serde_json::json!({
-            "dist": rel.dist,
+            "distance": rel.dist,
             "bearing_deg": rel.bearing_deg,
             "elevation": rel.elevation,
             "occluded": rel.occluded,

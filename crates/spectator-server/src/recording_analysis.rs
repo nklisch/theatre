@@ -261,7 +261,7 @@ pub fn snapshot_at(
 
             if detail != "summary" {
                 entry["rel"] = json!({
-                    "dist": rel.dist,
+                    "distance": rel.dist,
                     "bearing": rel.bearing,
                     "bearing_deg": rel.bearing_deg,
                 });
