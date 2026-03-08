@@ -1,6 +1,11 @@
 use godot::obj::Gd;
 use godot::prelude::*;
-use spectator_protocol::{codec, handshake::Handshake, messages::Message};
+use spectator_protocol::{
+    codec,
+    connection_state::{ConnectionAction, ConnectionState},
+    handshake::Handshake,
+    messages::Message,
+};
 use spectator_protocol::query::ActionResponse;
 use std::io::ErrorKind;
 use std::net::{TcpListener, TcpStream};
@@ -15,7 +20,8 @@ pub struct SpectatorTCPServer {
     listener: Option<TcpListener>,
     client: Option<TcpStream>,
     port: i32,
-    handshake_completed: bool,
+    /// Pure connection state machine (handshake lifecycle + frame-advance tracking).
+    conn_state: ConnectionState,
     collector: Option<Gd<SpectatorCollector>>,
     recorder: Option<Gd<SpectatorRecorder>>,
 }
@@ -28,7 +34,7 @@ impl INode for SpectatorTCPServer {
             listener: None,
             client: None,
             port: 9077,
-            handshake_completed: false,
+            conn_state: ConnectionState::default(),
             collector: None,
             recorder: None,
         }
@@ -57,7 +63,7 @@ impl SpectatorTCPServer {
     /// Returns "connected", "waiting", or "stopped".
     #[func]
     pub fn get_connection_status(&self) -> GString {
-        if self.handshake_completed {
+        if self.conn_state.handshake_completed {
             "connected".into()
         } else if self.listener.is_some() {
             "waiting".into()
@@ -94,14 +100,14 @@ impl SpectatorTCPServer {
     pub fn stop(&mut self) {
         self.client = None;
         self.listener = None;
-        self.handshake_completed = false;
+        self.conn_state.on_disconnect();
         godot_print!("[Spectator] TCP server stopped");
     }
 
     /// Returns true if a client is connected and handshake is complete.
     #[func]
     pub fn is_connected(&self) -> bool {
-        self.handshake_completed
+        self.conn_state.handshake_completed
     }
 
     /// Poll for new connections and incoming messages. Call every _physics_process.
@@ -155,7 +161,7 @@ impl SpectatorTCPServer {
                 godot_print!("[Spectator] Client connected from {}", addr);
                 stream.set_nonblocking(true).ok();
                 self.client = Some(stream);
-                self.handshake_completed = false;
+                self.conn_state.on_client_connected();
                 self.send_handshake();
             }
             Err(ref e) if e.kind() == ErrorKind::WouldBlock => {}
@@ -227,7 +233,7 @@ impl SpectatorTCPServer {
                     "[Spectator] Handshake ACK received — session {}",
                     ack.session_id
                 );
-                self.handshake_completed = true;
+                self.conn_state.on_handshake_ack();
             }
             Message::HandshakeError(err) => {
                 godot_error!("[Spectator] Handshake rejected: {}", err.message);
@@ -257,9 +263,11 @@ impl SpectatorTCPServer {
                         params,
                         &collector.bind(),
                     );
-                    // None means response is deferred (e.g., advance_frames)
-                    if let Some(msg) = response {
-                        self.send_response(msg);
+                    match response {
+                        Some(msg) => self.send_response(msg),
+                        // None means deferred (advance_frames): sync advance state
+                        // from the collector into ConnectionState.
+                        None => self.sync_advance_from_collector(),
                     }
                 } else {
                     self.send_response(Message::Error {
@@ -318,52 +326,29 @@ impl SpectatorTCPServer {
 
     fn disconnect_client(&mut self) {
         self.client = None;
-        self.handshake_completed = false;
+        self.conn_state.on_disconnect();
     }
 
-    /// Returns true if a frame-advance is currently in progress (remaining > 0).
+    /// Returns true if a frame-advance is currently in progress.
     fn is_advancing(&self) -> bool {
-        self.collector
-            .as_ref()
-            .map(|c| c.bind().advance_state.borrow().remaining > 0)
-            .unwrap_or(false)
+        self.conn_state.is_advancing()
     }
 
-    /// Decrement the advance counter. If it reaches zero, re-pauses the tree
-    /// and returns a deferred response message. Returns None if still advancing.
+    /// Tick the advance counter via ConnectionState. If the advance just
+    /// completed, re-pauses the scene tree and returns the deferred response.
     fn check_frame_advance(&mut self) -> Option<Message> {
-        let collector = self.collector.as_ref()?;
-        let remaining = collector.bind().advance_state.borrow().remaining;
-        if remaining == 0 {
-            return None;
-        }
+        let current_frame = self
+            .collector
+            .as_ref()
+            .map(|c| c.bind().get_frame_info().frame)
+            .unwrap_or(0);
 
-        let new_remaining = remaining - 1;
-        let (pending_id, frame) = {
-            let bound = collector.bind();
-            let mut state = bound.advance_state.borrow_mut();
-            state.remaining = new_remaining;
-            let id = if new_remaining == 0 {
-                state.pending_id.take()
-            } else {
-                None
-            };
-            let f = if new_remaining == 0 {
-                drop(state);
-                bound.get_frame_info().frame
-            } else {
-                0
-            };
-            (id, f)
-        };
-
-        if new_remaining == 0 {
-            // Re-pause the scene tree
-            if let Some(mut tree) = self.base().get_tree() {
-                tree.set_pause(true);
-            }
-            // Build and return the deferred response
-            if let Some(id) = pending_id {
+        match self.conn_state.tick_advance(current_frame) {
+            ConnectionAction::AdvanceComplete { response_id, frame } => {
+                // Re-pause the scene tree
+                if let Some(mut tree) = self.base().get_tree() {
+                    tree.set_pause(true);
+                }
                 let response = ActionResponse {
                     action: "advance_frames".into(),
                     result: "ok".into(),
@@ -374,11 +359,27 @@ impl SpectatorTCPServer {
                     frame,
                 };
                 let data = serde_json::to_value(&response).unwrap_or(serde_json::Value::Null);
-                return Some(Message::Response { id, data });
+                Some(Message::Response { id: response_id, data })
+            }
+            _ => None,
+        }
+    }
+
+    /// Sync advance state written by action_handler (into the collector) into
+    /// `conn_state` so that `ConnectionState` becomes the authoritative tracker.
+    /// Called after `handle_query` returns `None` (deferred response).
+    fn sync_advance_from_collector(&mut self) {
+        if let Some(ref collector) = self.collector {
+            let bound = collector.bind();
+            let mut state = bound.advance_state.borrow_mut();
+            if state.remaining > 0 {
+                let frames = state.remaining;
+                let id = state.pending_id.take().unwrap_or_default();
+                state.remaining = 0; // transferred to conn_state
+                drop(state);
+                self.conn_state.begin_advance(frames, id);
             }
         }
-
-        None
     }
 
     fn get_godot_version(&self) -> String {

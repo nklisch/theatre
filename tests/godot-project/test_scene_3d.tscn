@@ -1,0 +1,69 @@
+[gd_scene load_steps=8 format=3 uid="uid://btest3dscene"]
+
+[ext_resource type="Script" path="res://test_scene_3d.gd" id="1_root"]
+[ext_resource type="Script" path="res://test_player.gd" id="2_player"]
+[ext_resource type="Script" path="res://test_enemy.gd" id="3_enemy"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_player"]
+radius = 0.4
+height = 1.8
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_scout"]
+radius = 0.4
+height = 1.8
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_tank"]
+radius = 0.5
+height = 2.0
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_floor"]
+size = Vector3(20, 0.2, 20)
+
+[node name="TestScene3D" type="Node3D"]
+script = ExtResource("1_root")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.866025, 0.5, 0, -0.5, 0.866025, 0, 8, 12)
+
+[node name="Player" type="CharacterBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+script = ExtResource("2_player")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player"]
+shape = SubResource("CapsuleShape3D_player")
+
+[node name="Enemies" type="Node3D" parent="."]
+
+[node name="Scout" type="CharacterBody3D" parent="Enemies" groups=["enemies"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, -3)
+script = ExtResource("3_enemy")
+health = 80
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Enemies/Scout"]
+shape = SubResource("CapsuleShape3D_scout")
+
+[node name="Tank" type="CharacterBody3D" parent="Enemies" groups=["enemies"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0, 2)
+script = ExtResource("3_enemy")
+health = 150
+speed = 1.5
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Enemies/Tank"]
+shape = SubResource("CapsuleShape3D_tank")
+
+[node name="Items" type="Node3D" parent="."]
+
+[node name="HealthPack" type="Node3D" parent="Items"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0, 3)
+
+[node name="Ammo" type="Node3D" parent="Items"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0, 1)
+
+[node name="Floor" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.1, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Floor"]
+shape = SubResource("BoxShape3D_floor")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, -0.5, 0.866025, 0, -0.866025, -0.5, 0, 5, 5)

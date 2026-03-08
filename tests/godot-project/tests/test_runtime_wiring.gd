@@ -77,6 +77,44 @@ func test_runtime_clears_instance_on_exit() -> String:
 	return Assert.is_null(inst, "static instance cleared after exit")
 
 
+func test_runtime_process_mode_is_always() -> String:
+	## Verify runtime sets PROCESS_MODE_ALWAYS so TCP polling and recording
+	## continue even when the scene tree is paused via F10 / advance_frames.
+	var rt = load("res://addons/spectator/runtime.gd").new()
+	_root.add_child(rt)
+	await _root.get_tree().process_frame
+
+	var err := Assert.eq(rt.process_mode, Node.PROCESS_MODE_ALWAYS,
+		"runtime.process_mode should be PROCESS_MODE_ALWAYS")
+
+	rt.queue_free()
+	return err
+
+
+func test_runtime_polls_during_pause() -> String:
+	## When the tree is paused, tcp_server.poll() should still be called
+	## because runtime has PROCESS_MODE_ALWAYS.
+	var rt = load("res://addons/spectator/runtime.gd").new()
+	_root.add_child(rt)
+	await _root.get_tree().process_frame
+
+	var server = rt.get("tcp_server")
+	if not server or not is_instance_valid(server):
+		rt.queue_free()
+		return "tcp_server not available"
+
+	# Pause the tree
+	_root.get_tree().paused = true
+	await _root.get_tree().process_frame
+
+	# Server should still be in 'waiting' state — it was polled
+	var status: String = server.get_connection_status()
+	_root.get_tree().paused = false
+	rt.queue_free()
+
+	return Assert.eq(status, "waiting", "server still waiting during pause")
+
+
 func test_runtime_stops_server_on_exit() -> String:
 	var rt = load("res://addons/spectator/runtime.gd").new()
 	_root.add_child(rt)

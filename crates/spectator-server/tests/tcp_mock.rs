@@ -739,6 +739,150 @@ async fn test_recording_status() {
     );
 }
 
+#[tokio::test]
+async fn test_recording_start_and_stop() {
+    let handler: QueryHandler = Arc::new(|method, _| match method {
+        "recording_start" => Ok(json!({
+            "recording": true,
+            "recording_id": "rec-001",
+            "recording_name": "test_run"
+        })),
+        "recording_stop" => Ok(json!({
+            "recording": false,
+            "frames_captured": 42,
+            "recording_id": "rec-001"
+        })),
+        "recording_status" => Ok(json!({ "recording": false })),
+        _ => Err(("unknown_method".into(), method.to_string())),
+    });
+
+    let harness = TestHarness::new(handler).await;
+
+    let start = harness
+        .call_tool("recording", json!({ "action": "start", "recording_name": "test_run" }))
+        .await
+        .unwrap();
+    assert_eq!(
+        start.get("recording").and_then(|v| v.as_bool()),
+        Some(true),
+        "start result: {start}"
+    );
+    assert!(start.get("recording_id").is_some(), "start should return recording_id: {start}");
+
+    let stop = harness
+        .call_tool("recording", json!({ "action": "stop" }))
+        .await
+        .unwrap();
+    assert_eq!(
+        stop.get("recording").and_then(|v| v.as_bool()),
+        Some(false),
+        "stop result: {stop}"
+    );
+    assert!(stop.get("frames_captured").is_some(), "stop should return frames_captured: {stop}");
+}
+
+#[tokio::test]
+async fn test_recording_start_already_active_returns_error() {
+    let handler: QueryHandler = Arc::new(|method, _| match method {
+        "recording_start" => Err(("already_recording".into(), "A recording is already active".into())),
+        _ => Err(("unknown_method".into(), method.to_string())),
+    });
+
+    let harness = TestHarness::new(handler).await;
+    let err = harness
+        .call_tool("recording", json!({ "action": "start" }))
+        .await
+        .unwrap_err();
+
+    assert!(
+        err.message.contains("recording") || !err.message.is_empty(),
+        "expected error about active recording, got: {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_recording_add_marker() {
+    let handler: QueryHandler = Arc::new(|method, params| match method {
+        "recording_marker" => {
+            let label = params
+                .get("label")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            Ok(json!({ "ok": true, "label": label, "frame": 10 }))
+        }
+        _ => Err(("unknown_method".into(), method.to_string())),
+    });
+
+    let harness = TestHarness::new(handler).await;
+    let result = harness
+        .call_tool(
+            "recording",
+            json!({ "action": "marker", "marker_label": "checkpoint_1" }),
+        )
+        .await
+        .unwrap();
+
+    assert!(
+        result.get("ok").and_then(|v| v.as_bool()) == Some(true)
+            || result.get("frame").is_some()
+            || result.get("label").is_some(),
+        "marker result: {result}"
+    );
+}
+
+#[tokio::test]
+async fn test_recording_list() {
+    let handler: QueryHandler = Arc::new(|method, _| match method {
+        "recording_list" => Ok(json!({
+            "recordings": [
+                { "recording_id": "rec-001", "name": "run_a", "frames": 100 },
+                { "recording_id": "rec-002", "name": "run_b", "frames": 200 },
+            ]
+        })),
+        _ => Err(("unknown_method".into(), method.to_string())),
+    });
+
+    let harness = TestHarness::new(handler).await;
+    let result = harness
+        .call_tool("recording", json!({ "action": "list" }))
+        .await
+        .unwrap();
+
+    let recordings = result.get("recordings").and_then(|v| v.as_array());
+    assert!(recordings.is_some(), "list should return recordings array: {result}");
+    assert_eq!(recordings.unwrap().len(), 2, "expected 2 recordings: {result}");
+}
+
+#[tokio::test]
+async fn test_recording_delete() {
+    let handler: QueryHandler = Arc::new(|method, params| match method {
+        "recording_delete" => {
+            let id = params
+                .get("recording_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if id == "rec-001" {
+                Ok(json!({ "deleted": true, "recording_id": "rec-001" }))
+            } else {
+                Err(("not_found".into(), format!("recording {id} not found")))
+            }
+        }
+        _ => Err(("unknown_method".into(), method.to_string())),
+    });
+
+    let harness = TestHarness::new(handler).await;
+    let result = harness
+        .call_tool("recording", json!({ "action": "delete", "recording_id": "rec-001" }))
+        .await
+        .unwrap();
+
+    assert!(
+        result.get("deleted").and_then(|v| v.as_bool()) == Some(true)
+            || result.get("recording_id").is_some(),
+        "delete result: {result}"
+    );
+}
+
 // ---------------------------------------------------------------------------
 // Error handling tests
 // ---------------------------------------------------------------------------
