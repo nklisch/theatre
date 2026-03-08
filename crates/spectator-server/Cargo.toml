@@ -34,3 +34,8 @@ tempfile = "3"
 name = "tcp_mock"
 path = "tests/tcp_mock.rs"
 required-features = ["integration-tests"]
+
+[[test]]
+name = "scenarios"
+path = "tests/scenarios.rs"
+required-features = ["integration-tests"]
