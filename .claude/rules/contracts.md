@@ -10,7 +10,7 @@ Any field carrying an identifier for a named resource **must** be named
 `<resource>_id`, never a bare `"id"`.
 
 ```
-recording_id   ✓    id      ✗
+clip_id        ✓    id      ✗
 watch_id       ✓    id      ✗
 session_id     ✓    id      ✗
 marker_id      ✓    id      ✗
@@ -21,13 +21,12 @@ list entries, delete responses, query parameters, and event payloads. The name
 must be the same in every context so agents can correlate resources across
 calls without reading docs.
 
-**List entries are not exempt.** A `recordings` array whose entries use `"id"`
-while every other recording endpoint uses `"recording_id"` is a contract
-violation.
+**List entries are not exempt.** A `clips` array whose entries use `"id"`
+while every other clips endpoint uses `"clip_id"` is a contract violation.
 
 **Delete/remove responses must echo the id, not a boolean.** Returning
 `{ "result": "ok", "deleted": true }` forces agents to track the id themselves.
-Return `{ "result": "ok", "recording_id": "..." }` instead.
+Return `{ "result": "ok", "clip_id": "..." }` instead.
 
 ## Distance Fields: Always `distance`, Never `dist`
 

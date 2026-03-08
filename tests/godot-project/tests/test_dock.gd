@@ -1,26 +1,11 @@
-## Tests the dock's push-driven API introduced in the EditorDebuggerPlugin refactor.
+## Tests the dock's push-driven API.
 ##
-## The dock no longer polls a shared static var — it receives data via three
-## public methods called by debugger_plugin.gd when the game pushes messages.
-## Dock buttons send commands back via _debugger_plugin.send_command().
-##
-## All the old _try_acquire_runtime / _tcp_server / _recorder tests are gone
-## because those fields were removed. These tests cover the new contract.
+## The dock receives data via public methods called by debugger_plugin.gd
+## when the game pushes messages. The dock is read-only — no buttons send
+## commands to the game.
 extends RefCounted
 
 var _root: Window
-
-
-## Minimal mock for the debugger plugin — records commands sent by the dock.
-class MockDebuggerPlugin extends RefCounted:
-	var last_command: String = ""
-	var last_args: Array = []
-	var commands: Array[String] = []
-
-	func send_command(command: String, args: Array = []) -> void:
-		last_command = command
-		last_args = args
-		commands.append(command)
 
 
 func setup(root: Window) -> void:
@@ -54,8 +39,7 @@ func test_dock_has_no_try_acquire_runtime() -> String:
 
 
 func test_dock_has_no_tcp_server_field() -> String:
-	## Regression: the dock must not have a _tcp_server field (was never valid
-	## in real editor use because of process isolation).
+	## Regression: the dock must not have a _tcp_server field.
 	var dock_scene: PackedScene = load("res://addons/spectator/dock.tscn")
 	if not dock_scene:
 		return "dock.tscn failed to load"
@@ -86,6 +70,25 @@ func test_dock_has_no_recorder_field() -> String:
 	if recorder != null:
 		return "_recorder field exists on dock — must be removed"
 	return ""
+
+
+func test_dock_has_no_recording_buttons() -> String:
+	## Regression: record/stop/marker buttons were removed in dashcam-only refactor.
+	var dock_scene: PackedScene = load("res://addons/spectator/dock.tscn")
+	if not dock_scene:
+		return "dock.tscn failed to load"
+	var dock := dock_scene.instantiate()
+	_root.add_child(dock)
+	await _root.get_tree().process_frame
+
+	var record_btn = dock.get("record_btn")
+	var stop_btn = dock.get("stop_btn")
+	dock.queue_free()
+
+	var err := Assert.is_null(record_btn, "record_btn must not exist on dock")
+	if err:
+		return err
+	return Assert.is_null(stop_btn, "stop_btn must not exist on dock")
 
 
 func test_dock_receive_status_connected() -> String:
@@ -180,146 +183,6 @@ func test_dock_receive_activity_adds_entry() -> String:
 		"activity list should have more entries after receive_activity")
 	dock.queue_free()
 	return err
-
-
-func test_dock_receive_recording_updates_controls() -> String:
-	## receive_recording(true, ...) must enable the stop button and disable the record button.
-	var dock_scene: PackedScene = load("res://addons/spectator/dock.tscn")
-	if not dock_scene:
-		return "dock.tscn failed to load"
-	var dock := dock_scene.instantiate()
-	_root.add_child(dock)
-	await _root.get_tree().process_frame
-
-	dock.receive_recording(true, 5000, 300, 128)
-	await _root.get_tree().process_frame
-
-	var record_btn: Button = dock.get_node("%RecordBtn")
-	var stop_btn: Button = dock.get_node("%StopBtn")
-	var recording_stats: Label = dock.get_node("%RecordingStats")
-
-	var err := Assert.true_(record_btn.disabled, "record button disabled when recording")
-	if err:
-		dock.queue_free()
-		return err
-	err = Assert.false_(stop_btn.disabled, "stop button enabled when recording")
-	if err:
-		dock.queue_free()
-		return err
-	err = Assert.true_(recording_stats.visible, "recording stats visible when recording")
-	dock.queue_free()
-	return err
-
-
-func test_dock_receive_recording_stopped_updates_controls() -> String:
-	## receive_recording(false, ...) must re-enable the record button.
-	var dock_scene: PackedScene = load("res://addons/spectator/dock.tscn")
-	if not dock_scene:
-		return "dock.tscn failed to load"
-	var dock := dock_scene.instantiate()
-	_root.add_child(dock)
-	await _root.get_tree().process_frame
-
-	# First set recording active, then stop it
-	dock.receive_recording(true, 5000, 300, 128)
-	await _root.get_tree().process_frame
-	dock.receive_recording(false, 0, 300, 0)
-	await _root.get_tree().process_frame
-
-	var record_btn: Button = dock.get_node("%RecordBtn")
-	var stop_btn: Button = dock.get_node("%StopBtn")
-
-	var err := Assert.false_(record_btn.disabled, "record button re-enabled after recording stops")
-	if err:
-		dock.queue_free()
-		return err
-	err = Assert.true_(stop_btn.disabled, "stop button disabled after recording stops")
-	dock.queue_free()
-	return err
-
-
-func test_dock_record_button_sends_command() -> String:
-	## Regression: pressing Record must call _debugger_plugin.send_command("start_recording").
-	## This is the new mechanism since the dock has no direct recorder reference.
-	var dock_scene: PackedScene = load("res://addons/spectator/dock.tscn")
-	if not dock_scene:
-		return "dock.tscn failed to load"
-	var dock := dock_scene.instantiate()
-	_root.add_child(dock)
-	await _root.get_tree().process_frame
-
-	var mock_plugin := MockDebuggerPlugin.new()
-	dock.set("_debugger_plugin", mock_plugin)
-
-	dock.call("_on_record_pressed")
-	await _root.get_tree().process_frame
-
-	var err := Assert.eq(mock_plugin.last_command, "start_recording",
-		"record button should send 'start_recording' command")
-	dock.queue_free()
-	return err
-
-
-func test_dock_stop_button_sends_command() -> String:
-	## Regression: pressing Stop must call _debugger_plugin.send_command("stop_recording").
-	var dock_scene: PackedScene = load("res://addons/spectator/dock.tscn")
-	if not dock_scene:
-		return "dock.tscn failed to load"
-	var dock := dock_scene.instantiate()
-	_root.add_child(dock)
-	await _root.get_tree().process_frame
-
-	var mock_plugin := MockDebuggerPlugin.new()
-	dock.set("_debugger_plugin", mock_plugin)
-
-	dock.call("_on_stop_pressed")
-	await _root.get_tree().process_frame
-
-	var err := Assert.eq(mock_plugin.last_command, "stop_recording",
-		"stop button should send 'stop_recording' command")
-	dock.queue_free()
-	return err
-
-
-func test_dock_marker_button_sends_command() -> String:
-	## Regression: pressing Marker must call _debugger_plugin.send_command("add_marker").
-	var dock_scene: PackedScene = load("res://addons/spectator/dock.tscn")
-	if not dock_scene:
-		return "dock.tscn failed to load"
-	var dock := dock_scene.instantiate()
-	_root.add_child(dock)
-	await _root.get_tree().process_frame
-
-	var mock_plugin := MockDebuggerPlugin.new()
-	dock.set("_debugger_plugin", mock_plugin)
-
-	dock.call("_on_marker_pressed")
-	await _root.get_tree().process_frame
-
-	var err := Assert.eq(mock_plugin.last_command, "add_marker",
-		"marker button should send 'add_marker' command")
-	dock.queue_free()
-	return err
-
-
-func test_dock_buttons_safe_without_plugin() -> String:
-	## Dock buttons must not crash when _debugger_plugin is null.
-	## This happens in editor before the game has run.
-	var dock_scene: PackedScene = load("res://addons/spectator/dock.tscn")
-	if not dock_scene:
-		return "dock.tscn failed to load"
-	var dock := dock_scene.instantiate()
-	_root.add_child(dock)
-	await _root.get_tree().process_frame
-
-	# No plugin set — all buttons must be safe no-ops
-	dock.call("_on_record_pressed")
-	dock.call("_on_stop_pressed")
-	dock.call("_on_marker_pressed")
-	await _root.get_tree().process_frame
-
-	dock.queue_free()
-	return ""  # Not crashing = pass
 
 
 func test_dock_activity_list_respects_max() -> String:

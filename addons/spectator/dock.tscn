@@ -42,34 +42,6 @@ text = "Frame: —"
 
 [node name="HSeparator2" type="HSeparator" parent="."]
 
-[node name="RecordingSection" type="VBoxContainer" parent="."]
-
-[node name="RecordingHeader" type="Label" parent="RecordingSection"]
-text = "Recording"
-
-[node name="RecordingControls" type="HBoxContainer" parent="RecordingSection"]
-
-[node name="RecordBtn" type="Button" parent="RecordingSection/RecordingControls"]
-unique_name_in_owner = true
-text = "Record"
-
-[node name="StopBtn" type="Button" parent="RecordingSection/RecordingControls"]
-unique_name_in_owner = true
-text = "Stop"
-disabled = true
-
-[node name="MarkerBtn" type="Button" parent="RecordingSection/RecordingControls"]
-unique_name_in_owner = true
-text = "Marker"
-disabled = true
-
-[node name="RecordingStats" type="Label" parent="RecordingSection"]
-unique_name_in_owner = true
-text = ""
-visible = false
-
-[node name="HSeparator3" type="HSeparator" parent="."]
-
 [node name="ActivitySection" type="VBoxContainer" parent="."]
 size_flags_vertical = 3
 

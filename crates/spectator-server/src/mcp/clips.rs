@@ -7,7 +7,7 @@ use tokio::sync::Mutex;
 
 use spectator_core::budget::resolve_budget;
 
-use crate::recording_analysis;
+use crate::clip_analysis;
 use crate::tcp::{SessionState, query_addon};
 
 use super::{finalize_response, require_param};
@@ -17,40 +17,35 @@ use super::{finalize_response, require_param};
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Deserialize, JsonSchema)]
-pub struct RecordingParams {
+pub struct ClipsParams {
     /// Action to perform.
-    /// "start" — begin recording.
-    /// "stop" — end recording.
-    /// "status" — check if recording.
-    /// "list" — list saved recordings (includes dashcam clips).
-    /// "delete" — remove a recording.
-    /// "markers" — list markers in a recording.
-    /// "add_marker" — add an agent marker to the active recording or trigger a dashcam clip.
-    /// "dashcam_status" — return dashcam ring buffer state and config.
-    /// "flush_dashcam" — force-save whatever is in the ring buffer right now as an agent clip.
+    /// "add_marker" — mark the current moment, triggers clip capture.
+    /// "save" — force-save the dashcam buffer as a clip.
+    /// "status" — dashcam buffer state and config.
+    /// "list" — list saved clips.
+    /// "delete" — remove a clip by clip_id.
+    /// "markers" — list markers in a saved clip.
+    /// "snapshot_at" — spatial state at a frame in a clip.
+    /// "query_range" — search frames for spatial conditions.
+    /// "diff_frames" — compare two frames in a clip.
+    /// "find_event" — search events in a clip.
     pub action: String,
 
-    /// Name for the recording (start only). Auto-generated if omitted.
-    pub recording_name: Option<String>,
+    /// Clip to operate on. Uses most recent if omitted.
+    pub clip_id: Option<String>,
 
-    /// Capture configuration (start only).
-    pub capture: Option<CaptureConfig>,
-
-    /// Recording to query (markers, delete). Uses most recent if omitted.
-    pub recording_id: Option<String>,
-
-    /// Marker label (add_marker only).
+    /// Marker label (add_marker, save).
     pub marker_label: Option<String>,
 
-    /// Frame to attach marker to (add_marker only). Defaults to current frame.
+    /// Frame to attach marker to (add_marker). Defaults to current.
     pub marker_frame: Option<u64>,
 
-    /// Soft token budget for the response.
+    /// Soft token budget.
     pub token_budget: Option<u32>,
 
-    // --- M8 analysis fields ---
+    // --- Analysis fields ---
 
-    /// Frame number for snapshot_at. Mutually exclusive with at_time_ms.
+    /// Frame number for snapshot_at.
     pub at_frame: Option<u64>,
 
     /// Timestamp (ms) for snapshot_at. Finds nearest frame.
@@ -59,23 +54,22 @@ pub struct RecordingParams {
     /// Detail level for snapshot_at: "summary", "standard", "full".
     pub detail: Option<String>,
 
-    /// Start of frame range for query_range and find_event.
+    /// Start of frame range for query_range / find_event.
     pub from_frame: Option<u64>,
 
-    /// End of frame range for query_range and find_event.
+    /// End of frame range for query_range / find_event.
     pub to_frame: Option<u64>,
 
     /// Node path for query_range.
     pub node: Option<String>,
 
-    /// Spatial/temporal condition for query_range.
+    /// Condition object for query_range.
     pub condition: Option<serde_json::Value>,
 
-    /// Event type for find_event: "signal", "property_change", "collision",
-    /// "area_enter", "area_exit", "node_added", "node_removed", "marker", "input".
+    /// Event type for find_event.
     pub event_type: Option<String>,
 
-    /// Event filter string for find_event (substring match on event data).
+    /// Event filter for find_event (substring match).
     pub event_filter: Option<String>,
 
     /// Frame A for diff_frames.
@@ -85,20 +79,12 @@ pub struct RecordingParams {
     pub frame_b: Option<u64>,
 }
 
-#[derive(Debug, Deserialize, JsonSchema)]
-pub struct CaptureConfig {
-    /// Capture every N physics frames. Default 1.
-    pub capture_interval: Option<u32>,
-    /// Maximum frames to capture. Default 36000.
-    pub max_frames: Option<u32>,
-}
-
 // ---------------------------------------------------------------------------
 // Top-level handler
 // ---------------------------------------------------------------------------
 
-pub async fn handle_recording(
-    params: RecordingParams,
+pub async fn handle_clips(
+    params: ClipsParams,
     state: &Arc<Mutex<SessionState>>,
 ) -> Result<String, McpError> {
     let config = crate::tcp::get_config(state).await;
@@ -106,33 +92,20 @@ pub async fn handle_recording(
     let budget_limit = resolve_budget(params.token_budget, 1500, hard_cap);
 
     match params.action.as_str() {
-        "start" => handle_start(&params, state, budget_limit, hard_cap).await,
-        "stop" => query_and_finalize(state, "recording_stop", json!({}), budget_limit, hard_cap).await,
-        "status" => query_and_finalize(state, "recording_status", json!({}), budget_limit, hard_cap).await,
+        "add_marker" => handle_add_marker(&params, state, budget_limit, hard_cap).await,
+        "save" => handle_save(&params, state, budget_limit, hard_cap).await,
+        "status" => query_and_finalize(state, "dashcam_status", json!({}), budget_limit, hard_cap).await,
         "list" => query_and_finalize(state, "recording_list", json!({}), budget_limit, hard_cap).await,
         "delete" => handle_delete(&params, state, budget_limit, hard_cap).await,
         "markers" => handle_markers(&params, state, budget_limit, hard_cap).await,
-        "add_marker" => handle_add_marker(&params, state, budget_limit, hard_cap).await,
-
-        // --- M8 analysis actions ---
         "snapshot_at" => handle_snapshot_at(&params, state, budget_limit, hard_cap).await,
         "query_range" => handle_query_range(&params, state, budget_limit, hard_cap).await,
         "diff_frames" => handle_diff_frames(&params, state, budget_limit, hard_cap).await,
         "find_event" => handle_find_event(&params, state, budget_limit, hard_cap).await,
-
-        // --- M11 dashcam actions ---
-        "dashcam_status" => {
-            query_and_finalize(state, "dashcam_status", json!({}), budget_limit, hard_cap).await
-        }
-        "flush_dashcam" => {
-            handle_flush_dashcam(&params, state, budget_limit, hard_cap).await
-        }
-
         other => Err(McpError::invalid_params(
             format!(
-                "Unknown recording action: '{other}'. Valid: start, stop, status, list, delete, \
-                 markers, add_marker, snapshot_at, query_range, diff_frames, find_event, \
-                 dashcam_status, flush_dashcam"
+                "Unknown clips action: '{other}'. Valid: add_marker, save, status, list, delete, \
+                 markers, snapshot_at, query_range, diff_frames, find_event"
             ),
             None,
         )),
@@ -154,50 +127,8 @@ async fn query_and_finalize(
     finalize_response(&mut data, budget_limit, hard_cap)
 }
 
-async fn handle_start(
-    params: &RecordingParams,
-    state: &Arc<Mutex<SessionState>>,
-    budget_limit: u32,
-    hard_cap: u32,
-) -> Result<String, McpError> {
-    let capture = params.capture.as_ref();
-    let query_params = json!({
-        "name": params.recording_name.as_deref().unwrap_or(""),
-        "capture_interval": capture.and_then(|c| c.capture_interval).unwrap_or(1),
-        "max_frames": capture.and_then(|c| c.max_frames).unwrap_or(36000),
-    });
-
-    let data = query_addon(state, "recording_start", query_params).await?;
-    let mut response = data;
-    finalize_response(&mut response, budget_limit, hard_cap)
-}
-
-async fn handle_delete(
-    params: &RecordingParams,
-    state: &Arc<Mutex<SessionState>>,
-    budget_limit: u32,
-    hard_cap: u32,
-) -> Result<String, McpError> {
-    let id = require_param!(params.recording_id.as_deref(), "recording_id is required for delete");
-    let data = query_addon(state, "recording_delete", json!({ "recording_id": id })).await?;
-    let mut response = data;
-    finalize_response(&mut response, budget_limit, hard_cap)
-}
-
-async fn handle_markers(
-    params: &RecordingParams,
-    state: &Arc<Mutex<SessionState>>,
-    budget_limit: u32,
-    hard_cap: u32,
-) -> Result<String, McpError> {
-    let id = require_param!(params.recording_id.as_deref(), "recording_id is required for markers");
-    let data = query_addon(state, "recording_markers", json!({ "recording_id": id })).await?;
-    let mut response = data;
-    finalize_response(&mut response, budget_limit, hard_cap)
-}
-
 async fn handle_add_marker(
-    params: &RecordingParams,
+    params: &ClipsParams,
     state: &Arc<Mutex<SessionState>>,
     budget_limit: u32,
     hard_cap: u32,
@@ -214,41 +145,61 @@ async fn handle_add_marker(
     finalize_response(&mut response, budget_limit, hard_cap)
 }
 
-// ---------------------------------------------------------------------------
-// M11 dashcam handlers
-// ---------------------------------------------------------------------------
-
-async fn handle_flush_dashcam(
-    params: &RecordingParams,
+async fn handle_save(
+    params: &ClipsParams,
     state: &Arc<Mutex<SessionState>>,
     budget_limit: u32,
     hard_cap: u32,
 ) -> Result<String, McpError> {
     let query = json!({
-        "marker_label": params.marker_label.as_deref().unwrap_or("agent flush"),
+        "marker_label": params.marker_label.as_deref().unwrap_or("agent save"),
     });
     let data = query_addon(state, "dashcam_flush", query).await?;
     let mut response = data;
     finalize_response(&mut response, budget_limit, hard_cap)
 }
 
-// ---------------------------------------------------------------------------
-// M8 analysis handlers
-// ---------------------------------------------------------------------------
-
-async fn handle_snapshot_at(
-    params: &RecordingParams,
+async fn handle_delete(
+    params: &ClipsParams,
     state: &Arc<Mutex<SessionState>>,
     budget_limit: u32,
     hard_cap: u32,
 ) -> Result<String, McpError> {
-    let session = recording_analysis::RecordingSession::open(state, params.recording_id.as_deref()).await?;
+    let id = require_param!(params.clip_id.as_deref(), "clip_id is required for delete");
+    let data = query_addon(state, "recording_delete", json!({ "clip_id": id })).await?;
+    let mut response = data;
+    finalize_response(&mut response, budget_limit, hard_cap)
+}
+
+async fn handle_markers(
+    params: &ClipsParams,
+    state: &Arc<Mutex<SessionState>>,
+    budget_limit: u32,
+    hard_cap: u32,
+) -> Result<String, McpError> {
+    let id = require_param!(params.clip_id.as_deref(), "clip_id is required for markers");
+    let data = query_addon(state, "recording_markers", json!({ "clip_id": id })).await?;
+    let mut response = data;
+    finalize_response(&mut response, budget_limit, hard_cap)
+}
+
+// ---------------------------------------------------------------------------
+// Analysis handlers
+// ---------------------------------------------------------------------------
+
+async fn handle_snapshot_at(
+    params: &ClipsParams,
+    state: &Arc<Mutex<SessionState>>,
+    budget_limit: u32,
+    hard_cap: u32,
+) -> Result<String, McpError> {
+    let session = clip_analysis::ClipSession::open(state, params.clip_id.as_deref()).await?;
 
     let frame = if let Some(f) = params.at_frame {
         session.meta.validate_frame(f)?;
         f
     } else if let Some(t) = params.at_time_ms {
-        let (frame, _) = recording_analysis::read_frame_at_time(&session.db, t)?;
+        let (frame, _) = clip_analysis::read_frame_at_time(&session.db, t)?;
         frame
     } else {
         return Err(McpError::invalid_params(
@@ -259,24 +210,24 @@ async fn handle_snapshot_at(
 
     let detail = params.detail.as_deref().unwrap_or("standard");
     let mut response =
-        recording_analysis::snapshot_at(&session.db, frame, detail, budget_limit, hard_cap)?;
+        clip_analysis::snapshot_at(&session.db, frame, detail, budget_limit, hard_cap)?;
     session.finalize(&mut response, budget_limit, hard_cap)
 }
 
 async fn handle_query_range(
-    params: &RecordingParams,
+    params: &ClipsParams,
     state: &Arc<Mutex<SessionState>>,
     budget_limit: u32,
     hard_cap: u32,
 ) -> Result<String, McpError> {
-    let session = recording_analysis::RecordingSession::open(state, params.recording_id.as_deref()).await?;
+    let session = clip_analysis::ClipSession::open(state, params.clip_id.as_deref()).await?;
 
     let node = require_param!(params.node.as_deref(), "query_range requires 'node' parameter");
     let from = require_param!(params.from_frame, "query_range requires 'from_frame'");
     let to = require_param!(params.to_frame, "query_range requires 'to_frame'");
     session.meta.validate_frame(from)?;
     session.meta.validate_frame(to)?;
-    let condition: recording_analysis::QueryCondition = params
+    let condition: clip_analysis::QueryCondition = params
         .condition
         .as_ref()
         .ok_or_else(|| McpError::invalid_params("query_range requires 'condition'".to_string(), None))
@@ -285,10 +236,10 @@ async fn handle_query_range(
                 .map_err(|e| McpError::invalid_params(format!("Invalid condition: {e}"), None))
         })?;
 
-    let mut response = recording_analysis::query_range(
+    let mut response = clip_analysis::query_range(
         &session.db,
         &session.storage_path,
-        &session.recording_id,
+        &session.clip_id,
         node,
         from,
         to,
@@ -299,29 +250,29 @@ async fn handle_query_range(
 }
 
 async fn handle_diff_frames(
-    params: &RecordingParams,
+    params: &ClipsParams,
     state: &Arc<Mutex<SessionState>>,
     budget_limit: u32,
     hard_cap: u32,
 ) -> Result<String, McpError> {
-    let session = recording_analysis::RecordingSession::open(state, params.recording_id.as_deref()).await?;
+    let session = clip_analysis::ClipSession::open(state, params.clip_id.as_deref()).await?;
 
     let frame_a = require_param!(params.frame_a, "diff_frames requires 'frame_a'");
     let frame_b = require_param!(params.frame_b, "diff_frames requires 'frame_b'");
     session.meta.validate_frame(frame_a)?;
     session.meta.validate_frame(frame_b)?;
 
-    let mut response = recording_analysis::diff_frames(&session.db, frame_a, frame_b, budget_limit)?;
+    let mut response = clip_analysis::diff_frames(&session.db, frame_a, frame_b, budget_limit)?;
     session.finalize(&mut response, budget_limit, hard_cap)
 }
 
 async fn handle_find_event(
-    params: &RecordingParams,
+    params: &ClipsParams,
     state: &Arc<Mutex<SessionState>>,
     budget_limit: u32,
     hard_cap: u32,
 ) -> Result<String, McpError> {
-    let session = recording_analysis::RecordingSession::open(state, params.recording_id.as_deref()).await?;
+    let session = clip_analysis::ClipSession::open(state, params.clip_id.as_deref()).await?;
 
     if let Some(from) = params.from_frame {
         session.meta.validate_frame(from)?;
@@ -332,9 +283,9 @@ async fn handle_find_event(
 
     let event_type = require_param!(params.event_type.as_deref(), "find_event requires 'event_type'");
 
-    let mut response = recording_analysis::find_event(
+    let mut response = clip_analysis::find_event(
         &session.db,
-        &session.recording_id,
+        &session.clip_id,
         event_type,
         params.event_filter.as_deref(),
         params.node.as_deref(),
@@ -354,57 +305,44 @@ mod tests {
     use super::*;
 
     #[test]
-    fn recording_params_deserializes() {
-        let json = serde_json::json!({
-            "action": "start",
-            "recording_name": "test_rec",
-            "capture": {
-                "capture_interval": 2,
-                "max_frames": 1000,
-            }
-        });
-        let params: RecordingParams = serde_json::from_value(json).unwrap();
-        assert_eq!(params.action, "start");
-        assert_eq!(params.recording_name.as_deref(), Some("test_rec"));
-        assert_eq!(params.capture.as_ref().unwrap().capture_interval, Some(2));
-    }
-
-    #[test]
-    fn recording_params_minimal_start() {
-        let json = serde_json::json!({ "action": "start" });
-        let params: RecordingParams = serde_json::from_value(json).unwrap();
-        assert_eq!(params.action, "start");
-        assert!(params.recording_name.is_none());
-        assert!(params.capture.is_none());
-    }
-
-    #[test]
-    fn recording_params_add_marker() {
+    fn clips_params_deserializes_add_marker() {
         let json = serde_json::json!({
             "action": "add_marker",
             "marker_label": "bug here",
         });
-        let params: RecordingParams = serde_json::from_value(json).unwrap();
+        let params: ClipsParams = serde_json::from_value(json).unwrap();
         assert_eq!(params.action, "add_marker");
         assert_eq!(params.marker_label.as_deref(), Some("bug here"));
     }
 
     #[test]
-    fn recording_params_snapshot_at() {
+    fn clips_params_save() {
+        let json = serde_json::json!({
+            "action": "save",
+            "marker_label": "suspected physics glitch",
+        });
+        let params: ClipsParams = serde_json::from_value(json).unwrap();
+        assert_eq!(params.action, "save");
+        assert_eq!(params.marker_label.as_deref(), Some("suspected physics glitch"));
+    }
+
+    #[test]
+    fn clips_params_snapshot_at() {
         let json = serde_json::json!({
             "action": "snapshot_at",
             "at_frame": 4575,
             "detail": "standard",
-            "recording_id": "rec_001",
+            "clip_id": "clip_001",
         });
-        let params: RecordingParams = serde_json::from_value(json).unwrap();
+        let params: ClipsParams = serde_json::from_value(json).unwrap();
         assert_eq!(params.action, "snapshot_at");
         assert_eq!(params.at_frame, Some(4575));
         assert_eq!(params.detail.as_deref(), Some("standard"));
+        assert_eq!(params.clip_id.as_deref(), Some("clip_001"));
     }
 
     #[test]
-    fn recording_params_query_range() {
+    fn clips_params_query_range() {
         let json = serde_json::json!({
             "action": "query_range",
             "from_frame": 4570u64,
@@ -416,7 +354,7 @@ mod tests {
                 "threshold": 0.5,
             },
         });
-        let params: RecordingParams = serde_json::from_value(json).unwrap();
+        let params: ClipsParams = serde_json::from_value(json).unwrap();
         assert_eq!(params.action, "query_range");
         assert!(params.condition.is_some());
         assert_eq!(params.from_frame, Some(4570));
@@ -424,45 +362,34 @@ mod tests {
     }
 
     #[test]
-    fn recording_params_diff_frames() {
+    fn clips_params_diff_frames() {
         let json = serde_json::json!({
             "action": "diff_frames",
             "frame_a": 3010u64,
             "frame_b": 3020u64,
         });
-        let params: RecordingParams = serde_json::from_value(json).unwrap();
+        let params: ClipsParams = serde_json::from_value(json).unwrap();
         assert_eq!(params.frame_a, Some(3010));
         assert_eq!(params.frame_b, Some(3020));
     }
 
     #[test]
-    fn recording_params_find_event() {
+    fn clips_params_find_event() {
         let json = serde_json::json!({
             "action": "find_event",
             "event_type": "signal",
             "event_filter": "health_changed",
-            "recording_id": "rec_001",
+            "clip_id": "clip_001",
         });
-        let params: RecordingParams = serde_json::from_value(json).unwrap();
+        let params: ClipsParams = serde_json::from_value(json).unwrap();
         assert_eq!(params.event_type.as_deref(), Some("signal"));
         assert_eq!(params.event_filter.as_deref(), Some("health_changed"));
     }
 
     #[test]
-    fn recording_params_dashcam_status() {
-        let json = serde_json::json!({ "action": "dashcam_status" });
-        let params: RecordingParams = serde_json::from_value(json).unwrap();
-        assert_eq!(params.action, "dashcam_status");
-    }
-
-    #[test]
-    fn recording_params_flush_dashcam() {
-        let json = serde_json::json!({
-            "action": "flush_dashcam",
-            "marker_label": "suspected physics glitch",
-        });
-        let params: RecordingParams = serde_json::from_value(json).unwrap();
-        assert_eq!(params.action, "flush_dashcam");
-        assert_eq!(params.marker_label.as_deref(), Some("suspected physics glitch"));
+    fn clips_params_status() {
+        let json = serde_json::json!({ "action": "status" });
+        let params: ClipsParams = serde_json::from_value(json).unwrap();
+        assert_eq!(params.action, "status");
     }
 }

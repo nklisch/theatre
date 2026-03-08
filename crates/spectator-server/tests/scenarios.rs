@@ -584,104 +584,7 @@ async fn test_config_persists_across_multiple_calls() {
 }
 
 // ============================================================================
-// Section 5: Recording lifecycle consistency
-// recording_id returned by start must match status and stop responses
-// ============================================================================
-
-/// Start → status → stop: recording_id must be consistent across all three calls.
-/// status must show active=true between start and stop.
-/// stop must report frames_captured > 0.
-#[tokio::test]
-async fn test_recording_lifecycle_ids_consistent() {
-    // Shared state for the mock: records the active recording id
-    let active_id: Arc<std::sync::Mutex<Option<String>>> = Arc::new(std::sync::Mutex::new(None));
-    let aid = active_id.clone();
-
-    let handler: QueryHandler = Arc::new(move |method, _params| {
-        let mut id_guard = aid.lock().unwrap();
-        match method {
-            "recording_start" => {
-                let id = "rec_scenario_001".to_string();
-                *id_guard = Some(id.clone());
-                Ok(json!({
-                    "recording_id": id,
-                    "name": "scenario_test",
-                    "started_at_frame": 100
-                }))
-            }
-            "recording_status" => {
-                let active = id_guard.is_some();
-                let id = id_guard.clone().unwrap_or_default();
-                Ok(json!({
-                    "recording_active": active,
-                    "recording_id": id,
-                    "name": "scenario_test",
-                    "frames_captured": if active { 150u32 } else { 0u32 },
-                    "duration_ms": 2500u64,
-                    "buffer_size_kb": 12u32
-                }))
-            }
-            "recording_stop" => {
-                let id = id_guard.take().unwrap_or_default();
-                Ok(json!({
-                    "recording_id": id,
-                    "name": "scenario_test",
-                    "frames_captured": 150u32,
-                    "duration_ms": 2500u64,
-                    "frame_range": [100u64, 250u64]
-                }))
-            }
-            _ => Err(("unknown".into(), format!("unexpected: {method}"))),
-        }
-    });
-
-    let harness = TestHarness::new(handler).await;
-
-    // Start
-    let start = harness
-        .call_tool("recording", json!({ "action": "start" }))
-        .await
-        .unwrap();
-    let started_id = start["recording_id"]
-        .as_str()
-        .expect("start must return recording_id")
-        .to_string();
-    assert_eq!(started_id, "rec_scenario_001");
-
-    // Status: must show active with the same id
-    let status = harness
-        .call_tool("recording", json!({ "action": "status" }))
-        .await
-        .unwrap();
-    let status_active = status["recording_active"].as_bool().unwrap_or(false);
-    let status_id = status["recording_id"].as_str().unwrap_or("");
-    assert!(status_active, "status should show active=true after start: {status}");
-    assert_eq!(
-        status_id, started_id,
-        "status recording_id must match start id"
-    );
-
-    // Stop: must return the same id and a non-zero frame count
-    let stop = harness
-        .call_tool("recording", json!({ "action": "stop" }))
-        .await
-        .unwrap();
-    let stopped_id = stop["recording_id"].as_str().unwrap_or("");
-    let frames = stop["frames_captured"].as_u64().unwrap_or(0);
-    assert_eq!(stopped_id, started_id, "stop recording_id must match start id");
-    assert!(frames > 0, "stop must report frames_captured > 0: {stop}");
-
-    // Status after stop: must show active=false
-    let status_after = harness
-        .call_tool("recording", json!({ "action": "status" }))
-        .await
-        .unwrap();
-    let active_after = status_after["recording_active"].as_bool().unwrap_or(true);
-    assert!(!active_after, "status should show active=false after stop: {status_after}");
-}
-
-// ============================================================================
-// Section 6: Error isolation
+// Section 5: Error isolation
 // A failed tool call must not corrupt state for subsequent calls
 // ============================================================================
 
@@ -1085,169 +988,74 @@ async fn test_watches_can_be_re_added_after_clear() {
 // ============================================================================
 
 // ============================================================================
-// Section 6: Dashcam and explicit recording coexistence
+// Section 6: Dashcam clip operations
 // ============================================================================
 
-/// Dashcam status should report "buffering" even while an explicit recording
-/// is active. The two systems are orthogonal.
-#[tokio::test]
-async fn test_dashcam_independent_of_explicit_recording() {
-    let active_id: Arc<std::sync::Mutex<Option<String>>> =
-        Arc::new(std::sync::Mutex::new(None));
-    let aid = active_id.clone();
-
-    let handler: QueryHandler = Arc::new(move |method, _params| {
-        let mut id_guard = aid.lock().unwrap();
-        match method {
-            "recording_start" => {
-                let id = "rec_coexist_001".to_string();
-                *id_guard = Some(id.clone());
-                Ok(json!({
-                    "recording_id": id,
-                    "name": "coexist_test",
-                    "started_at_frame": 100
-                }))
-            }
-            "recording_stop" => {
-                let id = id_guard.take().unwrap_or_default();
-                Ok(json!({
-                    "recording_id": id,
-                    "frames_captured": 42,
-                    "duration_ms": 700
-                }))
-            }
-            "dashcam_status" => {
-                // Dashcam reports buffering regardless of explicit recording state
-                Ok(json!({
-                    "dashcam_enabled": true,
-                    "state": "buffering",
-                    "buffer_frames": 600,
-                    "buffer_kb": 4800,
-                    "config": {
-                        "capture_interval": 1,
-                        "pre_window_sec": { "system": 30, "deliberate": 60 },
-                        "post_window_sec": { "system": 10, "deliberate": 30 },
-                        "max_window_sec": 120,
-                        "min_after_sec": 5,
-                        "system_min_interval_sec": 2,
-                        "byte_cap_mb": 1024
-                    }
-                }))
-            }
-            _ => Err(("unknown".into(), format!("unexpected: {method}"))),
-        }
-    });
-
-    let harness = TestHarness::new(handler).await;
-
-    // 1. dashcam_status before recording — should be buffering
-    let status1 = harness
-        .call_tool("recording", json!({ "action": "dashcam_status" }))
-        .await
-        .unwrap();
-    assert_eq!(status1["state"], json!("buffering"));
-
-    // 2. Start explicit recording
-    let start = harness
-        .call_tool("recording", json!({ "action": "start" }))
-        .await
-        .unwrap();
-    assert!(start["recording_id"].as_str().is_some());
-
-    // 3. dashcam_status during recording — still buffering
-    let status2 = harness
-        .call_tool("recording", json!({ "action": "dashcam_status" }))
-        .await
-        .unwrap();
-    assert_eq!(status2["state"], json!("buffering"), "dashcam should keep buffering during explicit recording");
-
-    // 4. Stop explicit recording
-    let stop = harness
-        .call_tool("recording", json!({ "action": "stop" }))
-        .await
-        .unwrap();
-    assert!(stop["frames_captured"].as_u64().unwrap() > 0);
-
-    // 5. dashcam_status after recording — still buffering
-    let status3 = harness
-        .call_tool("recording", json!({ "action": "dashcam_status" }))
-        .await
-        .unwrap();
-    assert_eq!(status3["state"], json!("buffering"));
-}
-
-/// Dashcam clips appear in recording list alongside explicit recordings.
+/// Dashcam clips appear in the clip list after saving.
 /// Clips are distinguishable by the "dashcam" flag in their metadata.
 #[tokio::test]
-async fn test_dashcam_clips_in_recording_list() {
-    let flushed: Arc<std::sync::Mutex<bool>> = Arc::new(std::sync::Mutex::new(false));
-    let f = flushed.clone();
+async fn test_dashcam_clips_in_list() {
+    let saved: Arc<std::sync::Mutex<bool>> = Arc::new(std::sync::Mutex::new(false));
+    let s = saved.clone();
 
     let handler: QueryHandler = Arc::new(move |method, _| match method {
         "dashcam_flush" => {
-            *f.lock().unwrap() = true;
+            *s.lock().unwrap() = true;
             Ok(json!({
-                "recording_id": "dash_clip001",
+                "clip_id": "clip_001",
                 "tier": "deliberate",
                 "frames": 300
             }))
         }
         "recording_list" => {
-            let mut recordings = vec![
-                json!({
-                    "recording_id": "rec_explicit_001",
-                    "name": "manual_run",
-                    "frames_captured": 500,
-                    "dashcam": false
-                }),
-            ];
-            if *flushed.lock().unwrap() {
-                recordings.push(json!({
-                    "recording_id": "dash_clip001",
+            let mut clips = vec![];
+            if *saved.lock().unwrap() {
+                clips.push(json!({
+                    "clip_id": "clip_001",
                     "name": "dashcam_100",
                     "frames_captured": 300,
                     "dashcam": true,
                     "tier": "deliberate"
                 }));
             }
-            Ok(json!({ "recordings": recordings }))
+            Ok(json!({ "clips": clips }))
         }
         _ => Err(("unknown".into(), format!("unexpected: {method}"))),
     });
 
     let harness = TestHarness::new(handler).await;
 
-    // List before flush — only explicit recordings
+    // List before save — empty
     let list1 = harness
-        .call_tool("recording", json!({ "action": "list" }))
+        .call_tool("clips", json!({ "action": "list" }))
         .await
         .unwrap();
-    let recordings1 = list1["recordings"].as_array().unwrap();
-    assert_eq!(recordings1.len(), 1);
+    let clips1 = list1["clips"].as_array().unwrap();
+    assert_eq!(clips1.len(), 0);
 
-    // Flush dashcam
-    let flush = harness
+    // Save dashcam clip
+    let save = harness
         .call_tool(
-            "recording",
-            json!({ "action": "flush_dashcam", "marker_label": "test clip" }),
+            "clips",
+            json!({ "action": "save", "marker_label": "test clip" }),
         )
         .await
         .unwrap();
-    assert!(flush["recording_id"].as_str().unwrap().starts_with("dash_"));
+    assert!(save["clip_id"].as_str().unwrap().starts_with("clip_"));
 
-    // List after flush — should include dashcam clip
+    // List after save — should include clip
     let list2 = harness
-        .call_tool("recording", json!({ "action": "list" }))
+        .call_tool("clips", json!({ "action": "list" }))
         .await
         .unwrap();
-    let recordings2 = list2["recordings"].as_array().unwrap();
-    assert_eq!(recordings2.len(), 2, "list should include dashcam clip after flush");
+    let clips2 = list2["clips"].as_array().unwrap();
+    assert_eq!(clips2.len(), 1, "list should include clip after save");
 
-    let dashcam_clip = recordings2
+    let dashcam_clip = clips2
         .iter()
         .find(|r| r["dashcam"].as_bool() == Some(true))
-        .expect("dashcam clip should be flagged with dashcam=true");
-    assert_eq!(dashcam_clip["recording_id"], json!("dash_clip001"));
+        .expect("clip should be flagged with dashcam=true");
+    assert_eq!(dashcam_clip["clip_id"], json!("clip_001"));
 }
 
 /// add_marker during buffering triggers a dashcam clip and returns
@@ -1274,7 +1082,7 @@ async fn test_add_marker_triggers_dashcam_clip() {
     let harness = TestHarness::new(handler).await;
     let result = harness
         .call_tool(
-            "recording",
+            "clips",
             json!({ "action": "add_marker", "marker_label": "root cause" }),
         )
         .await
@@ -1291,7 +1099,7 @@ async fn test_add_marker_triggers_dashcam_clip() {
 /// file for the recording_id. If the file doesn't exist, we get a specific
 /// error (not a crash or panic).
 #[tokio::test]
-async fn test_dashcam_clip_analysis_validates_recording_id() {
+async fn test_dashcam_clip_analysis_validates_clip_id() {
     let handler: QueryHandler = Arc::new(|method, _| match method {
         "recording_resolve_path" => Ok(json!({ "path": "/tmp/spectator_test_nonexistent" })),
         _ => Err(("unknown".into(), format!("unexpected: {method}"))),
@@ -1299,13 +1107,13 @@ async fn test_dashcam_clip_analysis_validates_recording_id() {
 
     let harness = TestHarness::new(handler).await;
 
-    // snapshot_at on a non-existent recording should return a clear error
+    // snapshot_at on a non-existent clip should return a clear error
     let err = harness
         .call_tool(
-            "recording",
+            "clips",
             json!({
                 "action": "snapshot_at",
-                "recording_id": "dash_nonexistent",
+                "clip_id": "clip_nonexistent",
                 "at_frame": 100
             }),
         )

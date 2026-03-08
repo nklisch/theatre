@@ -4,7 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::mcp::action::SpatialActionParams;
 use crate::mcp::config::SpatialConfigParams;
-use crate::mcp::recording::RecordingParams;
+use crate::mcp::clips::ClipsParams;
 use crate::mcp::scene_tree::SceneTreeToolParams;
 use crate::mcp::snapshot::SpatialSnapshotParams;
 use crate::mcp::watch::SpatialWatchParams;
@@ -181,26 +181,25 @@ pub fn watch_summary(params: &SpatialWatchParams) -> String {
     }
 }
 
-pub fn recording_summary(params: &RecordingParams) -> String {
+pub fn clips_summary(params: &ClipsParams) -> String {
     match params.action.as_str() {
-        "start" => {
-            let name = params.recording_name.as_deref().unwrap_or("(auto)");
-            format!("Started recording: {name}")
-        }
-        "stop" => "Stopped recording".into(),
-        "status" => "Checking recording status".into(),
-        "list" => "Listing recordings".into(),
-        "delete" => {
-            let id = params.recording_id.as_deref().unwrap_or("?");
-            format!("Deleted recording {id}")
-        }
-        "markers" => {
-            let id = params.recording_id.as_deref().unwrap_or("current");
-            format!("Listing markers for {id}")
-        }
         "add_marker" => {
             let label = params.marker_label.as_deref().unwrap_or("(no label)");
-            format!("Added marker: {label}")
+            format!("Marker: {label}")
+        }
+        "save" => {
+            let label = params.marker_label.as_deref().unwrap_or("agent save");
+            format!("Saved clip: {label}")
+        }
+        "status" => "Dashcam status".into(),
+        "list" => "Listing clips".into(),
+        "delete" => {
+            let id = params.clip_id.as_deref().unwrap_or("?");
+            format!("Deleted clip {id}")
+        }
+        "markers" => {
+            let id = params.clip_id.as_deref().unwrap_or("latest");
+            format!("Markers for {id}")
         }
         "snapshot_at" => {
             let frame_info = if let Some(f) = params.at_frame {
@@ -210,8 +209,8 @@ pub fn recording_summary(params: &RecordingParams) -> String {
             } else {
                 "?".into()
             };
-            let rec = params.recording_id.as_deref().unwrap_or("latest");
-            format!("Snapshot at {frame_info} in {rec}")
+            let clip = params.clip_id.as_deref().unwrap_or("latest");
+            format!("Snapshot at {frame_info} in {clip}")
         }
         "query_range" => {
             let from = params
@@ -245,7 +244,7 @@ pub fn recording_summary(params: &RecordingParams) -> String {
                 format!("Find events: {evt} filter={filter}")
             }
         }
-        other => format!("Recording: {other}"),
+        other => format!("Clips: {other}"),
     }
 }
 

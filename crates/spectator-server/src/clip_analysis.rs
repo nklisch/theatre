@@ -17,12 +17,12 @@ use crate::tcp::{SessionState, query_addon};
 
 /// Resolve the recording storage path, caching the result in SessionState.
 /// Queries the addon once via TCP, then uses the cached value.
-pub async fn resolve_storage_path(
+pub async fn resolve_clip_storage_path(
     state: &Arc<Mutex<SessionState>>,
 ) -> Result<String, McpError> {
     {
         let s = state.lock().await;
-        if let Some(ref path) = s.recording_storage_path {
+        if let Some(ref path) = s.clip_storage_path {
             return Ok(path.clone());
         }
     }
@@ -33,17 +33,17 @@ pub async fn resolve_storage_path(
         .to_string();
     {
         let mut s = state.lock().await;
-        s.recording_storage_path = Some(path.clone());
+        s.clip_storage_path = Some(path.clone());
     }
     Ok(path)
 }
 
 /// Open a recording's SQLite database read-only.
-pub fn open_recording_db(storage_path: &str, recording_id: &str) -> Result<Connection, McpError> {
-    let db_path = format!("{}/{}.sqlite", storage_path, recording_id);
+pub fn open_clip_db(storage_path: &str, clip_id: &str) -> Result<Connection, McpError> {
+    let db_path = format!("{}/{}.sqlite", storage_path, clip_id);
     Connection::open_with_flags(&db_path, OpenFlags::SQLITE_OPEN_READ_ONLY).map_err(|e| {
         McpError::invalid_params(
-            format!("Recording '{recording_id}' not found or unreadable: {e}"),
+            format!("Clip '{clip_id}' not found or unreadable: {e}"),
             None,
         )
     })
@@ -92,7 +92,7 @@ pub fn read_frame_at_time(
 }
 
 /// Recording metadata from the recording table.
-pub struct RecordingMeta {
+pub struct ClipMeta {
     pub id: String,
     pub name: String,
     pub started_at_frame: i64,
@@ -103,11 +103,11 @@ pub struct RecordingMeta {
     pub physics_ticks_per_sec: u32,
 }
 
-impl RecordingMeta {
+impl ClipMeta {
     /// Build a light JSON context object for inclusion in analysis responses.
     pub fn to_context(&self) -> serde_json::Value {
         json!({
-            "recording_id": self.id,
+            "clip_id": self.id,
             "name": self.name,
             "frame_range": [self.started_at_frame, self.ended_at_frame],
             "dimensions": match self.scene_dimensions { 2 => "2d", 3 => "3d", _ => "mixed" },
@@ -131,13 +131,13 @@ impl RecordingMeta {
 }
 
 /// Get recording metadata from the recording table.
-pub fn read_recording_meta(db: &Connection) -> Result<RecordingMeta, McpError> {
+pub fn read_recording_meta(db: &Connection) -> Result<ClipMeta, McpError> {
     db.query_row(
         "SELECT id, name, started_at_frame, ended_at_frame, started_at_ms, ended_at_ms, \
          scene_dimensions, physics_ticks_per_sec FROM recording LIMIT 1",
         [],
         |row| {
-            Ok(RecordingMeta {
+            Ok(ClipMeta {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 started_at_frame: row.get(2)?,
@@ -153,35 +153,35 @@ pub fn read_recording_meta(db: &Connection) -> Result<RecordingMeta, McpError> {
 }
 
 // ---------------------------------------------------------------------------
-// RecordingSession
+// ClipSession
 // ---------------------------------------------------------------------------
 
 /// Open recording DB and metadata in one step. Used by all 4 analysis handlers.
-pub struct RecordingSession {
+pub struct ClipSession {
     pub db: Connection,
-    pub meta: RecordingMeta,
+    pub meta: ClipMeta,
     pub storage_path: String,
-    pub recording_id: String,
+    pub clip_id: String,
 }
 
-impl RecordingSession {
+impl ClipSession {
     pub async fn open(
         state: &Arc<Mutex<SessionState>>,
-        recording_id: Option<&str>,
+        clip_id: Option<&str>,
     ) -> Result<Self, McpError> {
-        let storage_path = resolve_storage_path(state).await?;
-        let recording_id = match recording_id {
+        let storage_path = resolve_clip_storage_path(state).await?;
+        let clip_id = match clip_id {
             Some(id) => id.to_string(),
-            None => most_recent_recording(&storage_path).ok_or_else(|| {
+            None => most_recent_clip(&storage_path).ok_or_else(|| {
                 McpError::invalid_params(
-                    "No recording_id specified and no recordings found",
+                    "No clip_id specified and no clips found",
                     None,
                 )
             })?,
         };
-        let db = open_recording_db(&storage_path, &recording_id)?;
+        let db = open_clip_db(&storage_path, &clip_id)?;
         let meta = read_recording_meta(&db)?;
-        Ok(Self { db, meta, storage_path, recording_id })
+        Ok(Self { db, meta, storage_path, clip_id })
     }
 
     pub fn finalize(
@@ -191,14 +191,14 @@ impl RecordingSession {
         hard_cap: u32,
     ) -> Result<String, McpError> {
         if let Some(obj) = response.as_object_mut() {
-            obj.insert("recording_context".into(), self.meta.to_context());
+            obj.insert("clip_context".into(), self.meta.to_context());
         }
         crate::mcp::finalize_response(response, budget_limit, hard_cap)
     }
 }
 
 /// Find the most recently modified .sqlite file in the storage directory.
-fn most_recent_recording(storage_path: &str) -> Option<String> {
+fn most_recent_clip(storage_path: &str) -> Option<String> {
     let entries = std::fs::read_dir(storage_path).ok()?;
     let mut newest: Option<(std::time::SystemTime, String)> = None;
 
@@ -366,7 +366,7 @@ pub struct RangeMatch {
 pub fn query_range(
     db: &Connection,
     storage_path: &str,
-    recording_id: &str,
+    clip_id: &str,
     node: &str,
     from_frame: u64,
     to_frame: u64,
@@ -453,7 +453,7 @@ pub fn query_range(
             if let Some(ref note) = m.note {
                 insert_system_marker(
                     storage_path,
-                    recording_id,
+                    clip_id,
                     m.frame,
                     m.time_ms,
                     &format!("{}: {}", condition.condition_type, note),
@@ -733,12 +733,12 @@ fn budget_truncate_count(matches: &[RangeMatch], budget_limit: u32) -> usize {
 
 fn insert_system_marker(
     storage_path: &str,
-    recording_id: &str,
+    clip_id: &str,
     frame: u64,
     timestamp_ms: u64,
     label: &str,
 ) {
-    let db_path = format!("{}/{}.sqlite", storage_path, recording_id);
+    let db_path = format!("{}/{}.sqlite", storage_path, clip_id);
     let db = match Connection::open_with_flags(&db_path, OpenFlags::SQLITE_OPEN_READ_WRITE) {
         Ok(db) => db,
         Err(e) => {
@@ -886,7 +886,7 @@ fn query_markers_between(
 /// Search the recording timeline for specific event types.
 pub fn find_event(
     db: &Connection,
-    recording_id: &str,
+    clip_id: &str,
     event_type: &str,
     event_filter: Option<&str>,
     node: Option<&str>,
@@ -895,7 +895,7 @@ pub fn find_event(
     budget_limit: u32,
 ) -> Result<serde_json::Value, McpError> {
     if event_type == "marker" {
-        return find_markers(db, recording_id, event_filter, from_frame, to_frame);
+        return find_markers(db, clip_id, event_filter, from_frame, to_frame);
     }
 
     let mut sql = String::from(
@@ -963,7 +963,7 @@ pub fn find_event(
     events.truncate(showing);
 
     Ok(json!({
-        "recording_id": recording_id,
+        "clip_id": clip_id,
         "event_type": event_type,
         "filter": event_filter,
         "events": events,
@@ -974,7 +974,7 @@ pub fn find_event(
 
 fn find_markers(
     db: &Connection,
-    recording_id: &str,
+    clip_id: &str,
     label_filter: Option<&str>,
     from_frame: Option<u64>,
     to_frame: Option<u64>,
@@ -1019,7 +1019,7 @@ fn find_markers(
     let events: Vec<serde_json::Value> = rows.flatten().collect();
 
     Ok(json!({
-        "recording_id": recording_id,
+        "clip_id": clip_id,
         "event_type": "marker",
         "events": events,
     }))

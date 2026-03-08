@@ -4,12 +4,8 @@ extends VBoxContainer
 ## Maximum number of activity entries displayed.
 const MAX_ACTIVITY_ENTRIES := 20
 
-## Wired by plugin.gd — used to send record/stop/marker commands to the game.
-var _debugger_plugin: Object = null
-
 ## State pushed from the game via EditorDebuggerPlugin.
 var _collapsed := false
-var _recording_active := false
 var _active_watches := 0
 
 @onready var status_dot: ColorRect = %StatusDot
@@ -21,18 +17,10 @@ var _active_watches := 0
 @onready var activity_list: VBoxContainer = %ActivityList
 @onready var activity_scroll: ScrollContainer = %ActivityScroll
 @onready var collapse_btn: Button = %CollapseBtn
-@onready var record_btn: Button = %RecordBtn
-@onready var stop_btn: Button = %StopBtn
-@onready var marker_btn: Button = %MarkerBtn
-@onready var recording_stats: Label = %RecordingStats
 
 
 func _ready() -> void:
 	collapse_btn.pressed.connect(_toggle_collapse)
-	record_btn.pressed.connect(_on_record_pressed)
-	stop_btn.pressed.connect(_on_stop_pressed)
-	marker_btn.pressed.connect(_on_marker_pressed)
-	_update_recording_controls()
 
 
 # ---------------------------------------------------------------------------
@@ -68,42 +56,6 @@ func receive_activity(entry_type: String, summary: String, tool_name: String, ac
 	})
 
 
-func receive_recording(is_recording: bool, elapsed_ms: int, frames: int, buffer_kb: int) -> void:
-	_recording_active = is_recording
-	_update_recording_controls()
-	if is_recording:
-		var elapsed_sec := elapsed_ms / 1000.0
-		recording_stats.text = "  %s  |  Frame %d  |  %d KB" % [
-			_format_elapsed(elapsed_sec), frames, buffer_kb,
-		]
-	recording_stats.visible = is_recording
-
-
-# ---------------------------------------------------------------------------
-# Button handlers — send commands to the game via debugger_plugin
-# ---------------------------------------------------------------------------
-
-func _on_record_pressed() -> void:
-	if _debugger_plugin:
-		_debugger_plugin.send_command("start_recording")
-
-
-func _on_stop_pressed() -> void:
-	if _debugger_plugin:
-		_debugger_plugin.send_command("stop_recording")
-
-
-func _on_marker_pressed() -> void:
-	if _debugger_plugin:
-		_debugger_plugin.send_command("add_marker")
-
-
-func _update_recording_controls() -> void:
-	record_btn.disabled = _recording_active
-	stop_btn.disabled = not _recording_active
-	marker_btn.disabled = not _recording_active
-	recording_stats.visible = _recording_active
-
 
 func _set_status(state: String, text: String) -> void:
 	status_label.text = text
@@ -130,7 +82,7 @@ func _add_activity_entry(entry: Dictionary) -> void:
 	match entry_type:
 		"action":
 			color = "yellow"
-		"watch", "recording":
+		"watch":
 			color = "cyan"
 		_:
 			color = "gray"
@@ -159,9 +111,3 @@ func _toggle_collapse() -> void:
 static func _format_timestamp(unix: float) -> String:
 	var dt := Time.get_datetime_dict_from_unix_time(int(unix))
 	return "%02d:%02d:%02d" % [dt.hour, dt.minute, dt.second]
-
-
-static func _format_elapsed(seconds: float) -> String:
-	var mins := int(seconds) / 60
-	var secs := fmod(seconds, 60.0)
-	return "%02d:%04.1f" % [mins, secs]

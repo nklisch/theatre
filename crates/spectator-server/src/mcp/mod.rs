@@ -1,9 +1,9 @@
 pub mod action;
+pub mod clips;
 pub mod config;
 pub mod delta;
 pub mod inspect;
 pub mod query;
-pub mod recording;
 pub mod scene_tree;
 pub mod snapshot;
 pub mod watch;
@@ -514,23 +514,19 @@ impl SpectatorServer {
         result
     }
 
-    /// Capture and analyze play session recordings.
-    #[tool(description = "Capture and analyze play session recordings. \
-        Capture: 'start' (begin recording), 'stop' (end recording), 'status' (check state), \
-        'list' (saved recordings), 'delete' (remove by recording_id), 'markers' (list markers), \
-        'add_marker' (agent marker). \
-        Analysis: 'snapshot_at' (spatial state at frame/time, requires at_frame or at_time_ms), \
-        'query_range' (search frame range with condition, requires node + from_frame + to_frame + condition), \
-        'diff_frames' (compare two frames, requires frame_a + frame_b), \
-        'find_event' (search events by type, requires event_type). \
-        Analysis defaults to most recent recording if recording_id is omitted.")]
-    pub async fn recording(
+    /// Capture and analyze gameplay clips. Clips are saved automatically when you
+    /// mark a moment with 'add_marker'. Use 'save' to capture the buffer immediately.
+    /// Analyze saved clips with 'snapshot_at', 'query_range', 'diff_frames', 'find_event'.
+    /// Manage with 'list', 'delete', 'markers'. Check dashcam buffer with 'status'.
+    /// Analysis defaults to the most recent clip if clip_id is omitted.
+    #[tool(description = "Capture and analyze gameplay clips. Clips are saved automatically when you mark a moment with 'add_marker'. Use 'save' to capture the buffer immediately. Analyze saved clips with 'snapshot_at' (spatial state at frame/time, requires at_frame or at_time_ms), 'query_range' (search frame range with condition, requires node + from_frame + to_frame + condition), 'diff_frames' (compare two frames, requires frame_a + frame_b), 'find_event' (search events by type, requires event_type). Manage with 'list', 'delete', 'markers'. Check dashcam buffer with 'status'. Analysis defaults to the most recent clip if clip_id is omitted.")]
+    pub async fn clips(
         &self,
-        Parameters(params): Parameters<recording::RecordingParams>,
+        Parameters(params): Parameters<clips::ClipsParams>,
     ) -> Result<String, McpError> {
-        let summary = crate::activity::recording_summary(&params);
-        let result = recording::handle_recording(params, &self.state).await;
-        self.log_activity("recording", &summary, "recording").await;
+        let summary = crate::activity::clips_summary(&params);
+        let result = clips::handle_clips(params, &self.state).await;
+        self.log_activity("query", &summary, "clips").await;
         result
     }
 }

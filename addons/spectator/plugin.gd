@@ -11,7 +11,6 @@ func _enter_tree() -> void:
 
 	_debugger_plugin = preload("res://addons/spectator/debugger_plugin.gd").new()
 	_debugger_plugin._dock = _dock
-	_dock._debugger_plugin = _debugger_plugin
 	add_debugger_plugin(_debugger_plugin)
 
 
@@ -40,16 +39,7 @@ func _register_settings() -> void:
 	_add_setting("spectator/connection/auto_start", TYPE_BOOL, true)
 	_add_setting("spectator/connection/client_idle_timeout_secs", TYPE_INT, 10,
 		PROPERTY_HINT_RANGE, "0,3600")
-	_add_setting("spectator/recording/storage_path", TYPE_STRING,
-		"user://spectator_recordings/")
-	_add_setting("spectator/recording/max_frames", TYPE_INT, 36000,
-		PROPERTY_HINT_RANGE, "600,360000")
-	_add_setting("spectator/recording/capture_interval", TYPE_INT, 1,
-		PROPERTY_HINT_RANGE, "1,60")
 	_add_setting("spectator/display/show_agent_notifications", TYPE_BOOL, true)
-	_add_setting("spectator/display/show_recording_indicator", TYPE_BOOL, true)
-	_add_setting("spectator/shortcuts/record_key", TYPE_STRING, "F12",
-		PROPERTY_HINT_NONE, "Key name for toggling recording (e.g. F12). Avoid F5-F11 (Godot editor shortcuts).")
 	_add_setting("spectator/shortcuts/marker_key", TYPE_STRING, "F9",
 		PROPERTY_HINT_NONE, "Key name for marker/dashcam clip (e.g. F9). Avoid F5-F11 (Godot editor shortcuts).")
 	_add_setting("spectator/shortcuts/pause_key", TYPE_STRING, "F11",

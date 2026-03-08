@@ -11,9 +11,6 @@ pub fn handle_recording_query(
     params: &Value,
 ) -> Result<Value, (String, String)> {
     match method {
-        "recording_start" => handle_start(recorder, params),
-        "recording_stop" => handle_stop(recorder),
-        "recording_status" => handle_status(recorder),
         "recording_list" => handle_list(recorder, params),
         "recording_delete" => handle_delete(recorder, params),
         "recording_marker" => handle_marker(recorder, params),
@@ -35,79 +32,6 @@ fn handle_resolve_path(_params: &Value) -> Result<Value, (String, String)> {
     Ok(json!({ "path": globalized }))
 }
 
-fn handle_start(
-    recorder: &mut Gd<SpectatorRecorder>,
-    params: &Value,
-) -> Result<Value, (String, String)> {
-    if recorder.bind().is_recording() {
-        return Err(("recording_active".into(), "A recording is already active".into()));
-    }
-
-    let name = params.get("name").and_then(|v| v.as_str()).unwrap_or("");
-    let storage_path = params
-        .get("storage_path")
-        .and_then(|v| v.as_str())
-        .unwrap_or("user://spectator_recordings/");
-    let interval = params
-        .get("capture_interval")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(1) as u32;
-    let max_frames = params
-        .get("max_frames")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(36000) as u32;
-
-    let id = recorder.bind_mut().start_recording(
-        name.into(),
-        storage_path.into(),
-        interval,
-        max_frames,
-    );
-
-    if id.is_empty() {
-        return Err(("internal_error".into(), "Failed to start recording".into()));
-    }
-
-    let name_val = recorder.bind().get_recording_name().to_string();
-    let started_at_frame = godot::classes::Engine::singleton().get_physics_frames();
-    Ok(json!({
-        "recording_id": id.to_string(),
-        "name": name_val,
-        "started_at_frame": started_at_frame,
-    }))
-}
-
-fn handle_stop(recorder: &mut Gd<SpectatorRecorder>) -> Result<Value, (String, String)> {
-    if !recorder.bind().is_recording() {
-        return Err(("no_recording_active".into(), "No recording is active".into()));
-    }
-
-    let meta = recorder.bind_mut().stop_recording();
-
-    Ok(json!({
-        "recording_id": meta.get("recording_id").map(|v| v.to_string()).unwrap_or_default(),
-        "name": meta.get("name").map(|v| v.to_string()).unwrap_or_default(),
-        "frames_captured": meta.get("frames_captured").map(|v: godot::builtin::Variant| v.to::<u32>()).unwrap_or(0),
-        "duration_ms": meta.get("duration_ms").map(|v: godot::builtin::Variant| v.to::<u64>()).unwrap_or(0),
-        "frame_range": [
-            meta.get("started_at_frame").map(|v: godot::builtin::Variant| v.to::<u64>()).unwrap_or(0),
-            meta.get("ended_at_frame").map(|v: godot::builtin::Variant| v.to::<u64>()).unwrap_or(0),
-        ],
-    }))
-}
-
-fn handle_status(recorder: &mut Gd<SpectatorRecorder>) -> Result<Value, (String, String)> {
-    let rec = recorder.bind();
-    Ok(json!({
-        "recording_active": rec.is_recording(),
-        "recording_id": rec.get_recording_id().to_string(),
-        "name": rec.get_recording_name().to_string(),
-        "frames_captured": rec.get_frames_captured(),
-        "duration_ms": rec.get_elapsed_ms(),
-        "buffer_size_kb": rec.get_buffer_size_kb(),
-    }))
-}
-
 fn handle_list(
     recorder: &mut Gd<SpectatorRecorder>,
     params: &Value,
@@ -123,7 +47,7 @@ fn handle_list(
         .iter_shared()
         .map(|dict| {
             json!({
-                "recording_id": dict.get("recording_id").map(|v| v.to_string()).unwrap_or_default(),
+                "clip_id": dict.get("clip_id").map(|v| v.to_string()).unwrap_or_default(),
                 "name": dict.get("name").map(|v| v.to_string()).unwrap_or_default(),
                 "frames_captured": dict.get("frames_captured").map(|v: godot::builtin::Variant| v.to::<u32>()).unwrap_or(0),
                 "duration_ms": dict.get("duration_ms").map(|v: godot::builtin::Variant| v.to::<i64>()).unwrap_or(0),
@@ -140,7 +64,7 @@ fn handle_list(
         })
         .collect();
 
-    Ok(json!({ "recordings": list }))
+    Ok(json!({ "clips": list }))
 }
 
 fn handle_delete(
@@ -148,9 +72,9 @@ fn handle_delete(
     params: &Value,
 ) -> Result<Value, (String, String)> {
     let id = params
-        .get("recording_id")
+        .get("clip_id")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| ("invalid_params".into(), "recording_id is required".to_string()))?;
+        .ok_or_else(|| ("invalid_params".into(), "clip_id is required".to_string()))?;
     let storage_path = params
         .get("storage_path")
         .and_then(|v| v.as_str())
@@ -159,11 +83,11 @@ fn handle_delete(
     let ok = recorder.bind().delete_recording(storage_path.into(), id.into());
 
     if ok {
-        Ok(json!({ "result": "ok", "recording_id": id }))
+        Ok(json!({ "result": "ok", "clip_id": id }))
     } else {
         Err((
-            "recording_not_found".into(),
-            format!("Recording '{id}' not found"),
+            "clip_not_found".into(),
+            format!("Clip '{id}' not found"),
         ))
     }
 }
@@ -172,16 +96,15 @@ fn handle_marker(
     recorder: &mut Gd<SpectatorRecorder>,
     params: &Value,
 ) -> Result<Value, (String, String)> {
-    let is_recording = recorder.bind().is_recording();
     let dashcam_active = {
         let state = recorder.bind().get_dashcam_state().to_string();
         state == "buffering" || state == "post_capture"
     };
 
-    if !is_recording && !dashcam_active {
+    if !dashcam_active {
         return Err((
-            "no_recording_active".into(),
-            "No recording or dashcam is active to add a marker to".into(),
+            "no_dashcam_active".into(),
+            "Dashcam is not active to add a marker to".into(),
         ));
     }
 
@@ -191,25 +114,12 @@ fn handle_marker(
         .unwrap_or("agent");
     let label = params.get("label").and_then(|v| v.as_str()).unwrap_or("");
 
-    // Add marker to explicit recording if active
-    if is_recording {
-        recorder.bind_mut().add_marker(source.into(), label.into());
-    }
-
-    // Trigger dashcam clip only when NO explicit recording is active.
-    // When explicit recording is running, markers go to it instead.
-    let mut dashcam_triggered = false;
-    let mut dashcam_tier = String::new();
-    if !is_recording && dashcam_active {
-        let tier = if source == "agent" || source == "human" {
-            "deliberate"
-        } else {
-            "system"
-        };
-        recorder.bind_mut().trigger_dashcam_clip(source.into(), label.into(), tier.into());
-        dashcam_triggered = true;
-        dashcam_tier = tier.to_string();
-    }
+    let tier = if source == "agent" || source == "human" {
+        "deliberate"
+    } else {
+        "system"
+    };
+    recorder.bind_mut().trigger_dashcam_clip(source.into(), label.into(), tier.into());
 
     let frame = godot::classes::Engine::singleton().get_physics_frames();
     Ok(json!({
@@ -217,8 +127,8 @@ fn handle_marker(
         "frame": frame,
         "source": source,
         "label": label,
-        "dashcam_triggered": dashcam_triggered,
-        "dashcam_tier": dashcam_tier,
+        "dashcam_triggered": true,
+        "dashcam_tier": tier,
     }))
 }
 
@@ -227,9 +137,9 @@ fn handle_get_markers(
     params: &Value,
 ) -> Result<Value, (String, String)> {
     let id = params
-        .get("recording_id")
+        .get("clip_id")
         .and_then(|v| v.as_str())
-        .ok_or_else(|| ("invalid_params".into(), "recording_id is required".to_string()))?;
+        .ok_or_else(|| ("invalid_params".into(), "clip_id is required".to_string()))?;
     let storage_path = params
         .get("storage_path")
         .and_then(|v| v.as_str())
@@ -251,7 +161,7 @@ fn handle_get_markers(
         })
         .collect();
 
-    Ok(json!({ "recording_id": id, "markers": list }))
+    Ok(json!({ "clip_id": id, "markers": list }))
 }
 
 fn handle_dashcam_status(recorder: &mut Gd<SpectatorRecorder>) -> Result<Value, (String, String)> {
@@ -286,9 +196,9 @@ fn handle_dashcam_flush(
     // Capture buffer frame count before flush (flush drains the buffer)
     let buffer_frames = recorder.bind().get_dashcam_buffer_frames();
 
-    let recording_id = recorder.bind_mut().flush_dashcam_clip(label.into()).to_string();
+    let clip_id = recorder.bind_mut().flush_dashcam_clip(label.into()).to_string();
 
-    if recording_id.is_empty() {
+    if clip_id.is_empty() {
         Err((
             "dashcam_not_active".into(),
             "Dashcam is not active or flush failed".into(),
@@ -296,7 +206,7 @@ fn handle_dashcam_flush(
     } else {
         Ok(json!({
             "result": "ok",
-            "recording_id": recording_id,
+            "clip_id": clip_id,
             "tier": "deliberate",
             "frames": buffer_frames,
         }))

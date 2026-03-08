@@ -9,7 +9,7 @@ mod test_handshake;
 #[cfg(test)]
 mod test_inspect;
 #[cfg(test)]
-mod test_recording;
+mod test_clips;
 #[cfg(test)]
 mod test_scene_tree;
 #[cfg(test)]

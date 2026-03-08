@@ -63,9 +63,9 @@ pub async fn dispatch_tool_raw(
             let p = from_value(params)?;
             server.spatial_config(Parameters(p)).await
         }
-        "recording" => {
+        "clips" => {
             let p = from_value(params)?;
-            server.recording(Parameters(p)).await
+            server.clips(Parameters(p)).await
         }
         _ => Err(McpError::invalid_params(
             format!("Unknown tool: {name}"),

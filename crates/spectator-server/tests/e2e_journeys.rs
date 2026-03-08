@@ -391,120 +391,6 @@ async fn journey_debug_spatial_bug() {
     }
 }
 
-/// Journey: Record game state, verify recording lifecycle.
-///
-/// Steps:
-///   1. spatial_snapshot(standard) → baseline, note frame number
-///   2. recording(start) → recording_id returned
-///   3. recording(status) → active=true, recording_id matches
-///   4. wait_frames(30) → let recorder capture ~30 frames
-///   5. spatial_snapshot(standard) → mid-recording snapshot still works
-///        Assert: frame number advanced from step 1
-///   6. recording(add_marker, source="agent", label="mid_test") → ack
-///   7. wait_frames(30) → more frames
-///   8. recording(stop) → frames_captured > 0
-///   9. recording(status) → active=false
-///  10. spatial_snapshot(standard) → post-recording snapshot still works
-#[tokio::test]
-async fn journey_recording_lifecycle() {
-    let mut h = support::e2e_harness::E2EHarness::start_3d()
-        .await
-        .expect("Failed to start Godot 3D scene");
-
-    // Step 1: baseline snapshot
-    let baseline = h
-        .expect(1, "spatial_snapshot", json!({"detail": "standard"}))
-        .await;
-    let frame_0 = baseline["frame"].as_u64().unwrap_or(0);
-
-    // Step 2: start recording
-    let start_result = h
-        .expect(2, "recording", json!({"action": "start"}))
-        .await;
-    let recording_id = start_result["recording_id"]
-        .as_str()
-        .expect("recording start should return recording_id")
-        .to_string();
-    assert!(!recording_id.is_empty(), "recording_id should be non-empty");
-
-    // Step 3: check status
-    let status = h
-        .expect(3, "recording", json!({"action": "status"}))
-        .await;
-    assert_eq!(
-        status["recording_active"].as_bool(),
-        Some(true),
-        "Recording should be active after start"
-    );
-    assert_eq!(
-        status["recording_id"].as_str(),
-        Some(recording_id.as_str()),
-        "Status recording_id should match"
-    );
-
-    // Step 4: wait ~30 frames
-    h.wait_frames(30).await;
-
-    // Step 5: mid-recording snapshot
-    let mid_snapshot = h
-        .expect(5, "spatial_snapshot", json!({"detail": "standard"}))
-        .await;
-    let frame_mid = mid_snapshot["frame"].as_u64().unwrap_or(0);
-    assert!(
-        frame_mid > frame_0,
-        "Frame counter should advance during recording: {frame_0} → {frame_mid}"
-    );
-
-    // Step 6: add marker
-    let marker_result = h
-        .expect(
-            6,
-            "recording",
-            json!({
-                "action": "add_marker",
-                "marker_label": "mid_test"
-            }),
-        )
-        .await;
-    assert!(
-        !marker_result.is_null(),
-        "add_marker should return acknowledgement"
-    );
-
-    // Step 7: wait more frames
-    h.wait_frames(30).await;
-
-    // Step 8: stop recording
-    let stop_result = h
-        .expect(8, "recording", json!({"action": "stop"}))
-        .await;
-    let frames_captured = stop_result["frames_captured"].as_u64().unwrap_or(0);
-    assert!(
-        frames_captured > 0,
-        "frames_captured should be > 0 after recording, got {frames_captured}"
-    );
-
-    // Step 9: status after stop
-    let status_after = h
-        .expect(9, "recording", json!({"action": "status"}))
-        .await;
-    assert_eq!(
-        status_after["recording_active"].as_bool(),
-        Some(false),
-        "Recording should not be active after stop"
-    );
-
-    // Step 10: post-recording snapshot — session should not be corrupted
-    let post_snapshot = h
-        .expect(10, "spatial_snapshot", json!({"detail": "standard"}))
-        .await;
-    let post_entities = post_snapshot["entities"].as_array();
-    assert!(
-        post_entities.is_some(),
-        "Post-recording snapshot should still return entities (session not corrupted)"
-    );
-}
-
 /// Journey: Agent uses dashcam to capture a spatial anomaly.
 ///
 /// This is the primary dashcam usage pattern: the agent is debugging a game,
@@ -512,17 +398,17 @@ async fn journey_recording_lifecycle() {
 /// surrounding context, and verifies the clip is available for analysis.
 ///
 /// Steps:
-///   1. Verify dashcam is active: dashcam_status returns state="buffering"
+///   1. Verify dashcam is active: clips(status) returns state="buffering"
 ///   2. spatial_snapshot(standard) → baseline, note entities and frame
 ///   3. wait_frames(60) → let dashcam buffer accumulate ~1 second of data
 ///   4. spatial_action(teleport, Enemies/Scout, [100, 0, 100]) → create an anomaly
 ///   5. wait_frames(5) → let physics settle
-///   6. recording(add_marker, marker_label="anomaly detected") → trigger dashcam clip
-///   7. dashcam_status → state should be "post_capture" (capturing post-window)
-///   8. flush_dashcam → force-close the clip immediately (avoid 30s wait)
-///   9. dashcam_status → state should be back to "buffering"
-///  10. recording(list) → dashcam clip should appear in the list
-///  11. Verify the clip has dashcam=true and recording_id starts with "dash_"
+///   6. clips(add_marker, marker_label="anomaly detected") → trigger dashcam clip
+///   7. clips(status) → state should be "post_capture" (capturing post-window)
+///   8. clips(save) → force-close the clip immediately (avoid 30s wait)
+///   9. clips(status) → state should be back to "buffering"
+///  10. clips(list) → dashcam clip should appear in the list
+///  11. Verify the clip has dashcam=true and clip_id starts with "clip_"
 #[tokio::test]
 async fn journey_dashcam_agent_workflow() {
     let mut h = support::e2e_harness::E2EHarness::start_3d()
@@ -531,7 +417,7 @@ async fn journey_dashcam_agent_workflow() {
 
     // Step 1: verify dashcam is actively buffering on startup
     let status = h
-        .expect(1, "recording", json!({ "action": "dashcam_status" }))
+        .expect(1, "clips", json!({ "action": "status" }))
         .await;
     assert_eq!(
         status["dashcam_enabled"], json!(true),
@@ -584,7 +470,7 @@ async fn journey_dashcam_agent_workflow() {
     let marker_result = h
         .expect(
             6,
-            "recording",
+            "clips",
             json!({
                 "action": "add_marker",
                 "marker_label": "anomaly detected"
@@ -598,53 +484,53 @@ async fn journey_dashcam_agent_workflow() {
 
     // Step 7: dashcam should now be in post_capture state
     let status_post = h
-        .expect(7, "recording", json!({ "action": "dashcam_status" }))
+        .expect(7, "clips", json!({ "action": "status" }))
         .await;
     assert_eq!(
         status_post["state"], json!("post_capture"),
         "Dashcam should be in post_capture after marker trigger. Got: {status_post}"
     );
 
-    // Step 8: force-flush to close the clip immediately (avoid 30s deliberate post-window)
-    let flush_result = h
+    // Step 8: force-save to close the clip immediately (avoid 30s deliberate post-window)
+    let save_result = h
         .expect(
             8,
-            "recording",
+            "clips",
             json!({
-                "action": "flush_dashcam",
+                "action": "save",
                 "marker_label": "force close for test"
             }),
         )
         .await;
-    let clip_id = flush_result["recording_id"]
+    let clip_id = save_result["clip_id"]
         .as_str()
-        .expect("flush should return recording_id");
+        .expect("save should return clip_id");
     assert!(
-        clip_id.starts_with("dash_"),
-        "dashcam clip id should start with 'dash_', got: {clip_id}"
+        clip_id.starts_with("clip_"),
+        "clip id should start with 'clip_', got: {clip_id}"
     );
     assert!(
-        flush_result["frames"].as_u64().unwrap_or(0) > 0,
+        save_result["frames"].as_u64().unwrap_or(0) > 0,
         "Clip should contain captured frames"
     );
 
-    // Step 9: dashcam should be back to buffering after flush
+    // Step 9: dashcam should be back to buffering after save
     let status_after = h
-        .expect(9, "recording", json!({ "action": "dashcam_status" }))
+        .expect(9, "clips", json!({ "action": "status" }))
         .await;
     assert_eq!(
         status_after["state"], json!("buffering"),
-        "Dashcam should return to buffering after clip flush. Got: {status_after}"
+        "Dashcam should return to buffering after clip save. Got: {status_after}"
     );
 
-    // Step 10: clip should appear in recording list
+    // Step 10: clip should appear in list
     let list = h
-        .expect(10, "recording", json!({ "action": "list" }))
+        .expect(10, "clips", json!({ "action": "list" }))
         .await;
-    let recordings = list["recordings"]
+    let clips = list["clips"]
         .as_array()
-        .expect("list should return recordings array");
-    let dashcam_clips: Vec<_> = recordings
+        .expect("list should return clips array");
+    let dashcam_clips: Vec<_> = clips
         .iter()
         .filter(|r| r["dashcam"].as_bool() == Some(true))
         .collect();
@@ -654,144 +540,23 @@ async fn journey_dashcam_agent_workflow() {
     );
 
     // Step 11: verify clip metadata
-    let our_clip = recordings
+    let our_clip = clips
         .iter()
-        .find(|r| r["recording_id"].as_str() == Some(clip_id))
+        .find(|r| r["clip_id"].as_str() == Some(clip_id))
         .unwrap_or_else(|| {
-            panic!("Clip {clip_id} should be in list. Recordings: {recordings:?}")
+            panic!("Clip {clip_id} should be in list. Clips: {clips:?}")
         });
     assert_eq!(our_clip["dashcam"], json!(true));
 }
 
-/// Journey: Explicit recording and dashcam run simultaneously without interference.
-///
-/// This catches the most likely class of bugs: shared state corruption between
-/// the two recording paths (shared frame_buffer, shared db, shared collector).
-///
-/// Steps:
-///   1. dashcam_status → buffering (dashcam auto-started)
-///   2. recording(start) → explicit recording begins
-///   3. recording(status) → active=true, recording_id present
-///   4. dashcam_status → still buffering (not affected by explicit recording)
-///   5. wait_frames(30) → both systems capturing simultaneously
-///   6. recording(add_marker, "during_explicit") → marker goes to explicit recording
-///   7. recording(stop) → explicit recording stops, frames_captured > 0
-///   8. dashcam_status → STILL buffering (not stopped by explicit recording stop)
-///   9. flush_dashcam → dashcam clip saved independently
-///  10. recording(list) → both explicit recording AND dashcam clip in list
-#[tokio::test]
-async fn journey_dashcam_coexists_with_explicit_recording() {
-    let mut h = support::e2e_harness::E2EHarness::start_3d()
-        .await
-        .expect("Failed to start Godot 3D scene");
-
-    // Step 1: dashcam should be auto-started
-    let dc_status = h
-        .expect(1, "recording", json!({ "action": "dashcam_status" }))
-        .await;
-    assert_eq!(dc_status["state"], json!("buffering"));
-
-    // Step 2: start explicit recording
-    let start = h
-        .expect(2, "recording", json!({ "action": "start", "recording_name": "coexist_test" }))
-        .await;
-    let rec_id = start["recording_id"]
-        .as_str()
-        .expect("start should return recording_id")
-        .to_string();
-    assert!(!rec_id.is_empty());
-
-    // Step 3: verify explicit recording is active
-    let rec_status = h
-        .expect(3, "recording", json!({ "action": "status" }))
-        .await;
-    assert_eq!(rec_status["recording_active"], json!(true));
-    assert_eq!(rec_status["recording_id"].as_str(), Some(rec_id.as_str()));
-
-    // Step 4: dashcam should still be buffering independently
-    let dc_status2 = h
-        .expect(4, "recording", json!({ "action": "dashcam_status" }))
-        .await;
-    assert_eq!(
-        dc_status2["state"], json!("buffering"),
-        "Dashcam should keep buffering during explicit recording"
-    );
-
-    // Step 5: let both systems capture simultaneously
-    h.wait_frames(30).await;
-
-    // Step 6: add marker to explicit recording
-    let marker = h
-        .expect(
-            6,
-            "recording",
-            json!({ "action": "add_marker", "marker_label": "during_explicit" }),
-        )
-        .await;
-    assert!(!marker.is_null());
-
-    // Step 7: stop explicit recording
-    let stop = h
-        .expect(7, "recording", json!({ "action": "stop" }))
-        .await;
-    let frames = stop["frames_captured"].as_u64().unwrap_or(0);
-    assert!(frames > 0, "Explicit recording should have captured frames");
-
-    // Step 8: dashcam should STILL be buffering after explicit stop
-    let dc_status3 = h
-        .expect(8, "recording", json!({ "action": "dashcam_status" }))
-        .await;
-    assert_eq!(
-        dc_status3["state"], json!("buffering"),
-        "Dashcam must not stop when explicit recording stops"
-    );
-
-    // Step 9: flush dashcam to save a clip
-    let flush = h
-        .expect(
-            9,
-            "recording",
-            json!({ "action": "flush_dashcam", "marker_label": "post-explicit" }),
-        )
-        .await;
-    let dash_id = flush["recording_id"]
-        .as_str()
-        .expect("flush should return recording_id");
-    assert!(dash_id.starts_with("dash_"));
-
-    // Step 10: list should contain BOTH the explicit recording and the dashcam clip
-    let list = h
-        .expect(10, "recording", json!({ "action": "list" }))
-        .await;
-    let recordings = list["recordings"]
-        .as_array()
-        .expect("list should return recordings array");
-
-    let has_explicit = recordings
-        .iter()
-        .any(|r| r["recording_id"].as_str() == Some(rec_id.as_str()));
-    let has_dashcam = recordings
-        .iter()
-        .any(|r| r["recording_id"].as_str() == Some(dash_id));
-
-    assert!(
-        has_explicit,
-        "Explicit recording {rec_id} should be in list. Got: {recordings:?}"
-    );
-    assert!(
-        has_dashcam,
-        "Dashcam clip {dash_id} should be in list. Got: {recordings:?}"
-    );
-}
-
-/// Journey: Flush a dashcam clip, verify it exists, delete it, verify it's gone.
+/// Journey: Save a dashcam clip, verify it exists, delete it, verify it's gone.
 ///
 /// Steps:
 ///   1. wait_frames(60) → accumulate buffer
-///   2. flush_dashcam("cleanup_test") → get clip recording_id
-///   3. recording(list) → clip should be present
-///   4. recording(delete, recording_id) → delete the clip
-///   5. recording(list) → clip should be gone
+///   2. clips(save, "cleanup_test") → get clip_id
+///   3. clips(list) → clip should be present
+///   4. clips(delete, clip_id) → delete the clip
+///   5. clips(list) → clip should be gone
 #[tokio::test]
 async fn journey_dashcam_clip_lifecycle() {
     let mut h = support::e2e_harness::E2EHarness::start_3d()
@@ -801,52 +566,52 @@ async fn journey_dashcam_clip_lifecycle() {
     // Step 1: let buffer accumulate
     h.wait_frames(60).await;
 
-    // Step 2: flush
-    let flush = h
+    // Step 2: save clip
+    let save = h
         .expect(
             2,
-            "recording",
-            json!({ "action": "flush_dashcam", "marker_label": "cleanup_test" }),
+            "clips",
+            json!({ "action": "save", "marker_label": "cleanup_test" }),
         )
         .await;
-    let clip_id = flush["recording_id"]
+    let clip_id = save["clip_id"]
         .as_str()
-        .expect("flush should return recording_id")
+        .expect("save should return clip_id")
         .to_string();
 
     // Step 3: verify clip exists in list
     let list = h
-        .expect(3, "recording", json!({ "action": "list" }))
+        .expect(3, "clips", json!({ "action": "list" }))
         .await;
-    let found = list["recordings"]
+    let found = list["clips"]
         .as_array()
         .unwrap()
         .iter()
-        .any(|r| r["recording_id"].as_str() == Some(&clip_id));
-    assert!(found, "Clip {clip_id} should be in list after flush");
+        .any(|r| r["clip_id"].as_str() == Some(&clip_id));
+    assert!(found, "Clip {clip_id} should be in list after save");
 
     // Step 4: delete the clip
     let delete = h
         .expect(
             4,
-            "recording",
-            json!({ "action": "delete", "recording_id": clip_id }),
+            "clips",
+            json!({ "action": "delete", "clip_id": clip_id }),
         )
         .await;
     assert!(
-        delete["result"].as_str() == Some("ok") || delete["deleted"].as_bool() == Some(true),
+        delete["result"].as_str() == Some("ok"),
         "delete should confirm success: {delete}"
     );
 
     // Step 5: verify clip is gone
     let list2 = h
-        .expect(5, "recording", json!({ "action": "list" }))
+        .expect(5, "clips", json!({ "action": "list" }))
         .await;
-    let still_found = list2["recordings"]
+    let still_found = list2["clips"]
         .as_array()
         .unwrap()
         .iter()
-        .any(|r| r["recording_id"].as_str() == Some(&clip_id));
+        .any(|r| r["clip_id"].as_str() == Some(&clip_id));
     assert!(
         !still_found,
         "Clip {clip_id} should be gone after delete. List: {list2}"

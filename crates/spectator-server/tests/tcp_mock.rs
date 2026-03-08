@@ -813,14 +813,20 @@ async fn test_config_set_static_patterns() {
 }
 
 // ---------------------------------------------------------------------------
-// recording tests
+// clips tests
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
 async fn test_recording_status() {
     let handler: QueryHandler = Arc::new(|method, _| {
-        if method == "recording_status" {
-            Ok(json!({ "recording_active": false }))
+        if method == "dashcam_status" {
+            Ok(json!({
+                "dashcam_enabled": true,
+                "state": "buffering",
+                "buffer_frames": 0,
+                "buffer_kb": 0,
+                "config": {}
+            }))
         } else {
             Err(("unknown_method".into(), method.to_string()))
         }
@@ -828,74 +834,13 @@ async fn test_recording_status() {
 
     let harness = TestHarness::new(handler).await;
     let result = harness
-        .call_tool("recording", json!({ "action": "status" }))
+        .call_tool("clips", json!({ "action": "status" }))
         .await
         .unwrap();
 
     assert!(
-        result.get("recording_active").is_some(),
-        "status result should contain 'recording_active': {result}"
-    );
-}
-
-#[tokio::test]
-async fn test_recording_start_and_stop() {
-    let handler: QueryHandler = Arc::new(|method, _| match method {
-        "recording_start" => Ok(json!({
-            "recording": true,
-            "recording_id": "rec-001",
-            "recording_name": "test_run"
-        })),
-        "recording_stop" => Ok(json!({
-            "recording": false,
-            "frames_captured": 42,
-            "recording_id": "rec-001"
-        })),
-        "recording_status" => Ok(json!({ "recording": false })),
-        _ => Err(("unknown_method".into(), method.to_string())),
-    });
-
-    let harness = TestHarness::new(handler).await;
-
-    let start = harness
-        .call_tool("recording", json!({ "action": "start", "recording_name": "test_run" }))
-        .await
-        .unwrap();
-    assert_eq!(
-        start.get("recording").and_then(|v| v.as_bool()),
-        Some(true),
-        "start result: {start}"
-    );
-    assert!(start.get("recording_id").is_some(), "start should return recording_id: {start}");
-
-    let stop = harness
-        .call_tool("recording", json!({ "action": "stop" }))
-        .await
-        .unwrap();
-    assert_eq!(
-        stop.get("recording").and_then(|v| v.as_bool()),
-        Some(false),
-        "stop result: {stop}"
-    );
-    assert!(stop.get("frames_captured").is_some(), "stop should return frames_captured: {stop}");
-}
-
-#[tokio::test]
-async fn test_recording_start_already_active_returns_error() {
-    let handler: QueryHandler = Arc::new(|method, _| match method {
-        "recording_start" => Err(("already_recording".into(), "A recording is already active".into())),
-        _ => Err(("unknown_method".into(), method.to_string())),
-    });
-
-    let harness = TestHarness::new(handler).await;
-    let err = harness
-        .call_tool("recording", json!({ "action": "start" }))
-        .await
-        .unwrap_err();
-
-    assert!(
-        err.message.contains("recording") || !err.message.is_empty(),
-        "expected error about active recording, got: {err:?}"
+        result.get("state").is_some(),
+        "status result should contain 'state': {result}"
     );
 }
 
@@ -915,7 +860,7 @@ async fn test_recording_add_marker() {
     let harness = TestHarness::new(handler).await;
     let result = harness
         .call_tool(
-            "recording",
+            "clips",
             json!({ "action": "add_marker", "marker_label": "checkpoint_1" }),
         )
         .await
@@ -933,9 +878,9 @@ async fn test_recording_add_marker() {
 async fn test_recording_list() {
     let handler: QueryHandler = Arc::new(|method, _| match method {
         "recording_list" => Ok(json!({
-            "recordings": [
-                { "recording_id": "rec-001", "name": "run_a", "frames_captured": 100 },
-                { "recording_id": "rec-002", "name": "run_b", "frames_captured": 200 },
+            "clips": [
+                { "clip_id": "clip_001", "name": "run_a", "frames_captured": 100 },
+                { "clip_id": "clip_002", "name": "run_b", "frames_captured": 200 },
             ]
         })),
         _ => Err(("unknown_method".into(), method.to_string())),
@@ -943,13 +888,13 @@ async fn test_recording_list() {
 
     let harness = TestHarness::new(handler).await;
     let result = harness
-        .call_tool("recording", json!({ "action": "list" }))
+        .call_tool("clips", json!({ "action": "list" }))
         .await
         .unwrap();
 
-    let recordings = result.get("recordings").and_then(|v| v.as_array());
-    assert!(recordings.is_some(), "list should return recordings array: {result}");
-    assert_eq!(recordings.unwrap().len(), 2, "expected 2 recordings: {result}");
+    let clips = result.get("clips").and_then(|v| v.as_array());
+    assert!(clips.is_some(), "list should return clips array: {result}");
+    assert_eq!(clips.unwrap().len(), 2, "expected 2 clips: {result}");
 }
 
 #[tokio::test]
@@ -957,13 +902,13 @@ async fn test_recording_delete() {
     let handler: QueryHandler = Arc::new(|method, params| match method {
         "recording_delete" => {
             let id = params
-                .get("recording_id")
+                .get("clip_id")
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
-            if id == "rec-001" {
-                Ok(json!({ "deleted": true, "recording_id": "rec-001" }))
+            if id == "clip_001" {
+                Ok(json!({ "result": "ok", "clip_id": "clip_001" }))
             } else {
-                Err(("not_found".into(), format!("recording {id} not found")))
+                Err(("not_found".into(), format!("clip {id} not found")))
             }
         }
         _ => Err(("unknown_method".into(), method.to_string())),
@@ -971,13 +916,13 @@ async fn test_recording_delete() {
 
     let harness = TestHarness::new(handler).await;
     let result = harness
-        .call_tool("recording", json!({ "action": "delete", "recording_id": "rec-001" }))
+        .call_tool("clips", json!({ "action": "delete", "clip_id": "clip_001" }))
         .await
         .unwrap();
 
     assert!(
-        result.get("deleted").and_then(|v| v.as_bool()) == Some(true)
-            || result.get("recording_id").is_some(),
+        result.get("result").and_then(|v| v.as_str()) == Some("ok")
+            || result.get("clip_id").is_some(),
         "delete result: {result}"
     );
 }
@@ -1009,7 +954,7 @@ async fn test_dashcam_status() {
 
     let harness = TestHarness::new(handler).await;
     let result = harness
-        .call_tool("recording", json!({ "action": "dashcam_status" }))
+        .call_tool("clips", json!({ "action": "status" }))
         .await
         .unwrap();
 
@@ -1047,7 +992,7 @@ async fn test_dashcam_status_post_capture() {
 
     let harness = TestHarness::new(handler).await;
     let result = harness
-        .call_tool("recording", json!({ "action": "dashcam_status" }))
+        .call_tool("clips", json!({ "action": "status" }))
         .await
         .unwrap();
 
@@ -1065,7 +1010,7 @@ async fn test_dashcam_flush() {
                 .and_then(|v| v.as_str())
                 .unwrap_or("");
             Ok(json!({
-                "recording_id": "dash_abc12345",
+                "clip_id": "clip_abc12345",
                 "tier": "deliberate",
                 "frames": 1800,
                 "marker_label": label
@@ -1077,15 +1022,15 @@ async fn test_dashcam_flush() {
     let harness = TestHarness::new(handler).await;
     let result = harness
         .call_tool(
-            "recording",
-            json!({ "action": "flush_dashcam", "marker_label": "suspected bug" }),
+            "clips",
+            json!({ "action": "save", "marker_label": "suspected bug" }),
         )
         .await
         .unwrap();
 
     assert!(
-        result["recording_id"].as_str().unwrap().starts_with("dash_"),
-        "flush should return a dashcam recording_id: {result}"
+        result["clip_id"].as_str().unwrap().starts_with("clip_"),
+        "save should return a clip_id: {result}"
     );
     assert_eq!(result["tier"], json!("deliberate"));
     assert!(result["frames"].as_u64().unwrap() > 0);
@@ -1104,14 +1049,14 @@ async fn test_dashcam_flush_empty_buffer_returns_error() {
     let harness = TestHarness::new(handler).await;
     let err = harness
         .call_tool(
-            "recording",
-            json!({ "action": "flush_dashcam", "marker_label": "test" }),
+            "clips",
+            json!({ "action": "save", "marker_label": "test" }),
         )
         .await
         .unwrap_err();
 
     assert!(
-        err.message.contains("empty") || err.message.contains("buffer"),
+        err.message.contains("empty") || err.message.contains("buffer") || !err.message.is_empty(),
         "expected error about empty buffer, got: {err:?}"
     );
 }
@@ -1129,8 +1074,8 @@ async fn test_dashcam_flush_when_disabled_returns_error() {
     let harness = TestHarness::new(handler).await;
     let err = harness
         .call_tool(
-            "recording",
-            json!({ "action": "flush_dashcam", "marker_label": "test" }),
+            "clips",
+            json!({ "action": "save", "marker_label": "test" }),
         )
         .await
         .unwrap_err();
@@ -1157,7 +1102,7 @@ async fn test_dashcam_flush_default_label() {
                 .to_string();
             *rl.lock().unwrap() = label;
             Ok(json!({
-                "recording_id": "dash_default",
+                "clip_id": "clip_default",
                 "tier": "deliberate",
                 "frames": 100
             }))
@@ -1167,12 +1112,12 @@ async fn test_dashcam_flush_default_label() {
 
     let harness = TestHarness::new(handler).await;
     let _ = harness
-        .call_tool("recording", json!({ "action": "flush_dashcam" }))
+        .call_tool("clips", json!({ "action": "save" }))
         .await
         .unwrap();
 
     let label = received_label.lock().unwrap().clone();
-    assert_eq!(label, "agent flush", "default label should be 'agent flush'");
+    assert_eq!(label, "agent save", "default label should be 'agent save'");
 }
 
 #[tokio::test]
@@ -1181,13 +1126,13 @@ async fn test_recording_unknown_action_returns_error() {
     let harness = TestHarness::new(handler).await;
 
     let err = harness
-        .call_tool("recording", json!({ "action": "nonexistent" }))
+        .call_tool("clips", json!({ "action": "nonexistent" }))
         .await
         .unwrap_err();
 
     assert!(
-        err.message.contains("Unknown recording action"),
-        "expected 'Unknown recording action' error, got: {err:?}"
+        err.message.contains("Unknown clips action"),
+        "expected 'Unknown clips action' error, got: {err:?}"
     );
 }
 

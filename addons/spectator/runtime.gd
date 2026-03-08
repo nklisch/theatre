@@ -8,7 +8,6 @@ var _overlay: CanvasLayer
 var _pause_label: Label
 var _toast_container: VBoxContainer
 var _toasts: Array[Control] = []
-var _recording_dot: ColorRect
 var _dashcam_label: Label
 var _marker_btn: Button
 
@@ -16,7 +15,6 @@ const MAX_TOASTS := 3
 const TOAST_DURATION := 3.0
 
 # Configurable shortcut keycodes (resolved from project settings in _ready).
-var _record_keycode: int = KEY_F12
 var _marker_keycode: int = KEY_F9
 var _pause_keycode: int = KEY_F11
 
@@ -47,8 +45,6 @@ func _ready() -> void:
 	recorder = SpectatorRecorder.new()
 	add_child(recorder)
 	recorder.set_collector(collector)
-	recorder.recording_started.connect(_on_recording_started)
-	recorder.recording_stopped.connect(_on_recording_stopped)
 	recorder.marker_added.connect(_on_marker_added)
 	recorder.dashcam_clip_saved.connect(_on_dashcam_clip_saved)
 	recorder.dashcam_clip_started.connect(_on_dashcam_clip_started)
@@ -95,28 +91,17 @@ func _push_status_to_editor() -> void:
 	EngineDebugger.send_message("spectator:status",
 		[status, port, tracked, groups,
 		 Engine.get_physics_frames(), Engine.get_frames_per_second()])
-	var is_rec: bool = recorder != null and recorder.is_recording()
-	var elapsed_ms: int = recorder.get_elapsed_ms() if is_rec else 0
-	var frames: int = recorder.get_frames_captured() if is_rec else 0
-	var kb: int = recorder.get_buffer_size_kb() if is_rec else 0
-	EngineDebugger.send_message("spectator:recording", [is_rec, elapsed_ms, frames, kb])
 
 
 func _on_debugger_command(message: String, data: Array) -> bool:
 	if message != "spectator:command" or data.is_empty():
 		return false
 	match data[0]:
-		"start_recording": _toggle_recording()
-		"stop_recording":
-			if recorder and recorder.is_recording():
-				recorder.stop_recording()
 		"add_marker": _drop_marker()
 	return true
 
 
 func _resolve_shortcut_keys() -> void:
-	_record_keycode = _key_name_to_code(ProjectSettings.get_setting(
-		"spectator/shortcuts/record_key", "F12"))
 	_marker_keycode = _key_name_to_code(ProjectSettings.get_setting(
 		"spectator/shortcuts/marker_key", "F9"))
 	_pause_keycode = _key_name_to_code(ProjectSettings.get_setting(
@@ -165,15 +150,6 @@ func _setup_overlay() -> void:
 	_toast_container.offset_right = -20
 	_overlay.add_child(_toast_container)
 
-	_recording_dot = ColorRect.new()
-	_recording_dot.color = Color(0.9, 0.1, 0.1)
-	_recording_dot.custom_minimum_size = Vector2(16, 16)
-	_recording_dot.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	_recording_dot.offset_left = 10
-	_recording_dot.offset_top = 10
-	_recording_dot.visible = false
-	_overlay.add_child(_recording_dot)
-
 	_dashcam_label = Label.new()
 	_dashcam_label.add_theme_font_size_override("font_size", 12)
 	_dashcam_label.modulate = Color(0.6, 0.9, 1.0, 0.85)
@@ -213,10 +189,7 @@ func _shortcut_input(event: InputEvent) -> void:
 		return
 	if event is InputEventKey:
 		var code: int = event.keycode
-		if code == _record_keycode:
-			_toggle_recording()
-			get_viewport().set_input_as_handled()
-		elif code == _marker_keycode:
+		if code == _marker_keycode:
 			_drop_marker()
 			get_viewport().set_input_as_handled()
 		elif code == _pause_keycode:
@@ -231,49 +204,13 @@ func _toggle_pause() -> void:
 		_pause_label.visible = tree.paused
 
 
-func _toggle_recording() -> void:
-	if not recorder:
-		return
-	if recorder.is_recording():
-		recorder.stop_recording()
-		_set_recording_indicator(false)
-	else:
-		var storage_path: String = ProjectSettings.get_setting(
-			"spectator/recording/storage_path", "user://spectator_recordings/")
-		var interval: int = ProjectSettings.get_setting(
-			"spectator/recording/capture_interval", 1)
-		var max_frames: int = ProjectSettings.get_setting(
-			"spectator/recording/max_frames", 36000)
-		var id: String = recorder.start_recording("", storage_path, interval, max_frames)
-		if not id.is_empty():
-			_set_recording_indicator(true)
-
-
 func _drop_marker() -> void:
 	if not recorder:
 		return
-	# Explicit recording takes priority.
-	if recorder.is_recording():
-		recorder.add_marker("human", "")
-		if _recording_dot:
-			_recording_dot.color = Color.YELLOW
-			get_tree().create_timer(0.3).timeout.connect(func() -> void:
-				if _recording_dot:
-					_recording_dot.color = Color(0.9, 0.1, 0.1)
-			)
-	elif recorder.is_dashcam_active():
-		# Dashcam-only mode: flush ring buffer as a human clip.
+	if recorder.is_dashcam_active():
 		var clip_id: String = recorder.flush_dashcam_clip("human")
 		if not clip_id.is_empty():
 			_show_toast("Dashcam clip saved")
-
-
-func _set_recording_indicator(visible: bool) -> void:
-	if not ProjectSettings.get_setting(
-			"spectator/display/show_recording_indicator", true):
-		return
-	if _recording_dot:
-		_recording_dot.visible = visible
 
 
 func _update_dashcam_label() -> void:
@@ -292,36 +229,16 @@ func _update_dashcam_label() -> void:
 	_dashcam_label.visible = true
 
 
-func _on_recording_started(_id: String, _name: String) -> void:
-	_set_recording_indicator(true)
-	_show_toast("Recording started")
-	if EngineDebugger.is_active():
-		EngineDebugger.send_message("spectator:recording", [true, 0, 0, 0])
-
-
-func _on_recording_stopped(_id: String, frames: int) -> void:
-	_set_recording_indicator(false)
-	if EngineDebugger.is_active():
-		EngineDebugger.send_message("spectator:recording", [false, 0, frames, 0])
-
-
 func _on_marker_added(_frame: int, source: String, label: String) -> void:
 	var text := "Marker: %s" % label if not label.is_empty() else "Marker added"
 	if source != "human":
 		text = "[%s] %s" % [source, text]
 	_show_toast(text)
-	if _recording_dot:
-		_recording_dot.color = Color.YELLOW
-		get_tree().create_timer(0.3).timeout.connect(func() -> void:
-			if _recording_dot:
-				_recording_dot.color = Color(0.9, 0.1, 0.1)
-		)
 
 
-func _on_dashcam_clip_saved(recording_id: String, tier: String, frames: int) -> void:
+func _on_dashcam_clip_saved(_clip_id: String, tier: String, frames: int) -> void:
 	_show_toast("[dashcam] Clip saved (%s, %d frames)" % [tier, frames])
 	_update_dashcam_label()
-	var _unused = recording_id  # used by dock library list in future
 
 
 func _on_dashcam_clip_started(_trigger_frame: int, tier: String) -> void:
@@ -370,7 +287,5 @@ func _show_toast(text: String) -> void:
 
 
 func _exit_tree() -> void:
-	if recorder and recorder.is_recording():
-		recorder.stop_recording()
 	if tcp_server:
 		tcp_server.stop()

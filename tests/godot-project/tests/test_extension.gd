@@ -52,7 +52,7 @@ func test_tcp_server_has_activity_signal() -> String:
 
 func test_recorder_has_signals() -> String:
 	var r := SpectatorRecorder.new()
-	for sig in ["recording_started", "recording_stopped", "marker_added"]:
+	for sig in ["marker_added", "dashcam_clip_saved", "dashcam_clip_started"]:
 		var err := Assert.obj_has_signal(r, sig)
 		if err:
 			return err

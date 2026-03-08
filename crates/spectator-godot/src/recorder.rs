@@ -20,20 +20,6 @@ struct CapturedFrame {
     data: Vec<u8>, // MessagePack-encoded Vec<FrameEntityData>
 }
 
-struct CapturedEvent {
-    frame: u64,
-    event_type: String,
-    node_path: String,
-    data: String, // JSON
-}
-
-struct CapturedMarker {
-    frame: u64,
-    timestamp_ms: u64,
-    source: String, // "human", "agent", "system"
-    label: String,
-}
-
 // FrameEntityData is defined in spectator-protocol and imported above.
 
 // ---------------------------------------------------------------------------
@@ -122,28 +108,8 @@ enum DashcamState {
 pub struct SpectatorRecorder {
     base: Base<Node>,
 
-    // Recording state
-    recording: bool,
-    recording_id: String,
-    recording_name: String,
-    started_at_frame: u64,
-    started_at_ms: u64,
-    frames_captured: u32,
+    // Physics frame counter (for dashcam capture interval)
     frame_counter: u32,
-
-    // Capture config
-    capture_interval: u32,
-    max_frames: u32,
-
-    // Buffers (flushed to SQLite periodically)
-    frame_buffer: Vec<CapturedFrame>,
-    event_buffer: Vec<CapturedEvent>,
-    marker_buffer: Vec<CapturedMarker>,
-    flush_counter: u32,
-
-    // SQLite connection (open during recording)
-    db: Option<Connection>,
-    storage_path: String,
 
     // Collector reference for snapshot data
     collector: Option<Gd<SpectatorCollector>>,
@@ -185,21 +151,7 @@ impl INode for SpectatorRecorder {
     fn init(base: Base<Node>) -> Self {
         Self {
             base,
-            recording: false,
-            recording_id: String::new(),
-            recording_name: String::new(),
-            started_at_frame: 0,
-            started_at_ms: 0,
-            frames_captured: 0,
             frame_counter: 0,
-            capture_interval: 1,
-            max_frames: 36000,
-            frame_buffer: Vec::new(),
-            event_buffer: Vec::new(),
-            marker_buffer: Vec::new(),
-            flush_counter: 0,
-            db: None,
-            storage_path: String::new(),
             collector: None,
             dashcam_config: DashcamConfig::default(),
             dashcam_state: DashcamState::Disabled,
@@ -214,64 +166,25 @@ impl INode for SpectatorRecorder {
         // --- Dashcam force-close check (no capture needed) ---
         self.dashcam_check_force_close();
 
-        // --- Determine which systems need a frame this tick ---
-        let dashcam_wants = !matches!(self.dashcam_state, DashcamState::Disabled);
-
-        let mut recording_wants = false;
-        if self.recording {
-            self.frame_counter += 1;
-            if self.frame_counter.is_multiple_of(self.capture_interval) {
-                if self.frames_captured >= self.max_frames {
-                    self.stop_recording();
-                    tracing::warn!(
-                        "Recording stopped: max_frames ({}) reached",
-                        self.max_frames
-                    );
-                } else {
-                    recording_wants = true;
-                }
-            }
-        }
-
-        if !dashcam_wants && !recording_wants {
+        if matches!(self.dashcam_state, DashcamState::Disabled) {
             return;
         }
 
-        // --- Capture scene tree at most once per frame ---
+        self.frame_counter += 1;
+        if !self.frame_counter.is_multiple_of(self.dashcam_config.capture_interval) {
+            return;
+        }
+
         let Some(captured) = self.do_capture() else {
             return;
         };
 
-        if dashcam_wants && recording_wants {
-            self.dashcam_ingest(captured.clone());
-            self.frame_buffer.push(captured);
-            self.frames_captured += 1;
-        } else if dashcam_wants {
-            self.dashcam_ingest(captured);
-        } else {
-            self.frame_buffer.push(captured);
-            self.frames_captured += 1;
-        }
-
-        // --- Recording flush ---
-        if recording_wants {
-            self.flush_counter += 1;
-            if self.flush_counter >= 60 {
-                self.flush_to_db();
-                self.flush_counter = 0;
-            }
-        }
+        self.dashcam_ingest(captured);
     }
 }
 
 #[godot_api]
 impl SpectatorRecorder {
-    #[signal]
-    fn recording_started(recording_id: GString, name: GString);
-
-    #[signal]
-    fn recording_stopped(recording_id: GString, frames: u32);
-
     #[signal]
     fn marker_added(frame: u64, source: GString, label: GString);
 
@@ -284,41 +197,6 @@ impl SpectatorRecorder {
     #[func]
     pub fn set_collector(&mut self, collector: Gd<SpectatorCollector>) {
         self.collector = Some(collector);
-    }
-
-    #[func]
-    pub fn is_recording(&self) -> bool {
-        self.recording
-    }
-
-    #[func]
-    pub fn get_recording_id(&self) -> GString {
-        GString::from(&self.recording_id)
-    }
-
-    #[func]
-    pub fn get_frames_captured(&self) -> u32 {
-        self.frames_captured
-    }
-
-    #[func]
-    pub fn get_recording_name(&self) -> GString {
-        GString::from(&self.recording_name)
-    }
-
-    #[func]
-    pub fn get_elapsed_ms(&self) -> u64 {
-        if !self.recording {
-            return 0;
-        }
-        let now_ms = current_time_ms();
-        now_ms.saturating_sub(self.started_at_ms)
-    }
-
-    #[func]
-    pub fn get_buffer_size_kb(&self) -> u32 {
-        let bytes: usize = self.frame_buffer.iter().map(|f| f.data.len()).sum();
-        (bytes / 1024) as u32
     }
 
     // --- Dashcam funcs ---
@@ -479,134 +357,7 @@ impl SpectatorRecorder {
         GString::from(json.to_string().as_str())
     }
 
-    /// Start a new recording. Returns the recording_id, or empty string on error.
-    #[func]
-    pub fn start_recording(
-        &mut self,
-        name: GString,
-        storage_path: GString,
-        capture_interval: u32,
-        max_frames: u32,
-    ) -> GString {
-        if self.recording {
-            tracing::warn!("Recording already active");
-            return GString::new();
-        }
-
-        let recording_id = format!("rec_{:08x}", rand_u32());
-        let name_str = name.to_string();
-        let recording_name = if name_str.is_empty() {
-            format!("recording_{}", chrono_like_timestamp())
-        } else {
-            name_str
-        };
-
-        let storage = storage_path.to_string();
-        let dir_path = globalize_path(&storage);
-        let _ = std::fs::create_dir_all(&dir_path);
-
-        let db_path = format!("{}/{}.sqlite", dir_path, recording_id);
-        if let Err(e) = self.create_db(&db_path) {
-            tracing::error!("Failed to create recording database: {e}");
-            return GString::new();
-        }
-
-        let now_ms = current_time_ms();
-        let now_frame = current_physics_frame();
-        let physics_ticks = Engine::singleton().get_physics_ticks_per_second() as u32;
-        let scene_dims = detect_scene_dimensions(self.base().get_tree().and_then(|t| t.get_current_scene()));
-
-        if let Some(ref db) = self.db {
-            let config_json = serde_json::json!({
-                "capture_interval": capture_interval,
-                "max_frames": max_frames,
-            });
-            let _ = db.execute(
-                "INSERT INTO recording \
-                 (id, name, started_at_frame, started_at_ms, scene_dimensions, \
-                  physics_ticks_per_sec, capture_config) \
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-                rusqlite::params![
-                    &recording_id,
-                    &recording_name,
-                    now_frame,
-                    now_ms,
-                    scene_dims,
-                    physics_ticks,
-                    config_json.to_string(),
-                ],
-            );
-        }
-
-        self.recording = true;
-        self.recording_id = recording_id.clone();
-        self.recording_name = recording_name.clone();
-        self.started_at_frame = now_frame;
-        self.started_at_ms = now_ms;
-        self.frames_captured = 0;
-        self.frame_counter = 0;
-        self.flush_counter = 0;
-        self.capture_interval = capture_interval.max(1);
-        self.max_frames = max_frames;
-        self.storage_path = storage;
-
-        let id_var = GString::from(&self.recording_id).to_variant();
-        let name_var = GString::from(&self.recording_name).to_variant();
-        self.base_mut().emit_signal("recording_started", &[id_var, name_var]);
-
-        GString::from(&recording_id)
-    }
-
-    /// Stop the active recording. Returns metadata dict, or empty dict if not recording.
-    #[func]
-    pub fn stop_recording(&mut self) -> VarDictionary {
-        if !self.recording {
-            return VarDictionary::new();
-        }
-
-        self.flush_to_db();
-
-        let ended_frame = current_physics_frame();
-        let ended_ms = current_time_ms();
-        if let Some(ref db) = self.db {
-            let _ = db.execute(
-                "UPDATE recording SET ended_at_frame = ?1, ended_at_ms = ?2 WHERE id = ?3",
-                rusqlite::params![ended_frame, ended_ms, &self.recording_id],
-            );
-        }
-
-        self.db = None;
-
-        let mut result = VarDictionary::new();
-        result.set("recording_id", GString::from(&self.recording_id));
-        result.set("name", GString::from(&self.recording_name));
-        result.set("frames_captured", self.frames_captured);
-        result.set("duration_ms", ended_ms.saturating_sub(self.started_at_ms));
-        result.set("started_at_frame", self.started_at_frame);
-        result.set("ended_at_frame", ended_frame);
-
-        let frames_captured = self.frames_captured;
-        let recording_id = self.recording_id.clone();
-
-        self.recording = false;
-        self.recording_id.clear();
-        self.recording_name.clear();
-        self.frame_buffer.clear();
-        self.event_buffer.clear();
-        self.marker_buffer.clear();
-
-        self.base_mut().emit_signal(
-            "recording_stopped",
-            &[
-                GString::from(&recording_id).to_variant(),
-                frames_captured.to_variant(),
-            ],
-        );
-
-        result
-    }
-
-    /// Add a marker at the current frame.
+    /// Add a marker at the current frame. Triggers a dashcam clip.
     #[func]
     pub fn add_marker(&mut self, source: GString, label: GString) {
         let frame = current_physics_frame();
@@ -614,21 +365,7 @@ impl SpectatorRecorder {
         let source_str = source.to_string();
         let label_str = label.to_string();
 
-        // Explicit recording marker
-        if self.recording {
-            self.marker_buffer.push(CapturedMarker {
-                frame,
-                timestamp_ms,
-                source: source_str.clone(),
-                label: label_str.clone(),
-            });
-        }
-
-        // Dashcam trigger — only when no explicit recording is active.
-        // When explicit recording is running, markers go to it instead.
-        if !self.recording {
-            self.on_dashcam_marker(&source_str, &label_str, frame, timestamp_ms);
-        }
+        self.on_dashcam_marker(&source_str, &label_str, frame, timestamp_ms);
 
         self.base_mut().emit_signal(
             "marker_added",
@@ -707,7 +444,7 @@ impl SpectatorRecorder {
                         };
 
                         let mut dict = VarDictionary::new();
-                        dict.set("recording_id", GString::from(&id));
+                        dict.set("clip_id", GString::from(&id));
                         dict.set("name", GString::from(&name));
                         dict.set("frames_captured", frame_count as u32);
                         dict.set("duration_ms", duration_ms);
@@ -732,19 +469,6 @@ impl SpectatorRecorder {
         let dir_path = globalize_path(&storage_path.to_string());
         let file_path = format!("{}/{}.sqlite", dir_path, recording_id);
         std::fs::remove_file(&file_path).is_ok()
-    }
-
-    /// Return current recording status as a dictionary.
-    #[func]
-    pub fn get_recording_status(&self) -> VarDictionary {
-        let mut dict = VarDictionary::new();
-        dict.set("recording_active", self.recording);
-        dict.set("recording_id", GString::from(&self.recording_id));
-        dict.set("name", GString::from(&self.recording_name));
-        dict.set("frames_captured", self.frames_captured);
-        dict.set("duration_ms", self.get_elapsed_ms());
-        dict.set("buffer_size_kb", self.get_buffer_size_kb());
-        dict
     }
 
     /// Return all markers for a recording by reading its SQLite file.
@@ -848,89 +572,6 @@ impl SpectatorRecorder {
             timestamp_ms: snapshot.timestamp_ms,
             data,
         })
-    }
-
-    fn flush_to_db(&mut self) {
-        let Some(ref db) = self.db else {
-            return;
-        };
-
-        if self.frame_buffer.is_empty() && self.event_buffer.is_empty() && self.marker_buffer.is_empty() {
-            return;
-        }
-
-        let tx = match db.unchecked_transaction() {
-            Ok(tx) => tx,
-            Err(e) => {
-                tracing::error!("SQLite transaction error: {e}");
-                return;
-            }
-        };
-
-        {
-            let mut stmt = match tx.prepare_cached(
-                "INSERT OR REPLACE INTO frames (frame, timestamp_ms, data) VALUES (?1, ?2, ?3)",
-            ) {
-                Ok(s) => s,
-                Err(e) => {
-                    tracing::error!("SQLite prepare error: {e}");
-                    return;
-                }
-            };
-            for f in &self.frame_buffer {
-                let _ = stmt.execute(rusqlite::params![f.frame, f.timestamp_ms, &f.data]);
-            }
-        }
-
-        {
-            let mut stmt = match tx.prepare_cached(
-                "INSERT INTO events (frame, event_type, node_path, data) VALUES (?1, ?2, ?3, ?4)",
-            ) {
-                Ok(s) => s,
-                Err(e) => {
-                    tracing::error!("SQLite prepare error: {e}");
-                    return;
-                }
-            };
-            for ev in &self.event_buffer {
-                let _ = stmt
-                    .execute(rusqlite::params![ev.frame, &ev.event_type, &ev.node_path, &ev.data]);
-            }
-        }
-
-        {
-            let mut stmt = match tx.prepare_cached(
-                "INSERT INTO markers (frame, timestamp_ms, source, label) VALUES (?1, ?2, ?3, ?4)",
-            ) {
-                Ok(s) => s,
-                Err(e) => {
-                    tracing::error!("SQLite prepare error: {e}");
-                    return;
-                }
-            };
-            for m in &self.marker_buffer {
-                let _ = stmt
-                    .execute(rusqlite::params![m.frame, m.timestamp_ms, &m.source, &m.label]);
-            }
-        }
-
-        if let Err(e) = tx.commit() {
-            tracing::error!("SQLite commit error: {e}");
-        }
-
-        self.frame_buffer.clear();
-        self.event_buffer.clear();
-        self.marker_buffer.clear();
-    }
-
-    fn create_db(&mut self, path: &str) -> Result<(), String> {
-        let db = Connection::open(path).map_err(|e| format!("SQLite open error: {e}"))?;
-        db.execute_batch("PRAGMA journal_mode=WAL;")
-            .map_err(|e| format!("WAL error: {e}"))?;
-        db.execute_batch(SCHEMA_SQL)
-            .map_err(|e| format!("Schema error: {e}"))?;
-        self.db = Some(db);
-        Ok(())
     }
 
     // -----------------------------------------------------------------------
@@ -1154,7 +795,7 @@ impl SpectatorRecorder {
             return None;
         };
 
-        let recording_id = format!("dash_{:08x}", rand_u32());
+        let recording_id = format!("clip_{:08x}", rand_u32());
         let storage_path = "user://spectator_recordings/";
         let dir_path = globalize_path(storage_path);
         let _ = std::fs::create_dir_all(&dir_path);

@@ -52,8 +52,8 @@ pub struct SessionState {
     pub watch_engine: WatchEngine,
     /// Active session configuration (merged from TOML defaults + spatial_config overrides).
     pub config: SessionConfig,
-    /// Cached filesystem path to recording storage (resolved from addon).
-    pub recording_storage_path: Option<String>,
+    /// Cached filesystem path to clip storage (resolved from addon).
+    pub clip_storage_path: Option<String>,
     /// Scene dimensions from handshake.
     pub scene_dimensions: SceneDimensions,
 }
@@ -70,7 +70,7 @@ impl Default for SessionState {
             delta_engine: DeltaEngine::new(),
             watch_engine: WatchEngine::new(),
             config: SessionConfig::default(),
-            recording_storage_path: None,
+            clip_storage_path: None,
             scene_dimensions: SceneDimensions::Three,
         }
     }
