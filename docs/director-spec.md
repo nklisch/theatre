@@ -453,7 +453,8 @@ List all scenes in the project with their root node types.
 Params:
   project_path: string
   directory: string?
-  pattern: string?        — glob filter (e.g. "scenes/**/*.tscn"); deferred, not in Phase 2
+  pattern: string?              — glob filter (e.g. "scenes/**/*.tscn"); deferred, not in Phase 2
+  include_node_count: boolean?  — default true; deferred opt-out for large projects
 
 Returns:
   [{ path, root_type, node_count }]
@@ -461,15 +462,18 @@ Returns:
 
 #### `resource_read`
 
-Read a `.tres` resource file as structured data.
+Read a resource file as structured data. Accepts `.tres`, `.res`, or any
+`load()`-able path. For `.tscn` files, returns metadata with a hint to use
+`scene_read` instead.
 
 ```
 Params:
   project_path: string
   resource_path: string
+  depth: number?          — nested resource serialization depth (default 1); deferred
 
 Returns:
-  { type, properties: Record<string, any> }
+  { type, path, properties: Record<string, any>, hint?: string }
 ```
 
 ### Domain 2: Scene Manipulation

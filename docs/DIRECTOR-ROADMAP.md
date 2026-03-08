@@ -133,10 +133,14 @@ all Phase 1 tests with `GODOT_BIN` set.
 headlessly — may be slow for large projects. Consider returning node count as
 optional or lazy.
 
-**Deferred:** `scene_list` currently filters by subdirectory only. Add a
-`pattern: string?` param for glob matching (e.g. `"scenes/**/*.tscn"`) once
-real projects need it. Contract-compatible addition — new optional param,
-no breaking change.
+**Deferred:**
+- `scene_list`: Add `pattern: string?` for glob matching (e.g.
+  `"scenes/**/*.tscn"`) once real projects need it. Contract-compatible.
+- `scene_list`: Add `include_node_count: boolean?` (default true) opt-out for
+  large projects where instantiating every scene is too slow.
+- `resource_read`: Add `depth: number?` to control nested resource
+  serialization depth. Default 1 (nested resources as path strings).
+  Contract-compatible.
 
 ---
 
