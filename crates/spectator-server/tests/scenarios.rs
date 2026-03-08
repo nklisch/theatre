@@ -1106,6 +1106,7 @@ async fn test_inspect_entity_returned_by_snapshot() {
         signals: None,
         script: None,
         spatial_context_raw: None,
+        resources: None,
     };
     let inspect_value = Arc::new(serde_json::to_value(&inspect_response).unwrap());
     let iv = inspect_value.clone();

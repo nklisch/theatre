@@ -156,6 +156,7 @@ pub enum InspectCategory {
     Signals,
     Script,
     SpatialContext,
+    Resources,
 }
 
 /// Response from `get_node_inspect`.
@@ -180,6 +181,142 @@ pub struct NodeInspectResponse {
     /// Raw nearby-entity data for spatial_context (server computes bearings).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub spatial_context_raw: Option<SpatialContextRaw>,
+    /// Resource data from node and immediate children (opt-in via include).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resources: Option<InspectResources>,
+}
+
+/// Resource data collected from a node and its immediate children.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InspectResources {
+    /// Mesh data from MeshInstance3D/MeshInstance2D children.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub meshes: Vec<MeshResourceData>,
+    /// Collision shape data from CollisionShape3D/CollisionShape2D children.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub collision_shapes: Vec<CollisionShapeData>,
+    /// Animation player data from AnimationPlayer children.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub animation_players: Vec<AnimationPlayerData>,
+    /// Navigation agent data from NavigationAgent3D/2D children.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub navigation_agents: Vec<NavigationAgentData>,
+    /// Sprite data from Sprite2D/Sprite3D children.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub sprites: Vec<SpriteData>,
+    /// Particle system data from GPUParticles3D/2D children.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub particles: Vec<ParticleData>,
+    /// Shader parameters from ShaderMaterial on the node or mesh children.
+    #[serde(default, skip_serializing_if = "serde_json::Map::is_empty")]
+    pub shader_params: serde_json::Map<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MeshResourceData {
+    /// Name of the child node holding the mesh.
+    pub child: String,
+    /// Resource path (e.g. "res://models/scout.tres") or null if inline.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resource: Option<String>,
+    /// Mesh class name (e.g. "ArrayMesh", "BoxMesh", "SphereMesh").
+    #[serde(rename = "type")]
+    pub mesh_type: String,
+    /// Number of surfaces in the mesh.
+    pub surface_count: u32,
+    /// Material overrides per surface index.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub material_overrides: Vec<MaterialOverrideData>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MaterialOverrideData {
+    /// Surface index.
+    pub surface: u32,
+    /// Material resource path or null if inline.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub resource: Option<String>,
+    /// Material class name (e.g. "StandardMaterial3D", "ShaderMaterial").
+    #[serde(rename = "type")]
+    pub material_type: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CollisionShapeData {
+    /// Name of the child node holding the shape.
+    pub child: String,
+    /// Shape class name (e.g. "CapsuleShape3D", "BoxShape3D", "CircleShape2D").
+    #[serde(rename = "type")]
+    pub shape_type: String,
+    /// Shape dimensions as key-value pairs (e.g. {"radius": 0.5, "height": 1.8}).
+    pub dimensions: serde_json::Map<String, serde_json::Value>,
+    /// Whether the shape is an inline resource (true) or loaded from a file (false).
+    pub inline: bool,
+    /// Disabled flag from the CollisionShape node.
+    pub disabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnimationPlayerData {
+    /// Name of the AnimationPlayer child node.
+    pub child: String,
+    /// Currently playing animation name (null if stopped).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub current_animation: Option<String>,
+    /// List of available animation names.
+    pub animations: Vec<String>,
+    /// Current playback position in seconds.
+    pub position_sec: f64,
+    /// Length of current animation in seconds (0.0 if stopped).
+    pub length_sec: f64,
+    /// Whether the current animation loops.
+    pub looping: bool,
+    /// Whether the player is currently playing.
+    pub playing: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NavigationAgentData {
+    /// Name of the NavigationAgent child node.
+    pub child: String,
+    /// Target position the agent is navigating toward.
+    pub target_position: Vec<f64>,
+    /// Whether the target has been reached.
+    pub target_reached: bool,
+    /// Remaining distance to the target.
+    pub distance_remaining: f64,
+    /// Path postprocessing mode.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub path_postprocessing: Option<String>,
+    /// Whether avoidance is enabled.
+    pub avoidance_enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SpriteData {
+    /// Name of the Sprite child node.
+    pub child: String,
+    /// Texture resource path (null if no texture).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub texture: Option<String>,
+    /// Whether the sprite is visible.
+    pub visible: bool,
+    /// Flip flags.
+    pub flip_h: bool,
+    pub flip_v: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParticleData {
+    /// Name of the particle system child node.
+    pub child: String,
+    /// Whether particles are currently emitting.
+    pub emitting: bool,
+    /// Number of particles.
+    pub amount: i32,
+    /// Process material resource path (null if inline/none).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub process_material: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -659,9 +796,74 @@ mod tests {
             signals: None,
             script: None,
             spatial_context_raw: None,
+            resources: None,
         };
         let json = serde_json::to_string(&response).unwrap();
         assert!(!json.contains("transform"));
         assert!(!json.contains("physics"));
+        assert!(!json.contains("resources"));
+    }
+
+    #[test]
+    fn inspect_resources_round_trip() {
+        use serde_json::json;
+        let resources = InspectResources {
+            meshes: vec![MeshResourceData {
+                child: "Mesh".into(),
+                resource: Some("res://models/scout.tres".into()),
+                mesh_type: "ArrayMesh".into(),
+                surface_count: 3,
+                material_overrides: vec![MaterialOverrideData {
+                    surface: 0,
+                    resource: Some("res://materials/skin.tres".into()),
+                    material_type: "StandardMaterial3D".into(),
+                }],
+            }],
+            collision_shapes: vec![CollisionShapeData {
+                child: "CollisionShape3D".into(),
+                shape_type: "CapsuleShape3D".into(),
+                dimensions: {
+                    let mut m = serde_json::Map::new();
+                    m.insert("radius".into(), json!(0.5));
+                    m.insert("height".into(), json!(1.8));
+                    m
+                },
+                inline: true,
+                disabled: false,
+            }],
+            animation_players: vec![],
+            navigation_agents: vec![],
+            sprites: vec![],
+            particles: vec![],
+            shader_params: serde_json::Map::new(),
+        };
+        let json = serde_json::to_value(&resources).unwrap();
+        let back: InspectResources = serde_json::from_value(json).unwrap();
+        assert_eq!(back.meshes.len(), 1);
+        assert_eq!(back.meshes[0].surface_count, 3);
+        assert_eq!(back.collision_shapes[0].dimensions["radius"], 0.5);
+    }
+
+    #[test]
+    fn inspect_resources_empty_collections_omitted() {
+        let resources = InspectResources {
+            meshes: vec![],
+            collision_shapes: vec![],
+            animation_players: vec![],
+            navigation_agents: vec![],
+            sprites: vec![],
+            particles: vec![],
+            shader_params: serde_json::Map::new(),
+        };
+        let json = serde_json::to_string(&resources).unwrap();
+        assert!(!json.contains("meshes"));
+        assert!(!json.contains("collision_shapes"));
+    }
+
+    #[test]
+    fn inspect_category_resources_deserializes() {
+        let json = serde_json::json!("resources");
+        let cat: InspectCategory = serde_json::from_value(json).unwrap();
+        assert_eq!(cat, InspectCategory::Resources);
     }
 }

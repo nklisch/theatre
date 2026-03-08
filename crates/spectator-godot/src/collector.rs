@@ -5,19 +5,25 @@ use godot::builtin::{
 };
 use godot::builtin::VariantType;
 use godot::classes::{
-    CharacterBody2D, CharacterBody3D, Engine, NavigationServer3D, Node, Node2D, Node3D,
-    PhysicsBody2D, PhysicsBody3D, PhysicsRayQueryParameters2D, PhysicsRayQueryParameters3D,
-    PhysicsServer2D, PhysicsServer3D, Resource, RigidBody2D, RigidBody3D,
+    AnimationPlayer, BoxShape3D, CanvasItem, CapsuleShape2D, CapsuleShape3D,
+    CharacterBody2D, CharacterBody3D, CircleShape2D, CollisionShape2D, CollisionShape3D,
+    CylinderShape3D, Engine, GeometryInstance3D, GpuParticles2D, GpuParticles3D,
+    MeshInstance2D, MeshInstance3D, NavigationAgent2D, NavigationAgent3D, NavigationServer3D,
+    Node, Node2D, Node3D, PhysicsBody2D, PhysicsBody3D, PhysicsRayQueryParameters2D,
+    PhysicsRayQueryParameters3D, PhysicsServer2D, PhysicsServer3D, RectangleShape2D,
+    Resource, RigidBody2D, RigidBody3D, ShaderMaterial, SphereShape3D, Sprite2D, Sprite3D,
 };
 use godot::obj::Gd;
 use godot::prelude::*;
 use spectator_protocol::query::{
-    ChildData, DetailLevel, EntityData, FindBy, FrameInfoResponse, GetNodeInspectParams,
-    GetSceneTreeParams, GetSnapshotDataParams, InspectCategory, InspectChild, InspectPhysics,
-    InspectScript, InspectSignals, InspectState, InspectTransform, NearbyEntityRaw,
-    NavPathResponse, NodeInspectResponse, PerspectiveData, PerspectiveParam, PhysicsEntityData,
-    RaycastResponse, ResolveNodeResponse, SceneTreeAction, SnapshotResponse, SpatialContextRaw,
-    TransformEntityData, TreeInclude,
+    AnimationPlayerData, ChildData, CollisionShapeData, DetailLevel, EntityData, FindBy,
+    FrameInfoResponse, GetNodeInspectParams, GetSceneTreeParams, GetSnapshotDataParams,
+    InspectCategory, InspectChild, InspectPhysics, InspectResources, InspectScript,
+    InspectSignals, InspectState, InspectTransform, MaterialOverrideData, MeshResourceData,
+    NavPathResponse, NavigationAgentData, NearbyEntityRaw, NodeInspectResponse, ParticleData,
+    PerspectiveData, PerspectiveParam, PhysicsEntityData, RaycastResponse, ResolveNodeResponse,
+    SceneTreeAction, SnapshotResponse, SpatialContextRaw, SpriteData, TransformEntityData,
+    TreeInclude,
 };
 
 /// State for deferred frame advance (set by action_handler, read by tcp_server).
@@ -601,6 +607,7 @@ impl SpectatorCollector {
             signals: None,
             script: None,
             spatial_context_raw: None,
+            resources: None,
         };
 
         let is_spatial = node.clone().try_cast::<Node3D>().is_ok()
@@ -631,6 +638,9 @@ impl SpectatorCollector {
                         response.spatial_context_raw =
                             Some(self.collect_spatial_context_raw(&node));
                     }
+                }
+                InspectCategory::Resources => {
+                    response.resources = Some(self.collect_inspect_resources(&node));
                 }
             }
         }
@@ -1055,6 +1065,429 @@ impl SpectatorCollector {
             camera_distance,
             node_position,
             node_forward,
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // Resource inspection
+    // -------------------------------------------------------------------------
+
+    /// Collect resource data from the node and its immediate children.
+    fn collect_inspect_resources(&self, node: &Gd<Node>) -> InspectResources {
+        let mut resources = InspectResources {
+            meshes: Vec::new(),
+            collision_shapes: Vec::new(),
+            animation_players: Vec::new(),
+            navigation_agents: Vec::new(),
+            sprites: Vec::new(),
+            particles: Vec::new(),
+            shader_params: serde_json::Map::new(),
+        };
+
+        // Collect shader params from the node itself if it has a material.
+        self.collect_shader_params_from_node(node, &mut resources.shader_params);
+
+        // Walk immediate children.
+        for i in 0..node.get_child_count() {
+            let Some(child) = node.get_child(i) else { continue };
+            let child_name = child.get_name().to_string();
+            let child_class = child.get_class().to_string();
+
+            match child_class.as_str() {
+                "MeshInstance3D" => {
+                    if let Ok(mi) = child.clone().try_cast::<MeshInstance3D>() {
+                        self.collect_shader_params_from_mesh_3d(&mi, &mut resources.shader_params);
+                        resources.meshes.push(self.collect_mesh_3d(&mi, &child_name));
+                    }
+                }
+                "MeshInstance2D" => {
+                    if let Ok(mi) = child.clone().try_cast::<MeshInstance2D>() {
+                        resources.meshes.push(self.collect_mesh_2d(&mi, &child_name));
+                    }
+                }
+                "CollisionShape3D" => {
+                    if let Ok(cs) = child.clone().try_cast::<CollisionShape3D>() {
+                        resources.collision_shapes.push(
+                            self.collect_collision_shape_3d(&cs, &child_name),
+                        );
+                    }
+                }
+                "CollisionShape2D" => {
+                    if let Ok(cs) = child.clone().try_cast::<CollisionShape2D>() {
+                        resources.collision_shapes.push(
+                            self.collect_collision_shape_2d(&cs, &child_name),
+                        );
+                    }
+                }
+                "AnimationPlayer" => {
+                    if let Ok(ap) = child.clone().try_cast::<AnimationPlayer>() {
+                        resources.animation_players.push(
+                            self.collect_animation_player(&ap, &child_name),
+                        );
+                    }
+                }
+                "NavigationAgent3D" => {
+                    if let Ok(na) = child.clone().try_cast::<NavigationAgent3D>() {
+                        resources.navigation_agents.push(
+                            self.collect_nav_agent_3d(&na, &child_name),
+                        );
+                    }
+                }
+                "NavigationAgent2D" => {
+                    if let Ok(na) = child.clone().try_cast::<NavigationAgent2D>() {
+                        resources.navigation_agents.push(
+                            self.collect_nav_agent_2d(&na, &child_name),
+                        );
+                    }
+                }
+                "Sprite2D" => {
+                    if let Ok(sp) = child.clone().try_cast::<Sprite2D>() {
+                        resources.sprites.push(self.collect_sprite_2d(&sp, &child_name));
+                    }
+                }
+                "Sprite3D" => {
+                    if let Ok(sp) = child.clone().try_cast::<Sprite3D>() {
+                        resources.sprites.push(self.collect_sprite_3d(&sp, &child_name));
+                    }
+                }
+                "GPUParticles3D" => {
+                    if let Ok(p) = child.clone().try_cast::<GpuParticles3D>() {
+                        resources.particles.push(
+                            self.collect_particles_3d(&p, &child_name),
+                        );
+                    }
+                }
+                "GPUParticles2D" => {
+                    if let Ok(p) = child.clone().try_cast::<GpuParticles2D>() {
+                        resources.particles.push(
+                            self.collect_particles_2d(&p, &child_name),
+                        );
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        resources
+    }
+
+    fn collect_mesh_3d(&self, mi: &Gd<MeshInstance3D>, child_name: &str) -> MeshResourceData {
+        let mesh_opt = mi.get_mesh();
+        let (resource, mesh_type, surface_count) = match &mesh_opt {
+            Some(mesh) => {
+                let res: Gd<Resource> = mesh.clone().upcast();
+                (resource_path(&res), mesh.get_class().to_string(), mesh.get_surface_count() as u32)
+            }
+            None => (None, "None".into(), 0),
+        };
+
+        let mut material_overrides = Vec::new();
+        if let Some(mesh) = &mesh_opt {
+            for i in 0..mesh.get_surface_count() {
+                if let Some(mat) = mi.get_surface_override_material(i) {
+                    let mat_res: Gd<Resource> = mat.clone().upcast();
+                    material_overrides.push(MaterialOverrideData {
+                        surface: i as u32,
+                        resource: resource_path(&mat_res),
+                        material_type: mat.get_class().to_string(),
+                    });
+                }
+            }
+        }
+
+        MeshResourceData {
+            child: child_name.into(),
+            resource,
+            mesh_type,
+            surface_count,
+            material_overrides,
+        }
+    }
+
+    fn collect_mesh_2d(&self, mi: &Gd<MeshInstance2D>, child_name: &str) -> MeshResourceData {
+        let mesh_opt = mi.get_mesh();
+        let (resource, mesh_type, surface_count) = match &mesh_opt {
+            Some(mesh) => {
+                let res: Gd<Resource> = mesh.clone().upcast();
+                (resource_path(&res), mesh.get_class().to_string(), mesh.get_surface_count() as u32)
+            }
+            None => (None, "None".into(), 0),
+        };
+        MeshResourceData {
+            child: child_name.into(),
+            resource,
+            mesh_type,
+            surface_count,
+            material_overrides: Vec::new(),
+        }
+    }
+
+    fn collect_collision_shape_3d(
+        &self,
+        cs: &Gd<CollisionShape3D>,
+        child_name: &str,
+    ) -> CollisionShapeData {
+        let disabled = cs.is_disabled();
+        let shape_opt = cs.get_shape();
+
+        let (shape_type, dimensions, inline) = match &shape_opt {
+            Some(shape) => {
+                let res: Gd<Resource> = shape.clone().upcast();
+                let inline = resource_path(&res).is_none();
+                let shape_type = shape.get_class().to_string();
+                let dims = self.extract_shape_dimensions_3d(shape);
+                (shape_type, dims, inline)
+            }
+            None => ("None".into(), serde_json::Map::new(), true),
+        };
+
+        CollisionShapeData { child: child_name.into(), shape_type, dimensions, inline, disabled }
+    }
+
+    fn collect_collision_shape_2d(
+        &self,
+        cs: &Gd<CollisionShape2D>,
+        child_name: &str,
+    ) -> CollisionShapeData {
+        let disabled = cs.is_disabled();
+        let shape_opt = cs.get_shape();
+
+        let (shape_type, dimensions, inline) = match &shape_opt {
+            Some(shape) => {
+                let res: Gd<Resource> = shape.clone().upcast();
+                let inline = resource_path(&res).is_none();
+                let shape_type = shape.get_class().to_string();
+                let dims = self.extract_shape_dimensions_2d(shape);
+                (shape_type, dims, inline)
+            }
+            None => ("None".into(), serde_json::Map::new(), true),
+        };
+
+        CollisionShapeData { child: child_name.into(), shape_type, dimensions, inline, disabled }
+    }
+
+    fn extract_shape_dimensions_3d(
+        &self,
+        shape: &Gd<godot::classes::Shape3D>,
+    ) -> serde_json::Map<String, serde_json::Value> {
+        let mut dims = serde_json::Map::new();
+        if let Ok(cap) = shape.clone().try_cast::<CapsuleShape3D>() {
+            dims.insert("radius".into(), serde_json::json!(cap.get_radius()));
+            dims.insert("height".into(), serde_json::json!(cap.get_height()));
+        } else if let Ok(box_s) = shape.clone().try_cast::<BoxShape3D>() {
+            let size = box_s.get_size();
+            dims.insert("size".into(), serde_json::json!([size.x, size.y, size.z]));
+        } else if let Ok(sphere) = shape.clone().try_cast::<SphereShape3D>() {
+            dims.insert("radius".into(), serde_json::json!(sphere.get_radius()));
+        } else if let Ok(cyl) = shape.clone().try_cast::<CylinderShape3D>() {
+            dims.insert("radius".into(), serde_json::json!(cyl.get_radius()));
+            dims.insert("height".into(), serde_json::json!(cyl.get_height()));
+        }
+        dims
+    }
+
+    fn extract_shape_dimensions_2d(
+        &self,
+        shape: &Gd<godot::classes::Shape2D>,
+    ) -> serde_json::Map<String, serde_json::Value> {
+        let mut dims = serde_json::Map::new();
+        if let Ok(circle) = shape.clone().try_cast::<CircleShape2D>() {
+            dims.insert("radius".into(), serde_json::json!(circle.get_radius()));
+        } else if let Ok(rect) = shape.clone().try_cast::<RectangleShape2D>() {
+            let size = rect.get_size();
+            dims.insert("size".into(), serde_json::json!([size.x, size.y]));
+        } else if let Ok(cap) = shape.clone().try_cast::<CapsuleShape2D>() {
+            dims.insert("radius".into(), serde_json::json!(cap.get_radius()));
+            dims.insert("height".into(), serde_json::json!(cap.get_height()));
+        }
+        dims
+    }
+
+    fn collect_animation_player(
+        &self,
+        ap: &Gd<AnimationPlayer>,
+        child_name: &str,
+    ) -> AnimationPlayerData {
+        let playing = ap.is_playing();
+        let current = if playing {
+            let name = ap.get_current_animation().to_string();
+            if name.is_empty() { None } else { Some(name) }
+        } else {
+            None
+        };
+
+        let animations: Vec<String> = ap
+            .get_animation_list()
+            .as_slice()
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+
+        let length_sec = current
+            .as_ref()
+            .and_then(|name| {
+                ap.get_animation(&StringName::from(name.as_str()))
+                    .map(|anim| anim.get_length() as f64)
+            })
+            .unwrap_or(0.0);
+
+        let looping = current
+            .as_ref()
+            .and_then(|name| {
+                ap.get_animation(&StringName::from(name.as_str()))
+                    .map(|anim| anim.get_loop_mode() != godot::classes::animation::LoopMode::NONE)
+            })
+            .unwrap_or(false);
+
+        AnimationPlayerData {
+            child: child_name.into(),
+            current_animation: current,
+            animations,
+            position_sec: ap.get_current_animation_position() as f64,
+            length_sec,
+            looping,
+            playing,
+        }
+    }
+
+    fn collect_nav_agent_3d(
+        &self,
+        na: &Gd<NavigationAgent3D>,
+        child_name: &str,
+    ) -> NavigationAgentData {
+        let target = na.get_target_position();
+        NavigationAgentData {
+            child: child_name.into(),
+            target_position: vec![target.x as f64, target.y as f64, target.z as f64],
+            target_reached: na.is_target_reached(),
+            distance_remaining: na.distance_to_target() as f64,
+            path_postprocessing: Some(format!("{:?}", na.get_path_postprocessing())),
+            avoidance_enabled: na.get_avoidance_enabled(),
+        }
+    }
+
+    fn collect_nav_agent_2d(
+        &self,
+        na: &Gd<NavigationAgent2D>,
+        child_name: &str,
+    ) -> NavigationAgentData {
+        let target = na.get_target_position();
+        NavigationAgentData {
+            child: child_name.into(),
+            target_position: vec![target.x as f64, target.y as f64],
+            target_reached: na.is_target_reached(),
+            distance_remaining: na.distance_to_target() as f64,
+            path_postprocessing: Some(format!("{:?}", na.get_path_postprocessing())),
+            avoidance_enabled: na.get_avoidance_enabled(),
+        }
+    }
+
+    fn collect_sprite_2d(&self, sp: &Gd<Sprite2D>, child_name: &str) -> SpriteData {
+        let texture = sp.get_texture().map(|t| {
+            let res: Gd<Resource> = t.upcast();
+            resource_path(&res).unwrap_or_else(|| "inline".into())
+        });
+        SpriteData {
+            child: child_name.into(),
+            texture,
+            visible: sp.is_visible(),
+            flip_h: sp.is_flipped_h(),
+            flip_v: sp.is_flipped_v(),
+        }
+    }
+
+    fn collect_sprite_3d(&self, sp: &Gd<Sprite3D>, child_name: &str) -> SpriteData {
+        let texture = sp.get_texture().map(|t| {
+            let res: Gd<Resource> = t.upcast();
+            resource_path(&res).unwrap_or_else(|| "inline".into())
+        });
+        SpriteData {
+            child: child_name.into(),
+            texture,
+            visible: sp.is_visible(),
+            flip_h: sp.is_flipped_h(),
+            flip_v: sp.is_flipped_v(),
+        }
+    }
+
+    fn collect_particles_3d(&self, p: &Gd<GpuParticles3D>, child_name: &str) -> ParticleData {
+        let process_material = p.get_process_material().and_then(|m| {
+            let res: Gd<Resource> = m.upcast();
+            resource_path(&res)
+        });
+        ParticleData {
+            child: child_name.into(),
+            emitting: p.is_emitting(),
+            amount: p.get_amount(),
+            process_material,
+        }
+    }
+
+    fn collect_particles_2d(&self, p: &Gd<GpuParticles2D>, child_name: &str) -> ParticleData {
+        let process_material = p.get_process_material().and_then(|m| {
+            let res: Gd<Resource> = m.upcast();
+            resource_path(&res)
+        });
+        ParticleData {
+            child: child_name.into(),
+            emitting: p.is_emitting(),
+            amount: p.get_amount(),
+            process_material,
+        }
+    }
+
+    fn collect_shader_params_from_node(
+        &self,
+        node: &Gd<Node>,
+        params: &mut serde_json::Map<String, serde_json::Value>,
+    ) {
+        if let Ok(gi) = node.clone().try_cast::<GeometryInstance3D>() {
+            if let Some(mat) = gi.get_material_override() {
+                let res: Gd<Resource> = mat.upcast();
+                self.extract_shader_params(&res, params);
+            }
+        }
+        if let Ok(ci) = node.clone().try_cast::<CanvasItem>() {
+            if let Some(mat) = ci.get_material() {
+                let res: Gd<Resource> = mat.upcast();
+                self.extract_shader_params(&res, params);
+            }
+        }
+    }
+
+    fn collect_shader_params_from_mesh_3d(
+        &self,
+        mi: &Gd<MeshInstance3D>,
+        params: &mut serde_json::Map<String, serde_json::Value>,
+    ) {
+        if let Some(mesh) = mi.get_mesh() {
+            for i in 0..mesh.get_surface_count() {
+                if let Some(mat) = mi.get_surface_override_material(i) {
+                    let res: Gd<Resource> = mat.upcast();
+                    self.extract_shader_params(&res, params);
+                }
+            }
+        }
+    }
+
+    fn extract_shader_params(
+        &self,
+        material: &Gd<Resource>,
+        params: &mut serde_json::Map<String, serde_json::Value>,
+    ) {
+        if let Ok(shader_mat) = material.clone().try_cast::<ShaderMaterial>() {
+            if let Some(mut shader) = shader_mat.get_shader() {
+                let uniform_list = shader.get_shader_uniform_list();
+                for entry in uniform_list.iter_shared() {
+                    let dict = entry.to::<VarDictionary>();
+                    let Some(name_var) = dict.get("name") else { continue };
+                    let name = name_var.to::<GString>().to_string();
+                    let value = shader_mat.get_shader_parameter(&StringName::from(&name));
+                    if let Some(json_val) = variant_to_json(&value) {
+                        params.insert(name, json_val);
+                    }
+                }
+            }
         }
     }
 
@@ -1681,6 +2114,12 @@ impl SpectatorCollector {
         state.remaining = remaining;
         state.pending_id = pending_id;
     }
+}
+
+/// Extract file path from a Godot Resource, or None if inline.
+fn resource_path(res: &Gd<Resource>) -> Option<String> {
+    let path = res.get_path().to_string();
+    if path.is_empty() { None } else { Some(path) }
 }
 
 /// Convert a Godot `Vector3` to a `Vec<f64>`.

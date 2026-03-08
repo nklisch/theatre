@@ -226,6 +226,7 @@ async fn test_inspect_all_categories() {
         signals: None,
         script: None,
         spatial_context_raw: None,
+        resources: None,
     };
 
     let handler: QueryHandler = Arc::new(move |method, _| {
@@ -245,6 +246,104 @@ async fn test_inspect_all_categories() {
     assert_eq!(result["path"], "Player");
     assert_eq!(result["class"], "CharacterBody3D");
     assert!(result.get("budget").is_some());
+}
+
+#[tokio::test]
+async fn test_inspect_resources_passthrough() {
+    use spectator_protocol::query::InspectCategory;
+
+    let handler: QueryHandler = Arc::new(|method, params| {
+        if method == "get_node_inspect" {
+            let p: spectator_protocol::query::GetNodeInspectParams =
+                serde_json::from_value(params.clone()).unwrap();
+            assert!(p.include.contains(&InspectCategory::Resources));
+
+            Ok(json!({
+                "path": "enemies/scout_02",
+                "class": "CharacterBody3D",
+                "instance_id": 12345,
+                "resources": {
+                    "meshes": [{
+                        "child": "MeshInstance3D",
+                        "resource": "res://models/scout.tres",
+                        "type": "ArrayMesh",
+                        "surface_count": 3,
+                        "material_overrides": [{
+                            "surface": 0,
+                            "resource": "res://materials/enemy_skin.tres",
+                            "type": "StandardMaterial3D"
+                        }]
+                    }],
+                    "collision_shapes": [{
+                        "child": "CollisionShape3D",
+                        "type": "CapsuleShape3D",
+                        "dimensions": {"radius": 0.5, "height": 1.8},
+                        "inline": true,
+                        "disabled": false
+                    }],
+                    "animation_players": [{
+                        "child": "AnimationPlayer",
+                        "current_animation": "patrol_walk",
+                        "animations": ["idle", "patrol_walk", "run", "attack"],
+                        "position_sec": 0.8,
+                        "length_sec": 1.2,
+                        "looping": true,
+                        "playing": true
+                    }],
+                    "shader_params": {
+                        "outline_color": [1.0, 0.0, 0.0, 1.0],
+                        "damage_flash_intensity": 0.0
+                    }
+                }
+            }))
+        } else {
+            Err(("unknown_method".into(), format!("unknown: {method}")))
+        }
+    });
+
+    let harness = TestHarness::new(handler).await;
+    let result = harness
+        .call_tool("spatial_inspect", json!({
+            "node": "enemies/scout_02",
+            "include": ["resources"]
+        }))
+        .await
+        .unwrap();
+
+    assert!(result["resources"]["meshes"].is_array());
+    assert_eq!(result["resources"]["meshes"][0]["type"], "ArrayMesh");
+    assert_eq!(result["resources"]["collision_shapes"][0]["dimensions"]["radius"], 0.5);
+    assert_eq!(result["resources"]["animation_players"][0]["playing"], true);
+    assert_eq!(result["resources"]["shader_params"]["damage_flash_intensity"], 0.0);
+}
+
+#[tokio::test]
+async fn test_inspect_default_excludes_resources() {
+    use spectator_protocol::query::InspectCategory;
+
+    let handler: QueryHandler = Arc::new(|method, params| {
+        if method == "get_node_inspect" {
+            let p: spectator_protocol::query::GetNodeInspectParams =
+                serde_json::from_value(params.clone()).unwrap();
+            assert!(!p.include.contains(&InspectCategory::Resources));
+
+            Ok(json!({
+                "path": "enemies/scout_02",
+                "class": "CharacterBody3D",
+                "instance_id": 12345
+            }))
+        } else {
+            Err(("unknown_method".into(), format!("unknown: {method}")))
+        }
+    });
+
+    let harness = TestHarness::new(handler).await;
+    let result = harness
+        .call_tool("spatial_inspect", json!({ "node": "enemies/scout_02" }))
+        .await
+        .unwrap();
+
+    assert!(result.get("resources").is_none());
 }
 
 // ---------------------------------------------------------------------------

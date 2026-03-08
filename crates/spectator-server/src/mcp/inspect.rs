@@ -12,8 +12,8 @@ pub struct SpatialInspectParams {
 
     /// Which data categories to include.
     /// Options: "transform", "physics", "state", "children", "signals",
-    ///          "script", "spatial_context"
-    /// Default: all categories.
+    ///          "script", "spatial_context", "resources"
+    /// Default: all categories except "resources" (opt-in to save tokens).
     #[serde(default = "default_include")]
     pub include: Vec<String>,
 }
@@ -40,6 +40,7 @@ pub fn parse_include(strings: &[String]) -> Result<Vec<InspectCategory>, McpErro
         ("signals", InspectCategory::Signals),
         ("script", InspectCategory::Script),
         ("spatial_context", InspectCategory::SpatialContext),
+        ("resources", InspectCategory::Resources),
     ])
 }
 
@@ -101,6 +102,20 @@ mod tests {
     fn parse_include_invalid() {
         let include = vec!["invalid".into()];
         assert!(parse_include(&include).is_err());
+    }
+
+    #[test]
+    fn parse_include_resources() {
+        let include = vec!["resources".into()];
+        let result = parse_include(&include).unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], InspectCategory::Resources);
+    }
+
+    #[test]
+    fn default_include_excludes_resources() {
+        let defaults = default_include();
+        assert!(!defaults.contains(&"resources".to_string()));
     }
 
     #[test]

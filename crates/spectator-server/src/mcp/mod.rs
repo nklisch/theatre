@@ -300,7 +300,7 @@ impl SpectatorServer {
     /// Deep inspection of a single node — transform, physics, state, children,
     /// signals, script, and spatial context. The "tell me everything about this
     /// one thing" tool.
-    #[tool(description = "Deep inspection of a single node. Returns transform, physics, state, children, signals, script, and spatial context. Use the 'include' parameter to select specific categories and reduce token usage. Default includes all categories.")]
+    #[tool(description = "Deep inspection of a single node. Returns transform, physics, state, children, signals, script, spatial context, and resources. Use the 'include' parameter to select specific categories and reduce token usage. Default includes all categories except 'resources' (opt-in to save tokens).")]
     pub async fn spatial_inspect(
         &self,
         Parameters(params): Parameters<SpatialInspectParams>,
