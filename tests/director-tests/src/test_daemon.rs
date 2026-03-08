@@ -78,8 +78,7 @@ fn daemon_unknown_operation() {
 fn fallback_to_oneshot() {
     let f = DirectorFixture::new();
     let scene_path = DirectorFixture::temp_scene_path("oneshot_fallback");
-    let project_path = f
-        .project_dir_path()
+    let project_path = DirectorFixture::project_dir_path()
         .to_string_lossy()
         .into_owned();
 
