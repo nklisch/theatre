@@ -319,10 +319,8 @@ The recording workflow: human reproduces the bug, agent analyzes the timeline.
   "action": "start",
   "recording_name": "detailed_run",
   "capture": {
-    "capture_interval": 1,    // capture every N physics frames (default 1)
-    "max_frames": 36000,      // max frames to capture (default 36000)
-    "include_signals": true,  // capture signal emissions (default true)
-    "include_input": false    // capture input events (default false)
+    "capture_interval": 1,   // capture every N physics frames (default 1)
+    "max_frames": 36000      // max frames to capture (default 36000)
   }
 }
 
@@ -424,10 +422,10 @@ ahead, ahead_left, ahead_right, left, right, behind, behind_left, behind_right
 
 **Elevation** (3D only): `level` (within ±2m), `above_5m`, `below_2m`
 
-**`rel` block** on each entity:
+**`relative` block** on each entity:
 ```jsonc
 {
-  "dist": 7.2,              // straight-line distance in world units
+  "distance": 7.2,          // straight-line distance in world units
   "bearing": "ahead_left",  // relative to perspective facing
   "bearing_deg": 322,       // exact degrees (0 = ahead, clockwise)
   "elevation": "level",
@@ -435,7 +433,7 @@ ahead, ahead_left, ahead_right, left, right, behind, behind_left, behind_right
 }
 ```
 
-**`abs`** is the world position (`[x, y, z]` in 3D, `[x, y]` in 2D).
+**`global_position`** is the world position (`[x, y, z]` in 3D, `[x, y]` in 2D).
 
 ## Error Reference
 
