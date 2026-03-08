@@ -195,6 +195,23 @@ mod tests {
     }
 
     #[test]
+    fn begin_advance_while_advancing_is_rejected() {
+        let mut state = ConnectionState::default();
+        state.on_client_connected();
+        state.on_handshake_ack();
+
+        assert!(state.begin_advance(5, "req-1".into()));
+        assert_eq!(state.advance_remaining, 5);
+
+        // Second call while first is in progress must be rejected.
+        assert!(!state.begin_advance(3, "req-2".into()));
+
+        // State must be unchanged — still tracking req-1 with 5 frames.
+        assert_eq!(state.advance_remaining, 5);
+        assert_eq!(state.advance_request_id.as_deref(), Some("req-1"));
+    }
+
+    #[test]
     fn reconnect_after_disconnect_resets_state() {
         let mut state = ConnectionState::default();
         state.on_client_connected();

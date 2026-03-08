@@ -983,6 +983,65 @@ async fn test_recording_delete() {
 }
 
 // ---------------------------------------------------------------------------
+// advance_frames tests
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn test_action_advance_frames_returns_new_frame() {
+    let handler: QueryHandler = Arc::new(|method, params| {
+        if method == "execute_action" {
+            let action = params["action"].as_str().unwrap_or("");
+            if action == "advance_frames" {
+                let frames = params["frames"].as_u64().unwrap_or(0);
+                // Simulate the deferred response the GDExtension sends after
+                // advancing N physics frames.
+                Ok(json!({
+                    "action": "advance_frames",
+                    "result": "ok",
+                    "details": { "new_frame": 105 + frames },
+                    "frame": 105 + frames
+                }))
+            } else {
+                Err(("unknown_action".into(), action.to_string()))
+            }
+        } else {
+            Err(("unknown_method".into(), method.to_string()))
+        }
+    });
+
+    let harness = TestHarness::new(handler).await;
+    let result = harness
+        .call_tool("spatial_action", json!({ "action": "advance_frames", "frames": 5 }))
+        .await
+        .unwrap();
+
+    // MCP layer passes the addon response through; new_frame should be present.
+    assert!(
+        result.get("details").and_then(|d| d.get("new_frame")).is_some()
+            || result.get("new_frame").is_some()
+            || result.get("frame").is_some(),
+        "advance_frames result missing new_frame: {result}"
+    );
+}
+
+#[tokio::test]
+async fn test_action_advance_frames_requires_frames_param() {
+    let handler: QueryHandler = Arc::new(|_, _| Ok(json!({})));
+    let harness = TestHarness::new(handler).await;
+
+    // frames is required — MCP layer should reject before hitting the addon.
+    let err = harness
+        .call_tool("spatial_action", json!({ "action": "advance_frames" }))
+        .await
+        .unwrap_err();
+
+    assert!(
+        !err.message.is_empty(),
+        "expected param error, got: {err:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
 // Error handling tests
 // ---------------------------------------------------------------------------
 
