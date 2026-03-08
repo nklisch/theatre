@@ -9,7 +9,7 @@ allowed-tools: Read
 
 # Godot 4 Naming Reference
 
-Full dictionary: `docs/design/GODOT-NAMING.md`
+Full dictionary: [GODOT-NAMING.md](GODOT-NAMING.md)
 Contract rules: `.claude/rules/contracts.md`
 
 ## Decision Rules (apply in order)

@@ -64,7 +64,7 @@ rotation_y_deg    ✓    rot_y            ✗   (Y component of rotation_degrees
 position          ✓    local_origin     ✗   (Godot: position)
 ```
 
-**Derivation rules** (see `docs/design/GODOT-NAMING.md` for the full dictionary):
+**Derivation rules** (see `godot-naming` skill / `GODOT-NAMING.md` for the full dictionary):
 - Godot property → use exact name: `velocity`, `scale`, `visible`, `collision_layer`
 - Godot `get_X()` method → drop `get_`: `get_class()` → `class`, `get_path()` → `path`
 - Godot `is_X()` method → drop `is_`: `is_on_floor()` → `on_floor`
