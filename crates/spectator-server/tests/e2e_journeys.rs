@@ -81,7 +81,7 @@ async fn journey_explore_scene() {
         .iter()
         .find(|e| e["path"].as_str().map(|p| p.contains("Player")).unwrap_or(false))
         .expect("Player should be in snapshot");
-    let player_pos = player["abs"]
+    let player_pos = player["global_position"]
         .as_array()
         .expect("Player should have position array");
     assert_eq!(player_pos.len(), 3, "3D position should have 3 components");
@@ -95,7 +95,7 @@ async fn journey_explore_scene() {
         .iter()
         .find(|e| e["path"].as_str().map(|p| p.contains("Scout")).unwrap_or(false))
         .expect("Scout should be in snapshot");
-    let scout_pos = scout["abs"]
+    let scout_pos = scout["global_position"]
         .as_array()
         .expect("Scout should have position array");
     assert!(
@@ -250,7 +250,7 @@ async fn journey_debug_spatial_bug() {
         .iter()
         .find(|e| e["path"].as_str().map(|p| p.contains("Scout")).unwrap_or(false))
         .expect(&format!("Scout should be in baseline snapshot, found: {entity_paths:?}"));
-    let before_pos = scout_before["abs"].as_array().expect("position array");
+    let before_pos = scout_before["global_position"].as_array().expect("position array");
     let before_x = before_pos[0].as_f64().unwrap_or(0.0);
 
     // Step 2: teleport Scout to origin
@@ -316,7 +316,7 @@ async fn journey_debug_spatial_bug() {
         .iter()
         .find(|e| e["path"].as_str().map(|p| p.contains("Scout")).unwrap_or(false))
         .expect("Scout should still be in post-teleport snapshot");
-    let after_pos = scout_after["abs"].as_array().expect("position array");
+    let after_pos = scout_after["global_position"].as_array().expect("position array");
     let after_x = after_pos[0].as_f64().unwrap_or(999.0);
     assert!(
         (after_x - before_x).abs() > 2.0,
@@ -552,7 +552,7 @@ async fn journey_2d_scene() {
 
     // All positions should be 2-element arrays
     for entity in entities {
-        if let Some(pos) = entity["abs"].as_array() {
+        if let Some(pos) = entity["global_position"].as_array() {
             assert_eq!(
                 pos.len(),
                 2,
@@ -568,7 +568,7 @@ async fn journey_2d_scene() {
         .iter()
         .find(|e| e["path"].as_str().map(|p| p == "Player").unwrap_or(false))
         .expect("Player should be in 2D snapshot");
-    let player_pos = player["abs"].as_array().expect("Player should have abs position");
+    let player_pos = player["global_position"].as_array().expect("Player should have abs position");
     assert!(
         player_pos[0].as_f64().unwrap_or(999.0).abs() < 1.0,
         "Player X should be ~0 in 2D scene, got {:?}",
@@ -648,7 +648,7 @@ async fn journey_2d_scene() {
         .iter()
         .find(|e| e["path"].as_str().map(|p| p.contains("Player")).unwrap_or(false))
         .expect("Player should still be in post-teleport 2D snapshot");
-    let player_after_pos = player_after["abs"].as_array().expect("position");
+    let player_after_pos = player_after["global_position"].as_array().expect("position");
     assert_eq!(
         player_after_pos.len(),
         2,
