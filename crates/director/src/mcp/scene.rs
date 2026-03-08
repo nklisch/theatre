@@ -35,3 +35,39 @@ pub struct SceneReadParams {
 fn default_true() -> bool {
     true
 }
+
+/// Parameters for `scene_list`.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+pub struct SceneListParams {
+    /// Absolute path to the Godot project directory (must contain project.godot).
+    pub project_path: String,
+
+    /// Subdirectory to list (relative to project root). Lists entire project if omitted.
+    #[serde(default)]
+    pub directory: Option<String>,
+}
+
+/// Parameters for `scene_add_instance`.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+pub struct SceneAddInstanceParams {
+    /// Absolute path to the Godot project directory.
+    pub project_path: String,
+
+    /// Scene file to modify (relative to project, e.g. "scenes/level.tscn").
+    pub scene_path: String,
+
+    /// Scene to instance (relative to project, e.g. "scenes/player.tscn").
+    pub instance_scene: String,
+
+    /// Parent node path within the target scene (default: root ".").
+    #[serde(default = "default_root")]
+    pub parent_path: String,
+
+    /// Override the instance root's name. Uses the instanced scene's root name if omitted.
+    #[serde(default)]
+    pub node_name: Option<String>,
+}
+
+fn default_root() -> String {
+    ".".to_string()
+}

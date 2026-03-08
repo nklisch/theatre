@@ -60,6 +60,26 @@ pub struct NodeRemoveParams {
     pub node_path: String,
 }
 
+/// Parameters for `node_reparent`.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+pub struct NodeReparentParams {
+    /// Absolute path to the Godot project directory.
+    pub project_path: String,
+
+    /// Path to the scene file relative to the project root.
+    pub scene_path: String,
+
+    /// Path to the node to move within the scene tree.
+    pub node_path: String,
+
+    /// Path to the new parent node within the scene tree.
+    pub new_parent_path: String,
+
+    /// Rename the node during reparent. Useful to avoid name collisions.
+    #[serde(default)]
+    pub new_name: Option<String>,
+}
+
 fn default_root() -> String {
     ".".to_string()
 }

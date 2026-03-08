@@ -156,6 +156,83 @@ static func op_node_remove(params: Dictionary) -> Dictionary:
 	return {"success": true, "data": {"removed": node_path, "children_removed": children_count}}
 
 
+static func op_node_reparent(params: Dictionary) -> Dictionary:
+	## Move a node to a new parent within the same scene.
+	##
+	## Params: scene_path, node_path, new_parent_path, new_name (optional)
+	## Returns: { success, data: { old_path, new_path } }
+
+	var scene_path: String = params.get("scene_path", "")
+	var node_path: String = params.get("node_path", "")
+	var new_parent_path: String = params.get("new_parent_path", "")
+	var new_name = params.get("new_name", null)
+
+	if scene_path == "":
+		return _error("scene_path is required", "node_reparent", params)
+	if node_path == "" or node_path == ".":
+		return _error("Cannot reparent root node", "node_reparent", {"scene_path": scene_path})
+	if new_parent_path == "":
+		return _error("new_parent_path is required", "node_reparent", params)
+
+	var full_path = "res://" + scene_path
+	if not ResourceLoader.exists(full_path):
+		return _error("Scene not found: " + scene_path, "node_reparent", {"scene_path": scene_path})
+
+	var packed: PackedScene = load(full_path)
+	var root = packed.instantiate()
+
+	# Find the target node
+	var target = root.get_node_or_null(node_path)
+	if target == null:
+		root.free()
+		return _error("Node not found: " + node_path, "node_reparent", {"scene_path": scene_path, "node_path": node_path})
+
+	# Find the new parent
+	var new_parent: Node
+	if new_parent_path == "." or new_parent_path == "":
+		new_parent = root
+	else:
+		new_parent = root.get_node_or_null(new_parent_path)
+	if new_parent == null:
+		root.free()
+		return _error("New parent not found: " + new_parent_path, "node_reparent", {"scene_path": scene_path, "new_parent_path": new_parent_path})
+
+	# Check for circular reparent: target cannot be moved to itself or its own descendant
+	if target == new_parent or target.is_ancestor_of(new_parent):
+		root.free()
+		return _error("Circular reparent: cannot move a node to itself or its own descendant", "node_reparent", {"node_path": node_path, "new_parent_path": new_parent_path})
+
+	# Determine final name
+	var final_name = new_name if new_name != null else str(target.name)
+
+	# Name collision check
+	if new_parent.has_node(NodePath(final_name)):
+		root.free()
+		return _error("Name collision: " + final_name + " already exists under " + new_parent_path + ". Use new_name to resolve.", "node_reparent", {"node_path": node_path, "new_parent_path": new_parent_path})
+
+	# Record old path
+	var old_path = str(root.get_path_to(target))
+
+	# Reparent
+	target.get_parent().remove_child(target)
+	if new_name != null:
+		target.name = new_name
+	new_parent.add_child(target)
+	target.owner = root
+	_set_owner_recursive(target, root)
+
+	# Record new path
+	var new_path_str = str(root.get_path_to(target))
+
+	# Re-pack and save
+	var save_result = _repack_and_save(root, full_path)
+	root.free()
+	if not save_result.success:
+		return save_result
+
+	return {"success": true, "data": {"old_path": old_path, "new_path": new_path_str}}
+
+
 # ---------------------------------------------------------------------------
 # Type conversion system
 # ---------------------------------------------------------------------------
@@ -252,10 +329,14 @@ static func _repack_and_save(root: Node, full_path: String) -> Dictionary:
 
 
 static func _set_owner_recursive(node: Node, owner: Node):
-	## Set owner on all descendants (required for PackedScene serialization).
+	## Set owner on all descendants, but skip children of scene instances.
+	## A node with a non-empty scene_file_path is an instance root from
+	## another scene — its children belong to that scene, not this one.
 	for child in node.get_children():
 		child.owner = owner
-		_set_owner_recursive(child, owner)
+		if child.scene_file_path == "":
+			# Only recurse into non-instance children
+			_set_owner_recursive(child, owner)
 
 
 static func _count_descendants(node: Node) -> int:

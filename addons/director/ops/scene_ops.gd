@@ -79,6 +79,141 @@ static func op_scene_read(params: Dictionary) -> Dictionary:
 	return {"success": true, "data": {"root": node_data}}
 
 
+static func op_scene_list(params: Dictionary) -> Dictionary:
+	## List all .tscn files in the project (or a subdirectory).
+	##
+	## Params: directory (String, optional — default "")
+	## Returns: { success, data: { scenes: [{ path, root_type, node_count }] } }
+
+	var directory: String = params.get("directory", "")
+
+	var base_path: String
+	if directory == "":
+		base_path = "res://"
+	else:
+		base_path = "res://" + directory
+		var check_dir = DirAccess.open(base_path)
+		if check_dir == null:
+			return _error("Directory not found: " + directory, "scene_list", {"directory": directory})
+
+	var scene_paths: Array = []
+	_collect_scenes(base_path, scene_paths)
+	scene_paths.sort()
+
+	var scenes: Array = []
+	for full_path in scene_paths:
+		var rel_path = full_path.replace("res://", "")
+		var packed = load(full_path)
+		if packed == null:
+			continue
+		var root = packed.instantiate()
+		if root == null:
+			continue
+		var root_type = root.get_class()
+		var node_count = _count_nodes(root)
+		root.free()
+		scenes.append({"path": rel_path, "root_type": root_type, "node_count": node_count})
+
+	return {"success": true, "data": {"scenes": scenes}}
+
+
+static func op_scene_add_instance(params: Dictionary) -> Dictionary:
+	## Add a scene instance (reference) as a child in another scene.
+	##
+	## Params: scene_path, instance_scene, parent_path (default "."), node_name (optional)
+	## Returns: { success, data: { node_path, instance_scene } }
+
+	var scene_path: String = params.get("scene_path", "")
+	var instance_scene: String = params.get("instance_scene", "")
+	var parent_path: String = params.get("parent_path", ".")
+	var node_name = params.get("node_name", null)
+
+	if scene_path == "":
+		return _error("scene_path is required", "scene_add_instance", params)
+	if instance_scene == "":
+		return _error("instance_scene is required", "scene_add_instance", params)
+
+	var full_path = "res://" + scene_path
+	if not ResourceLoader.exists(full_path):
+		return _error("Scene not found: " + scene_path, "scene_add_instance", {"scene_path": scene_path})
+
+	var instance_full_path = "res://" + instance_scene
+	if not ResourceLoader.exists(instance_full_path):
+		return _error("Instance scene not found: " + instance_scene, "scene_add_instance", {"instance_scene": instance_scene})
+
+	# Load the instance scene as PackedScene
+	var instance_packed = load(instance_full_path)
+	if not instance_packed is PackedScene:
+		return _error("Not a valid scene file: " + instance_scene, "scene_add_instance", {"instance_scene": instance_scene})
+
+	# Load and instantiate the target scene
+	var packed: PackedScene = load(full_path)
+	var root = packed.instantiate()
+
+	# Create the instance node
+	var instance_node = instance_packed.instantiate()
+	if node_name != null:
+		instance_node.name = node_name
+
+	# Find the parent node
+	var parent: Node
+	if parent_path == "." or parent_path == "":
+		parent = root
+	else:
+		parent = root.get_node_or_null(parent_path)
+	if parent == null:
+		instance_node.free()
+		root.free()
+		return _error("Parent node not found: " + parent_path, "scene_add_instance", {"scene_path": scene_path, "parent_path": parent_path})
+
+	# Name collision check
+	if parent.has_node(NodePath(str(instance_node.name))):
+		instance_node.free()
+		root.free()
+		return _error("Name collision: " + str(instance_node.name) + " already exists under " + parent_path + ". Use node_name to resolve.", "scene_add_instance", {"parent_path": parent_path, "instance_scene": instance_scene})
+
+	# Add instance and set owner — do NOT recurse into instance's children
+	parent.add_child(instance_node)
+	instance_node.owner = root
+	# Do not call _set_owner_recursive on instance's children; they belong to the instanced scene
+
+	var node_path_str = str(root.get_path_to(instance_node))
+
+	# Re-pack and save
+	var save_result = _repack_and_save(root, full_path)
+	root.free()
+	if not save_result.success:
+		return save_result
+
+	return {"success": true, "data": {"node_path": node_path_str, "instance_scene": instance_scene}}
+
+
+static func _collect_scenes(dir_path: String, result: Array):
+	## Recursively collect all .tscn file paths under dir_path.
+	var dir = DirAccess.open(dir_path)
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	var file_name = dir.get_next()
+	while file_name != "":
+		if file_name != "." and file_name != "..":
+			var full = dir_path.trim_suffix("/") + "/" + file_name
+			if dir.current_is_dir():
+				_collect_scenes(full, result)
+			elif file_name.ends_with(".tscn"):
+				result.append(full)
+		file_name = dir.get_next()
+	dir.list_dir_end()
+
+
+static func _count_nodes(node: Node) -> int:
+	## Count node plus all its descendants.
+	var count = 1
+	for child in node.get_children():
+		count += _count_nodes(child)
+	return count
+
+
 static func _read_node(node: Node, current_depth: int, max_depth: int, include_props: bool) -> Dictionary:
 	var data: Dictionary = {
 		"name": node.name,

@@ -1,4 +1,5 @@
 pub mod node;
+pub mod resource;
 pub mod scene;
 
 use rmcp::handler::server::wrapper::Parameters;
@@ -10,8 +11,9 @@ use crate::oneshot::run_oneshot;
 use crate::resolve::{resolve_godot_bin, validate_project_path};
 use crate::server::DirectorServer;
 
-use node::{NodeAddParams, NodeRemoveParams, NodeSetPropertiesParams};
-use scene::{SceneCreateParams, SceneReadParams};
+use node::{NodeAddParams, NodeRemoveParams, NodeReparentParams, NodeSetPropertiesParams};
+use resource::ResourceReadParams;
+use scene::{SceneAddInstanceParams, SceneCreateParams, SceneListParams, SceneReadParams};
 
 // ---------------------------------------------------------------------------
 // Shared MCP helpers
@@ -124,6 +126,65 @@ impl DirectorServer {
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
         let data = run_operation(&params.project_path, "node_remove", &op_params).await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "scene_list",
+        description = "List all Godot scene files (.tscn) in the project or a subdirectory, \
+            with root node type and node count for each scene."
+    )]
+    pub async fn scene_list(
+        &self,
+        Parameters(params): Parameters<SceneListParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(&params.project_path, "scene_list", &op_params).await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "scene_add_instance",
+        description = "Add a scene instance (reference) as a child node in another Godot scene. \
+            The instanced scene is linked, not copied — changes to the source scene propagate. \
+            Always use this tool instead of editing .tscn files directly."
+    )]
+    pub async fn scene_add_instance(
+        &self,
+        Parameters(params): Parameters<SceneAddInstanceParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(&params.project_path, "scene_add_instance", &op_params).await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "node_reparent",
+        description = "Move a node to a new parent within the same Godot scene. Optionally \
+            rename the node during the move. Always use this tool instead of editing .tscn \
+            files directly."
+    )]
+    pub async fn node_reparent(
+        &self,
+        Parameters(params): Parameters<NodeReparentParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(&params.project_path, "node_reparent", &op_params).await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "resource_read",
+        description = "Read a Godot resource file (.tres, .res) and return its type and \
+            properties as structured data. For scene files (.tscn), prefer scene_read which \
+            returns the full node tree."
+    )]
+    pub async fn resource_read(
+        &self,
+        Parameters(params): Parameters<ResourceReadParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(&params.project_path, "resource_read", &op_params).await?;
         serialize_response(&data)
     }
 }

@@ -5,6 +5,7 @@ extends SceneTree
 
 const SceneOps = preload("res://addons/director/ops/scene_ops.gd")
 const NodeOps = preload("res://addons/director/ops/node_ops.gd")
+const ResourceOps = preload("res://addons/director/ops/resource_ops.gd")
 
 
 func _init():
@@ -26,6 +27,14 @@ func _init():
 			result = NodeOps.op_node_set_properties(args.params)
 		"node_remove":
 			result = NodeOps.op_node_remove(args.params)
+		"node_reparent":
+			result = NodeOps.op_node_reparent(args.params)
+		"scene_list":
+			result = SceneOps.op_scene_list(args.params)
+		"scene_add_instance":
+			result = SceneOps.op_scene_add_instance(args.params)
+		"resource_read":
+			result = ResourceOps.op_resource_read(args.params)
 		_:
 			result = {"success": false, "error": "Unknown operation: " + args.operation, "operation": args.operation, "context": {}}
 
