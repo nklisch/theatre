@@ -617,13 +617,303 @@ headless unit tests. Test the following without Godot:
 - **`read_screenshot_near_time`:** Same setup, verify nearest-timestamp lookup.
 - **`list_screenshots`:** Verify metadata-only listing.
 - **Missing table:** Verify graceful handling when `screenshots` table doesn't
-  exist.
+  exist (pre-feature clips).
 
-### Integration Tests
+### Test Harness Changes
 
-- **E2E journey:** Deploy to test project, run game, let dashcam capture
-  screenshots, flush clip, use `clips(action: "screenshots")` to list them,
-  use `clips(action: "screenshot_at")` to retrieve one, verify it's valid JPEG.
+**File**: `crates/spectator-server/tests/support/mod.rs`
+
+The `dispatch_tool` / `dispatch_tool_raw` helpers currently assume all tools
+return `Result<String, McpError>`. When the `clips` handler changes to return
+`Result<CallToolResult, McpError>`, the dispatch helper must be updated.
+
+Add a `dispatch_tool_result` variant that returns `CallToolResult`:
+
+```rust
+pub async fn dispatch_tool_result(
+    server: &SpectatorServer,
+    name: &str,
+    params: serde_json::Value,
+) -> Result<CallToolResult, McpError> {
+    // For "clips": call server.clips() and get CallToolResult
+    // For other tools: call existing dispatch_tool_raw, wrap in
+    //   CallToolResult::success(vec![Content::text(s)])
+}
+```
+
+Also update `E2EHarness` with a new method for image-returning tools:
+
+```rust
+impl E2EHarness {
+    /// Call a tool that may return mixed content (text + images).
+    /// Returns the full CallToolResult for inspection.
+    pub async fn expect_result(
+        &mut self,
+        step: u32,
+        tool: &str,
+        params: Value,
+    ) -> CallToolResult { ... }
+}
+```
+
+### E2E Journey Tests
+
+**File**: `crates/spectator-server/tests/e2e_journeys.rs`
+
+#### Journey: `journey_screenshot_capture_and_retrieval`
+
+Tests the full screenshot lifecycle: dashcam captures screenshots, clip is
+saved, screenshots are listed and retrieved as MCP image content.
+
+```rust
+/// Journey: Screenshots are captured during dashcam buffering and can be
+/// retrieved from saved clips as MCP image content.
+///
+/// Steps:
+///   1. clips(status) → verify dashcam buffering with screenshot config
+///   2. wait_frames(180) → accumulate ~3 seconds of buffer (expect 1-2 screenshots
+///      at 2-second interval)
+///   3. clips(save, "screenshot_test") → flush clip, get clip_id
+///   4. clips(screenshots, clip_id) → list screenshot metadata
+///      Assert: total >= 1, each entry has frame, timestamp_ms, width, height, size_bytes
+///   5. clips(screenshot_at, clip_id, at_frame=<first screenshot frame>) → retrieve image
+///      Assert: CallToolResult has 2 content blocks (text metadata + image)
+///      Assert: image content has mime_type="image/jpeg"
+///      Assert: text content has clip_id, frame, width, height
+///   6. clips(screenshot_at, clip_id, at_time_ms=<first screenshot timestamp>) → by time
+///      Assert: returns same screenshot (nearest match)
+///   7. clips(delete, clip_id) → cleanup
+#[tokio::test]
+async fn journey_screenshot_capture_and_retrieval() {
+    let mut h = support::e2e_harness::E2EHarness::start_3d()
+        .await
+        .expect("Failed to start Godot 3D scene");
+
+    // Step 1: verify dashcam is buffering and screenshot config is present
+    let status = h.expect(1, "clips", json!({ "action": "status" })).await;
+    assert_eq!(status["state"], json!("buffering"));
+    assert!(
+        status["screenshot_buffer_count"].as_u64().is_some(),
+        "screenshot_buffer_count should be present in status"
+    );
+
+    // Step 2: accumulate buffer with screenshots (~3 seconds)
+    h.wait_frames(180).await;
+
+    // Step 3: save clip
+    let save = h
+        .expect(
+            3,
+            "clips",
+            json!({ "action": "save", "marker_label": "screenshot_test" }),
+        )
+        .await;
+    let clip_id = save["clip_id"]
+        .as_str()
+        .expect("save should return clip_id")
+        .to_string();
+
+    // Step 4: list screenshots in the saved clip
+    let screenshots = h
+        .expect(
+            4,
+            "clips",
+            json!({ "action": "screenshots", "clip_id": clip_id }),
+        )
+        .await;
+    let total = screenshots["total"].as_u64().expect("total should be present");
+    assert!(
+        total >= 1,
+        "Clip should contain at least 1 screenshot after ~3s buffer. Got: {screenshots}"
+    );
+    let screenshot_list = screenshots["screenshots"]
+        .as_array()
+        .expect("screenshots array should be present");
+    let first = &screenshot_list[0];
+    assert!(first["frame"].as_u64().is_some(), "screenshot should have frame");
+    assert!(first["timestamp_ms"].as_u64().is_some(), "screenshot should have timestamp_ms");
+    assert!(first["width"].as_u64().is_some(), "screenshot should have width");
+    assert!(first["height"].as_u64().is_some(), "screenshot should have height");
+    assert!(first["size_bytes"].as_u64().unwrap_or(0) > 0, "screenshot should have non-zero size");
+
+    let first_frame = first["frame"].as_u64().unwrap();
+    let first_time = first["timestamp_ms"].as_u64().unwrap();
+
+    // Step 5: retrieve screenshot by frame — returns CallToolResult with image content
+    let result = h
+        .expect_result(
+            5,
+            "clips",
+            json!({ "action": "screenshot_at", "clip_id": clip_id, "at_frame": first_frame }),
+        )
+        .await;
+    assert_eq!(
+        result.content.len(),
+        2,
+        "screenshot_at should return 2 content blocks (text + image)"
+    );
+    // First block: text metadata
+    let text_content = result.content[0]
+        .as_text()
+        .expect("First content block should be text");
+    let meta: serde_json::Value = serde_json::from_str(&text_content.text)
+        .expect("Text block should be valid JSON");
+    assert_eq!(meta["clip_id"], json!(clip_id));
+    assert!(meta["frame"].as_u64().is_some());
+    assert!(meta["width"].as_u64().is_some());
+    assert!(meta["height"].as_u64().is_some());
+    // Second block: image
+    let image_content = result.content[1]
+        .as_image()
+        .expect("Second content block should be an image");
+    assert_eq!(image_content.mime_type, "image/jpeg");
+    assert!(!image_content.data.is_empty(), "Image data should be non-empty base64");
+    // Verify it decodes to valid JPEG (starts with FFD8 header)
+    let jpeg_bytes = base64::engine::general_purpose::STANDARD
+        .decode(&image_content.data)
+        .expect("Image data should be valid base64");
+    assert!(
+        jpeg_bytes.len() >= 2 && jpeg_bytes[0] == 0xFF && jpeg_bytes[1] == 0xD8,
+        "Decoded data should be valid JPEG (FFD8 header)"
+    );
+
+    // Step 6: retrieve by timestamp — should find the same (or nearest) screenshot
+    let result_by_time = h
+        .expect_result(
+            6,
+            "clips",
+            json!({ "action": "screenshot_at", "clip_id": clip_id, "at_time_ms": first_time }),
+        )
+        .await;
+    assert_eq!(
+        result_by_time.content.len(),
+        2,
+        "screenshot_at by time should also return 2 content blocks"
+    );
+    let time_meta: serde_json::Value = serde_json::from_str(
+        &result_by_time.content[0].as_text().unwrap().text,
+    )
+    .unwrap();
+    // Should be the same or very near frame
+    let returned_frame = time_meta["frame"].as_u64().unwrap();
+    assert!(
+        (returned_frame as i64 - first_frame as i64).unsigned_abs() < 120,
+        "Nearest screenshot by time should be close to the one by frame"
+    );
+
+    // Step 7: cleanup
+    h.expect(
+        7,
+        "clips",
+        json!({ "action": "delete", "clip_id": clip_id }),
+    )
+    .await;
+}
+```
+
+#### Journey: `journey_screenshot_absent_in_old_clips`
+
+Tests backward compatibility with clips that predate the screenshots feature.
+
+```rust
+/// Journey: Clips without screenshots (older format) handle screenshot queries gracefully.
+///
+/// This test creates a clip, then queries screenshots — since the test project
+/// may have older clips from before the feature. The key assertion is that
+/// screenshot queries never error on clips without screenshot data.
+///
+/// Steps:
+///   1. wait_frames(5) → minimal buffer (screenshot interval unlikely to fire)
+///   2. clips(save) → get clip_id with minimal/no screenshots
+///   3. clips(screenshots, clip_id) → should return total=0 or list, never error
+///   4. clips(screenshot_at, clip_id, at_frame=0) → should return no_screenshots message
+///   5. clips(delete, clip_id) → cleanup
+#[tokio::test]
+async fn journey_screenshot_absent_in_old_clips() {
+    let mut h = support::e2e_harness::E2EHarness::start_3d()
+        .await
+        .expect("Failed to start Godot 3D scene");
+
+    // Step 1: minimal buffer — too short for screenshot interval to fire
+    h.wait_frames(5).await;
+
+    // Step 2: save clip immediately
+    let save = h
+        .expect(2, "clips", json!({ "action": "save", "marker_label": "no_screenshots" }))
+        .await;
+    let clip_id = save["clip_id"].as_str().unwrap().to_string();
+
+    // Step 3: list screenshots — should be empty, not an error
+    let screenshots = h
+        .expect(3, "clips", json!({ "action": "screenshots", "clip_id": clip_id }))
+        .await;
+    // May be 0 or very few — the key is no error
+    assert!(
+        screenshots["total"].as_u64().is_some(),
+        "screenshots action should succeed even with no screenshots"
+    );
+
+    // Step 4: screenshot_at on a clip with no screenshots — graceful response
+    let result = h
+        .expect_result(
+            4,
+            "clips",
+            json!({ "action": "screenshot_at", "clip_id": clip_id, "at_frame": 0 }),
+        )
+        .await;
+    // Should return a text-only result with "no_screenshots" message, not an MCP error
+    assert!(
+        result.content.len() == 1,
+        "screenshot_at with no screenshots should return single text content"
+    );
+    let text = result.content[0].as_text().expect("Should be text content");
+    let body: serde_json::Value = serde_json::from_str(&text.text).unwrap();
+    assert_eq!(body["error"], json!("no_screenshots"));
+
+    // Step 5: cleanup
+    h.expect(5, "clips", json!({ "action": "delete", "clip_id": clip_id })).await;
+}
+```
+
+#### Journey: `journey_screenshot_status_fields`
+
+Tests that dashcam status includes screenshot buffer metadata.
+
+```rust
+/// Journey: Dashcam status reports screenshot buffer stats.
+///
+/// Steps:
+///   1. clips(status) → verify screenshot_buffer_count and screenshot_buffer_kb present
+///   2. wait_frames(180) → accumulate screenshots
+///   3. clips(status) → screenshot_buffer_count should have increased
+#[tokio::test]
+async fn journey_screenshot_status_fields() {
+    let mut h = support::e2e_harness::E2EHarness::start_3d()
+        .await
+        .expect("Failed to start Godot 3D scene");
+
+    // Step 1: initial status
+    let status1 = h.expect(1, "clips", json!({ "action": "status" })).await;
+    let initial_count = status1["screenshot_buffer_count"]
+        .as_u64()
+        .expect("screenshot_buffer_count should be present");
+
+    // Step 2: accumulate ~3 seconds
+    h.wait_frames(180).await;
+
+    // Step 3: buffer count should have grown
+    let status2 = h.expect(3, "clips", json!({ "action": "status" })).await;
+    let later_count = status2["screenshot_buffer_count"].as_u64().unwrap();
+    assert!(
+        later_count > initial_count,
+        "Screenshot buffer count should grow over time. Initial: {initial_count}, Later: {later_count}"
+    );
+    assert!(
+        status2["screenshot_buffer_kb"].as_u64().unwrap_or(0) > 0,
+        "Screenshot buffer should have non-zero KB"
+    );
+}
+```
 
 ## Verification Checklist
 
@@ -631,9 +921,12 @@ headless unit tests. Test the following without Godot:
 # Build everything
 cargo build --workspace
 
-# Run all tests
+# Run all tests (unit + integration + E2E)
 spectator-deploy ~/dev/spectator/tests/godot-project
 cargo test --workspace
+
+# Run only the new E2E screenshot journeys
+cargo test -p spectator-server --test e2e_journeys journey_screenshot -- --nocapture
 
 # Lint
 cargo clippy --workspace
