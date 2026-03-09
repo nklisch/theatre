@@ -20,3 +20,6 @@ Available patterns:
 - [serde-tagged-enum.md](serde-tagged-enum.md) — Serde Tagged Enum (#[serde(tag="type")] protocol dispatch)
 - [error-layering.md](error-layering.md) — Three-Tier Error Layering (CodecError → anyhow → McpError)
 - [inline-test-fixtures.md](inline-test-fixtures.md) — Inline Test Module with Builder Fixtures
+- [activity-logging.md](activity-logging.md) — Activity Logging Tail (summary up front, log_activity at handler tail)
+- [clip-session.md](clip-session.md) — ClipSession Resource (open + analyze + finalize for clip analysis)
+- [godot-e2e-harness.md](godot-e2e-harness.md) — Godot E2E Test Harness (GodotFixture + DirectorFixture + DaemonFixture)
