@@ -1,6 +1,7 @@
 class_name SceneOps
 
 const NodeOps = preload("res://addons/director/ops/node_ops.gd")
+const OpsUtil = preload("res://addons/director/ops/ops_util.gd")
 
 
 static func op_scene_create(params: Dictionary) -> Dictionary:

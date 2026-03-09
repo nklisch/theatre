@@ -76,7 +76,7 @@ fn resolve_node_returns_position() {
             "spatial_query",
             serde_json::json!({
                 "query_type": "resolve_node",
-                "path": "TestScene3D/Player"
+                "path": "Player"
             }),
         )
         .unwrap()

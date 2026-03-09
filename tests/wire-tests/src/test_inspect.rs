@@ -10,7 +10,7 @@ fn inspect_returns_transform_category() {
         .query(
             "get_node_inspect",
             serde_json::json!({
-                "path": "TestScene3D/Player",
+                "path": "Player",
                 "include": ["transform"]
             }),
         )
@@ -29,7 +29,7 @@ fn inspect_returns_state_category() {
         .query(
             "get_node_inspect",
             serde_json::json!({
-                "path": "TestScene3D/Enemies/Scout",
+                "path": "Enemies/Scout",
                 "include": ["state"]
             }),
         )
@@ -48,7 +48,7 @@ fn inspect_returns_children_category() {
         .query(
             "get_node_inspect",
             serde_json::json!({
-                "path": "TestScene3D/Player",
+                "path": "Player",
                 "include": ["children"]
             }),
         )
@@ -67,7 +67,7 @@ fn inspect_missing_node_returns_error() {
         .query(
             "get_node_inspect",
             serde_json::json!({
-                "path": "TestScene3D/DoesNotExist",
+                "path": "DoesNotExist",
                 "include": ["transform"]
             }),
         )
@@ -85,7 +85,7 @@ fn inspect_returns_path_and_class() {
         .query(
             "get_node_inspect",
             serde_json::json!({
-                "path": "TestScene3D/Player",
+                "path": "Player",
                 "include": ["transform"]
             }),
         )
@@ -108,7 +108,7 @@ fn inspect_resources_not_returned_by_default() {
         .query(
             "get_node_inspect",
             serde_json::json!({
-                "path": "TestScene3D/Player",
+                "path": "Player",
                 "include": ["transform", "state", "children"]
             }),
         )
@@ -131,7 +131,7 @@ fn inspect_resources_returns_collision_shapes() {
         .query(
             "get_node_inspect",
             serde_json::json!({
-                "path": "TestScene3D/Player",
+                "path": "Player",
                 "include": ["resources"]
             }),
         )
@@ -171,7 +171,7 @@ fn inspect_resources_capsule_shape_3d_dimensions() {
         .query(
             "get_node_inspect",
             serde_json::json!({
-                "path": "TestScene3D/Player",
+                "path": "Player",
                 "include": ["resources"]
             }),
         )
@@ -204,7 +204,7 @@ fn inspect_resources_box_shape_3d_dimensions() {
         .query(
             "get_node_inspect",
             serde_json::json!({
-                "path": "TestScene3D/Floor",
+                "path": "Floor",
                 "include": ["resources"]
             }),
         )
@@ -249,7 +249,7 @@ fn inspect_resources_2d_collision_shape_dimensions() {
         .query(
             "get_node_inspect",
             serde_json::json!({
-                "path": "TestScene2D/Player",
+                "path": "Player",
                 "include": ["resources"]
             }),
         )

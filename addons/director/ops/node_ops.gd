@@ -1,5 +1,7 @@
 class_name NodeOps
 
+const OpsUtil = preload("res://addons/director/ops/ops_util.gd")
+
 
 static func op_node_add(params: Dictionary) -> Dictionary:
 	## Add a node to an existing scene.

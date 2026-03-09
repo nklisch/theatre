@@ -2,6 +2,7 @@ class_name GridMapOps
 
 const NodeOps = preload("res://addons/director/ops/node_ops.gd")
 const TileMapOps = preload("res://addons/director/ops/tilemap_ops.gd")
+const OpsUtil = preload("res://addons/director/ops/ops_util.gd")
 
 
 static func op_gridmap_set_cells(params: Dictionary) -> Dictionary:

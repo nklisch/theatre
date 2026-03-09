@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 ///
 /// Dropped via `impl Drop` which kills the Godot process.
 pub struct GodotFixture {
-    child: Child,
+    child: Option<Child>,
     pub port: u16,
     stream: TcpStream,
     pub handshake: Handshake,
@@ -64,7 +64,7 @@ impl GodotFixture {
         });
         codec::write_message(&mut stream, &ack)?;
 
-        Ok(Self { child, port, stream, handshake })
+        Ok(Self { child: Some(child), port, stream, handshake })
     }
 
     /// Send a query and wait for the matching response.
@@ -112,10 +112,24 @@ impl GodotFixture {
     }
 }
 
+impl GodotFixture {
+    /// Close the TCP connection without killing the Godot process.
+    /// Returns the port and child process so tests can reconnect to the same process.
+    /// Drop the returned `Child` when done to kill Godot.
+    pub fn disconnect_keep_alive(mut self) -> (u16, Child) {
+        let port = self.port;
+        let child = self.child.take().expect("child already taken");
+        // self.stream is dropped here, closing the TCP connection (sends FIN to Godot)
+        (port, child)
+    }
+}
+
 impl Drop for GodotFixture {
     fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        if let Some(mut child) = self.child.take() {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
     }
 }
 

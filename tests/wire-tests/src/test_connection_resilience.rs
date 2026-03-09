@@ -6,7 +6,7 @@
 /// These tests exercise the live TCP protocol between a real Godot process and
 /// the spectator wire protocol — they catch bugs that unit tests miss (actual
 /// socket lifecycle, GDExtension process_mode, TCP state).
-use crate::harness::{GodotFixture, QueryResult};
+use crate::harness::GodotFixture;
 use spectator_protocol::{codec, handshake::PROTOCOL_VERSION, messages::Message};
 use std::net::TcpStream;
 use std::time::{Duration, Instant};
@@ -44,8 +44,8 @@ fn second_client_connects_after_clean_disconnect() {
         .unwrap();
     assert!(status.is_ok(), "first client should work");
 
-    // Drop the first connection (clean disconnect)
-    drop(f1);
+    // Disconnect cleanly without killing Godot
+    let (_port, mut _godot) = f1.disconnect_keep_alive();
 
     // Give Godot a moment to detect the disconnect and re-enter waiting state
     std::thread::sleep(Duration::from_millis(500));
@@ -86,9 +86,8 @@ fn second_client_gets_handshake_after_first_disconnects_abnormally() {
     // Complete a query to ensure handshake is done
     f1.query("get_frame_info", serde_json::json!({})).unwrap();
 
-    // Kill abruptly (no clean close) — simulate kill -9 of spectator-server
-    // We drop without waiting so the OS RST may or may not arrive quickly.
-    drop(f1);
+    // Disconnect without killing Godot (OS will close socket)
+    let (_port, mut _godot) = f1.disconnect_keep_alive();
 
     // Brief wait for OS to close the socket
     std::thread::sleep(Duration::from_secs(2));
@@ -130,8 +129,8 @@ fn dashcam_works_after_reconnect() {
         "first session dashcam must return state"
     );
 
-    // Drop first connection cleanly
-    drop(f1);
+    // Disconnect cleanly without killing Godot
+    let (_port, mut _godot) = f1.disconnect_keep_alive();
     std::thread::sleep(Duration::from_millis(500));
 
     // Second session after reconnect

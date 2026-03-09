@@ -14,10 +14,7 @@ fn scene_tree_roots_returns_at_least_one_node() {
         .unwrap()
         .unwrap_data();
 
-    // Response is wrapped in "data" field
-    let nodes = data["data"].as_array().unwrap_or_else(|| {
-        data.as_array().expect("expected array response for roots")
-    });
+    let nodes = data["roots"].as_array().expect("expected 'roots' array in response");
     assert!(!nodes.is_empty(), "expected at least one root node");
 }
 
@@ -31,18 +28,13 @@ fn scene_tree_children_returns_expected_nodes() {
             "get_scene_tree",
             serde_json::json!({
                 "action": "children",
-                "node": "TestScene3D/Enemies"
+                "node": "Enemies"
             }),
         )
         .unwrap()
         .unwrap_data();
 
-    // Find children array (may be nested under "data")
-    let children = if let Some(arr) = data["data"].as_array() {
-        arr
-    } else {
-        data.as_array().expect("expected array")
-    };
+    let children = data["children"].as_array().expect("expected 'children' array in response");
 
     let names: Vec<&str> = children
         .iter()
@@ -77,7 +69,8 @@ fn scene_tree_find_by_class() {
         .unwrap_data();
 
     // Result should include at least one match
-    assert!(data.get("data").is_some() || data.is_array(), "expected search result");
+    let results = data["results"].as_array().expect("expected 'results' array in response");
+    assert!(!results.is_empty(), "expected at least one CharacterBody3D node in results");
 }
 
 #[test]
@@ -90,7 +83,7 @@ fn scene_tree_missing_node_returns_error() {
             "get_scene_tree",
             serde_json::json!({
                 "action": "children",
-                "node": "TestScene3D/DoesNotExist"
+                "node": "DoesNotExist"
             }),
         )
         .unwrap();

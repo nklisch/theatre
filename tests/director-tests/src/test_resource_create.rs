@@ -1,4 +1,4 @@
-use crate::harness::DirectorFixture;
+use crate::harness::{assert_approx, DirectorFixture};
 use serde_json::json;
 
 #[test]
@@ -29,7 +29,7 @@ fn material_create_standard_material_3d() {
         .unwrap()
         .unwrap_data();
     assert_eq!(read["type"], "StandardMaterial3D");
-    assert_eq!(read["properties"]["metallic"], 0.8);
+    assert_approx(read["properties"]["metallic"].as_f64().unwrap(), 0.8);
 }
 
 #[test]
@@ -264,7 +264,7 @@ fn resource_duplicate_shallow() {
         )
         .unwrap()
         .unwrap_data();
-    assert_eq!(read["properties"]["metallic"], 0.9);
+    assert_approx(read["properties"]["metallic"].as_f64().unwrap(), 0.9);
 }
 
 #[test]

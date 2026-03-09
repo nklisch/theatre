@@ -38,10 +38,11 @@ func _init():
 	print(JSON.stringify({"source": "director", "status": "ready", "port": _port}))
 
 
-func _process(delta: float) -> void:
+func _process(delta: float) -> bool:
 	_accept_client()
 	_poll_client()
 	_check_idle_timeout(delta)
+	return false
 
 
 func _accept_client() -> void:

@@ -1947,6 +1947,9 @@ impl SpectatorCollector {
     }
 
     /// Resolve a node path to a Gd<Node>.
+    ///
+    /// Paths are relative to the current scene root (same convention as snapshot
+    /// entity paths). E.g. "Player", "Enemies/Scout".
     fn resolve_node(&self, path: &str) -> Result<Gd<Node>, String> {
         let tree = self.base().get_tree().ok_or("No scene tree")?;
         let root = tree.get_current_scene().ok_or("No current scene")?;
@@ -2170,7 +2173,9 @@ impl SpectatorCollector {
 /// Extract file path from a Godot Resource, or None if inline.
 fn resource_path(res: &Gd<Resource>) -> Option<String> {
     let path = res.get_path().to_string();
-    if path.is_empty() { None } else { Some(path) }
+    // Sub-resources embedded in a scene file have paths like
+    // "res://scene.tscn::SubResourceId". Treat these as inline (no external file).
+    if path.is_empty() || path.contains("::") { None } else { Some(path) }
 }
 
 /// Convert a Godot `Vector3` to a `Vec<f64>`.

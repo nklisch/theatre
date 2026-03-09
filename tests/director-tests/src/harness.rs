@@ -159,7 +159,9 @@ impl DaemonFixture {
             .spawn()
             .unwrap_or_else(|e| panic!("Failed to launch Godot daemon ({godot_bin}): {e}"));
 
-        // Read stdout line-by-line until we see the ready signal.
+        // Read stdout line-by-line until we see the ready signal, then keep
+        // draining it in a background thread so the pipe stays open and Godot
+        // doesn't get SIGPIPE when printing later output (e.g. Spectator logs).
         let stdout = child.stdout.take().expect("stdout was piped");
         let mut reader = std::io::BufReader::new(stdout);
         let mut ready = false;
@@ -181,6 +183,11 @@ impl DaemonFixture {
             let _ = child.kill();
             panic!("Daemon did not emit ready signal");
         }
+
+        // Keep draining stdout so the pipe never fills and the daemon never gets SIGPIPE.
+        std::thread::spawn(move || {
+            for _ in reader.lines() {}
+        });
 
         // Connect TCP.
         let addr = format!("127.0.0.1:{port}");

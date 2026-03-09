@@ -2,6 +2,7 @@ class_name ResourceOps
 
 const NodeOps = preload("res://addons/director/ops/node_ops.gd")
 const SceneOps = preload("res://addons/director/ops/scene_ops.gd")
+const OpsUtil = preload("res://addons/director/ops/ops_util.gd")
 
 
 static func op_resource_read(params: Dictionary) -> Dictionary:
