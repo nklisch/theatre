@@ -133,9 +133,9 @@ async fn test_snapshot_filters_by_group() {
 
             let mut scene = mock_scene_3d();
             if !groups.is_empty() {
-                scene.entities.retain(|e| {
-                    e.groups.iter().any(|g| groups.contains(&g.as_str()))
-                });
+                scene
+                    .entities
+                    .retain(|e| e.groups.iter().any(|g| groups.contains(&g.as_str())));
             }
             Ok(serde_json::to_value(scene).unwrap())
         } else {
@@ -172,7 +172,10 @@ async fn test_snapshot_2d_scene() {
 
     // Use large radius and include_offscreen to capture 2D entities far from origin
     let result = harness
-        .call_tool("spatial_snapshot", json!({ "detail": "standard", "radius": 1000.0, "include_offscreen": true }))
+        .call_tool(
+            "spatial_snapshot",
+            json!({ "detail": "standard", "radius": 1000.0, "include_offscreen": true }),
+        )
         .await
         .unwrap();
 
@@ -206,7 +209,8 @@ async fn test_inspect_node_not_found() {
 
     // node_not_found maps to invalid_params
     assert!(
-        format!("{:?}", err).contains("invalid_params") || err.code == rmcp::model::ErrorCode(-32602),
+        format!("{:?}", err).contains("invalid_params")
+            || err.code == rmcp::model::ErrorCode(-32602),
         "expected invalid_params, got: {err:?}"
     );
 }
@@ -303,18 +307,27 @@ async fn test_inspect_resources_passthrough() {
 
     let harness = TestHarness::new(handler).await;
     let result = harness
-        .call_tool("spatial_inspect", json!({
-            "node": "enemies/scout_02",
-            "include": ["resources"]
-        }))
+        .call_tool(
+            "spatial_inspect",
+            json!({
+                "node": "enemies/scout_02",
+                "include": ["resources"]
+            }),
+        )
         .await
         .unwrap();
 
     assert!(result["resources"]["meshes"].is_array());
     assert_eq!(result["resources"]["meshes"][0]["type"], "ArrayMesh");
-    assert_eq!(result["resources"]["collision_shapes"][0]["dimensions"]["radius"], 0.5);
+    assert_eq!(
+        result["resources"]["collision_shapes"][0]["dimensions"]["radius"],
+        0.5
+    );
     assert_eq!(result["resources"]["animation_players"][0]["playing"], true);
-    assert_eq!(result["resources"]["shader_params"]["damage_flash_intensity"], 0.0);
+    assert_eq!(
+        result["resources"]["shader_params"]["damage_flash_intensity"],
+        0.0
+    );
 }
 
 #[tokio::test]
@@ -480,7 +493,10 @@ async fn test_action_node_not_found() {
         .await
         .unwrap_err();
 
-    assert!(err.code == rmcp::model::ErrorCode(-32602), "expected invalid_params, got: {err:?}");
+    assert!(
+        err.code == rmcp::model::ErrorCode(-32602),
+        "expected invalid_params, got: {err:?}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -529,8 +545,10 @@ async fn test_query_nearest() {
         .await
         .unwrap();
 
-    assert!(result.get("results").is_some(),
-        "expected results in nearest result: {result}");
+    assert!(
+        result.get("results").is_some(),
+        "expected results in nearest result: {result}"
+    );
 }
 
 #[tokio::test]
@@ -550,8 +568,10 @@ async fn test_query_radius() {
         .await
         .unwrap();
 
-    assert!(result.get("results").is_some(),
-        "expected results in radius result: {result}");
+    assert!(
+        result.get("results").is_some(),
+        "expected results in radius result: {result}"
+    );
 }
 
 #[tokio::test]
@@ -572,8 +592,10 @@ async fn test_query_raycast() {
 
     // Raycast wraps the response: { "query": "raycast", "result": { "clear": ... } }
     let inner = result.get("result").unwrap_or(&result);
-    assert!(inner.get("clear").is_some(),
-        "raycast result should have clear field: {result}");
+    assert!(
+        inner.get("clear").is_some(),
+        "raycast result should have clear field: {result}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -613,10 +635,7 @@ async fn test_delta_detects_moved() {
 
     // Delta queries the addon again (count=1: Scout at [10,0,0], frame=110)
     // and computes delta vs baseline → Scout should be in moved
-    let result = harness
-        .call_tool("spatial_delta", json!({}))
-        .await
-        .unwrap();
+    let result = harness.call_tool("spatial_delta", json!({})).await.unwrap();
 
     let moved = result["moved"].as_array().unwrap();
     assert!(
@@ -661,10 +680,7 @@ async fn test_delta_signal_emitted_appears() {
     tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
 
     // Delta queries the addon for current state and drains the buffered events
-    let result = harness
-        .call_tool("spatial_delta", json!({}))
-        .await
-        .unwrap();
+    let result = harness.call_tool("spatial_delta", json!({})).await.unwrap();
 
     // Signal should appear in signals_emitted
     let signals = result.get("signals_emitted").and_then(|v| v.as_array());
@@ -808,8 +824,10 @@ async fn test_config_set_static_patterns() {
         .unwrap();
 
     // Should succeed and return updated config
-    assert!(result.get("config").is_some() || result.get("static_patterns").is_some(),
-        "config update result: {result}");
+    assert!(
+        result.get("config").is_some() || result.get("static_patterns").is_some(),
+        "config update result: {result}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -848,10 +866,7 @@ async fn test_recording_status() {
 async fn test_recording_add_marker() {
     let handler: QueryHandler = Arc::new(|method, params| match method {
         "recording_marker" => {
-            let label = params
-                .get("label")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let label = params.get("label").and_then(|v| v.as_str()).unwrap_or("");
             Ok(json!({ "ok": true, "label": label, "frame": 10 }))
         }
         _ => Err(("unknown_method".into(), method.to_string())),
@@ -901,10 +916,7 @@ async fn test_recording_list() {
 async fn test_recording_delete() {
     let handler: QueryHandler = Arc::new(|method, params| match method {
         "recording_delete" => {
-            let id = params
-                .get("clip_id")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
+            let id = params.get("clip_id").and_then(|v| v.as_str()).unwrap_or("");
             if id == "clip_001" {
                 Ok(json!({ "result": "ok", "clip_id": "clip_001" }))
             } else {
@@ -916,7 +928,10 @@ async fn test_recording_delete() {
 
     let harness = TestHarness::new(handler).await;
     let result = harness
-        .call_tool("clips", json!({ "action": "delete", "clip_id": "clip_001" }))
+        .call_tool(
+            "clips",
+            json!({ "action": "delete", "clip_id": "clip_001" }),
+        )
         .await
         .unwrap();
 
@@ -1048,10 +1063,7 @@ async fn test_dashcam_flush_empty_buffer_returns_error() {
 
     let harness = TestHarness::new(handler).await;
     let err = harness
-        .call_tool(
-            "clips",
-            json!({ "action": "save", "marker_label": "test" }),
-        )
+        .call_tool("clips", json!({ "action": "save", "marker_label": "test" }))
         .await
         .unwrap_err();
 
@@ -1064,19 +1076,13 @@ async fn test_dashcam_flush_empty_buffer_returns_error() {
 #[tokio::test]
 async fn test_dashcam_flush_when_disabled_returns_error() {
     let handler: QueryHandler = Arc::new(|method, _| match method {
-        "dashcam_flush" => Err((
-            "dashcam_disabled".into(),
-            "Dashcam is not enabled".into(),
-        )),
+        "dashcam_flush" => Err(("dashcam_disabled".into(), "Dashcam is not enabled".into())),
         _ => Err(("unknown_method".into(), method.to_string())),
     });
 
     let harness = TestHarness::new(handler).await;
     let err = harness
-        .call_tool(
-            "clips",
-            json!({ "action": "save", "marker_label": "test" }),
-        )
+        .call_tool("clips", json!({ "action": "save", "marker_label": "test" }))
         .await
         .unwrap_err();
 
@@ -1165,13 +1171,19 @@ async fn test_action_advance_frames_returns_new_frame() {
 
     let harness = TestHarness::new(handler).await;
     let result = harness
-        .call_tool("spatial_action", json!({ "action": "advance_frames", "frames": 5 }))
+        .call_tool(
+            "spatial_action",
+            json!({ "action": "advance_frames", "frames": 5 }),
+        )
         .await
         .unwrap();
 
     // MCP layer passes the addon response through; new_frame should be present.
     assert!(
-        result.get("details").and_then(|d| d.get("new_frame")).is_some()
+        result
+            .get("details")
+            .and_then(|d| d.get("new_frame"))
+            .is_some()
             || result.get("new_frame").is_some()
             || result.get("frame").is_some(),
         "advance_frames result missing new_frame: {result}"
@@ -1225,10 +1237,14 @@ async fn test_not_connected_error() {
         expand: None,
     };
 
-    let err = server.spatial_snapshot(Parameters(params)).await.unwrap_err();
+    let err = server
+        .spatial_snapshot(Parameters(params))
+        .await
+        .unwrap_err();
     assert!(
         err.message.contains("Not connected") || err.message.contains("connected"),
-        "expected not-connected error, got: {}", err.message
+        "expected not-connected error, got: {}",
+        err.message
     );
 }
 

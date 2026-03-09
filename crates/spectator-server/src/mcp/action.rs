@@ -72,20 +72,35 @@ pub struct SpatialActionParams {
 pub fn build_action_request(params: &SpatialActionParams) -> Result<ActionRequest, McpError> {
     match params.action.as_str() {
         "pause" => {
-            let paused = require_param!(params.paused, "'paused' (bool) is required for pause action");
+            let paused = require_param!(
+                params.paused,
+                "'paused' (bool) is required for pause action"
+            );
             Ok(ActionRequest::Pause { paused })
         }
         "advance_frames" => {
-            let frames = require_param!(params.frames, "'frames' (int) is required for advance_frames action");
+            let frames = require_param!(
+                params.frames,
+                "'frames' (int) is required for advance_frames action"
+            );
             Ok(ActionRequest::AdvanceFrames { frames })
         }
         "advance_time" => {
-            let seconds = require_param!(params.seconds, "'seconds' (float) is required for advance_time action");
+            let seconds = require_param!(
+                params.seconds,
+                "'seconds' (float) is required for advance_time action"
+            );
             Ok(ActionRequest::AdvanceTime { seconds })
         }
         "teleport" => {
-            let node = require_param!(params.node.as_ref(), "'node' is required for teleport action");
-            let position = require_param!(params.position.as_ref(), "'position' ([x,y,z] or [x,y]) is required for teleport action");
+            let node = require_param!(
+                params.node.as_ref(),
+                "'node' is required for teleport action"
+            );
+            let position = require_param!(
+                params.position.as_ref(),
+                "'position' ([x,y,z] or [x,y]) is required for teleport action"
+            );
             Ok(ActionRequest::Teleport {
                 path: node.clone(),
                 position: position.clone(),
@@ -93,9 +108,18 @@ pub fn build_action_request(params: &SpatialActionParams) -> Result<ActionReques
             })
         }
         "set_property" => {
-            let node = require_param!(params.node.as_ref(), "'node' is required for set_property action");
-            let property = require_param!(params.property.as_ref(), "'property' is required for set_property action");
-            let value = require_param!(params.value.as_ref(), "'value' is required for set_property action");
+            let node = require_param!(
+                params.node.as_ref(),
+                "'node' is required for set_property action"
+            );
+            let property = require_param!(
+                params.property.as_ref(),
+                "'property' is required for set_property action"
+            );
+            let value = require_param!(
+                params.value.as_ref(),
+                "'value' is required for set_property action"
+            );
             Ok(ActionRequest::SetProperty {
                 path: node.clone(),
                 property: property.clone(),
@@ -103,8 +127,14 @@ pub fn build_action_request(params: &SpatialActionParams) -> Result<ActionReques
             })
         }
         "call_method" => {
-            let node = require_param!(params.node.as_ref(), "'node' is required for call_method action");
-            let method = require_param!(params.method.as_ref(), "'method' is required for call_method action");
+            let node = require_param!(
+                params.node.as_ref(),
+                "'node' is required for call_method action"
+            );
+            let method = require_param!(
+                params.method.as_ref(),
+                "'method' is required for call_method action"
+            );
             let args = params
                 .method_args
                 .as_ref()
@@ -118,8 +148,14 @@ pub fn build_action_request(params: &SpatialActionParams) -> Result<ActionReques
             })
         }
         "emit_signal" => {
-            let node = require_param!(params.node.as_ref(), "'node' is required for emit_signal action");
-            let signal = require_param!(params.signal.as_ref(), "'signal' is required for emit_signal action");
+            let node = require_param!(
+                params.node.as_ref(),
+                "'node' is required for emit_signal action"
+            );
+            let signal = require_param!(
+                params.signal.as_ref(),
+                "'signal' is required for emit_signal action"
+            );
             let args = params.args.as_ref().cloned().unwrap_or_default();
             Ok(ActionRequest::EmitSignal {
                 path: node.clone(),
@@ -128,8 +164,14 @@ pub fn build_action_request(params: &SpatialActionParams) -> Result<ActionReques
             })
         }
         "spawn_node" => {
-            let scene_path = require_param!(params.scene_path.as_ref(), "'scene_path' is required for spawn_node action");
-            let parent = require_param!(params.parent.as_ref(), "'parent' is required for spawn_node action");
+            let scene_path = require_param!(
+                params.scene_path.as_ref(),
+                "'scene_path' is required for spawn_node action"
+            );
+            let parent = require_param!(
+                params.parent.as_ref(),
+                "'parent' is required for spawn_node action"
+            );
             Ok(ActionRequest::SpawnNode {
                 scene_path: scene_path.clone(),
                 parent: parent.clone(),
@@ -138,7 +180,10 @@ pub fn build_action_request(params: &SpatialActionParams) -> Result<ActionReques
             })
         }
         "remove_node" => {
-            let node = require_param!(params.node.as_ref(), "'node' is required for remove_node action");
+            let node = require_param!(
+                params.node.as_ref(),
+                "'node' is required for remove_node action"
+            );
             Ok(ActionRequest::RemoveNode { path: node.clone() })
         }
         other => Err(McpError::invalid_params(

@@ -40,7 +40,10 @@ pub struct WatchSpec {
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct WatchConditionInput {
     pub property: String,
-    /// Operator: "lt", "gt", "eq", "changed".
+    /// Comparison operator.
+    #[schemars(
+        description = "Comparison operator: lt (less than), gt (greater than), eq (equals), changed (any change)"
+    )]
     pub operator: String,
     pub value: Option<serde_json::Value>,
 }
@@ -50,22 +53,30 @@ fn default_track() -> Vec<String> {
 }
 
 fn parse_operator(s: &str) -> Result<ConditionOperator, McpError> {
-    super::parse_enum_param(s, "operator", &[
-        ("lt", ConditionOperator::Lt),
-        ("gt", ConditionOperator::Gt),
-        ("eq", ConditionOperator::Eq),
-        ("changed", ConditionOperator::Changed),
-    ])
+    super::parse_enum_param(
+        s,
+        "operator",
+        &[
+            ("lt", ConditionOperator::Lt),
+            ("gt", ConditionOperator::Gt),
+            ("eq", ConditionOperator::Eq),
+            ("changed", ConditionOperator::Changed),
+        ],
+    )
 }
 
 fn parse_track(s: &str) -> Result<TrackCategory, McpError> {
-    super::parse_enum_param(s, "track category", &[
-        ("position", TrackCategory::Position),
-        ("state", TrackCategory::State),
-        ("signals", TrackCategory::Signals),
-        ("physics", TrackCategory::Physics),
-        ("all", TrackCategory::All),
-    ])
+    super::parse_enum_param(
+        s,
+        "track category",
+        &[
+            ("position", TrackCategory::Position),
+            ("state", TrackCategory::State),
+            ("signals", TrackCategory::Signals),
+            ("physics", TrackCategory::Physics),
+            ("all", TrackCategory::All),
+        ],
+    )
 }
 
 fn format_conditions(conditions: &[WatchCondition]) -> String {

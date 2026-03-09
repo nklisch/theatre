@@ -523,7 +523,9 @@ WHERE event_type = ? AND node_path LIKE ?
 ORDER BY frame;
 ```
 
-For complex conditions (proximity, velocity spike), the server scans the frame range and evaluates conditions in Rust — SQL is used for range selection, Rust for spatial logic.
+For complex conditions (proximity, velocity spike, moved), the server scans the frame range and evaluates conditions in Rust — SQL is used for range selection, Rust for spatial logic.
+
+The `moved` condition detects frames where a node displaced more than a threshold (default 0.01 units) compared to the previous frame. It uses the same frame iteration as `velocity_spike` and `property_change`.
 
 ---
 

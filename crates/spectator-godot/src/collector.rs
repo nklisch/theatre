@@ -1,29 +1,28 @@
+use godot::builtin::VariantType;
 use godot::builtin::{
     Array, Color, GString, PackedByteArray, PackedColorArray, PackedFloat32Array,
     PackedFloat64Array, PackedInt32Array, PackedInt64Array, PackedStringArray, PackedVector2Array,
-    PackedVector3Array, StringName, Variant, VarDictionary, Vector2, Vector3,
+    PackedVector3Array, StringName, VarDictionary, Variant, Vector2, Vector3,
 };
-use godot::builtin::VariantType;
 use godot::classes::{
-    AnimationPlayer, BoxShape3D, CanvasItem, CapsuleShape2D, CapsuleShape3D,
-    CharacterBody2D, CharacterBody3D, CircleShape2D, CollisionShape2D, CollisionShape3D,
-    CylinderShape3D, Engine, GeometryInstance3D, GpuParticles2D, GpuParticles3D,
-    MeshInstance2D, MeshInstance3D, NavigationAgent2D, NavigationAgent3D, NavigationServer3D,
-    Node, Node2D, Node3D, PhysicsBody2D, PhysicsBody3D, PhysicsRayQueryParameters2D,
-    PhysicsRayQueryParameters3D, PhysicsServer2D, PhysicsServer3D, RectangleShape2D,
-    Resource, RigidBody2D, RigidBody3D, ShaderMaterial, SphereShape3D, Sprite2D, Sprite3D,
+    AnimationPlayer, BoxShape3D, CanvasItem, CapsuleShape2D, CapsuleShape3D, CharacterBody2D,
+    CharacterBody3D, CircleShape2D, CollisionShape2D, CollisionShape3D, CylinderShape3D, Engine,
+    GeometryInstance3D, GpuParticles2D, GpuParticles3D, MeshInstance2D, MeshInstance3D,
+    NavigationAgent2D, NavigationAgent3D, NavigationServer3D, Node, Node2D, Node3D, PhysicsBody2D,
+    PhysicsBody3D, PhysicsRayQueryParameters2D, PhysicsRayQueryParameters3D, PhysicsServer2D,
+    PhysicsServer3D, RectangleShape2D, Resource, RigidBody2D, RigidBody3D, ShaderMaterial,
+    SphereShape3D, Sprite2D, Sprite3D,
 };
 use godot::obj::Gd;
 use godot::prelude::*;
 use spectator_protocol::query::{
     AnimationPlayerData, ChildData, CollisionShapeData, DetailLevel, EntityData, FindBy,
     FrameInfoResponse, GetNodeInspectParams, GetSceneTreeParams, GetSnapshotDataParams,
-    InspectCategory, InspectChild, InspectPhysics, InspectResources, InspectScript,
-    InspectSignals, InspectState, InspectTransform, MaterialOverrideData, MeshResourceData,
-    NavPathResponse, NavigationAgentData, NearbyEntityRaw, NodeInspectResponse, ParticleData,
-    PerspectiveData, PerspectiveParam, PhysicsEntityData, RaycastResponse, ResolveNodeResponse,
-    SceneTreeAction, SnapshotResponse, SpatialContextRaw, SpriteData, TransformEntityData,
-    TreeInclude,
+    InspectCategory, InspectChild, InspectPhysics, InspectResources, InspectScript, InspectSignals,
+    InspectState, InspectTransform, MaterialOverrideData, MeshResourceData, NavPathResponse,
+    NavigationAgentData, NearbyEntityRaw, NodeInspectResponse, ParticleData, PerspectiveData,
+    PerspectiveParam, PhysicsEntityData, RaycastResponse, ResolveNodeResponse, SceneTreeAction,
+    SnapshotResponse, SpatialContextRaw, SpriteData, TransformEntityData, TreeInclude,
 };
 
 /// State for deferred frame advance (set by action_handler, read by tcp_server).
@@ -34,7 +33,6 @@ pub struct AdvanceState {
     /// Request ID waiting for advance completion.
     pub pending_id: Option<String>,
 }
-
 
 #[derive(GodotClass)]
 #[class(base = Node)]
@@ -210,10 +208,11 @@ impl SpectatorCollector {
                 entities.push(entity);
             }
         } else if let Ok(node2d) = node.clone().try_cast::<Node2D>()
-            && self.should_collect_2d(&node2d, params) {
-                let entity = self.collect_single_entity_2d(&node2d, params);
-                entities.push(entity);
-            }
+            && self.should_collect_2d(&node2d, params)
+        {
+            let entity = self.collect_single_entity_2d(&node2d, params);
+            entities.push(entity);
+        }
 
         let count = node.get_child_count();
         for i in 0..count {
@@ -227,10 +226,9 @@ impl SpectatorCollector {
     fn should_collect_3d(&self, node: &Gd<Node3D>, params: &GetSnapshotDataParams) -> bool {
         let class_name = node.get_class().to_string();
 
-        if !params.class_filter.is_empty()
-            && !params.class_filter.contains(&class_name) {
-                return false;
-            }
+        if !params.class_filter.is_empty() && !params.class_filter.contains(&class_name) {
+            return false;
+        }
 
         if !params.groups.is_empty() {
             let node_ref: Gd<Node> = node.clone().upcast();
@@ -250,10 +248,9 @@ impl SpectatorCollector {
     fn should_collect_2d(&self, node: &Gd<Node2D>, params: &GetSnapshotDataParams) -> bool {
         let class_name = node.get_class().to_string();
 
-        if !params.class_filter.is_empty()
-            && !params.class_filter.contains(&class_name) {
-                return false;
-            }
+        if !params.class_filter.is_empty() && !params.class_filter.contains(&class_name) {
+            return false;
+        }
 
         if !params.groups.is_empty() {
             let node_ref: Gd<Node> = node.clone().upcast();
@@ -270,7 +267,11 @@ impl SpectatorCollector {
     }
 
     /// Collect data for a single 3D entity.
-    fn collect_single_entity_3d(&self, node: &Gd<Node3D>, params: &GetSnapshotDataParams) -> EntityData {
+    fn collect_single_entity_3d(
+        &self,
+        node: &Gd<Node3D>,
+        params: &GetSnapshotDataParams,
+    ) -> EntityData {
         let pos = node.get_global_position();
         let rot = node.get_global_rotation_degrees();
         let class_name = node.get_class().to_string();
@@ -312,7 +313,11 @@ impl SpectatorCollector {
     }
 
     /// Collect data for a single 2D entity.
-    fn collect_single_entity_2d(&self, node: &Gd<Node2D>, params: &GetSnapshotDataParams) -> EntityData {
+    fn collect_single_entity_2d(
+        &self,
+        node: &Gd<Node2D>,
+        params: &GetSnapshotDataParams,
+    ) -> EntityData {
         let pos = node.get_global_position();
         let rot = node.get_global_rotation_degrees();
         let class_name = node.get_class().to_string();
@@ -450,7 +455,9 @@ impl SpectatorCollector {
         let properties: Array<VarDictionary> = node.get_property_list();
 
         for i in 0..properties.len() {
-            let Some(prop) = properties.get(i) else { continue };
+            let Some(prop) = properties.get(i) else {
+                continue;
+            };
             let usage = prop
                 .get(GString::from("usage"))
                 .and_then(|v| v.try_to::<i64>().ok())
@@ -565,9 +572,10 @@ impl SpectatorCollector {
     /// Get the relative path of a node from the current scene root.
     fn get_relative_path(&self, node: &Gd<Node>) -> String {
         if let Some(tree) = self.base().get_tree()
-            && let Some(root) = tree.get_current_scene() {
-                return root.get_path_to(node).to_string();
-            }
+            && let Some(root) = tree.get_current_scene()
+        {
+            return root.get_path_to(node).to_string();
+        }
         node.get_name().to_string()
     }
 
@@ -586,7 +594,10 @@ impl SpectatorCollector {
     // -------------------------------------------------------------------------
 
     /// Collect deep inspection data for a single node.
-    pub fn inspect_node(&self, params: &GetNodeInspectParams) -> Result<NodeInspectResponse, String> {
+    pub fn inspect_node(
+        &self,
+        params: &GetNodeInspectParams,
+    ) -> Result<NodeInspectResponse, String> {
         let tree = self.base().get_tree().ok_or("No scene tree available")?;
         let root = tree.get_current_scene().ok_or("No current scene")?;
         let node: Gd<Node> = root
@@ -610,8 +621,8 @@ impl SpectatorCollector {
             resources: None,
         };
 
-        let is_spatial = node.clone().try_cast::<Node3D>().is_ok()
-            || node.clone().try_cast::<Node2D>().is_ok();
+        let is_spatial =
+            node.clone().try_cast::<Node3D>().is_ok() || node.clone().try_cast::<Node2D>().is_ok();
 
         for cat in &params.include {
             match cat {
@@ -797,12 +808,13 @@ impl SpectatorCollector {
         match class {
             "CollisionShape3D" => {
                 if let Ok(cs) = child.clone().try_cast::<godot::classes::CollisionShape3D>()
-                    && let Some(shape) = cs.get_shape() {
-                        props.insert(
-                            "shape".to_string(),
-                            serde_json::Value::String(shape.get_class().to_string()),
-                        );
-                    }
+                    && let Some(shape) = cs.get_shape()
+                {
+                    props.insert(
+                        "shape".to_string(),
+                        serde_json::Value::String(shape.get_class().to_string()),
+                    );
+                }
             }
             "MeshInstance3D" => {
                 if let Ok(mi) = child.clone().try_cast::<Node3D>() {
@@ -834,12 +846,13 @@ impl SpectatorCollector {
             }
             "CollisionShape2D" => {
                 if let Ok(cs) = child.clone().try_cast::<godot::classes::CollisionShape2D>()
-                    && let Some(shape) = cs.get_shape() {
-                        props.insert(
-                            "shape".to_string(),
-                            serde_json::Value::String(shape.get_class().to_string()),
-                        );
-                    }
+                    && let Some(shape) = cs.get_shape()
+                {
+                    props.insert(
+                        "shape".to_string(),
+                        serde_json::Value::String(shape.get_class().to_string()),
+                    );
+                }
             }
             "Sprite2D" => {
                 if let Ok(s) = child.clone().try_cast::<Node2D>() {
@@ -901,7 +914,10 @@ impl SpectatorCollector {
                                 }
                             })
                             .unwrap_or_else(|| "<unknown>".to_string());
-                        let method = callable.method_name().map(|n| n.to_string()).unwrap_or_default();
+                        let method = callable
+                            .method_name()
+                            .map(|n| n.to_string())
+                            .unwrap_or_default();
                         Some(serde_json::Value::String(format!("{obj_name}:{method}")))
                     })
                     .collect();
@@ -925,7 +941,8 @@ impl SpectatorCollector {
 
         let base_class = node.get_class().to_string();
 
-        let methods = if let Ok(mut gd_script) = script.clone().try_cast::<godot::classes::Script>() {
+        let methods = if let Ok(mut gd_script) = script.clone().try_cast::<godot::classes::Script>()
+        {
             let method_list: Array<VarDictionary> = gd_script.get_script_method_list();
             (0..method_list.len())
                 .filter_map(|i| {
@@ -981,7 +998,11 @@ impl SpectatorCollector {
         }
     }
 
-    fn collect_spatial_context_raw_3d(&self, node3d: &Gd<Node3D>, node: &Gd<Node>) -> SpatialContextRaw {
+    fn collect_spatial_context_raw_3d(
+        &self,
+        node3d: &Gd<Node3D>,
+        node: &Gd<Node>,
+    ) -> SpatialContextRaw {
         let pos = node3d.get_global_position();
         let fwd_col = node3d.get_global_transform().basis.col_c();
         let node_position = vec3(pos);
@@ -1002,15 +1023,16 @@ impl SpectatorCollector {
 
         let mut nearby = Vec::new();
         if let Some(tree) = self.base().get_tree()
-            && let Some(root) = tree.get_current_scene() {
-                self.collect_nearby_recursive(&root, &pos, node, &mut nearby, 20.0);
-                nearby.sort_by(|a, b| {
-                    let da = position_distance(&a.position, &node_position);
-                    let db = position_distance(&b.position, &node_position);
-                    da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
-                });
-                nearby.truncate(10);
-            }
+            && let Some(root) = tree.get_current_scene()
+        {
+            self.collect_nearby_recursive(&root, &pos, node, &mut nearby, 20.0);
+            nearby.sort_by(|a, b| {
+                let da = position_distance(&a.position, &node_position);
+                let db = position_distance(&b.position, &node_position);
+                da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
+            });
+            nearby.truncate(10);
+        }
 
         let in_areas = self.collect_containing_areas(node3d);
 
@@ -1024,7 +1046,11 @@ impl SpectatorCollector {
         }
     }
 
-    fn collect_spatial_context_raw_2d(&self, node2d: &Gd<Node2D>, node: &Gd<Node>) -> SpatialContextRaw {
+    fn collect_spatial_context_raw_2d(
+        &self,
+        node2d: &Gd<Node2D>,
+        node: &Gd<Node>,
+    ) -> SpatialContextRaw {
         let pos = node2d.get_global_position();
         let rot = node2d.get_global_rotation_degrees();
         let rad = (rot as f64).to_radians();
@@ -1046,15 +1072,16 @@ impl SpectatorCollector {
 
         let mut nearby = Vec::new();
         if let Some(tree) = self.base().get_tree()
-            && let Some(root) = tree.get_current_scene() {
-                self.collect_nearby_recursive_2d(&root, &pos, node, &mut nearby, 500.0);
-                nearby.sort_by(|a, b| {
-                    let da = position_distance(&a.position, &node_position);
-                    let db = position_distance(&b.position, &node_position);
-                    da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
-                });
-                nearby.truncate(10);
-            }
+            && let Some(root) = tree.get_current_scene()
+        {
+            self.collect_nearby_recursive_2d(&root, &pos, node, &mut nearby, 500.0);
+            nearby.sort_by(|a, b| {
+                let da = position_distance(&a.position, &node_position);
+                let db = position_distance(&b.position, &node_position);
+                da.partial_cmp(&db).unwrap_or(std::cmp::Ordering::Equal)
+            });
+            nearby.truncate(10);
+        }
 
         let in_areas = self.collect_containing_areas_2d(node2d);
 
@@ -1089,7 +1116,9 @@ impl SpectatorCollector {
 
         // Walk immediate children.
         for i in 0..node.get_child_count() {
-            let Some(child) = node.get_child(i) else { continue };
+            let Some(child) = node.get_child(i) else {
+                continue;
+            };
             let child_name = child.get_name().to_string();
             let child_class = child.get_class().to_string();
 
@@ -1097,71 +1126,79 @@ impl SpectatorCollector {
                 "MeshInstance3D" => {
                     if let Ok(mi) = child.clone().try_cast::<MeshInstance3D>() {
                         self.collect_shader_params_from_mesh_3d(&mi, &mut resources.shader_params);
-                        resources.meshes.push(self.collect_mesh_3d(&mi, &child_name));
+                        resources
+                            .meshes
+                            .push(self.collect_mesh_3d(&mi, &child_name));
                     }
                 }
                 "MeshInstance2D" => {
                     if let Ok(mi) = child.clone().try_cast::<MeshInstance2D>() {
-                        resources.meshes.push(self.collect_mesh_2d(&mi, &child_name));
+                        resources
+                            .meshes
+                            .push(self.collect_mesh_2d(&mi, &child_name));
                     }
                 }
                 "CollisionShape3D" => {
                     if let Ok(cs) = child.clone().try_cast::<CollisionShape3D>() {
-                        resources.collision_shapes.push(
-                            self.collect_collision_shape_3d(&cs, &child_name),
-                        );
+                        resources
+                            .collision_shapes
+                            .push(self.collect_collision_shape_3d(&cs, &child_name));
                     }
                 }
                 "CollisionShape2D" => {
                     if let Ok(cs) = child.clone().try_cast::<CollisionShape2D>() {
-                        resources.collision_shapes.push(
-                            self.collect_collision_shape_2d(&cs, &child_name),
-                        );
+                        resources
+                            .collision_shapes
+                            .push(self.collect_collision_shape_2d(&cs, &child_name));
                     }
                 }
                 "AnimationPlayer" => {
                     if let Ok(ap) = child.clone().try_cast::<AnimationPlayer>() {
-                        resources.animation_players.push(
-                            self.collect_animation_player(&ap, &child_name),
-                        );
+                        resources
+                            .animation_players
+                            .push(self.collect_animation_player(&ap, &child_name));
                     }
                 }
                 "NavigationAgent3D" => {
                     if let Ok(na) = child.clone().try_cast::<NavigationAgent3D>() {
-                        resources.navigation_agents.push(
-                            self.collect_nav_agent_3d(&na, &child_name),
-                        );
+                        resources
+                            .navigation_agents
+                            .push(self.collect_nav_agent_3d(&na, &child_name));
                     }
                 }
                 "NavigationAgent2D" => {
                     if let Ok(na) = child.clone().try_cast::<NavigationAgent2D>() {
-                        resources.navigation_agents.push(
-                            self.collect_nav_agent_2d(&na, &child_name),
-                        );
+                        resources
+                            .navigation_agents
+                            .push(self.collect_nav_agent_2d(&na, &child_name));
                     }
                 }
                 "Sprite2D" => {
                     if let Ok(sp) = child.clone().try_cast::<Sprite2D>() {
-                        resources.sprites.push(self.collect_sprite_2d(&sp, &child_name));
+                        resources
+                            .sprites
+                            .push(self.collect_sprite_2d(&sp, &child_name));
                     }
                 }
                 "Sprite3D" => {
                     if let Ok(sp) = child.clone().try_cast::<Sprite3D>() {
-                        resources.sprites.push(self.collect_sprite_3d(&sp, &child_name));
+                        resources
+                            .sprites
+                            .push(self.collect_sprite_3d(&sp, &child_name));
                     }
                 }
                 "GPUParticles3D" => {
                     if let Ok(p) = child.clone().try_cast::<GpuParticles3D>() {
-                        resources.particles.push(
-                            self.collect_particles_3d(&p, &child_name),
-                        );
+                        resources
+                            .particles
+                            .push(self.collect_particles_3d(&p, &child_name));
                     }
                 }
                 "GPUParticles2D" => {
                     if let Ok(p) = child.clone().try_cast::<GpuParticles2D>() {
-                        resources.particles.push(
-                            self.collect_particles_2d(&p, &child_name),
-                        );
+                        resources
+                            .particles
+                            .push(self.collect_particles_2d(&p, &child_name));
                     }
                 }
                 _ => {}
@@ -1176,7 +1213,11 @@ impl SpectatorCollector {
         let (resource, mesh_type, surface_count) = match &mesh_opt {
             Some(mesh) => {
                 let res: Gd<Resource> = mesh.clone().upcast();
-                (resource_path(&res), mesh.get_class().to_string(), mesh.get_surface_count() as u32)
+                (
+                    resource_path(&res),
+                    mesh.get_class().to_string(),
+                    mesh.get_surface_count() as u32,
+                )
             }
             None => (None, "None".into(), 0),
         };
@@ -1209,7 +1250,11 @@ impl SpectatorCollector {
         let (resource, mesh_type, surface_count) = match &mesh_opt {
             Some(mesh) => {
                 let res: Gd<Resource> = mesh.clone().upcast();
-                (resource_path(&res), mesh.get_class().to_string(), mesh.get_surface_count() as u32)
+                (
+                    resource_path(&res),
+                    mesh.get_class().to_string(),
+                    mesh.get_surface_count() as u32,
+                )
             }
             None => (None, "None".into(), 0),
         };
@@ -1241,7 +1286,13 @@ impl SpectatorCollector {
             None => ("None".into(), serde_json::Map::new(), true),
         };
 
-        CollisionShapeData { child: child_name.into(), shape_type, dimensions, inline, disabled }
+        CollisionShapeData {
+            child: child_name.into(),
+            shape_type,
+            dimensions,
+            inline,
+            disabled,
+        }
     }
 
     fn collect_collision_shape_2d(
@@ -1263,7 +1314,13 @@ impl SpectatorCollector {
             None => ("None".into(), serde_json::Map::new(), true),
         };
 
-        CollisionShapeData { child: child_name.into(), shape_type, dimensions, inline, disabled }
+        CollisionShapeData {
+            child: child_name.into(),
+            shape_type,
+            dimensions,
+            inline,
+            disabled,
+        }
     }
 
     fn extract_shape_dimensions_3d(
@@ -1480,7 +1537,9 @@ impl SpectatorCollector {
                 let uniform_list = shader.get_shader_uniform_list();
                 for entry in uniform_list.iter_shared() {
                     let dict = entry.to::<VarDictionary>();
-                    let Some(name_var) = dict.get("name") else { continue };
+                    let Some(name_var) = dict.get("name") else {
+                        continue;
+                    };
                     let name = name_var.to::<GString>().to_string();
                     let value = shader_mat.get_shader_parameter(&StringName::from(&name));
                     if let Some(json_val) = variant_to_json(&value) {
@@ -1578,9 +1637,10 @@ impl SpectatorCollector {
     fn collect_containing_areas(&self, node: &Gd<Node3D>) -> Vec<String> {
         let mut areas = Vec::new();
         if let Some(tree) = self.base().get_tree()
-            && let Some(root) = tree.get_current_scene() {
-                self.find_areas_containing(&root, node, &mut areas);
-            }
+            && let Some(root) = tree.get_current_scene()
+        {
+            self.find_areas_containing(&root, node, &mut areas);
+        }
         areas
     }
 
@@ -1594,11 +1654,12 @@ impl SpectatorCollector {
             let bodies = area.get_overlapping_bodies();
             for i in 0..bodies.len() {
                 if let Some(body) = bodies.get(i)
-                    && body.instance_id() == target.instance_id() {
-                        let area_node: Gd<Node> = area.clone().upcast();
-                        result.push(self.get_relative_path(&area_node));
-                        break;
-                    }
+                    && body.instance_id() == target.instance_id()
+                {
+                    let area_node: Gd<Node> = area.clone().upcast();
+                    result.push(self.get_relative_path(&area_node));
+                    break;
+                }
             }
         }
 
@@ -1656,10 +1717,7 @@ impl SpectatorCollector {
         }
     }
 
-    fn scene_tree_roots(
-        &self,
-        include: &[TreeInclude],
-    ) -> Result<serde_json::Value, String> {
+    fn scene_tree_roots(&self, include: &[TreeInclude]) -> Result<serde_json::Value, String> {
         let tree = self.base().get_tree().ok_or("No scene tree")?;
         let root = tree.get_root().ok_or("No root node")?;
 
@@ -1740,19 +1798,18 @@ impl SpectatorCollector {
                 }
             }
             if !children.is_empty()
-                && let serde_json::Value::Object(ref mut map) = info {
-                    map.insert(
-                        "children".to_string(),
-                        serde_json::Value::Object(children),
-                    );
-                }
-        } else if node.get_child_count() > 0
-            && let serde_json::Value::Object(ref mut map) = info {
-                map.insert(
-                    "children".to_string(),
-                    serde_json::json!({"...": "depth_limit_reached"}),
-                );
+                && let serde_json::Value::Object(ref mut map) = info
+            {
+                map.insert("children".to_string(), serde_json::Value::Object(children));
             }
+        } else if node.get_child_count() > 0
+            && let serde_json::Value::Object(ref mut map) = info
+        {
+            map.insert(
+                "children".to_string(),
+                serde_json::json!({"...": "depth_limit_reached"}),
+            );
+        }
 
         info
     }
@@ -2045,17 +2102,11 @@ impl SpectatorCollector {
     }
 
     /// Get navigation path distance between two points.
-    pub fn get_nav_path(
-        &self,
-        from: Vector3,
-        to: Vector3,
-    ) -> Result<NavPathResponse, String> {
+    pub fn get_nav_path(&self, from: Vector3, to: Vector3) -> Result<NavPathResponse, String> {
         let mut nav_server = NavigationServer3D::singleton();
         let maps = nav_server.get_maps();
         if maps.is_empty() {
-            return Err(
-                "No navigation maps available. Is NavigationServer3D active?".into(),
-            );
+            return Err("No navigation maps available. Is NavigationServer3D active?".into());
         }
         let map = maps.get(0).ok_or("No navigation map at index 0")?;
         let path = nav_server.map_get_path(map, from, to, true);
@@ -2202,19 +2253,28 @@ pub(crate) fn variant_to_json(v: &Variant) -> Option<serde_json::Value> {
         VariantType::PACKED_BYTE_ARRAY => {
             let arr = v.to::<PackedByteArray>();
             Some(serde_json::Value::Array(
-                arr.as_slice().iter().map(|&b| serde_json::json!(b)).collect(),
+                arr.as_slice()
+                    .iter()
+                    .map(|&b| serde_json::json!(b))
+                    .collect(),
             ))
         }
         VariantType::PACKED_INT32_ARRAY => {
             let arr = v.to::<PackedInt32Array>();
             Some(serde_json::Value::Array(
-                arr.as_slice().iter().map(|&i| serde_json::json!(i)).collect(),
+                arr.as_slice()
+                    .iter()
+                    .map(|&i| serde_json::json!(i))
+                    .collect(),
             ))
         }
         VariantType::PACKED_INT64_ARRAY => {
             let arr = v.to::<PackedInt64Array>();
             Some(serde_json::Value::Array(
-                arr.as_slice().iter().map(|&i| serde_json::json!(i)).collect(),
+                arr.as_slice()
+                    .iter()
+                    .map(|&i| serde_json::json!(i))
+                    .collect(),
             ))
         }
         VariantType::PACKED_FLOAT32_ARRAY => {
@@ -2222,7 +2282,9 @@ pub(crate) fn variant_to_json(v: &Variant) -> Option<serde_json::Value> {
             Some(serde_json::Value::Array(
                 arr.as_slice()
                     .iter()
-                    .filter_map(|&f| serde_json::Number::from_f64(f as f64).map(serde_json::Value::Number))
+                    .filter_map(|&f| {
+                        serde_json::Number::from_f64(f as f64).map(serde_json::Value::Number)
+                    })
                     .collect(),
             ))
         }

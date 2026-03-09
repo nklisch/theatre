@@ -2,8 +2,8 @@ pub mod fixtures;
 pub mod harness;
 pub mod mock_addon;
 
-pub mod godot_process;
 pub mod e2e_harness;
+pub mod godot_process;
 
 /// Shared tool dispatch: routes tool name + JSON params to SpectatorServer handler methods.
 /// Used by both TestHarness and E2EHarness.

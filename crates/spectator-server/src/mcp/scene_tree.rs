@@ -40,47 +40,57 @@ fn default_include() -> Option<Vec<String>> {
 }
 
 pub fn parse_action(s: &str) -> Result<SceneTreeAction, McpError> {
-    super::parse_enum_param(s, "action", &[
-        ("roots", SceneTreeAction::Roots),
-        ("children", SceneTreeAction::Children),
-        ("subtree", SceneTreeAction::Subtree),
-        ("ancestors", SceneTreeAction::Ancestors),
-        ("find", SceneTreeAction::Find),
-    ])
+    super::parse_enum_param(
+        s,
+        "action",
+        &[
+            ("roots", SceneTreeAction::Roots),
+            ("children", SceneTreeAction::Children),
+            ("subtree", SceneTreeAction::Subtree),
+            ("ancestors", SceneTreeAction::Ancestors),
+            ("find", SceneTreeAction::Find),
+        ],
+    )
 }
 
 pub fn parse_find_by(s: &str) -> Result<FindBy, McpError> {
-    super::parse_enum_param(s, "find_by", &[
-        ("name", FindBy::Name),
-        ("class", FindBy::Class),
-        ("group", FindBy::Group),
-        ("script", FindBy::Script),
-    ])
+    super::parse_enum_param(
+        s,
+        "find_by",
+        &[
+            ("name", FindBy::Name),
+            ("class", FindBy::Class),
+            ("group", FindBy::Group),
+            ("script", FindBy::Script),
+        ],
+    )
 }
 
 pub fn parse_tree_include(strings: &[String]) -> Result<Vec<TreeInclude>, McpError> {
-    super::parse_enum_list(strings, "include", &[
-        ("class", TreeInclude::Class),
-        ("groups", TreeInclude::Groups),
-        ("script", TreeInclude::Script),
-        ("visible", TreeInclude::Visible),
-        ("process_mode", TreeInclude::ProcessMode),
-    ])
+    super::parse_enum_list(
+        strings,
+        "include",
+        &[
+            ("class", TreeInclude::Class),
+            ("groups", TreeInclude::Groups),
+            ("script", TreeInclude::Script),
+            ("visible", TreeInclude::Visible),
+            ("process_mode", TreeInclude::ProcessMode),
+        ],
+    )
 }
 
 /// Build the GetSceneTreeParams from MCP tool params.
-pub fn build_scene_tree_params(params: &SceneTreeToolParams) -> Result<GetSceneTreeParams, McpError> {
+pub fn build_scene_tree_params(
+    params: &SceneTreeToolParams,
+) -> Result<GetSceneTreeParams, McpError> {
     let action = parse_action(&params.action)?;
 
     let default_inc = vec!["class".to_string(), "groups".to_string()];
     let include_strs = params.include.as_deref().unwrap_or(&default_inc);
     let include = parse_tree_include(include_strs)?;
 
-    let find_by = params
-        .find_by
-        .as_deref()
-        .map(parse_find_by)
-        .transpose()?;
+    let find_by = params.find_by.as_deref().map(parse_find_by).transpose()?;
 
     Ok(GetSceneTreeParams {
         action,

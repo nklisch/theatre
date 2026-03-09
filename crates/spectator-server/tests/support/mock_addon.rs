@@ -15,8 +15,9 @@ use tokio::{
 };
 
 /// Handler called for each query: `(method, params) → Ok(data) | Err((code, msg))`.
-pub type QueryHandler =
-    Arc<dyn Fn(&str, &serde_json::Value) -> Result<serde_json::Value, (String, String)> + Send + Sync>;
+pub type QueryHandler = Arc<
+    dyn Fn(&str, &serde_json::Value) -> Result<serde_json::Value, (String, String)> + Send + Sync,
+>;
 
 pub struct MockAddon {
     pub port: u16,
@@ -43,7 +44,13 @@ impl MockAddon {
         let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
         let (event_tx, event_rx) = mpsc::channel::<Message>(32);
 
-        let join_handle = tokio::spawn(run_mock(listener, handshake, handler, event_rx, shutdown_rx));
+        let join_handle = tokio::spawn(run_mock(
+            listener,
+            handshake,
+            handler,
+            event_rx,
+            shutdown_rx,
+        ));
 
         Self {
             port,

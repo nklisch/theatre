@@ -3,8 +3,8 @@ use spectator_protocol::messages::Message;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::mcp::action::SpatialActionParams;
-use crate::mcp::config::SpatialConfigParams;
 use crate::mcp::clips::ClipsParams;
+use crate::mcp::config::SpatialConfigParams;
 use crate::mcp::scene_tree::SceneTreeToolParams;
 use crate::mcp::snapshot::SpatialSnapshotParams;
 use crate::mcp::watch::SpatialWatchParams;
@@ -47,9 +47,10 @@ pub fn snapshot_summary(params: &SpatialSnapshotParams) -> String {
     let detail = &params.detail;
     let mut parts = vec![format!("Snapshot ({detail})")];
     if let Some(ref groups) = params.groups
-        && !groups.is_empty() {
-            parts.push(format!("groups: {}", groups.join(", ")));
-        }
+        && !groups.is_empty()
+    {
+        parts.push(format!("groups: {}", groups.join(", ")));
+    }
     if let Some(ref node) = params.focal_node {
         parts.push(format!("from: {node}"));
     }
@@ -217,22 +218,13 @@ pub fn clips_summary(params: &ClipsParams) -> String {
                 .from_frame
                 .map(|f| f.to_string())
                 .unwrap_or("?".into());
-            let to = params
-                .to_frame
-                .map(|f| f.to_string())
-                .unwrap_or("?".into());
+            let to = params.to_frame.map(|f| f.to_string()).unwrap_or("?".into());
             let node = params.node.as_deref().unwrap_or("?");
             format!("Query range {from}-{to} for {node}")
         }
         "diff_frames" => {
-            let a = params
-                .frame_a
-                .map(|f| f.to_string())
-                .unwrap_or("?".into());
-            let b = params
-                .frame_b
-                .map(|f| f.to_string())
-                .unwrap_or("?".into());
+            let a = params.frame_a.map(|f| f.to_string()).unwrap_or("?".into());
+            let b = params.frame_b.map(|f| f.to_string()).unwrap_or("?".into());
             format!("Diff frames {a} vs {b}")
         }
         "find_event" => {

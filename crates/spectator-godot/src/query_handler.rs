@@ -19,7 +19,10 @@ pub fn handle_query(
     collector: &SpectatorCollector,
 ) -> Option<Message> {
     match method {
-        "get_snapshot_data" => Some(simple_query(id, handle_get_snapshot_data(params, collector))),
+        "get_snapshot_data" => Some(simple_query(
+            id,
+            handle_get_snapshot_data(params, collector),
+        )),
         "get_frame_info" => Some(simple_query(id, handle_get_frame_info(collector))),
         "get_node_inspect" => Some(simple_query(id, handle_get_node_inspect(params, collector))),
         "get_scene_tree" => Some(simple_query(id, handle_get_scene_tree(params, collector))),
@@ -73,9 +76,7 @@ fn handle_get_snapshot_data(
     to_json_value(&collector.collect_snapshot(&params))
 }
 
-fn handle_get_frame_info(
-    collector: &SpectatorCollector,
-) -> Result<serde_json::Value, QueryError> {
+fn handle_get_frame_info(collector: &SpectatorCollector) -> Result<serde_json::Value, QueryError> {
     to_json_value(&collector.get_frame_info())
 }
 
@@ -114,7 +115,7 @@ fn handle_execute_action(
                 id,
                 code: e.code,
                 message: e.message,
-            })
+            });
         }
     };
 
@@ -197,11 +198,8 @@ fn handle_spatial_query(
                 from_pos[1] as f32,
                 from_pos[2] as f32,
             );
-            let to_v3 = godot::builtin::Vector3::new(
-                to_pos[0] as f32,
-                to_pos[1] as f32,
-                to_pos[2] as f32,
-            );
+            let to_v3 =
+                godot::builtin::Vector3::new(to_pos[0] as f32, to_pos[1] as f32, to_pos[2] as f32);
             let result = collector
                 .get_nav_path(from_v3, to_v3)
                 .map_err(|e| QueryError {
@@ -231,10 +229,12 @@ fn resolve_query_origin(
         QueryOrigin::Position(pos) => Ok(pos.clone()),
         QueryOrigin::Node(path) => {
             let resolved: ResolveNodeResponse =
-                collector.resolve_node_position(path).map_err(|e| QueryError {
-                    code: "node_not_found".into(),
-                    message: e,
-                })?;
+                collector
+                    .resolve_node_position(path)
+                    .map_err(|e| QueryError {
+                        code: "node_not_found".into(),
+                        message: e,
+                    })?;
             Ok(resolved.position)
         }
     }

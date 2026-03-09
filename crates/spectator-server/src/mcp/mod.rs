@@ -15,7 +15,7 @@ use rmcp::tool_router;
 use serde::{Deserialize, Serialize};
 use spectator_core::{
     bearing,
-    budget::{resolve_budget, SnapshotBudgetDefaults},
+    budget::{SnapshotBudgetDefaults, resolve_budget},
     index::{IndexedEntity, IndexedEntity2D, SpatialIndex},
     types::{vec_to_array2, vec_to_array3},
 };
@@ -31,23 +31,20 @@ use crate::tcp::{get_config, query_addon};
 // ---------------------------------------------------------------------------
 
 fn serialize_params<T: Serialize>(params: &T) -> Result<serde_json::Value, McpError> {
-    serde_json::to_value(params).map_err(|e| {
-        McpError::internal_error(format!("Param serialization error: {e}"), None)
-    })
+    serde_json::to_value(params)
+        .map_err(|e| McpError::internal_error(format!("Param serialization error: {e}"), None))
 }
 
 fn deserialize_response<T: for<'de> Deserialize<'de>>(
     data: serde_json::Value,
 ) -> Result<T, McpError> {
-    serde_json::from_value(data).map_err(|e| {
-        McpError::internal_error(format!("Response deserialization error: {e}"), None)
-    })
+    serde_json::from_value(data)
+        .map_err(|e| McpError::internal_error(format!("Response deserialization error: {e}"), None))
 }
 
 fn serialize_response<T: Serialize>(response: &T) -> Result<String, McpError> {
-    serde_json::to_string(response).map_err(|e| {
-        McpError::internal_error(format!("Response serialization error: {e}"), None)
-    })
+    serde_json::to_string(response)
+        .map_err(|e| McpError::internal_error(format!("Response serialization error: {e}"), None))
 }
 
 /// Inject a `budget` block into a JSON object value.
@@ -95,7 +92,10 @@ fn parse_enum_param<T: Clone>(
     }
     let valid: Vec<&str> = variants.iter().map(|(n, _)| *n).collect();
     Err(McpError::invalid_params(
-        format!("Invalid {field_name} '{value}'. Valid: {}", valid.join(", ")),
+        format!(
+            "Invalid {field_name} '{value}'. Valid: {}",
+            valid.join(", ")
+        ),
         None,
     ))
 }
@@ -142,7 +142,9 @@ impl SpectatorServer {
     /// Use detail 'summary' for a cheap overview (~200 tokens), 'standard' for per-entity data
     /// (~400-800 tokens), or 'full' for everything including transforms, physics, and children
     /// (~1000+ tokens). Start with summary, then drill down.
-    #[tool(description = "Get a spatial snapshot of the current scene from a perspective. Use detail 'summary' for a cheap overview (~200 tokens), 'standard' for per-entity data (~400-800 tokens), or 'full' for everything including transforms, physics, and children (~1000+ tokens). Start with summary, then drill down.")]
+    #[tool(
+        description = "Get a spatial snapshot of the current scene from a perspective. Use detail 'summary' for a cheap overview (~200 tokens), 'standard' for per-entity data (~400-800 tokens), or 'full' for everything including transforms, physics, and children (~1000+ tokens). Start with summary, then drill down."
+    )]
     pub async fn spatial_snapshot(
         &self,
         Parameters(params): Parameters<SpatialSnapshotParams>,
@@ -275,32 +277,51 @@ impl SpectatorServer {
                 &config,
             )?;
             let result = serialize_response(&response);
-            self.log_activity("query", &activity_summary, "spatial_snapshot").await;
+            self.log_activity("query", &activity_summary, "spatial_snapshot")
+                .await;
             return result;
         }
 
         // 9. Build response based on detail level
         let response = match detail {
-            DetailLevel::Summary => {
-                build_summary_response(&raw_data, &entities_with_rel, &persp, budget_limit, hard_cap, &config)
-            }
-            DetailLevel::Standard => {
-                build_standard_response(&raw_data, &entities_with_rel, &persp, budget_limit, hard_cap, &config)
-            }
-            DetailLevel::Full => {
-                build_full_response(&raw_data, &entities_with_rel, &persp, budget_limit, hard_cap, &config)
-            }
+            DetailLevel::Summary => build_summary_response(
+                &raw_data,
+                &entities_with_rel,
+                &persp,
+                budget_limit,
+                hard_cap,
+                &config,
+            ),
+            DetailLevel::Standard => build_standard_response(
+                &raw_data,
+                &entities_with_rel,
+                &persp,
+                budget_limit,
+                hard_cap,
+                &config,
+            ),
+            DetailLevel::Full => build_full_response(
+                &raw_data,
+                &entities_with_rel,
+                &persp,
+                budget_limit,
+                hard_cap,
+                &config,
+            ),
         };
 
         let result = serialize_response(&response);
-        self.log_activity("query", &activity_summary, "spatial_snapshot").await;
+        self.log_activity("query", &activity_summary, "spatial_snapshot")
+            .await;
         result
     }
 
     /// Deep inspection of a single node — transform, physics, state, children,
     /// signals, script, and spatial context. The "tell me everything about this
     /// one thing" tool.
-    #[tool(description = "Deep inspection of a single node. Returns transform, physics, state, children, signals, script, spatial context, and resources. Use the 'include' parameter to select specific categories and reduce token usage. Default includes all categories except 'resources' (opt-in to save tokens).")]
+    #[tool(
+        description = "Deep inspection of a single node. Returns transform, physics, state, children, signals, script, spatial context, and resources. Use the 'include' parameter to select specific categories and reduce token usage. Default includes all categories except 'resources' (opt-in to save tokens)."
+    )]
     pub async fn spatial_inspect(
         &self,
         Parameters(params): Parameters<SpatialInspectParams>,
@@ -319,9 +340,8 @@ impl SpectatorServer {
         let raw_data: NodeInspectResponse =
             query_and_deserialize(&self.state, "get_node_inspect", &query_params).await?;
 
-        let mut response = serde_json::to_value(&raw_data).map_err(|e| {
-            McpError::internal_error(format!("Serialization error: {e}"), None)
-        })?;
+        let mut response = serde_json::to_value(&raw_data)
+            .map_err(|e| McpError::internal_error(format!("Serialization error: {e}"), None))?;
 
         if let Some(raw_ctx) = &raw_data.spatial_context_raw {
             let spatial_context = build_spatial_context(raw_ctx);
@@ -333,13 +353,16 @@ impl SpectatorServer {
 
         let budget_limit = resolve_budget(None, 1500, config.token_hard_cap);
         let result = finalize_response(&mut response, budget_limit, config.token_hard_cap);
-        self.log_activity("query", &activity_summary, "spatial_inspect").await;
+        self.log_activity("query", &activity_summary, "spatial_inspect")
+            .await;
         result
     }
 
     /// Navigate and query the Godot scene tree structure. Not spatial — this is
     /// about understanding the node hierarchy.
-    #[tool(description = "Navigate the Godot scene tree. Actions: 'roots' (top-level nodes), 'children' (immediate children), 'subtree' (recursive tree with depth limit), 'ancestors' (parent chain to root), 'find' (search by name/class/group/script). Use 'include' to control per-node data.")]
+    #[tool(
+        description = "Navigate the Godot scene tree. Actions: 'roots' (top-level nodes), 'children' (immediate children), 'subtree' (recursive tree with depth limit), 'ancestors' (parent chain to root), 'find' (search by name/class/group/script). Use 'include' to control per-node data."
+    )]
     pub async fn scene_tree(
         &self,
         Parameters(params): Parameters<SceneTreeToolParams>,
@@ -347,15 +370,20 @@ impl SpectatorServer {
         let activity_summary = crate::activity::scene_tree_summary(&params);
         let query_params = build_scene_tree_params(&params)?;
 
-        let data = query_addon(&self.state, "get_scene_tree", serialize_params(&query_params)?)
-            .await?;
+        let data = query_addon(
+            &self.state,
+            "get_scene_tree",
+            serialize_params(&query_params)?,
+        )
+        .await?;
 
         let config = get_config(&self.state).await;
 
         let budget_limit = resolve_budget(params.token_budget, 1500, config.token_hard_cap);
         let mut response = data;
         let result = finalize_response(&mut response, budget_limit, config.token_hard_cap);
-        self.log_activity("query", &activity_summary, "scene_tree").await;
+        self.log_activity("query", &activity_summary, "scene_tree")
+            .await;
         result
     }
 
@@ -364,7 +392,9 @@ impl SpectatorServer {
     /// while paused), teleport (move node to position), set_property (change a property),
     /// call_method (call a method), emit_signal (emit a signal), spawn_node (instantiate
     /// a scene), remove_node (queue_free a node).
-    #[tool(description = "Manipulate game state for debugging. Actions: pause (pause/unpause scene), advance_frames (step N physics frames while paused), advance_time (step N seconds while paused), teleport (move node to position), set_property (change a property), call_method (call a method), emit_signal (emit a signal), spawn_node (instantiate a scene), remove_node (queue_free a node). Use return_delta=true to get a spatial delta showing what changed as a result of the action.")]
+    #[tool(
+        description = "Manipulate game state for debugging. Actions and required parameters:\n- 'pause' — pause/unpause. Requires: paused (bool).\n- 'advance_frames' — step physics frames. Requires: frames (int).\n- 'advance_time' — step seconds. Requires: seconds (float).\n- 'teleport' — move node. Requires: node, position. Optional: rotation_deg.\n- 'set_property' — change property. Requires: node, property, value.\n- 'call_method' — call method. Requires: node, method. Optional: method_args.\n- 'emit_signal' — emit signal. Requires: node, signal. Optional: args.\n- 'spawn_node' — instantiate scene. Requires: scene_path, parent. Optional: name, position.\n- 'remove_node' — delete node. Requires: node.\nSet return_delta=true to get a spatial delta showing what changed."
+    )]
     pub async fn spatial_action(
         &self,
         Parameters(params): Parameters<SpatialActionParams>,
@@ -409,32 +439,32 @@ impl SpectatorServer {
                     && let Ok(raw_data) = serde_json::from_value::<
                         spectator_protocol::query::SnapshotResponse,
                     >(snap_data)
-                    {
-                        let current_snapshots: Vec<spectator_core::delta::EntitySnapshot> =
-                            raw_data
-                                .entities
-                                .iter()
-                                .map(snapshot::to_entity_snapshot)
-                                .collect();
+                {
+                    let current_snapshots: Vec<spectator_core::delta::EntitySnapshot> = raw_data
+                        .entities
+                        .iter()
+                        .map(snapshot::to_entity_snapshot)
+                        .collect();
 
-                        let mut s = self.state.lock().await;
-                        let delta_result =
-                            s.delta_engine.compute_delta(&current_snapshots, raw_data.frame);
-                        let triggers = s.watch_engine.evaluate(
-                            s.delta_engine.last_snapshot_map(),
-                            &current_snapshots,
-                            raw_data.frame,
-                        );
+                    let mut s = self.state.lock().await;
+                    let delta_result = s
+                        .delta_engine
+                        .compute_delta(&current_snapshots, raw_data.frame);
+                    let triggers = s.watch_engine.evaluate(
+                        s.delta_engine.last_snapshot_map(),
+                        &current_snapshots,
+                        raw_data.frame,
+                    );
 
-                        // Update baseline
-                        s.delta_engine
-                            .store_snapshot(raw_data.frame, current_snapshots);
+                    // Update baseline
+                    s.delta_engine
+                        .store_snapshot(raw_data.frame, current_snapshots);
 
-                        let delta_json = delta::build_delta_json(&delta_result, &triggers);
-                        if let serde_json::Value::Object(ref mut map) = response {
-                            map.insert("delta".into(), delta_json);
-                        }
+                    let delta_json = delta::build_delta_json(&delta_result, &triggers);
+                    if let serde_json::Value::Object(ref mut map) = response {
+                        map.insert("delta".into(), delta_json);
                     }
+                }
             } else {
                 // No baseline — can't compute delta
                 if let serde_json::Value::Object(ref mut map) = response {
@@ -451,13 +481,16 @@ impl SpectatorServer {
         }
 
         let result = finalize_response(&mut response, action_budget, config.token_hard_cap);
-        self.log_activity("action", &activity_summary, "spatial_action").await;
+        self.log_activity("action", &activity_summary, "spatial_action")
+            .await;
         result
     }
 
     /// Targeted spatial questions: nearest nodes, radius search, raycast line-of-sight,
     /// navigation path distance, or mutual relationship between two nodes.
-    #[tool(description = "Targeted spatial questions. Query types: 'nearest' (K nearest nodes to a point/node, requires prior spatial_snapshot), 'radius' (all nodes within radius, requires prior spatial_snapshot), 'raycast' (line-of-sight check between two points/nodes), 'path_distance' (navmesh distance), 'relationship' (mutual spatial relationship between two nodes), 'area' (alias for radius).")]
+    #[tool(
+        description = "Targeted spatial questions. Query types and required parameters:\n- 'nearest' — K nearest nodes. Requires: from. Optional: k (default 5), groups, class_filter. Needs prior spatial_snapshot.\n- 'radius' — nodes within distance. Requires: from. Optional: radius (default 20), groups, class_filter. Needs prior spatial_snapshot.\n- 'area' — alias for radius.\n- 'raycast' — line-of-sight check. Requires: from, to.\n- 'path_distance' — navmesh distance. Requires: from, to.\n- 'relationship' — mutual spatial info. Requires: from, to.\n'from' and 'to' accept node path (string) or position array [x,y,z]."
+    )]
     pub async fn spatial_query(
         &self,
         Parameters(params): Parameters<SpatialQueryParams>,
@@ -470,19 +503,24 @@ impl SpectatorServer {
 
     /// See what changed since the last query. Returns moved entities, state
     /// changes, new/removed nodes, emitted signals, and watch triggers.
-    #[tool(description = "See what changed since the last query. Returns moved entities, state changes, new/removed nodes, and watch triggers. Use after spatial_snapshot or spatial_action to see effects.")]
+    #[tool(
+        description = "See what changed since the last query. Returns moved entities, state changes, new/removed nodes, and watch triggers. Use after spatial_snapshot or spatial_action to see effects."
+    )]
     pub async fn spatial_delta(
         &self,
         Parameters(params): Parameters<SpatialDeltaParams>,
     ) -> Result<String, McpError> {
         let result = delta::handle_spatial_delta(params, &self.state).await;
-        self.log_activity("query", &crate::activity::delta_summary(), "spatial_delta").await;
+        self.log_activity("query", &crate::activity::delta_summary(), "spatial_delta")
+            .await;
         result
     }
 
     /// Subscribe to changes on nodes or groups with optional conditions.
     /// Watch triggers appear in spatial_delta responses.
-    #[tool(description = "Subscribe to changes on nodes or groups. Actions: 'add' (subscribe with optional conditions like health < 20), 'remove' (by watch_id), 'list' (show active watches), 'clear' (remove all). Watch triggers appear in spatial_delta responses under 'watch_triggers'.")]
+    #[tool(
+        description = "Subscribe to changes on nodes or groups. Actions:\n- 'add' — subscribe. Requires: watch.node (path or \"group:name\"). Optional: watch.conditions (array of {property, operator, value}; operators: lt, gt, eq, changed), watch.track (array: position, state, signals, physics, all).\n- 'remove' — unsubscribe. Requires: watch_id.\n- 'list' — show active watches.\n- 'clear' — remove all watches.\nWatch triggers appear in spatial_delta responses under 'watch_triggers'."
+    )]
     pub async fn spatial_watch(
         &self,
         Parameters(params): Parameters<SpatialWatchParams>,
@@ -503,14 +541,17 @@ impl SpectatorServer {
     /// Configure tracking behavior — static patterns, state properties,
     /// clustering, bearing format, and token limits. Changes apply for the
     /// current session. Call with no parameters to see current config.
-    #[tool(description = "Configure tracking behavior. Set static_patterns (glob patterns for static nodes like [\"walls/*\"]), state_properties (per-group/class property tracking like {\"enemies\": [\"health\"]}), cluster_by (group/class/proximity/none), bearing_format (cardinal/degrees/both), expose_internals (include non-exported vars), poll_interval (collection frequency), token_hard_cap (max tokens per response). Changes apply for the current session.")]
+    #[tool(
+        description = "Configure tracking behavior. Set static_patterns (glob patterns for static nodes like [\"walls/*\"]), state_properties (per-group/class property tracking like {\"enemies\": [\"health\"]}), cluster_by (group/class/proximity/none), bearing_format (cardinal/degrees/both), expose_internals (include non-exported vars), poll_interval (collection frequency), token_hard_cap (max tokens per response). Changes apply for the current session."
+    )]
     pub async fn spatial_config(
         &self,
         Parameters(params): Parameters<SpatialConfigParams>,
     ) -> Result<String, McpError> {
         let summary = crate::activity::config_summary(&params);
         let result = handle_spatial_config(params, &self.state).await;
-        self.log_activity("config", &summary, "spatial_config").await;
+        self.log_activity("config", &summary, "spatial_config")
+            .await;
         result
     }
 
@@ -519,7 +560,9 @@ impl SpectatorServer {
     /// Analyze saved clips with 'snapshot_at', 'query_range', 'diff_frames', 'find_event'.
     /// Manage with 'list', 'delete', 'markers'. Check dashcam buffer with 'status'.
     /// Analysis defaults to the most recent clip if clip_id is omitted.
-    #[tool(description = "Capture and analyze gameplay clips. Clips are saved automatically when you mark a moment with 'add_marker'. Use 'save' to capture the buffer immediately. Analyze saved clips with 'snapshot_at' (spatial state at frame/time, requires at_frame or at_time_ms), 'query_range' (search frame range with condition, requires node + from_frame + to_frame + condition), 'diff_frames' (compare two frames, requires frame_a + frame_b), 'find_event' (search events by type, requires event_type). Manage with 'list', 'delete', 'markers'. Check dashcam buffer with 'status'. Analysis defaults to the most recent clip if clip_id is omitted.")]
+    #[tool(
+        description = "Capture and analyze gameplay clips. Actions:\n- 'add_marker' — mark a moment (triggers clip save). Optional: marker_label.\n- 'save' — force-save dashcam buffer. Optional: marker_label.\n- 'status' — dashcam state.\n- 'list' — saved clips with metadata.\n- 'delete' — remove clip. Requires: clip_id.\n- 'markers' — list markers in a clip.\n- 'snapshot_at' — state at a frame. Requires: at_frame or at_time_ms.\n- 'trajectory' — position/property timeseries across frame range. Requires: node, from_frame, to_frame. Optional: properties (default [\"position\"]), sample_interval.\n- 'query_range' — search frames matching a condition. Requires: node, from_frame, to_frame, condition. Condition example: {\"type\": \"proximity\", \"target\": \"walls/*\", \"threshold\": 0.5}. Types: moved, proximity, velocity_spike, property_change, state_transition, signal_emitted, entered_area, collision.\n- 'diff_frames' — compare two frames. Requires: frame_a, frame_b.\n- 'find_event' — search events. Requires: event_type.\nAnalysis defaults to most recent clip if clip_id omitted."
+    )]
     pub async fn clips(
         &self,
         Parameters(params): Parameters<clips::ClipsParams>,

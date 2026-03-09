@@ -11,9 +11,7 @@ use spectator_core::{
     delta::EntitySnapshot,
     types::{Perspective, Position3, RawEntityData, RecentSignal, RelativePosition, vec_to_array3},
 };
-use spectator_protocol::query::{
-    DetailLevel, EntityData, PerspectiveParam, SnapshotResponse,
-};
+use spectator_protocol::query::{DetailLevel, EntityData, PerspectiveParam, SnapshotResponse};
 use spectator_protocol::static_classes::{classify_static_category, is_static_class};
 
 /// Parameters for the spatial_snapshot MCP tool.
@@ -21,6 +19,9 @@ use spectator_protocol::static_classes::{classify_static_category, is_static_cla
 pub struct SpatialSnapshotParams {
     /// Perspective type: "camera", "node", or "point". Default: "camera".
     #[serde(default = "default_perspective")]
+    #[schemars(
+        description = "Where to look from: \"camera\" (active camera, default), \"node\" (requires focal_node), \"point\" (requires focal_point)"
+    )]
     pub perspective: String,
 
     /// Node path, required when perspective is "node".
@@ -35,6 +36,9 @@ pub struct SpatialSnapshotParams {
 
     /// Detail tier: "summary", "standard", or "full". Default: "standard".
     #[serde(default = "default_detail")]
+    #[schemars(
+        description = "Detail tier: \"summary\" (~200 tokens, clusters only), \"standard\" (~400-800 tokens, per-entity), \"full\" (~1000+ tokens, transforms/physics/children)"
+    )]
     pub detail: String,
 
     /// Filter by group membership.
@@ -54,9 +58,15 @@ pub struct SpatialSnapshotParams {
     pub expand: Option<String>,
 }
 
-fn default_perspective() -> String { "camera".to_string() }
-fn default_radius() -> f64 { 50.0 }
-fn default_detail() -> String { "standard".to_string() }
+fn default_perspective() -> String {
+    "camera".to_string()
+}
+fn default_radius() -> f64 {
+    50.0
+}
+fn default_detail() -> String {
+    "standard".to_string()
+}
 
 /// Processed entity for MCP output.
 #[derive(Debug, Serialize)]
@@ -120,23 +130,37 @@ pub fn to_entity_snapshot(e: &EntityData) -> EntitySnapshot {
 }
 
 pub fn parse_detail(s: &str) -> Result<DetailLevel, McpError> {
-    super::parse_enum_param(s, "detail level", &[
-        ("summary", DetailLevel::Summary),
-        ("standard", DetailLevel::Standard),
-        ("full", DetailLevel::Full),
-    ])
+    super::parse_enum_param(
+        s,
+        "detail level",
+        &[
+            ("summary", DetailLevel::Summary),
+            ("standard", DetailLevel::Standard),
+            ("full", DetailLevel::Full),
+        ],
+    )
 }
 
-pub fn build_perspective_param(params: &SpatialSnapshotParams) -> Result<PerspectiveParam, McpError> {
+pub fn build_perspective_param(
+    params: &SpatialSnapshotParams,
+) -> Result<PerspectiveParam, McpError> {
     match params.perspective.as_str() {
         "camera" => Ok(PerspectiveParam::Camera),
         "node" => {
-            let path = require_param!(params.focal_node.as_ref(), "focal_node is required when perspective is 'node'");
+            let path = require_param!(
+                params.focal_node.as_ref(),
+                "focal_node is required when perspective is 'node'"
+            );
             Ok(PerspectiveParam::Node { path: path.clone() })
         }
         "point" => {
-            let pos = require_param!(params.focal_point.as_ref(), "focal_point is required when perspective is 'point'");
-            Ok(PerspectiveParam::Point { position: pos.clone() })
+            let pos = require_param!(
+                params.focal_point.as_ref(),
+                "focal_point is required when perspective is 'point'"
+            );
+            Ok(PerspectiveParam::Point {
+                position: pos.clone(),
+            })
         }
         other => Err(McpError::invalid_params(
             format!("Invalid perspective '{other}'. Must be 'camera', 'node', or 'point'."),
@@ -158,7 +182,12 @@ pub fn build_perspective(data: &spectator_protocol::query::PerspectiveData) -> P
         let angle_deg = forward[1].atan2(forward[0]).to_degrees();
         let facing_deg = ((angle_deg % 360.0) + 360.0) % 360.0;
         let facing = bearing::to_cardinal(facing_deg);
-        Perspective { position, forward, facing, facing_deg }
+        Perspective {
+            position,
+            forward,
+            facing,
+            facing_deg,
+        }
     } else {
         let position: Position3 = [
             data.position.first().copied().unwrap_or(0.0),
@@ -171,7 +200,12 @@ pub fn build_perspective(data: &spectator_protocol::query::PerspectiveData) -> P
             data.forward.get(2).copied().unwrap_or(-1.0),
         ];
         let (facing, facing_deg) = bearing::compass_bearing(forward);
-        Perspective { position, forward, facing, facing_deg }
+        Perspective {
+            position,
+            forward,
+            facing,
+            facing_deg,
+        }
     }
 }
 
@@ -194,7 +228,12 @@ fn format_rel(rel: &RelativePosition, format: BearingFormat) -> serde_json::Valu
     }
 }
 
-pub fn build_output_entity(entity: &EntityData, rel: &RelativePosition, full: bool, config: &SessionConfig) -> OutputEntity {
+pub fn build_output_entity(
+    entity: &EntityData,
+    rel: &RelativePosition,
+    full: bool,
+    config: &SessionConfig,
+) -> OutputEntity {
     let velocity = if entity.velocity.iter().any(|v| v.abs() > 0.01) {
         Some(entity.velocity.clone())
     } else {
@@ -219,8 +258,16 @@ pub fn build_output_entity(entity: &EntityData, rel: &RelativePosition, full: bo
         class: entity.class.clone(),
         relative: format_rel(rel, config.bearing_format),
         global_position: entity.position.clone(),
-        rotation_y_deg: if is_2d { None } else { entity.rotation_deg.get(1).copied() },
-        rotation_deg: if is_2d { entity.rotation_deg.first().copied() } else { None },
+        rotation_y_deg: if is_2d {
+            None
+        } else {
+            entity.rotation_deg.get(1).copied()
+        },
+        rotation_deg: if is_2d {
+            entity.rotation_deg.first().copied()
+        } else {
+            None
+        },
         velocity,
         groups: entity.groups.clone(),
         state,
@@ -259,7 +306,11 @@ pub fn build_output_entity(entity: &EntityData, rel: &RelativePosition, full: bo
         } else {
             None
         },
-        all_exported_vars: if full { entity.all_exported_vars.clone() } else { None },
+        all_exported_vars: if full {
+            entity.all_exported_vars.clone()
+        } else {
+            None
+        },
     }
 }
 
@@ -284,7 +335,10 @@ fn to_raw_entity(e: &EntityData, config: &SessionConfig) -> RawEntityData {
         signals_recent: e
             .signals_recent
             .iter()
-            .map(|s| RecentSignal { signal: s.signal.clone(), frame: s.frame })
+            .map(|s| RecentSignal {
+                signal: s.signal.clone(),
+                frame: s.frame,
+            })
             .collect(),
         signals_connected: e.signals_connected.clone(),
         physics: None,
@@ -384,9 +438,7 @@ fn build_snapshot_body(
             } else {
                 static_count += 1;
                 let cat = classify_static_category(&entity.class).to_string();
-                let counter = static_categories
-                    .entry(cat)
-                    .or_insert(serde_json::json!(0));
+                let counter = static_categories.entry(cat).or_insert(serde_json::json!(0));
                 if let Some(n) = counter.as_u64() {
                     *counter = serde_json::json!(n + 1);
                 }
@@ -415,7 +467,8 @@ fn build_snapshot_body(
             if full {
                 resp["static_nodes"] = serde_json::json!(static_nodes);
             } else {
-                resp["static_summary"] = serde_json::json!({ "count": static_count, "categories": static_categories });
+                resp["static_summary"] =
+                    serde_json::json!({ "count": static_count, "categories": static_categories });
             }
             return resp;
         }
@@ -432,7 +485,8 @@ fn build_snapshot_body(
     if full {
         resp["static_nodes"] = serde_json::json!(static_nodes);
     } else {
-        resp["static_summary"] = serde_json::json!({ "count": static_count, "categories": static_categories });
+        resp["static_summary"] =
+            serde_json::json!({ "count": static_count, "categories": static_categories });
     }
     resp
 }
@@ -445,7 +499,15 @@ pub fn build_standard_response(
     hard_cap: u32,
     config: &SessionConfig,
 ) -> serde_json::Value {
-    build_snapshot_body(raw, entities, perspective, budget_limit, hard_cap, config, SnapshotTier::Standard)
+    build_snapshot_body(
+        raw,
+        entities,
+        perspective,
+        budget_limit,
+        hard_cap,
+        config,
+        SnapshotTier::Standard,
+    )
 }
 
 pub fn build_full_response(
@@ -456,7 +518,15 @@ pub fn build_full_response(
     hard_cap: u32,
     config: &SessionConfig,
 ) -> serde_json::Value {
-    build_snapshot_body(raw, entities, perspective, budget_limit, hard_cap, config, SnapshotTier::Full)
+    build_snapshot_body(
+        raw,
+        entities,
+        perspective,
+        budget_limit,
+        hard_cap,
+        config,
+        SnapshotTier::Full,
+    )
 }
 
 pub fn build_expand_response(
@@ -504,4 +574,3 @@ pub fn build_expand_response(
         "budget": enforcer.report(),
     }))
 }
-

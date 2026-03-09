@@ -33,7 +33,10 @@ async fn journey_explore_scene() {
     // Step 1: Verify handshake
     {
         let state = h.state.lock().await;
-        assert!(state.connected, "Session should be connected after handshake");
+        assert!(
+            state.connected,
+            "Session should be connected after handshake"
+        );
         let info = state
             .handshake_info
             .as_ref()
@@ -46,11 +49,12 @@ async fn journey_explore_scene() {
     }
 
     // Step 2: scene_tree — roots returns top-level nodes only
-    let tree = h
-        .expect(2, "scene_tree", json!({"action": "roots"}))
-        .await;
+    let tree = h.expect(2, "scene_tree", json!({"action": "roots"})).await;
     assert!(
-        tree["roots"].as_array().map(|a| !a.is_empty()).unwrap_or(false),
+        tree["roots"]
+            .as_array()
+            .map(|a| !a.is_empty())
+            .unwrap_or(false),
         "Scene tree roots should return at least one node, got: {tree}"
     );
 
@@ -79,7 +83,12 @@ async fn journey_explore_scene() {
     // Find Player and check position ~(0, 0, 0)
     let player = entities
         .iter()
-        .find(|e| e["path"].as_str().map(|p| p.contains("Player")).unwrap_or(false))
+        .find(|e| {
+            e["path"]
+                .as_str()
+                .map(|p| p.contains("Player"))
+                .unwrap_or(false)
+        })
         .expect("Player should be in snapshot");
     let player_pos = player["global_position"]
         .as_array()
@@ -93,7 +102,12 @@ async fn journey_explore_scene() {
     // Find Scout and check position ~(5, 0, -3)
     let scout = entities
         .iter()
-        .find(|e| e["path"].as_str().map(|p| p.contains("Scout")).unwrap_or(false))
+        .find(|e| {
+            e["path"]
+                .as_str()
+                .map(|p| p.contains("Scout"))
+                .unwrap_or(false)
+        })
         .expect("Scout should be in snapshot");
     let scout_pos = scout["global_position"]
         .as_array()
@@ -109,11 +123,7 @@ async fn journey_explore_scene() {
 
     // Step 5: spatial_inspect Scout
     let inspect = h
-        .expect(
-            5,
-            "spatial_inspect",
-            json!({"node": "Enemies/Scout"}),
-        )
+        .expect(5, "spatial_inspect", json!({"node": "Enemies/Scout"}))
         .await;
     // Should have class info
     assert!(
@@ -154,10 +164,7 @@ async fn journey_explore_scene() {
     // Distances should be geometrically plausible
     for r in results {
         let dist = r["distance"].as_f64().unwrap_or(-1.0);
-        assert!(
-            dist >= 0.0,
-            "Distance should be non-negative, got {dist}"
-        );
+        assert!(dist >= 0.0, "Distance should be non-negative, got {dist}");
     }
 
     // Step 7: resource inspection — Scout has a CapsuleShape3D collision shape
@@ -182,7 +189,10 @@ async fn journey_explore_scene() {
     let shapes = resources["resources"]["collision_shapes"]
         .as_array()
         .expect("collision_shapes should be an array");
-    assert!(!shapes.is_empty(), "Scout should have at least one collision shape");
+    assert!(
+        !shapes.is_empty(),
+        "Scout should have at least one collision shape"
+    );
 
     let shape = &shapes[0];
     assert_eq!(
@@ -192,7 +202,9 @@ async fn journey_explore_scene() {
     );
 
     // Dimensions should match the scene file (radius=0.4, height=1.8)
-    let dims = shape["dimensions"].as_object().expect("dimensions map missing");
+    let dims = shape["dimensions"]
+        .as_object()
+        .expect("dimensions map missing");
     let radius = dims["radius"].as_f64().unwrap_or(0.0);
     let height = dims["height"].as_f64().unwrap_or(0.0);
     assert!(
@@ -206,11 +218,7 @@ async fn journey_explore_scene() {
 
     // resources should NOT appear in a default inspect (no include specified)
     let default_inspect = h
-        .expect(
-            7,
-            "spatial_inspect",
-            json!({ "node": "Enemies/Scout" }),
-        )
+        .expect(7, "spatial_inspect", json!({ "node": "Enemies/Scout" }))
         .await;
     assert!(
         default_inspect.get("resources").is_none(),
@@ -248,9 +256,18 @@ async fn journey_debug_spatial_bug() {
     let entity_paths: Vec<&str> = entities.iter().filter_map(|e| e["path"].as_str()).collect();
     let scout_before = entities
         .iter()
-        .find(|e| e["path"].as_str().map(|p| p.contains("Scout")).unwrap_or(false))
-        .expect(&format!("Scout should be in baseline snapshot, found: {entity_paths:?}"));
-    let before_pos = scout_before["global_position"].as_array().expect("position array");
+        .find(|e| {
+            e["path"]
+                .as_str()
+                .map(|p| p.contains("Scout"))
+                .unwrap_or(false)
+        })
+        .expect(&format!(
+            "Scout should be in baseline snapshot, found: {entity_paths:?}"
+        ));
+    let before_pos = scout_before["global_position"]
+        .as_array()
+        .expect("position array");
     let before_x = before_pos[0].as_f64().unwrap_or(0.0);
 
     // Step 2: teleport Scout to origin
@@ -277,22 +294,25 @@ async fn journey_debug_spatial_bug() {
     // Scout moved from ~(5,0,-3) to ~(0,0,0), so it should appear in "moved".
     // Do NOT call spatial_snapshot before delta: that would update the baseline,
     // making the delta compare post-teleport vs post-teleport (no change detected).
-    let delta = h
-        .expect(4, "spatial_delta", json!({}))
-        .await;
+    let delta = h.expect(4, "spatial_delta", json!({})).await;
     let empty_arr = vec![];
     let moved = delta["moved"].as_array().unwrap_or(&empty_arr);
-    let scout_moved = moved
-        .iter()
-        .any(|e| e["path"].as_str().map(|p| p.contains("Scout")).unwrap_or(false));
+    let scout_moved = moved.iter().any(|e| {
+        e["path"]
+            .as_str()
+            .map(|p| p.contains("Scout"))
+            .unwrap_or(false)
+    });
     assert!(
         scout_moved,
         "Scout should appear in delta.moved after teleport. Full delta: {delta}"
     );
-    if let Some(scout_delta) = moved
-        .iter()
-        .find(|e| e["path"].as_str().map(|p| p.contains("Scout")).unwrap_or(false))
-    {
+    if let Some(scout_delta) = moved.iter().find(|e| {
+        e["path"]
+            .as_str()
+            .map(|p| p.contains("Scout"))
+            .unwrap_or(false)
+    }) {
         // Compute displacement from delta_pos: sqrt(dx^2 + dy^2 + dz^2)
         let dp = scout_delta["delta_pos"].as_array();
         if let Some(dp) = dp {
@@ -311,12 +331,21 @@ async fn journey_debug_spatial_bug() {
     let after_snapshot = h
         .expect(5, "spatial_snapshot", json!({"detail": "standard"}))
         .await;
-    let after_entities = after_snapshot["entities"].as_array().expect("Expected entities");
+    let after_entities = after_snapshot["entities"]
+        .as_array()
+        .expect("Expected entities");
     let scout_after = after_entities
         .iter()
-        .find(|e| e["path"].as_str().map(|p| p.contains("Scout")).unwrap_or(false))
+        .find(|e| {
+            e["path"]
+                .as_str()
+                .map(|p| p.contains("Scout"))
+                .unwrap_or(false)
+        })
         .expect("Scout should still be in post-teleport snapshot");
-    let after_pos = scout_after["global_position"].as_array().expect("position array");
+    let after_pos = scout_after["global_position"]
+        .as_array()
+        .expect("position array");
     let after_x = after_pos[0].as_f64().unwrap_or(999.0);
     assert!(
         (after_x - before_x).abs() > 2.0,
@@ -362,14 +391,15 @@ async fn journey_debug_spatial_bug() {
     h.wait_frames(2).await;
 
     // Step 9: delta — Scout should appear in state_changed (health 80→25)
-    let delta2 = h
-        .expect(9, "spatial_delta", json!({}))
-        .await;
+    let delta2 = h.expect(9, "spatial_delta", json!({})).await;
     let empty_arr2 = vec![];
     let state_changed = delta2["state_changed"].as_array().unwrap_or(&empty_arr2);
-    let scout_changed = state_changed
-        .iter()
-        .any(|e| e["path"].as_str().map(|p| p.contains("Scout")).unwrap_or(false));
+    let scout_changed = state_changed.iter().any(|e| {
+        e["path"]
+            .as_str()
+            .map(|p| p.contains("Scout"))
+            .unwrap_or(false)
+    });
     assert!(
         scout_changed,
         "Scout should appear in delta.state_changed after set_property. Full delta: {delta2}"
@@ -416,15 +446,15 @@ async fn journey_dashcam_agent_workflow() {
         .expect("Failed to start Godot 3D scene");
 
     // Step 1: verify dashcam is actively buffering on startup
-    let status = h
-        .expect(1, "clips", json!({ "action": "status" }))
-        .await;
+    let status = h.expect(1, "clips", json!({ "action": "status" })).await;
     assert_eq!(
-        status["dashcam_enabled"], json!(true),
+        status["dashcam_enabled"],
+        json!(true),
         "Dashcam should be enabled by default"
     );
     assert_eq!(
-        status["state"], json!("buffering"),
+        status["state"],
+        json!("buffering"),
         "Dashcam should start in buffering state"
     );
     assert!(
@@ -483,11 +513,10 @@ async fn journey_dashcam_agent_workflow() {
     );
 
     // Step 7: dashcam should now be in post_capture state
-    let status_post = h
-        .expect(7, "clips", json!({ "action": "status" }))
-        .await;
+    let status_post = h.expect(7, "clips", json!({ "action": "status" })).await;
     assert_eq!(
-        status_post["state"], json!("post_capture"),
+        status_post["state"],
+        json!("post_capture"),
         "Dashcam should be in post_capture after marker trigger. Got: {status_post}"
     );
 
@@ -515,18 +544,15 @@ async fn journey_dashcam_agent_workflow() {
     );
 
     // Step 9: dashcam should be back to buffering after save
-    let status_after = h
-        .expect(9, "clips", json!({ "action": "status" }))
-        .await;
+    let status_after = h.expect(9, "clips", json!({ "action": "status" })).await;
     assert_eq!(
-        status_after["state"], json!("buffering"),
+        status_after["state"],
+        json!("buffering"),
         "Dashcam should return to buffering after clip save. Got: {status_after}"
     );
 
     // Step 10: clip should appear in list
-    let list = h
-        .expect(10, "clips", json!({ "action": "list" }))
-        .await;
+    let list = h.expect(10, "clips", json!({ "action": "list" })).await;
     let clips = list["clips"]
         .as_array()
         .expect("list should return clips array");
@@ -543,9 +569,7 @@ async fn journey_dashcam_agent_workflow() {
     let our_clip = clips
         .iter()
         .find(|r| r["clip_id"].as_str() == Some(clip_id))
-        .unwrap_or_else(|| {
-            panic!("Clip {clip_id} should be in list. Clips: {clips:?}")
-        });
+        .unwrap_or_else(|| panic!("Clip {clip_id} should be in list. Clips: {clips:?}"));
     assert_eq!(our_clip["dashcam"], json!(true));
 }
 
@@ -580,9 +604,7 @@ async fn journey_dashcam_clip_lifecycle() {
         .to_string();
 
     // Step 3: verify clip exists in list
-    let list = h
-        .expect(3, "clips", json!({ "action": "list" }))
-        .await;
+    let list = h.expect(3, "clips", json!({ "action": "list" })).await;
     let found = list["clips"]
         .as_array()
         .unwrap()
@@ -604,9 +626,7 @@ async fn journey_dashcam_clip_lifecycle() {
     );
 
     // Step 5: verify clip is gone
-    let list2 = h
-        .expect(5, "clips", json!({ "action": "list" }))
-        .await;
+    let list2 = h.expect(5, "clips", json!({ "action": "list" })).await;
     let still_found = list2["clips"]
         .as_array()
         .unwrap()
@@ -653,7 +673,11 @@ async fn journey_2d_scene() {
 
     // Step 2: 2D snapshot — 2D pixel coords need a larger radius (Scout2D at ~224px from origin)
     let snapshot = h
-        .expect(2, "spatial_snapshot", json!({"detail": "standard", "radius": 500.0}))
+        .expect(
+            2,
+            "spatial_snapshot",
+            json!({"detail": "standard", "radius": 500.0}),
+        )
         .await;
     let entities = snapshot["entities"]
         .as_array()
@@ -681,7 +705,9 @@ async fn journey_2d_scene() {
         .iter()
         .find(|e| e["path"].as_str().map(|p| p == "Player").unwrap_or(false))
         .expect("Player should be in 2D snapshot");
-    let player_pos = player["global_position"].as_array().expect("Player should have abs position");
+    let player_pos = player["global_position"]
+        .as_array()
+        .expect("Player should have abs position");
     assert!(
         player_pos[0].as_f64().unwrap_or(999.0).abs() < 1.0,
         "Player X should be ~0 in 2D scene, got {:?}",
@@ -759,9 +785,16 @@ async fn journey_2d_scene() {
     let after_entities = after["entities"].as_array().expect("entities");
     let player_after = after_entities
         .iter()
-        .find(|e| e["path"].as_str().map(|p| p.contains("Player")).unwrap_or(false))
+        .find(|e| {
+            e["path"]
+                .as_str()
+                .map(|p| p.contains("Player"))
+                .unwrap_or(false)
+        })
         .expect("Player should still be in post-teleport 2D snapshot");
-    let player_after_pos = player_after["global_position"].as_array().expect("position");
+    let player_after_pos = player_after["global_position"]
+        .as_array()
+        .expect("position");
     assert_eq!(
         player_after_pos.len(),
         2,

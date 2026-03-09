@@ -8,15 +8,17 @@ use spectator_core::{
     bearing::{self, perspective_from_forward, perspective_from_yaw},
     budget::resolve_budget,
     index::NearestResult,
-    types::{vec_to_array3, Perspective, Position3},
+    types::{Perspective, Position3, vec_to_array3},
 };
 use spectator_protocol::query::{
     NavPathResponse, QueryOrigin, RaycastResponse, ResolveNodeResponse, SpatialQueryRequest,
 };
 
-use crate::tcp::{get_config, query_addon, SessionState};
+use crate::tcp::{SessionState, get_config, query_addon};
 
-use super::{deserialize_response, finalize_response, query_and_deserialize, require_param, serialize_params};
+use super::{
+    deserialize_response, finalize_response, query_and_deserialize, require_param, serialize_params,
+};
 
 /// MCP parameters for the spatial_query tool.
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -69,10 +71,7 @@ pub fn parse_origin(value: &serde_json::Value) -> Result<QueryOrigin, McpError> 
                 .iter()
                 .map(|v| {
                     v.as_f64().ok_or_else(|| {
-                        McpError::invalid_params(
-                            "Position array must contain numbers",
-                            None,
-                        )
+                        McpError::invalid_params("Position array must contain numbers", None)
                     })
                 })
                 .collect();
@@ -194,7 +193,11 @@ pub async fn build_relationship_response(
         match query_addon(state, "spatial_query", serialize_params(&nav_req)?).await {
             Ok(data) => {
                 let nav: NavPathResponse = deserialize_response(data)?;
-                if nav.traversable { Some(nav.nav_distance) } else { None }
+                if nav.traversable {
+                    Some(nav.nav_distance)
+                } else {
+                    None
+                }
             }
             Err(_) => None,
         }
@@ -216,9 +219,10 @@ pub async fn build_relationship_response(
         };
     }
     if !raycast.clear
-        && let Some(ref occ) = raycast.blocked_by {
-            result["occluder"] = serde_json::json!(occ);
-        }
+        && let Some(ref occ) = raycast.blocked_by
+    {
+        result["occluder"] = serde_json::json!(occ);
+    }
     if let Some(nav) = nav_distance {
         result["nav_distance"] = serde_json::json!((nav * 10.0).round() / 10.0);
     }
@@ -241,18 +245,15 @@ pub async fn handle_spatial_query(
     let from_origin = parse_origin(&params.from)?;
     let groups = params.groups.as_deref().unwrap_or(&[]);
     let class_filter = params.class_filter.as_deref().unwrap_or(&[]);
-    let budget_limit = resolve_budget(
-        params.token_budget,
-        500,
-        config.token_hard_cap,
-    );
+    let budget_limit = resolve_budget(params.token_budget, 500, config.token_hard_cap);
 
     let mut response = match params.query_type.as_str() {
         "nearest" => {
             let (from_pos, from_fwd) = resolve_origin(&from_origin, state).await?;
             let results = {
                 let s = state.lock().await;
-                s.spatial_index.nearest(from_pos, params.k, groups, class_filter)
+                s.spatial_index
+                    .nearest(from_pos, params.k, groups, class_filter)
             };
             build_nearest_response(&results, from_pos, from_fwd)
         }
@@ -283,14 +284,16 @@ pub async fn handle_spatial_query(
             })
         }
         "path_distance" => {
-            let to_val = require_param!(params.to.as_ref(), "'to' is required for path_distance query");
+            let to_val = require_param!(
+                params.to.as_ref(),
+                "'to' is required for path_distance query"
+            );
             let to_origin = parse_origin(to_val)?;
             let req = SpatialQueryRequest::PathDistance {
                 from: from_origin,
                 to: to_origin,
             };
-            let nav: NavPathResponse =
-                query_and_deserialize(state, "spatial_query", &req).await?;
+            let nav: NavPathResponse = query_and_deserialize(state, "spatial_query", &req).await?;
             serde_json::json!({
                 "query": "path_distance",
                 "from": params.from,
@@ -299,7 +302,10 @@ pub async fn handle_spatial_query(
             })
         }
         "relationship" => {
-            let to_val = require_param!(params.to.as_ref(), "'to' is required for relationship query");
+            let to_val = require_param!(
+                params.to.as_ref(),
+                "'to' is required for relationship query"
+            );
             let to_origin = parse_origin(to_val)?;
             let (from_pos, from_fwd) = resolve_origin(&from_origin, state).await?;
             let (to_pos, to_fwd) = resolve_origin(&to_origin, state).await?;
@@ -327,9 +333,10 @@ pub async fn handle_spatial_query(
 
     // Add "from" field if not already present
     if let serde_json::Value::Object(ref mut map) = response
-        && !map.contains_key("from") {
-            map.insert("from".into(), params.from.clone());
-        }
+        && !map.contains_key("from")
+    {
+        map.insert("from".into(), params.from.clone());
+    }
 
     finalize_response(&mut response, budget_limit, config.token_hard_cap)
 }

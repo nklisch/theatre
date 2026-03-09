@@ -62,14 +62,16 @@ pub fn read_frame(db: &Connection, frame: u64) -> Result<Vec<FrameEntityData>, M
             |row| row.get(0),
         )
         .map_err(|e| match e {
-            rusqlite::Error::QueryReturnedNoRows => McpError::invalid_params(
-                format!("Frame {frame} not found in recording"),
-                None,
-            ),
+            rusqlite::Error::QueryReturnedNoRows => {
+                McpError::invalid_params(format!("Frame {frame} not found in recording"), None)
+            }
             other => McpError::internal_error(format!("SQLite error: {other}"), None),
         })?;
     rmp_serde::from_slice(&data).map_err(|e| {
-        McpError::internal_error(format!("MessagePack decode error at frame {frame}: {e}"), None)
+        McpError::internal_error(
+            format!("MessagePack decode error at frame {frame}: {e}"),
+            None,
+        )
     })
 }
 
@@ -85,9 +87,8 @@ pub fn read_frame_at_time(
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .map_err(|e| McpError::internal_error(format!("SQLite error: {e}"), None))?;
-    let entities = rmp_serde::from_slice(&data).map_err(|e| {
-        McpError::internal_error(format!("MessagePack decode error: {e}"), None)
-    })?;
+    let entities = rmp_serde::from_slice(&data)
+        .map_err(|e| McpError::internal_error(format!("MessagePack decode error: {e}"), None))?;
     Ok((frame, entities))
 }
 
@@ -173,15 +174,17 @@ impl ClipSession {
         let clip_id = match clip_id {
             Some(id) => id.to_string(),
             None => most_recent_clip(&storage_path).ok_or_else(|| {
-                McpError::invalid_params(
-                    "No clip_id specified and no clips found",
-                    None,
-                )
+                McpError::invalid_params("No clip_id specified and no clips found", None)
             })?,
         };
         let db = open_clip_db(&storage_path, &clip_id)?;
         let meta = read_recording_meta(&db)?;
-        Ok(Self { db, meta, storage_path, clip_id })
+        Ok(Self {
+            db,
+            meta,
+            storage_path,
+            clip_id,
+        })
     }
 
     pub fn finalize(
@@ -399,8 +402,8 @@ pub fn query_range(
     let mut deepest_frame: Option<u64> = None;
 
     for row_result in rows {
-        let (frame, time_ms, data) = row_result
-            .map_err(|e| McpError::internal_error(format!("SQLite error: {e}"), None))?;
+        let (frame, time_ms, data) =
+            row_result.map_err(|e| McpError::internal_error(format!("SQLite error: {e}"), None))?;
         total_frames += 1;
 
         let entities: Vec<FrameEntityData> = rmp_serde::from_slice(&data).map_err(|e| {
@@ -410,19 +413,26 @@ pub fn query_range(
             )
         })?;
 
-        if let Some(range_match) =
-            evaluate_condition(db, frame, time_ms, node, &entities, condition, &prev_entities)
-        {
+        if let Some(range_match) = evaluate_condition(
+            db,
+            frame,
+            time_ms,
+            node,
+            &entities,
+            condition,
+            &prev_entities,
+        )? {
             if condition.condition_type == "proximity"
-                && let Some(dist) = range_match.distance {
-                    if first_breach_frame.is_none() {
-                        first_breach_frame = Some(frame);
-                    }
-                    if deepest_value.is_none() || dist < deepest_value.unwrap() {
-                        deepest_value = Some(dist);
-                        deepest_frame = Some(frame);
-                    }
+                && let Some(dist) = range_match.distance
+            {
+                if first_breach_frame.is_none() {
+                    first_breach_frame = Some(frame);
                 }
+                if deepest_value.is_none() || dist < deepest_value.unwrap() {
+                    deepest_value = Some(dist);
+                    deepest_frame = Some(frame);
+                }
+            }
             matches.push(range_match);
         }
 
@@ -485,22 +495,94 @@ fn evaluate_condition(
     entities: &[FrameEntityData],
     condition: &QueryCondition,
     prev_entities: &Option<Vec<FrameEntityData>>,
-) -> Option<RangeMatch> {
+) -> Result<Option<RangeMatch>, McpError> {
     match condition.condition_type.as_str() {
-        "proximity" => evaluate_proximity(frame, time_ms, node, entities, condition),
-        "velocity_spike" => {
-            evaluate_velocity_spike(frame, time_ms, node, entities, prev_entities, condition)
-        }
-        "property_change" => {
-            evaluate_property_change(frame, time_ms, node, entities, prev_entities, condition)
-        }
-        "state_transition" => {
-            evaluate_property_change(frame, time_ms, node, entities, prev_entities, condition)
-        }
-        "signal_emitted" => evaluate_signal_emitted(db, frame, time_ms, node, condition),
-        "entered_area" => evaluate_entered_area(db, frame, time_ms, node),
-        "collision" => evaluate_collision(db, frame, time_ms, node),
-        _ => None,
+        "proximity" => Ok(evaluate_proximity(
+            frame, time_ms, node, entities, condition,
+        )),
+        "velocity_spike" => Ok(evaluate_velocity_spike(
+            frame,
+            time_ms,
+            node,
+            entities,
+            prev_entities,
+            condition,
+        )),
+        "property_change" => Ok(evaluate_property_change(
+            frame,
+            time_ms,
+            node,
+            entities,
+            prev_entities,
+            condition,
+        )),
+        "state_transition" => Ok(evaluate_property_change(
+            frame,
+            time_ms,
+            node,
+            entities,
+            prev_entities,
+            condition,
+        )),
+        "signal_emitted" => Ok(evaluate_signal_emitted(db, frame, time_ms, node, condition)),
+        "entered_area" => Ok(evaluate_entered_area(db, frame, time_ms, node)),
+        "collision" => Ok(evaluate_collision(db, frame, time_ms, node)),
+        "moved" => Ok(evaluate_moved(
+            frame,
+            time_ms,
+            node,
+            entities,
+            prev_entities,
+            condition,
+        )),
+        other => Err(McpError::invalid_params(
+            format!(
+                "Unknown condition type '{}'. Valid types: moved, proximity, velocity_spike, \
+                 property_change, state_transition, signal_emitted, entered_area, collision",
+                other
+            ),
+            None,
+        )),
+    }
+}
+
+fn evaluate_moved(
+    frame: u64,
+    time_ms: u64,
+    node: &str,
+    entities: &[FrameEntityData],
+    prev_entities: &Option<Vec<FrameEntityData>>,
+    condition: &QueryCondition,
+) -> Option<RangeMatch> {
+    let prev = prev_entities.as_ref()?;
+    let threshold = condition.threshold.unwrap_or(0.01);
+
+    let cur = entities.iter().find(|e| e.path == node)?;
+    let old = prev.iter().find(|e| e.path == node)?;
+
+    let dx: f64 = cur
+        .position
+        .iter()
+        .zip(old.position.iter())
+        .map(|(a, b)| (a - b).powi(2))
+        .sum::<f64>()
+        .sqrt();
+
+    if dx >= threshold {
+        Some(RangeMatch {
+            frame,
+            time_ms,
+            distance: Some(dx),
+            node_pos: Some(cur.position.clone()),
+            node_velocity: if cur.velocity.iter().any(|v| *v != 0.0) {
+                Some(cur.velocity.clone())
+            } else {
+                None
+            },
+            note: None,
+        })
+    } else {
+        None
     }
 }
 
@@ -511,8 +593,9 @@ fn evaluate_signal_emitted(
     node: &str,
     condition: &QueryCondition,
 ) -> Option<RangeMatch> {
-    let mut sql =
-        String::from("SELECT 1 FROM events WHERE event_type = 'signal' AND frame = ?1 AND node_path = ?2");
+    let mut sql = String::from(
+        "SELECT 1 FROM events WHERE event_type = 'signal' AND frame = ?1 AND node_path = ?2",
+    );
     let mut params: Vec<Box<dyn rusqlite::types::ToSql>> =
         vec![Box::new(frame as i64), Box::new(node.to_string())];
 
@@ -572,12 +655,7 @@ fn evaluate_entered_area(
     }
 }
 
-fn evaluate_collision(
-    db: &Connection,
-    frame: u64,
-    time_ms: u64,
-    node: &str,
-) -> Option<RangeMatch> {
+fn evaluate_collision(db: &Connection, frame: u64, time_ms: u64, node: &str) -> Option<RangeMatch> {
     let found: bool = db
         .query_row(
             "SELECT 1 FROM events WHERE event_type = 'collision' AND frame = ?1 AND node_path = ?2 LIMIT 1",
@@ -654,7 +732,12 @@ fn evaluate_velocity_spike(
     let prev_entity = prev.iter().find(|e| e.path == node)?;
 
     let curr_speed: f64 = curr.velocity.iter().map(|v| v * v).sum::<f64>().sqrt();
-    let prev_speed: f64 = prev_entity.velocity.iter().map(|v| v * v).sum::<f64>().sqrt();
+    let prev_speed: f64 = prev_entity
+        .velocity
+        .iter()
+        .map(|v| v * v)
+        .sum::<f64>()
+        .sqrt();
     let delta_speed = (curr_speed - prev_speed).abs();
 
     if delta_speed >= threshold {
@@ -750,6 +833,130 @@ fn insert_system_marker(
         "INSERT INTO markers (frame, timestamp_ms, source, label) VALUES (?1, ?2, 'system', ?3)",
         rusqlite::params![frame as i64, timestamp_ms as i64, label],
     );
+}
+
+// ---------------------------------------------------------------------------
+// trajectory
+// ---------------------------------------------------------------------------
+
+/// Sample a node's properties at regular intervals across a frame range.
+/// Returns a compact timeseries suitable for understanding motion or state
+/// evolution without per-frame tool calls.
+pub fn trajectory(
+    db: &Connection,
+    node: &str,
+    from_frame: u64,
+    to_frame: u64,
+    properties: &[String],
+    sample_interval: u64,
+    budget_limit: u32,
+) -> Result<serde_json::Value, McpError> {
+    let interval = sample_interval.max(1);
+
+    let total_frames: u64 = db
+        .query_row(
+            "SELECT COUNT(*) FROM frames WHERE frame BETWEEN ?1 AND ?2",
+            rusqlite::params![from_frame, to_frame],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+
+    let props: Vec<String> = if properties.is_empty() {
+        vec!["position".to_string()]
+    } else {
+        properties.to_vec()
+    };
+
+    let mut stmt = db
+        .prepare(
+            "SELECT frame, timestamp_ms, data FROM frames \
+             WHERE frame BETWEEN ?1 AND ?2 ORDER BY frame",
+        )
+        .map_err(|e| McpError::internal_error(format!("SQLite error: {e}"), None))?;
+
+    let rows = stmt
+        .query_map(rusqlite::params![from_frame, to_frame], |row| {
+            Ok((
+                row.get::<_, u64>(0)?,
+                row.get::<_, u64>(1)?,
+                row.get::<_, Vec<u8>>(2)?,
+            ))
+        })
+        .map_err(|e| McpError::internal_error(format!("SQLite error: {e}"), None))?;
+
+    let mut samples: Vec<serde_json::Value> = Vec::new();
+    let mut budget_bytes: usize = 100; // overhead
+
+    for row_result in rows {
+        let (frame, time_ms, data) =
+            row_result.map_err(|e| McpError::internal_error(format!("SQLite error: {e}"), None))?;
+
+        // Sample every Nth frame relative to from_frame
+        if (frame - from_frame) % interval != 0 {
+            continue;
+        }
+
+        let entities: Vec<FrameEntityData> = rmp_serde::from_slice(&data).map_err(|e| {
+            McpError::internal_error(
+                format!("MessagePack decode error at frame {frame}: {e}"),
+                None,
+            )
+        })?;
+
+        let entity = match entities
+            .iter()
+            .find(|e| e.path == node || path_matches(&e.path, node))
+        {
+            Some(e) => e,
+            None => continue,
+        };
+
+        let mut sample = json!({
+            "frame": frame,
+            "time_ms": time_ms,
+        });
+
+        for prop in &props {
+            match prop.as_str() {
+                "position" => {
+                    sample["position"] = json!(entity.position);
+                }
+                "rotation_deg" => {
+                    sample["rotation_deg"] = json!(entity.rotation_deg);
+                }
+                "velocity" => {
+                    sample["velocity"] = json!(entity.velocity);
+                }
+                "speed" => {
+                    let speed: f64 = entity.velocity.iter().map(|v| v * v).sum::<f64>().sqrt();
+                    sample["speed"] = json!(speed);
+                }
+                other => {
+                    if let Some(val) = entity.state.get(other) {
+                        sample[other] = val.clone();
+                    }
+                }
+            }
+        }
+
+        let sample_bytes = serde_json::to_vec(&sample).unwrap_or_default().len();
+        budget_bytes += sample_bytes;
+        if spectator_core::budget::estimate_tokens(budget_bytes) > budget_limit {
+            break;
+        }
+        samples.push(sample);
+    }
+
+    let samples_returned = samples.len();
+    Ok(json!({
+        "node": node,
+        "from_frame": from_frame,
+        "to_frame": to_frame,
+        "sample_interval": interval,
+        "samples": samples,
+        "total_frames_in_range": total_frames,
+        "samples_returned": samples_returned,
+    }))
 }
 
 // ---------------------------------------------------------------------------
@@ -898,11 +1105,9 @@ pub fn find_event(
         return find_markers(db, clip_id, event_filter, from_frame, to_frame);
     }
 
-    let mut sql = String::from(
-        "SELECT frame, event_type, node_path, data FROM events WHERE event_type = ?1",
-    );
-    let mut params: Vec<Box<dyn rusqlite::types::ToSql>> =
-        vec![Box::new(event_type.to_string())];
+    let mut sql =
+        String::from("SELECT frame, event_type, node_path, data FROM events WHERE event_type = ?1");
+    let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(event_type.to_string())];
     let mut param_idx = 2usize;
 
     if let Some(node_path) = node {
@@ -936,8 +1141,7 @@ pub fn find_event(
             let evt_type: String = row.get(1)?;
             let node_path: String = row.get(2)?;
             let data_str: String = row.get(3)?;
-            let data: serde_json::Value =
-                serde_json::from_str(&data_str).unwrap_or(json!(null));
+            let data: serde_json::Value = serde_json::from_str(&data_str).unwrap_or(json!(null));
             Ok(json!({
                 "frame": frame,
                 "event_type": evt_type,
@@ -979,8 +1183,7 @@ fn find_markers(
     from_frame: Option<u64>,
     to_frame: Option<u64>,
 ) -> Result<serde_json::Value, McpError> {
-    let mut sql =
-        String::from("SELECT frame, timestamp_ms, source, label FROM markers WHERE 1=1");
+    let mut sql = String::from("SELECT frame, timestamp_ms, source, label FROM markers WHERE 1=1");
     let mut params: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
     let mut idx = 1usize;
 
@@ -1267,8 +1470,8 @@ CREATE INDEX IF NOT EXISTS idx_markers_frame ON markers(frame);
             signal: None,
         };
 
-        let response = query_range(&db, "/tmp", "rec_1", "enemy", 100, 101, &condition, 5000)
-            .unwrap();
+        let response =
+            query_range(&db, "/tmp", "rec_1", "enemy", 100, 101, &condition, 5000).unwrap();
         let results = response["results"].as_array().unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0]["frame"], 101);
@@ -1282,13 +1485,21 @@ CREATE INDEX IF NOT EXISTS idx_markers_frame ON markers(frame);
             &db,
             100,
             1000,
-            &[test_entity_with_velocity("enemy", [0.0, 0.0, 0.0], [1.0, 0.0, 0.0])],
+            &[test_entity_with_velocity(
+                "enemy",
+                [0.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+            )],
         );
         insert_frame(
             &db,
             101,
             1017,
-            &[test_entity_with_velocity("enemy", [1.0, 0.0, 0.0], [10.0, 0.0, 0.0])],
+            &[test_entity_with_velocity(
+                "enemy",
+                [1.0, 0.0, 0.0],
+                [10.0, 0.0, 0.0],
+            )],
         );
 
         let condition = QueryCondition {
@@ -1299,8 +1510,8 @@ CREATE INDEX IF NOT EXISTS idx_markers_frame ON markers(frame);
             signal: None,
         };
 
-        let response = query_range(&db, "/tmp", "rec_1", "enemy", 100, 101, &condition, 5000)
-            .unwrap();
+        let response =
+            query_range(&db, "/tmp", "rec_1", "enemy", 100, 101, &condition, 5000).unwrap();
         let results = response["results"].as_array().unwrap();
         assert_eq!(results.len(), 1);
     }
@@ -1375,8 +1586,8 @@ CREATE INDEX IF NOT EXISTS idx_markers_frame ON markers(frame);
             signal: Some("hit".into()),
         };
 
-        let response = query_range(&db, "/tmp", "rec_1", "enemy", 100, 101, &condition, 5000)
-            .unwrap();
+        let response =
+            query_range(&db, "/tmp", "rec_1", "enemy", 100, 101, &condition, 5000).unwrap();
         let results = response["results"].as_array().unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0]["frame"], 101);
@@ -1401,8 +1612,8 @@ CREATE INDEX IF NOT EXISTS idx_markers_frame ON markers(frame);
             signal: None,
         };
 
-        let response = query_range(&db, "/tmp", "rec_1", "enemy", 100, 101, &condition, 5000)
-            .unwrap();
+        let response =
+            query_range(&db, "/tmp", "rec_1", "enemy", 100, 101, &condition, 5000).unwrap();
         let results = response["results"].as_array().unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0]["note"], "area_enter");
@@ -1426,11 +1637,213 @@ CREATE INDEX IF NOT EXISTS idx_markers_frame ON markers(frame);
             signal: None,
         };
 
-        let response = query_range(&db, "/tmp", "rec_1", "enemy", 100, 100, &condition, 5000)
-            .unwrap();
+        let response =
+            query_range(&db, "/tmp", "rec_1", "enemy", 100, 100, &condition, 5000).unwrap();
         let results = response["results"].as_array().unwrap();
         assert_eq!(results.len(), 1);
         assert_eq!(results[0]["note"], "collision");
+    }
+
+    // --- moved condition tests ---
+
+    #[test]
+    fn test_moved_condition_detects_displacement() {
+        let db = test_db();
+        // 3 frames: Camera3D moves [0,60,60] → [0,55,55] → [0,48,48]
+        insert_frame(&db, 1, 1000, &[test_entity("Camera3D", [0.0, 60.0, 60.0])]);
+        insert_frame(&db, 2, 1017, &[test_entity("Camera3D", [0.0, 55.0, 55.0])]);
+        insert_frame(&db, 3, 1033, &[test_entity("Camera3D", [0.0, 48.0, 48.0])]);
+
+        let condition = QueryCondition {
+            condition_type: "moved".into(),
+            target: None,
+            threshold: Some(1.0),
+            property: None,
+            signal: None,
+        };
+
+        let response =
+            query_range(&db, "/tmp", "rec_1", "Camera3D", 1, 3, &condition, 5000).unwrap();
+        let results = response["results"].as_array().unwrap();
+        // Frame 2: moved ~7.07 units; Frame 3: moved ~9.9 units — both > 1.0
+        assert_eq!(results.len(), 2);
+        assert!(results[0]["distance"].as_f64().unwrap() > 1.0);
+    }
+
+    #[test]
+    fn test_moved_condition_stationary_node() {
+        let db = test_db();
+        insert_frame(&db, 1, 1000, &[test_entity("Player", [0.0, 0.0, 0.0])]);
+        insert_frame(&db, 2, 1017, &[test_entity("Player", [0.0, 0.0, 0.0])]);
+        insert_frame(&db, 3, 1033, &[test_entity("Player", [0.0, 0.0, 0.0])]);
+
+        let condition = QueryCondition {
+            condition_type: "moved".into(),
+            target: None,
+            threshold: None, // default 0.01
+            property: None,
+            signal: None,
+        };
+
+        let response = query_range(&db, "/tmp", "rec_1", "Player", 1, 3, &condition, 5000).unwrap();
+        let results = response["results"].as_array().unwrap();
+        assert_eq!(results.len(), 0);
+    }
+
+    #[test]
+    fn test_moved_condition_respects_threshold() {
+        let db = test_db();
+        // Node moves 0.005 units per frame — below default threshold of 0.01
+        insert_frame(&db, 1, 1000, &[test_entity("Player", [0.0, 0.0, 0.0])]);
+        insert_frame(&db, 2, 1017, &[test_entity("Player", [0.005, 0.0, 0.0])]);
+        insert_frame(&db, 3, 1033, &[test_entity("Player", [0.010, 0.0, 0.0])]);
+
+        let condition = QueryCondition {
+            condition_type: "moved".into(),
+            target: None,
+            threshold: None, // default 0.01
+            property: None,
+            signal: None,
+        };
+
+        let response = query_range(&db, "/tmp", "rec_1", "Player", 1, 3, &condition, 5000).unwrap();
+        let results = response["results"].as_array().unwrap();
+        // Frame 2 moved 0.005 (below 0.01), Frame 3 moved 0.005 (below 0.01)
+        assert_eq!(results.len(), 0);
+    }
+
+    #[test]
+    fn test_moved_condition_default_threshold() {
+        let db = test_db();
+        // Node moves exactly 0.01 units — at threshold, should match
+        insert_frame(&db, 1, 1000, &[test_entity("Player", [0.0, 0.0, 0.0])]);
+        insert_frame(&db, 2, 1017, &[test_entity("Player", [0.01, 0.0, 0.0])]);
+
+        let condition = QueryCondition {
+            condition_type: "moved".into(),
+            target: None,
+            threshold: None, // default 0.01
+            property: None,
+            signal: None,
+        };
+
+        let response = query_range(&db, "/tmp", "rec_1", "Player", 1, 2, &condition, 5000).unwrap();
+        let results = response["results"].as_array().unwrap();
+        assert_eq!(results.len(), 1);
+    }
+
+    // --- trajectory tests ---
+
+    #[test]
+    fn test_trajectory_basic() {
+        let db = test_db();
+        for i in 1u64..=10 {
+            insert_frame(
+                &db,
+                i,
+                i * 17,
+                &[test_entity("Camera3D", [i as f64, 0.0, 0.0])],
+            );
+        }
+
+        let response =
+            trajectory(&db, "Camera3D", 1, 10, &["position".to_string()], 1, 5000).unwrap();
+        let samples = response["samples"].as_array().unwrap();
+        assert_eq!(samples.len(), 10);
+        assert_eq!(samples[0]["frame"], 1);
+        assert_eq!(samples[9]["frame"], 10);
+        assert!(samples[0]["position"].is_array());
+    }
+
+    #[test]
+    fn test_trajectory_sample_interval() {
+        let db = test_db();
+        for i in 1u64..=100 {
+            insert_frame(
+                &db,
+                i,
+                i * 17,
+                &[test_entity("Camera3D", [i as f64, 0.0, 0.0])],
+            );
+        }
+
+        let response =
+            trajectory(&db, "Camera3D", 1, 100, &["position".to_string()], 10, 5000).unwrap();
+        let samples = response["samples"].as_array().unwrap();
+        // sample_interval=10 from from_frame=1: frames 1, 11, 21, ..., 91
+        assert_eq!(samples.len(), 10);
+        assert_eq!(samples[0]["frame"], 1);
+        assert_eq!(samples[1]["frame"], 11);
+        assert_eq!(samples[9]["frame"], 91);
+    }
+
+    #[test]
+    fn test_trajectory_multiple_properties() {
+        let db = test_db();
+        let mut e = test_entity_with_state(
+            "Player",
+            [1.0, 2.0, 3.0],
+            &[("health", serde_json::json!(100))],
+        );
+        e.velocity = vec![1.0, 0.0, 0.0];
+        let data = rmp_serde::to_vec(&vec![e]).unwrap();
+        db.execute(
+            "INSERT INTO frames (frame, timestamp_ms, data) VALUES (?1, ?2, ?3)",
+            rusqlite::params![1u64, 17u64, &data],
+        )
+        .unwrap();
+
+        let props = vec![
+            "position".to_string(),
+            "velocity".to_string(),
+            "health".to_string(),
+        ];
+        let response = trajectory(&db, "Player", 1, 1, &props, 1, 5000).unwrap();
+        let samples = response["samples"].as_array().unwrap();
+        assert_eq!(samples.len(), 1);
+        assert!(samples[0]["position"].is_array());
+        assert!(samples[0]["velocity"].is_array());
+        assert_eq!(samples[0]["health"], 100);
+    }
+
+    // --- invalid condition type test ---
+
+    #[test]
+    fn test_invalid_condition_type_returns_error() {
+        let db = test_db();
+        insert_frame(&db, 1, 1000, &[test_entity("Player", [0.0, 0.0, 0.0])]);
+
+        let condition = QueryCondition {
+            condition_type: "foo".into(),
+            target: None,
+            threshold: None,
+            property: None,
+            signal: None,
+        };
+
+        let result = query_range(&db, "/tmp", "rec_1", "Player", 1, 1, &condition, 5000);
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(err.message.contains("foo"));
+        assert!(err.message.contains("moved"));
+    }
+
+    #[test]
+    fn test_moved_is_valid_condition_type() {
+        let db = test_db();
+        insert_frame(&db, 1, 1000, &[test_entity("Player", [0.0, 0.0, 0.0])]);
+        insert_frame(&db, 2, 1017, &[test_entity("Player", [5.0, 0.0, 0.0])]);
+
+        let condition = QueryCondition {
+            condition_type: "moved".into(),
+            target: None,
+            threshold: None,
+            property: None,
+            signal: None,
+        };
+
+        let result = query_range(&db, "/tmp", "rec_1", "Player", 1, 2, &condition, 5000);
+        assert!(result.is_ok());
     }
 
     // --- RecordingParams deserialization tests are in recording.rs ---

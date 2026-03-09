@@ -1126,6 +1126,7 @@ Capture and analyze play sessions. The human drives, the agent observes. The rec
       "delete",           // remove a recording
       "snapshot_at",      // spatial state at a specific frame
       "query_range",      // search across frame range
+      "trajectory",       // position/property timeseries across frame range
       "find_event",       // search for specific events
       "diff_frames",      // compare two frames
       "markers",          // list markers in a recording
@@ -1166,7 +1167,8 @@ Capture and analyze play sessions. The human drives, the agent observes. The rec
     "properties": {
       "type": {
         "enum": ["proximity", "property_change", "signal_emitted",
-                 "entered_area", "velocity_spike", "state_transition"]
+                 "entered_area", "velocity_spike", "state_transition",
+                 "collision", "moved"]
       },
       "target": "string",
       "threshold": "number",
@@ -1229,6 +1231,25 @@ Capture and analyze play sessions. The human drives, the agent observes. The rec
 ### Response — `snapshot_at`
 
 Same shape as `spatial_snapshot` response (the recording is a queryable timeline of snapshots).
+
+### Response — `trajectory`
+
+```jsonc
+{
+  "node": "Camera3D",
+  "from_frame": 100,
+  "to_frame": 300,
+  "sample_interval": 10,
+  "samples": [
+    {"frame": 100, "time_ms": 1667, "position": [0, 60, 60]},
+    {"frame": 110, "time_ms": 1833, "position": [0, 54, 54]},
+    {"frame": 120, "time_ms": 2000, "position": [0, 48, 48]}
+  ],
+  "total_frames_in_range": 200,
+  "samples_returned": 21,
+  "budget": { /* ... */ }
+}
+```
 
 ### Response — `query_range`
 

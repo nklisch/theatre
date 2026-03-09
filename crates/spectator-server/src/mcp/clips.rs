@@ -26,12 +26,19 @@ pub struct ClipsParams {
     /// "delete" — remove a clip by clip_id.
     /// "markers" — list markers in a saved clip.
     /// "snapshot_at" — spatial state at a frame in a clip.
+    /// "trajectory" — position/property timeseries across frame range.
     /// "query_range" — search frames for spatial conditions.
     /// "diff_frames" — compare two frames in a clip.
     /// "find_event" — search events in a clip.
+    #[schemars(
+        description = "Action: add_marker, save, status, list, delete, markers, snapshot_at, trajectory, query_range, diff_frames, find_event"
+    )]
     pub action: String,
 
     /// Clip to operate on. Uses most recent if omitted.
+    #[schemars(
+        description = "Clip to operate on (from list response). Defaults to most recent clip if omitted."
+    )]
     pub clip_id: Option<String>,
 
     /// Marker label (add_marker, save).
@@ -44,7 +51,6 @@ pub struct ClipsParams {
     pub token_budget: Option<u32>,
 
     // --- Analysis fields ---
-
     /// Frame number for snapshot_at.
     pub at_frame: Option<u64>,
 
@@ -64,7 +70,21 @@ pub struct ClipsParams {
     pub node: Option<String>,
 
     /// Condition object for query_range.
+    #[schemars(
+        description = "Condition for query_range. Object with \"type\" key. Types: \"moved\" (threshold), \"proximity\" (target, threshold), \"velocity_spike\" (threshold), \"property_change\" (property), \"state_transition\" (property), \"signal_emitted\" (signal), \"entered_area\", \"collision\". Example: {\"type\": \"proximity\", \"target\": \"walls/*\", \"threshold\": 0.5}"
+    )]
     pub condition: Option<serde_json::Value>,
+
+    /// Properties to sample in trajectory. Default: ["position"].
+    /// Options: "position", "rotation_deg", "velocity", "speed", or any state property name.
+    #[schemars(
+        description = "Properties to sample in trajectory. Default: [\"position\"]. Options: position, rotation_deg, velocity, speed, or any state property name."
+    )]
+    pub properties: Option<Vec<String>>,
+
+    /// Sample every Nth frame in trajectory. Default: 1 (every frame).
+    #[schemars(description = "Sample every Nth frame for trajectory. Default: 1.")]
+    pub sample_interval: Option<u64>,
 
     /// Event type for find_event.
     pub event_type: Option<String>,
@@ -94,18 +114,23 @@ pub async fn handle_clips(
     match params.action.as_str() {
         "add_marker" => handle_add_marker(&params, state, budget_limit, hard_cap).await,
         "save" => handle_save(&params, state, budget_limit, hard_cap).await,
-        "status" => query_and_finalize(state, "dashcam_status", json!({}), budget_limit, hard_cap).await,
-        "list" => query_and_finalize(state, "recording_list", json!({}), budget_limit, hard_cap).await,
+        "status" => {
+            query_and_finalize(state, "dashcam_status", json!({}), budget_limit, hard_cap).await
+        }
+        "list" => {
+            query_and_finalize(state, "recording_list", json!({}), budget_limit, hard_cap).await
+        }
         "delete" => handle_delete(&params, state, budget_limit, hard_cap).await,
         "markers" => handle_markers(&params, state, budget_limit, hard_cap).await,
         "snapshot_at" => handle_snapshot_at(&params, state, budget_limit, hard_cap).await,
+        "trajectory" => handle_trajectory(&params, state, budget_limit, hard_cap).await,
         "query_range" => handle_query_range(&params, state, budget_limit, hard_cap).await,
         "diff_frames" => handle_diff_frames(&params, state, budget_limit, hard_cap).await,
         "find_event" => handle_find_event(&params, state, budget_limit, hard_cap).await,
         other => Err(McpError::invalid_params(
             format!(
                 "Unknown clips action: '{other}'. Valid: add_marker, save, status, list, delete, \
-                 markers, snapshot_at, query_range, diff_frames, find_event"
+                 markers, snapshot_at, trajectory, query_range, diff_frames, find_event"
             ),
             None,
         )),
@@ -214,6 +239,38 @@ async fn handle_snapshot_at(
     session.finalize(&mut response, budget_limit, hard_cap)
 }
 
+async fn handle_trajectory(
+    params: &ClipsParams,
+    state: &Arc<Mutex<SessionState>>,
+    budget_limit: u32,
+    hard_cap: u32,
+) -> Result<String, McpError> {
+    let session = clip_analysis::ClipSession::open(state, params.clip_id.as_deref()).await?;
+
+    let node = require_param!(
+        params.node.as_deref(),
+        "trajectory requires 'node' parameter"
+    );
+    let from = require_param!(params.from_frame, "trajectory requires 'from_frame'");
+    let to = require_param!(params.to_frame, "trajectory requires 'to_frame'");
+    session.meta.validate_frame(from)?;
+    session.meta.validate_frame(to)?;
+
+    let properties = params.properties.as_deref().unwrap_or(&[]);
+    let sample_interval = params.sample_interval.unwrap_or(1);
+
+    let mut response = clip_analysis::trajectory(
+        &session.db,
+        node,
+        from,
+        to,
+        properties,
+        sample_interval,
+        budget_limit,
+    )?;
+    session.finalize(&mut response, budget_limit, hard_cap)
+}
+
 async fn handle_query_range(
     params: &ClipsParams,
     state: &Arc<Mutex<SessionState>>,
@@ -222,7 +279,10 @@ async fn handle_query_range(
 ) -> Result<String, McpError> {
     let session = clip_analysis::ClipSession::open(state, params.clip_id.as_deref()).await?;
 
-    let node = require_param!(params.node.as_deref(), "query_range requires 'node' parameter");
+    let node = require_param!(
+        params.node.as_deref(),
+        "query_range requires 'node' parameter"
+    );
     let from = require_param!(params.from_frame, "query_range requires 'from_frame'");
     let to = require_param!(params.to_frame, "query_range requires 'to_frame'");
     session.meta.validate_frame(from)?;
@@ -230,7 +290,9 @@ async fn handle_query_range(
     let condition: clip_analysis::QueryCondition = params
         .condition
         .as_ref()
-        .ok_or_else(|| McpError::invalid_params("query_range requires 'condition'".to_string(), None))
+        .ok_or_else(|| {
+            McpError::invalid_params("query_range requires 'condition'".to_string(), None)
+        })
         .and_then(|v| {
             serde_json::from_value(v.clone())
                 .map_err(|e| McpError::invalid_params(format!("Invalid condition: {e}"), None))
@@ -281,7 +343,10 @@ async fn handle_find_event(
         session.meta.validate_frame(to)?;
     }
 
-    let event_type = require_param!(params.event_type.as_deref(), "find_event requires 'event_type'");
+    let event_type = require_param!(
+        params.event_type.as_deref(),
+        "find_event requires 'event_type'"
+    );
 
     let mut response = clip_analysis::find_event(
         &session.db,
@@ -323,7 +388,10 @@ mod tests {
         });
         let params: ClipsParams = serde_json::from_value(json).unwrap();
         assert_eq!(params.action, "save");
-        assert_eq!(params.marker_label.as_deref(), Some("suspected physics glitch"));
+        assert_eq!(
+            params.marker_label.as_deref(),
+            Some("suspected physics glitch")
+        );
     }
 
     #[test]

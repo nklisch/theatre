@@ -1,12 +1,12 @@
 use godot::obj::Gd;
 use godot::prelude::*;
+use spectator_protocol::query::ActionResponse;
 use spectator_protocol::{
     codec,
     connection_state::{ConnectionAction, ConnectionState},
     handshake::Handshake,
     messages::Message,
 };
-use spectator_protocol::query::ActionResponse;
 use std::io::ErrorKind;
 use std::net::{TcpListener, TcpStream};
 
@@ -68,7 +68,12 @@ impl SpectatorTCPServer {
     /// Emitted when an activity_log event is received from the server.
     /// `active_watches` is the current watch count from meta (-1 if not provided).
     #[signal]
-    fn activity_received(entry_type: GString, summary: GString, tool_name: GString, active_watches: i64);
+    fn activity_received(
+        entry_type: GString,
+        summary: GString,
+        tool_name: GString,
+        active_watches: i64,
+    );
 
     /// Wire the collector into the TCP server.
     #[func]
@@ -237,7 +242,11 @@ impl SpectatorTCPServer {
                         self.clients.len() - 1
                     }
                 };
-                godot_print!("[Spectator] Client connected from {} (slot {})", addr, slot_idx);
+                godot_print!(
+                    "[Spectator] Client connected from {} (slot {})",
+                    addr,
+                    slot_idx
+                );
                 self.send_handshake_to_slot(slot_idx);
             }
             Err(ref e) if e.kind() == ErrorKind::WouldBlock => {}
@@ -264,7 +273,11 @@ impl SpectatorTCPServer {
         match result {
             Ok(()) => godot_print!("[Spectator] Handshake sent to slot {}", slot_idx),
             Err(e) => {
-                godot_error!("[Spectator] Failed to send handshake to slot {}: {}", slot_idx, e);
+                godot_error!(
+                    "[Spectator] Failed to send handshake to slot {}: {}",
+                    slot_idx,
+                    e
+                );
                 self.disconnect_slot(slot_idx);
             }
         }
@@ -273,7 +286,8 @@ impl SpectatorTCPServer {
     fn try_read_handshake(&mut self, slot_idx: usize) {
         let result = match self.clients.get_mut(slot_idx).and_then(|s| s.as_mut()) {
             Some(slot) => with_blocking_io(&mut slot.stream, |s| {
-                s.set_read_timeout(Some(std::time::Duration::from_millis(1))).ok();
+                s.set_read_timeout(Some(std::time::Duration::from_millis(1)))
+                    .ok();
                 codec::read_message::<Message>(s)
             }),
             None => return,
@@ -305,11 +319,18 @@ impl SpectatorTCPServer {
                 if e.kind() == ErrorKind::UnexpectedEof
                     || e.kind() == ErrorKind::ConnectionReset =>
             {
-                godot_print!("[Spectator] Slot {} disconnected during handshake", slot_idx);
+                godot_print!(
+                    "[Spectator] Slot {} disconnected during handshake",
+                    slot_idx
+                );
                 self.disconnect_slot(slot_idx);
             }
             Err(e) => {
-                godot_error!("[Spectator] Handshake read error on slot {}: {}", slot_idx, e);
+                godot_error!(
+                    "[Spectator] Handshake read error on slot {}: {}",
+                    slot_idx,
+                    e
+                );
                 self.disconnect_slot(slot_idx);
             }
             Ok(_) => {
@@ -327,7 +348,8 @@ impl SpectatorTCPServer {
     fn try_read_query(&mut self, slot_idx: usize) -> bool {
         let result = match self.clients.get_mut(slot_idx).and_then(|s| s.as_mut()) {
             Some(slot) => with_blocking_io(&mut slot.stream, |s| {
-                s.set_read_timeout(Some(std::time::Duration::from_millis(1))).ok();
+                s.set_read_timeout(Some(std::time::Duration::from_millis(1)))
+                    .ok();
                 codec::read_message::<Message>(s)
             }),
             None => return false,
@@ -382,12 +404,8 @@ impl SpectatorTCPServer {
                     };
                     self.send_response_to_slot(slot_idx, response_msg);
                 } else if let Some(ref collector) = self.collector {
-                    let response = crate::query_handler::handle_query(
-                        id,
-                        &method,
-                        params,
-                        &collector.bind(),
-                    );
+                    let response =
+                        crate::query_handler::handle_query(id, &method, params, &collector.bind());
                     match response {
                         Some(msg) => self.send_response_to_slot(slot_idx, msg),
                         // None = deferred (advance_frames): record which slot owns the response
@@ -525,7 +543,10 @@ impl SpectatorTCPServer {
                     frame,
                 };
                 let data = serde_json::to_value(&response).unwrap_or(serde_json::Value::Null);
-                Some(Message::Response { id: response_id, data })
+                Some(Message::Response {
+                    id: response_id,
+                    data,
+                })
             }
             _ => None,
         }
@@ -562,8 +583,12 @@ impl SpectatorTCPServer {
     }
 
     fn detect_scene_dimensions(&self) -> u32 {
-        let Some(tree) = self.base().get_tree() else { return 3 };
-        let Some(root) = tree.get_current_scene() else { return 3 };
+        let Some(tree) = self.base().get_tree() else {
+            return 3;
+        };
+        let Some(root) = tree.get_current_scene() else {
+            return 3;
+        };
         let root_node: godot::obj::Gd<godot::classes::Node> = root.upcast();
 
         let has_2d = Self::has_node_type_recursive(&root_node, true);

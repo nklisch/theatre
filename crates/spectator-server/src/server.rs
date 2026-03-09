@@ -1,5 +1,5 @@
-use rmcp::handler::server::tool::ToolRouter;
 use rmcp::handler::server::ServerHandler;
+use rmcp::handler::server::tool::ToolRouter;
 use rmcp::model::{Implementation, ServerCapabilities, ServerInfo};
 use rmcp::tool_handler;
 use std::sync::Arc;

@@ -171,7 +171,10 @@ impl INode for SpectatorRecorder {
         }
 
         self.frame_counter += 1;
-        if !self.frame_counter.is_multiple_of(self.dashcam_config.capture_interval) {
+        if !self
+            .frame_counter
+            .is_multiple_of(self.dashcam_config.capture_interval)
+        {
             return;
         }
 
@@ -369,11 +372,7 @@ impl SpectatorRecorder {
 
         self.base_mut().emit_signal(
             "marker_added",
-            &[
-                frame.to_variant(),
-                source.to_variant(),
-                label.to_variant(),
-            ],
+            &[frame.to_variant(), source.to_variant(), label.to_variant()],
         );
     }
 
@@ -394,70 +393,131 @@ impl SpectatorRecorder {
                 continue;
             }
 
-            if let Ok(db) = Connection::open_with_flags(
-                &path,
-                rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-            )
+            if let Ok(db) =
+                Connection::open_with_flags(&path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)
                 && let Ok(mut stmt) = db.prepare(
                     "SELECT id, name, started_at_frame, ended_at_frame, \
                      started_at_ms, ended_at_ms, capture_config FROM recording LIMIT 1",
-                ) {
-                    let row_result = stmt.query_row([], |row| {
-                        let id: String = row.get(0)?;
-                        let name: String = row.get(1)?;
-                        let start_frame: i64 = row.get(2)?;
-                        let end_frame: Option<i64> = row.get(3)?;
-                        let start_ms: i64 = row.get(4)?;
-                        let end_ms: Option<i64> = row.get(5)?;
-                        let capture_config: Option<String> = row.get(6)?;
-                        Ok((id, name, start_frame, end_frame, start_ms, end_ms, capture_config))
+                )
+            {
+                let row_result = stmt.query_row([], |row| {
+                    let id: String = row.get(0)?;
+                    let name: String = row.get(1)?;
+                    let start_frame: i64 = row.get(2)?;
+                    let end_frame: Option<i64> = row.get(3)?;
+                    let start_ms: i64 = row.get(4)?;
+                    let end_ms: Option<i64> = row.get(5)?;
+                    let capture_config: Option<String> = row.get(6)?;
+                    Ok((
+                        id,
+                        name,
+                        start_frame,
+                        end_frame,
+                        start_ms,
+                        end_ms,
+                        capture_config,
+                    ))
+                });
+
+                if let Ok((id, name, start_frame, end_frame, start_ms, end_ms, capture_config)) =
+                    row_result
+                {
+                    let frame_count: i64 = db
+                        .query_row("SELECT COUNT(*) FROM frames", [], |r| r.get(0))
+                        .unwrap_or(0);
+
+                    let marker_count: i64 = db
+                        .query_row("SELECT COUNT(*) FROM markers", [], |r| r.get(0))
+                        .unwrap_or(0);
+
+                    let duration_ms = end_ms.unwrap_or(start_ms) - start_ms;
+
+                    let size_kb = std::fs::metadata(&path)
+                        .map(|m| m.len() / 1024)
+                        .unwrap_or(0);
+
+                    // Prefer stored wall-clock time; fall back to file mtime.
+                    let created_at_unix_ms: Option<i64> = db
+                        .query_row(
+                            "SELECT created_at_unix_ms FROM recording LIMIT 1",
+                            [],
+                            |row| row.get(0),
+                        )
+                        .ok()
+                        .flatten();
+                    let created_at_unix_ms = created_at_unix_ms.unwrap_or_else(|| {
+                        std::fs::metadata(&path)
+                            .and_then(|m| m.modified())
+                            .ok()
+                            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                            .map(|d| d.as_millis() as i64)
+                            .unwrap_or(0)
                     });
 
-                    if let Ok((id, name, start_frame, end_frame, start_ms, end_ms, capture_config)) = row_result {
-                        let frame_count: i64 = db
-                            .query_row("SELECT COUNT(*) FROM frames", [], |r| r.get(0))
-                            .unwrap_or(0);
+                    // First human/agent marker label — why this clip was saved.
+                    let trigger_label: Option<String> = db
+                        .query_row(
+                            "SELECT label FROM markers WHERE source IN ('human', 'agent') \
+                                 ORDER BY frame ASC LIMIT 1",
+                            [],
+                            |row| row.get(0),
+                        )
+                        .ok();
 
-                        let marker_count: i64 = db
-                            .query_row("SELECT COUNT(*) FROM markers", [], |r| r.get(0))
-                            .unwrap_or(0);
+                    // Check if this is a dashcam clip
+                    let capture_value: Option<serde_json::Value> = capture_config
+                        .as_deref()
+                        .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok());
 
-                        let duration_ms = end_ms.unwrap_or(start_ms) - start_ms;
+                    let is_dashcam = capture_value
+                        .as_ref()
+                        .and_then(|v| v.get("dashcam").and_then(|b| b.as_bool()))
+                        .unwrap_or(false);
 
-                        let size_kb = std::fs::metadata(&path)
-                            .map(|m| m.len() / 1024)
-                            .unwrap_or(0);
+                    let dashcam_tier = if is_dashcam {
+                        capture_value
+                            .as_ref()
+                            .and_then(|v| {
+                                v.get("tier")
+                                    .and_then(|t| t.as_str())
+                                    .map(|s| s.to_string())
+                            })
+                            .unwrap_or_default()
+                    } else {
+                        String::new()
+                    };
 
-                        // Check if this is a dashcam clip
-                        let is_dashcam = capture_config.as_deref()
-                            .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
-                            .and_then(|v| v.get("dashcam").and_then(|b| b.as_bool()))
-                            .unwrap_or(false);
+                    // Build capture block JSON string for recording_handler.rs.
+                    let capture_block_json: Option<String> = capture_value.as_ref().map(|v| {
+                            serde_json::json!({
+                                "include_input": v.get("include_input").and_then(|b| b.as_bool()).unwrap_or(false),
+                                "include_signals": v.get("include_signals").and_then(|b| b.as_bool()).unwrap_or(true),
+                                "capture_interval": v.get("capture_interval").and_then(|n| n.as_u64()).unwrap_or(1),
+                            })
+                            .to_string()
+                        });
 
-                        let dashcam_tier = if is_dashcam {
-                            capture_config.as_deref()
-                                .and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok())
-                                .and_then(|v| v.get("tier").and_then(|t| t.as_str()).map(|s| s.to_string()))
-                                .unwrap_or_default()
-                        } else {
-                            String::new()
-                        };
-
-                        let mut dict = VarDictionary::new();
-                        dict.set("clip_id", GString::from(&id));
-                        dict.set("name", GString::from(&name));
-                        dict.set("frames_captured", frame_count as u32);
-                        dict.set("duration_ms", duration_ms);
-                        dict.set("frame_range_start", start_frame);
-                        dict.set("frame_range_end", end_frame.unwrap_or(start_frame));
-                        dict.set("markers_count", marker_count as u32);
-                        dict.set("size_kb", size_kb as u32);
-                        dict.set("created_at_ms", start_ms);
-                        dict.set("dashcam", is_dashcam);
-                        dict.set("dashcam_tier", GString::from(&dashcam_tier));
-                        result.push(&dict);
+                    let mut dict = VarDictionary::new();
+                    dict.set("clip_id", GString::from(&id));
+                    dict.set("name", GString::from(&name));
+                    dict.set("frames_captured", frame_count as u32);
+                    dict.set("duration_ms", duration_ms);
+                    dict.set("frame_range_start", start_frame);
+                    dict.set("frame_range_end", end_frame.unwrap_or(start_frame));
+                    dict.set("markers_count", marker_count as u32);
+                    dict.set("size_kb", size_kb as u32);
+                    dict.set("created_at_unix_ms", created_at_unix_ms);
+                    dict.set("dashcam", is_dashcam);
+                    dict.set("dashcam_tier", GString::from(&dashcam_tier));
+                    if let Some(label) = trigger_label {
+                        dict.set("trigger_label", GString::from(&label));
                     }
+                    if let Some(capture_json) = capture_block_json {
+                        dict.set("capture_json", GString::from(&capture_json));
+                    }
+                    result.push(&dict);
                 }
+            }
         }
 
         result
@@ -490,9 +550,9 @@ impl SpectatorRecorder {
             Err(_) => return result,
         };
 
-        let mut stmt = match db.prepare(
-            "SELECT frame, timestamp_ms, source, label FROM markers ORDER BY frame",
-        ) {
+        let mut stmt = match db
+            .prepare("SELECT frame, timestamp_ms, source, label FROM markers ORDER BY frame")
+        {
             Ok(s) => s,
             Err(_) => return result,
         };
@@ -635,8 +695,7 @@ impl SpectatorRecorder {
             || (self.ring_buffer_bytes > byte_cap && !self.ring_buffer.is_empty())
         {
             if let Some(evicted) = self.ring_buffer.pop_front() {
-                self.ring_buffer_bytes =
-                    self.ring_buffer_bytes.saturating_sub(evicted.data.len());
+                self.ring_buffer_bytes = self.ring_buffer_bytes.saturating_sub(evicted.data.len());
             } else {
                 break;
             }
@@ -647,8 +706,7 @@ impl SpectatorRecorder {
     fn ring_cap_frames(&self) -> usize {
         let fps = self.physics_fps.max(1) as usize;
         let interval = self.dashcam_config.capture_interval.max(1) as usize;
-        let time_based =
-            self.dashcam_config.pre_window_deliberate_sec as usize * fps / interval;
+        let time_based = self.dashcam_config.pre_window_deliberate_sec as usize * fps / interval;
 
         if self.avg_frame_bytes == 0 {
             return time_based.max(1);
@@ -693,11 +751,7 @@ impl SpectatorRecorder {
             let pre_buffer: Vec<CapturedFrame> = self.ring_buffer.iter().cloned().collect();
             let post_window = self.post_window_frames(tier);
             let force_close_at_frame = if tier == DashcamTier::System {
-                Some(
-                    frame
-                        + self.dashcam_config.max_window_sec as u64
-                            * self.physics_fps as u64,
-                )
+                Some(frame + self.dashcam_config.max_window_sec as u64 * self.physics_fps as u64)
             } else {
                 None
             };
@@ -713,7 +767,11 @@ impl SpectatorRecorder {
                     source: source.to_string(),
                     label: label.to_string(),
                 }],
-                last_system_trigger_frame: if tier == DashcamTier::System { frame } else { 0 },
+                last_system_trigger_frame: if tier == DashcamTier::System {
+                    frame
+                } else {
+                    0
+                },
                 force_close_at_frame,
             };
 
@@ -819,8 +877,7 @@ impl SpectatorRecorder {
         }
 
         let tier_str = tier.as_str();
-        let all_frames: Vec<&CapturedFrame> =
-            pre_buffer.iter().chain(post_buffer.iter()).collect();
+        let all_frames: Vec<&CapturedFrame> = pre_buffer.iter().chain(post_buffer.iter()).collect();
         let total_frames = all_frames.len() as u32;
 
         let first_frame = all_frames.first().map(|f| f.frame).unwrap_or(0);
@@ -848,15 +905,15 @@ impl SpectatorRecorder {
         });
 
         let physics_ticks = self.physics_fps;
-        let scene_dims = detect_scene_dimensions(
-            self.base().get_tree().and_then(|t| t.get_current_scene()),
-        );
+        let scene_dims =
+            detect_scene_dimensions(self.base().get_tree().and_then(|t| t.get_current_scene()));
 
+        let created_at_unix_ms = current_time_ms() as i64;
         let _ = db.execute(
             "INSERT INTO recording \
              (id, name, started_at_frame, ended_at_frame, started_at_ms, ended_at_ms, \
-              scene_dimensions, physics_ticks_per_sec, capture_config) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+              scene_dimensions, physics_ticks_per_sec, capture_config, created_at_unix_ms) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             rusqlite::params![
                 &clip_id,
                 &format!("dashcam_{}", chrono_like_timestamp()),
@@ -867,6 +924,7 @@ impl SpectatorRecorder {
                 scene_dims,
                 physics_ticks,
                 capture_config.to_string(),
+                created_at_unix_ms,
             ],
         );
 
@@ -931,7 +989,8 @@ CREATE TABLE IF NOT EXISTS recording (
     ended_at_ms INTEGER,
     scene_dimensions INTEGER,
     physics_ticks_per_sec INTEGER,
-    capture_config TEXT
+    capture_config TEXT,
+    created_at_unix_ms INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS frames (
@@ -1113,7 +1172,9 @@ mod tests {
         .unwrap();
 
         let read_data: Vec<u8> = db
-            .query_row("SELECT data FROM frames WHERE frame = 100", [], |r| r.get(0))
+            .query_row("SELECT data FROM frames WHERE frame = 100", [], |r| {
+                r.get(0)
+            })
             .unwrap();
 
         let read_entities: Vec<FrameEntityData> = rmp_serde::from_slice(&read_data).unwrap();
@@ -1185,7 +1246,10 @@ mod tests {
         let msgpack = rmp_serde::to_vec(&entities).unwrap();
         let json = serde_json::to_vec(&entities).unwrap();
 
-        assert!(msgpack.len() < json.len(), "MessagePack should be smaller than JSON");
+        assert!(
+            msgpack.len() < json.len(),
+            "MessagePack should be smaller than JSON"
+        );
         let ratio = msgpack.len() as f64 / json.len() as f64;
         assert!(
             ratio < 0.7,
@@ -1392,7 +1456,10 @@ mod tests {
         if let Some(n) = json.get("pre_window_system_sec").and_then(|x| x.as_u64()) {
             cfg.pre_window_system_sec = n as u32;
         }
-        if let Some(n) = json.get("post_window_deliberate_sec").and_then(|x| x.as_u64()) {
+        if let Some(n) = json
+            .get("post_window_deliberate_sec")
+            .and_then(|x| x.as_u64())
+        {
             cfg.post_window_deliberate_sec = n as u32;
         }
         if let Some(n) = json.get("byte_cap_mb").and_then(|x| x.as_u64()) {
@@ -1422,8 +1489,7 @@ mod tests {
         let avg_frame_bytes = 256usize;
         let byte_cap = (cfg.byte_cap_mb as usize) * 1024 * 1024;
 
-        let time_based = (cfg.pre_window_deliberate_sec as usize)
-            * (physics_fps as usize)
+        let time_based = (cfg.pre_window_deliberate_sec as usize) * (physics_fps as usize)
             / (cfg.capture_interval as usize);
         let byte_based = byte_cap / avg_frame_bytes.max(1);
 
@@ -1444,13 +1510,15 @@ mod tests {
         let avg_frame_bytes = 10240usize; // 10KB per frame
         let byte_cap = (cfg.byte_cap_mb as usize) * 1024 * 1024;
 
-        let time_based = (cfg.pre_window_deliberate_sec as usize)
-            * (physics_fps as usize)
+        let time_based = (cfg.pre_window_deliberate_sec as usize) * (physics_fps as usize)
             / (cfg.capture_interval as usize);
         let byte_based = byte_cap / avg_frame_bytes.max(1);
 
         let cap = time_based.min(byte_based);
-        assert_eq!(cap, 1024, "byte-based cap should be the binding constraint for large frames");
+        assert_eq!(
+            cap, 1024,
+            "byte-based cap should be the binding constraint for large frames"
+        );
         assert!(cap < time_based);
     }
 
@@ -1463,8 +1531,7 @@ mod tests {
             ..DashcamConfig::default()
         };
         let physics_fps = 60u32;
-        let time_based = (cfg.pre_window_system_sec as usize)
-            * (physics_fps as usize)
+        let time_based = (cfg.pre_window_system_sec as usize) * (physics_fps as usize)
             / (cfg.capture_interval as usize);
 
         assert_eq!(time_based, 900);
@@ -1484,7 +1551,10 @@ mod tests {
         // Second deliberate trigger arrives
         frames_remaining = frames_remaining.max(deliberate_frames);
 
-        assert_eq!(frames_remaining, 1800, "deliberate+deliberate should extend to full window");
+        assert_eq!(
+            frames_remaining, 1800,
+            "deliberate+deliberate should extend to full window"
+        );
     }
 
     #[test]
@@ -1505,8 +1575,15 @@ mod tests {
             // tier stays deliberate
         }
 
-        assert_eq!(existing_tier, DashcamTier::Deliberate, "tier must not downgrade");
-        assert_eq!(frames_remaining, 600, "window should extend to system_frames");
+        assert_eq!(
+            existing_tier,
+            DashcamTier::Deliberate,
+            "tier must not downgrade"
+        );
+        assert_eq!(
+            frames_remaining, 600,
+            "window should extend to system_frames"
+        );
     }
 
     #[test]
@@ -1537,7 +1614,10 @@ mod tests {
             None
         };
 
-        assert!(force_close.is_none(), "deliberate clips should not have force_close");
+        assert!(
+            force_close.is_none(),
+            "deliberate clips should not have force_close"
+        );
     }
 
     // -------------------------------------------------------------------------
@@ -1563,8 +1643,14 @@ mod tests {
         }
 
         assert_eq!(cfg.pre_window_system_sec, 45, "updated field should change");
-        assert_eq!(cfg.post_window_system_sec, original_post_system, "unset field should be preserved");
-        assert_eq!(cfg.min_after_sec, original_min_after, "unset field should be preserved");
+        assert_eq!(
+            cfg.post_window_system_sec, original_post_system,
+            "unset field should be preserved"
+        );
+        assert_eq!(
+            cfg.min_after_sec, original_min_after,
+            "unset field should be preserved"
+        );
     }
 
     #[test]

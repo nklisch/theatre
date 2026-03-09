@@ -28,15 +28,17 @@ use support::{
 /// raycast response for spatial_query.  All other methods error.
 fn scene_handler(scene: serde_json::Value) -> QueryHandler {
     let scene = Arc::new(scene);
-    Arc::new(move |method: &str, _params: &serde_json::Value| match method {
-        "get_snapshot_data" => Ok((*scene).clone()),
-        "spatial_query" => Ok(json!({
-            "clear": true,
-            "total_distance": 10.0,
-            "clear_distance": 10.0
-        })),
-        _ => Err(("unknown".into(), format!("unexpected method: {method}"))),
-    })
+    Arc::new(
+        move |method: &str, _params: &serde_json::Value| match method {
+            "get_snapshot_data" => Ok((*scene).clone()),
+            "spatial_query" => Ok(json!({
+                "clear": true,
+                "total_distance": 10.0,
+                "clear_distance": 10.0
+            })),
+            _ => Err(("unknown".into(), format!("unexpected method: {method}"))),
+        },
+    )
 }
 
 /// Start a harness with a fixed scene and build the spatial index immediately.
@@ -84,10 +86,7 @@ async fn test_radius_query_respects_entity_positions() {
     let results = result["results"]
         .as_array()
         .expect("spatial_query should return results array");
-    let paths: Vec<&str> = results
-        .iter()
-        .filter_map(|e| e["path"].as_str())
-        .collect();
+    let paths: Vec<&str> = results.iter().filter_map(|e| e["path"].as_str()).collect();
 
     assert!(
         paths.contains(&"Player"),
@@ -258,10 +257,7 @@ async fn test_delta_baseline_rolls_forward_on_snapshot() {
 
     // Delta: current state (Scout still at [10,0,0]) vs baseline (also [10,0,0])
     // Scout did NOT move since the last snapshot → should NOT appear in moved
-    let delta = harness
-        .call_tool("spatial_delta", json!({}))
-        .await
-        .unwrap();
+    let delta = harness.call_tool("spatial_delta", json!({})).await.unwrap();
 
     let no_moved = vec![];
     let moved = delta["moved"].as_array().unwrap_or(&no_moved);
@@ -288,10 +284,10 @@ async fn test_delta_successive_calls_track_incremental_movement() {
         let mut scene = mock_scene_3d();
         scene.frame = 100 + n as u64;
         scene.entities[1].position = match n {
-            0 => vec![0.0, 0.0, -5.0],  // baseline: Scout at origin
-            1 => vec![5.0, 0.0, 0.0],   // delta1: Scout moved
-            2 => vec![15.0, 0.0, 0.0],  // delta2: Scout moved again
-            _ => vec![15.0, 0.0, 0.0],  // delta3+: Scout stopped
+            0 => vec![0.0, 0.0, -5.0], // baseline: Scout at origin
+            1 => vec![5.0, 0.0, 0.0],  // delta1: Scout moved
+            2 => vec![15.0, 0.0, 0.0], // delta2: Scout moved again
+            _ => vec![15.0, 0.0, 0.0], // delta3+: Scout stopped
         };
         Ok(serde_json::to_value(scene).unwrap())
     });
@@ -400,7 +396,9 @@ async fn test_teleport_reflected_in_subsequent_snapshot() {
         .expect("Player should appear in snapshot");
 
     // The absolute position should reflect the teleport destination
-    let pos = player["global_position"].as_array().expect("Player should have global_position");
+    let pos = player["global_position"]
+        .as_array()
+        .expect("Player should have global_position");
     let x = pos[0].as_f64().unwrap_or(f64::NAN);
     assert!(
         (x - 20.0).abs() < 0.5,
@@ -628,9 +626,7 @@ async fn test_error_isolation_snapshot_survives_failed_inspect() {
 #[tokio::test]
 async fn test_error_isolation_watches_survive_failed_action() {
     let handler: QueryHandler = Arc::new(|method, _| match method {
-        "execute_action" => {
-            Err(("node_not_found".into(), "Node '/Ghost' not found".into()))
-        }
+        "execute_action" => Err(("node_not_found".into(), "Node '/Ghost' not found".into())),
         _ => Ok(json!({})),
     });
 
@@ -669,13 +665,23 @@ async fn test_error_isolation_watches_survive_failed_action() {
         .await
         .unwrap();
     let watches = list["watches"].as_array().unwrap();
-    assert_eq!(watches.len(), 2, "both watches should survive the failed action: {list}");
+    assert_eq!(
+        watches.len(),
+        2,
+        "both watches should survive the failed action: {list}"
+    );
     let watch_ids: Vec<&str> = watches
         .iter()
         .filter_map(|w| w["watch_id"].as_str())
         .collect();
-    assert!(watch_ids.contains(&id1.as_str()), "watch 1 should still exist");
-    assert!(watch_ids.contains(&id2.as_str()), "watch 2 should still exist");
+    assert!(
+        watch_ids.contains(&id1.as_str()),
+        "watch 1 should still exist"
+    );
+    assert!(
+        watch_ids.contains(&id2.as_str()),
+        "watch 2 should still exist"
+    );
 }
 
 /// Multiple successive failures leave the session in a state where success still works.
@@ -845,7 +851,10 @@ async fn test_signals_pushed_after_delta_appear_in_next_delta() {
     // Delta 1: no signals yet — should be empty
     let d1 = harness.call_tool("spatial_delta", json!({})).await.unwrap();
     assert_eq!(
-        d1["signals_emitted"].as_array().map(|a| a.len()).unwrap_or(0),
+        d1["signals_emitted"]
+            .as_array()
+            .map(|a| a.len())
+            .unwrap_or(0),
         0,
         "delta before any signals should have 0 signals: {d1}"
     );
@@ -863,7 +872,10 @@ async fn test_signals_pushed_after_delta_appear_in_next_delta() {
     // Delta 2: should see the late signal
     let d2 = harness.call_tool("spatial_delta", json!({})).await.unwrap();
     assert_eq!(
-        d2["signals_emitted"].as_array().map(|a| a.len()).unwrap_or(0),
+        d2["signals_emitted"]
+            .as_array()
+            .map(|a| a.len())
+            .unwrap_or(0),
         1,
         "delta after signal push should see 1 signal: {d2}"
     );
@@ -920,7 +932,11 @@ async fn test_watch_cleared_before_event_does_not_affect_signal_stream() {
         .call_tool("spatial_watch", json!({ "action": "list" }))
         .await
         .unwrap();
-    assert_eq!(list_after["watches"].as_array().unwrap().len(), 0, "watches should be empty after clear");
+    assert_eq!(
+        list_after["watches"].as_array().unwrap().len(),
+        0,
+        "watches should be empty after clear"
+    );
 
     // Signals still arrive (the event stream is independent of watches)
     harness
@@ -938,7 +954,10 @@ async fn test_watch_cleared_before_event_does_not_affect_signal_stream() {
         .as_array()
         .map(|a| a.len())
         .unwrap_or(0);
-    assert_eq!(signals, 1, "signal event stream should be independent of watches: {delta}");
+    assert_eq!(
+        signals, 1,
+        "signal event stream should be independent of watches: {delta}"
+    );
 }
 
 /// After clearing watches, re-adding them works correctly.
@@ -1177,7 +1196,12 @@ async fn test_inspect_entity_returned_by_snapshot() {
     // Find Scout in the snapshot
     let scout = entities
         .iter()
-        .find(|e| e["path"].as_str().map(|p| p.contains("Scout")).unwrap_or(false))
+        .find(|e| {
+            e["path"]
+                .as_str()
+                .map(|p| p.contains("Scout"))
+                .unwrap_or(false)
+        })
         .expect("Scout should be in snapshot");
     let path = scout["path"].as_str().unwrap();
 

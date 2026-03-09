@@ -73,26 +73,23 @@ fn get_frame(collector: &SpectatorCollector) -> u64 {
 }
 
 fn get_scene_tree(collector: &SpectatorCollector) -> Result<Gd<SceneTree>, String> {
-    collector.base().get_tree().ok_or_else(|| "Not in scene tree".to_string())
+    collector
+        .base()
+        .get_tree()
+        .ok_or_else(|| "Not in scene tree".to_string())
 }
 
 fn resolve_node(collector: &SpectatorCollector, path: &str) -> Result<Gd<Node>, String> {
     collector.resolve_node_public(path)
 }
 
-fn execute_pause(
-    paused: bool,
-    collector: &SpectatorCollector,
-) -> Result<ActionResponse, String> {
+fn execute_pause(paused: bool, collector: &SpectatorCollector) -> Result<ActionResponse, String> {
     let mut tree = get_scene_tree(collector)?;
     tree.set_pause(paused);
     Ok(ActionResponse {
         action: "pause".into(),
         result: "ok".into(),
-        details: serde_json::Map::from_iter([(
-            "paused".into(),
-            serde_json::Value::Bool(paused),
-        )]),
+        details: serde_json::Map::from_iter([("paused".into(), serde_json::Value::Bool(paused))]),
         frame: get_frame(collector),
     })
 }
@@ -149,17 +146,13 @@ fn execute_teleport(
         );
 
         let new_pos = match position.len() {
-            3 => Vector3::new(
-                position[0] as f32,
-                position[1] as f32,
-                position[2] as f32,
-            ),
+            3 => Vector3::new(position[0] as f32, position[1] as f32, position[2] as f32),
             2 => Vector3::new(position[0] as f32, 0.0, position[1] as f32),
             _ => {
                 return Err(format!(
                     "Invalid position: expected 2 or 3 components, got {}",
                     position.len()
-                ))
+                ));
             }
         };
         node3d.set_global_position(new_pos);
@@ -187,7 +180,7 @@ fn execute_teleport(
                 return Err(format!(
                     "Invalid 2D position: expected 2 components, got {}",
                     position.len()
-                ))
+                ));
             }
         };
         node2d.set_global_position(new_pos);
@@ -254,15 +247,10 @@ fn execute_call_method(
     let mut node = resolve_node(collector, path)?;
 
     if !node.has_method(method) {
-        return Err(format!(
-            "Method '{method}' not found on node '{path}'"
-        ));
+        return Err(format!("Method '{method}' not found on node '{path}'"));
     }
 
-    let variant_args: Vec<Variant> = args
-        .iter()
-        .map(json_to_variant)
-        .collect::<Result<_, _>>()?;
+    let variant_args: Vec<Variant> = args.iter().map(json_to_variant).collect::<Result<_, _>>()?;
 
     let arr: Array<Variant> = variant_args.into_iter().collect();
     let result = node.callv(method, &arr);
@@ -291,20 +279,14 @@ fn execute_emit_signal(
 ) -> Result<ActionResponse, String> {
     let mut node = resolve_node(collector, path)?;
 
-    let variant_args: Vec<Variant> = args
-        .iter()
-        .map(json_to_variant)
-        .collect::<Result<_, _>>()?;
+    let variant_args: Vec<Variant> = args.iter().map(json_to_variant).collect::<Result<_, _>>()?;
 
     node.emit_signal(signal, &variant_args);
 
     Ok(ActionResponse {
         action: "emit_signal".into(),
         result: "ok".into(),
-        details: serde_json::Map::from_iter([(
-            "signal".into(),
-            serde_json::json!(signal),
-        )]),
+        details: serde_json::Map::from_iter([("signal".into(), serde_json::json!(signal))]),
         frame: get_frame(collector),
     })
 }
@@ -341,16 +323,13 @@ fn execute_spawn_node(
     if let Some(pos) = position {
         if let Ok(mut n3d) = instance.clone().try_cast::<Node3D>() {
             if pos.len() >= 3 {
-                n3d.set_global_position(Vector3::new(
-                    pos[0] as f32,
-                    pos[1] as f32,
-                    pos[2] as f32,
-                ));
+                n3d.set_global_position(Vector3::new(pos[0] as f32, pos[1] as f32, pos[2] as f32));
             }
         } else if let Ok(mut n2d) = instance.try_cast::<Node2D>()
-            && pos.len() >= 2 {
-                n2d.set_global_position(Vector2::new(pos[0] as f32, pos[1] as f32));
-            }
+            && pos.len() >= 2
+        {
+            n2d.set_global_position(Vector2::new(pos[0] as f32, pos[1] as f32));
+        }
     }
 
     let node_path = format!("{parent_path}/{node_name}");

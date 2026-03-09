@@ -1,8 +1,6 @@
 /// Canonical test scene data with known positions.
 use serde_json::json;
-use spectator_protocol::query::{
-    EntityData, PerspectiveData, SnapshotResponse,
-};
+use spectator_protocol::query::{EntityData, PerspectiveData, SnapshotResponse};
 
 /// A deterministic 3D scene: camera at (0,5,10) looking toward origin,
 /// player at origin, enemy north, wall east, coin south.
@@ -24,7 +22,12 @@ pub fn mock_scene_3d() -> SnapshotResponse {
                 &["enemies"],
                 &[("health", json!(80))],
             ),
-            entity("walls/EastWall", "StaticBody3D", [3.0, 0.0, 0.0], &["walls"]),
+            entity(
+                "walls/EastWall",
+                "StaticBody3D",
+                [3.0, 0.0, 0.0],
+                &["walls"],
+            ),
             entity("items/Coin", "Area3D", [0.0, 0.0, 2.0], &["collectibles"]),
             entity("Camera3D", "Camera3D", [0.0, 5.0, 10.0], &[]),
         ],

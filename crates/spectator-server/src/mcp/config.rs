@@ -8,20 +8,28 @@ use std::collections::HashMap;
 use super::serialize_response;
 
 fn parse_cluster_by(s: &str) -> Result<ClusterStrategy, McpError> {
-    super::parse_enum_param(s, "cluster_by", &[
-        ("group", ClusterStrategy::Group),
-        ("class", ClusterStrategy::Class),
-        ("proximity", ClusterStrategy::Proximity),
-        ("none", ClusterStrategy::None),
-    ])
+    super::parse_enum_param(
+        s,
+        "cluster_by",
+        &[
+            ("group", ClusterStrategy::Group),
+            ("class", ClusterStrategy::Class),
+            ("proximity", ClusterStrategy::Proximity),
+            ("none", ClusterStrategy::None),
+        ],
+    )
 }
 
 fn parse_bearing_format(s: &str) -> Result<BearingFormat, McpError> {
-    super::parse_enum_param(s, "bearing_format", &[
-        ("cardinal", BearingFormat::Cardinal),
-        ("degrees", BearingFormat::Degrees),
-        ("both", BearingFormat::Both),
-    ])
+    super::parse_enum_param(
+        s,
+        "bearing_format",
+        &[
+            ("cardinal", BearingFormat::Cardinal),
+            ("degrees", BearingFormat::Degrees),
+            ("both", BearingFormat::Both),
+        ],
+    )
 }
 
 /// MCP parameters for the spatial_config tool.
@@ -56,8 +64,16 @@ impl SpatialConfigParams {
         Ok(ConfigUpdate {
             static_patterns: self.static_patterns.clone(),
             state_properties: self.state_properties.clone(),
-            cluster_by: self.cluster_by.as_deref().map(parse_cluster_by).transpose()?,
-            bearing_format: self.bearing_format.as_deref().map(parse_bearing_format).transpose()?,
+            cluster_by: self
+                .cluster_by
+                .as_deref()
+                .map(parse_cluster_by)
+                .transpose()?,
+            bearing_format: self
+                .bearing_format
+                .as_deref()
+                .map(parse_bearing_format)
+                .transpose()?,
             expose_internals: self.expose_internals,
             poll_interval: self.poll_interval,
             token_hard_cap: self.token_hard_cap,

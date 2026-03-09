@@ -120,9 +120,7 @@ impl E2EHarness {
             Err(e) => e,
             Ok(v) => {
                 let trace = self.trace_dump();
-                panic!(
-                    "Step {n} ({tool}): expected error but got success: {v}\n\n{trace}"
-                );
+                panic!("Step {n} ({tool}): expected error but got success: {v}\n\n{trace}");
             }
         }
     }

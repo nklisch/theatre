@@ -1,7 +1,10 @@
 use rmcp::model::ErrorData as McpError;
 use schemars::JsonSchema;
 use serde::Deserialize;
-use spectator_core::{bearing, types::{Position3, vec_to_array3}};
+use spectator_core::{
+    bearing,
+    types::{Position3, vec_to_array3},
+};
 use spectator_protocol::query::{InspectCategory, SpatialContextRaw};
 
 /// Parameters for the spatial_inspect MCP tool.
@@ -32,16 +35,20 @@ fn default_include() -> Vec<String> {
 
 /// Parse include strings to InspectCategory enums.
 pub fn parse_include(strings: &[String]) -> Result<Vec<InspectCategory>, McpError> {
-    super::parse_enum_list(strings, "include category", &[
-        ("transform", InspectCategory::Transform),
-        ("physics", InspectCategory::Physics),
-        ("state", InspectCategory::State),
-        ("children", InspectCategory::Children),
-        ("signals", InspectCategory::Signals),
-        ("script", InspectCategory::Script),
-        ("spatial_context", InspectCategory::SpatialContext),
-        ("resources", InspectCategory::Resources),
-    ])
+    super::parse_enum_list(
+        strings,
+        "include category",
+        &[
+            ("transform", InspectCategory::Transform),
+            ("physics", InspectCategory::Physics),
+            ("state", InspectCategory::State),
+            ("children", InspectCategory::Children),
+            ("signals", InspectCategory::Signals),
+            ("script", InspectCategory::Script),
+            ("spatial_context", InspectCategory::SpatialContext),
+            ("resources", InspectCategory::Resources),
+        ],
+    )
 }
 
 /// Build the spatial_context block from raw addon data.
@@ -70,8 +77,7 @@ pub fn build_spatial_context(raw: &SpatialContextRaw) -> serde_json::Value {
                 "class": e.class,
             });
             if !e.groups.is_empty() {
-                entry["group"] =
-                    serde_json::json!(e.groups.first().unwrap_or(&String::new()));
+                entry["group"] = serde_json::json!(e.groups.first().unwrap_or(&String::new()));
             }
             entry
         })

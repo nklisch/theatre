@@ -6,14 +6,14 @@ use spectator_core::index::SpatialIndex;
 use spectator_core::watch::WatchEngine;
 use spectator_protocol::{
     codec::async_io,
-    handshake::{HandshakeAck, HandshakeError, SceneDimensions, PROTOCOL_VERSION},
+    handshake::{HandshakeAck, HandshakeError, PROTOCOL_VERSION, SceneDimensions},
     messages::Message,
 };
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::io::WriteHalf;
 use tokio::net::TcpStream;
-use tokio::sync::{oneshot, Mutex};
+use tokio::sync::{Mutex, oneshot};
 use tokio::time::{Duration, sleep};
 use uuid::Uuid;
 
@@ -127,13 +127,15 @@ async fn handle_connection(stream: TcpStream, state: Arc<Mutex<SessionState>>) -
     let (mut reader, writer) = tokio::io::split(stream);
 
     // Step 1: Read handshake from addon (timeout: Godot may have another client active)
-    let msg: Message = tokio::time::timeout(
-        Duration::from_secs(10),
-        async_io::read_message(&mut reader),
-    )
-    .await
-    .map_err(|_| anyhow::anyhow!("Handshake timeout after 10s — Godot may have another active client"))?
-    .map_err(|e| anyhow::anyhow!("Failed to read handshake: {}", e))?;
+    let msg: Message =
+        tokio::time::timeout(Duration::from_secs(10), async_io::read_message(&mut reader))
+            .await
+            .map_err(|_| {
+                anyhow::anyhow!(
+                    "Handshake timeout after 10s — Godot may have another active client"
+                )
+            })?
+            .map_err(|e| anyhow::anyhow!("Failed to read handshake: {}", e))?;
 
     let handshake = match msg {
         Message::Handshake(h) => h,
@@ -259,10 +261,7 @@ pub async fn query_addon(
         // Check connected and get request_id — brief borrow of tcp_writer
         {
             let writer = s.tcp_writer.as_mut().ok_or_else(|| {
-                McpError::internal_error(
-                    "Not connected to Godot addon. Is the game running?",
-                    None,
-                )
+                McpError::internal_error("Not connected to Godot addon. Is the game running?", None)
             })?;
             request_id = writer.next_request_id();
         }
@@ -291,10 +290,7 @@ pub async fn query_addon(
             )
         })?
         .map_err(|_| {
-            McpError::internal_error(
-                "TCP connection dropped while waiting for response",
-                None,
-            )
+            McpError::internal_error("TCP connection dropped while waiting for response", None)
         })?;
 
     // Clean up pending entry if timeout didn't do it
@@ -387,7 +383,13 @@ mod tests {
     async fn session_state_default_not_connected() {
         let state = SessionState::default();
         assert!(!state.connected, "default state should not be connected");
-        assert!(state.tcp_writer.is_none(), "default state should have no writer");
-        assert!(state.pending_queries.is_empty(), "default state should have no pending queries");
+        assert!(
+            state.tcp_writer.is_none(),
+            "default state should have no writer"
+        );
+        assert!(
+            state.pending_queries.is_empty(),
+            "default state should have no pending queries"
+        );
     }
 }
