@@ -73,13 +73,15 @@ impl DirectorFixture {
         let stdout = String::from_utf8_lossy(&output.stdout);
         let stderr = String::from_utf8_lossy(&output.stderr);
 
-        // Parse the last non-empty line of stdout as JSON
+        // Parse the last JSON-like line of stdout (starts with '{' or '[').
+        // Non-JSON lines like "[Spectator] TCP server stopped" may appear after
+        // the result when the GDExtension prints during Godot's shutdown.
         let json_line = stdout
             .lines()
             .rev()
-            .find(|line| !line.trim().is_empty())
+            .find(|line| line.trim().starts_with('{'))
             .ok_or_else(|| {
-                anyhow::anyhow!("No output from Godot.\nstderr: {stderr}")
+                anyhow::anyhow!("No JSON output from Godot.\nstdout: {stdout}\nstderr: {stderr}")
             })?;
 
         serde_json::from_str(json_line).map_err(|e| {

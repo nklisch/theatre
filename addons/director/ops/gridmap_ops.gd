@@ -1,5 +1,8 @@
 class_name GridMapOps
 
+const NodeOps = preload("res://addons/director/ops/node_ops.gd")
+const TileMapOps = preload("res://addons/director/ops/tilemap_ops.gd")
+
 
 static func op_gridmap_set_cells(params: Dictionary) -> Dictionary:
 	## Set cells in a GridMap node in a scene.

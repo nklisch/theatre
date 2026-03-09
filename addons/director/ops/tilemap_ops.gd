@@ -1,5 +1,7 @@
 class_name TileMapOps
 
+const NodeOps = preload("res://addons/director/ops/node_ops.gd")
+
 
 static func op_tilemap_set_cells(params: Dictionary) -> Dictionary:
 	## Set cells on a TileMapLayer node in a scene.

@@ -1,5 +1,8 @@
 class_name ResourceOps
 
+const NodeOps = preload("res://addons/director/ops/node_ops.gd")
+const SceneOps = preload("res://addons/director/ops/scene_ops.gd")
+
 
 static func op_resource_read(params: Dictionary) -> Dictionary:
 	## Read a resource file and serialize its properties.

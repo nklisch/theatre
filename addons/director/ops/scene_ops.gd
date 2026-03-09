@@ -1,5 +1,7 @@
 class_name SceneOps
 
+const NodeOps = preload("res://addons/director/ops/node_ops.gd")
+
 
 static func op_scene_create(params: Dictionary) -> Dictionary:
 	## Create a new scene with the specified root node type.
@@ -180,7 +182,7 @@ static func op_scene_add_instance(params: Dictionary) -> Dictionary:
 	var node_path_str = str(root.get_path_to(instance_node))
 
 	# Re-pack and save
-	var save_result = _repack_and_save(root, full_path)
+	var save_result = NodeOps._repack_and_save(root, full_path)
 	root.free()
 	if not save_result.success:
 		return save_result
