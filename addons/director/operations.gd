@@ -6,6 +6,8 @@ extends SceneTree
 const SceneOps = preload("res://addons/director/ops/scene_ops.gd")
 const NodeOps = preload("res://addons/director/ops/node_ops.gd")
 const ResourceOps = preload("res://addons/director/ops/resource_ops.gd")
+const TileMapOps = preload("res://addons/director/ops/tilemap_ops.gd")
+const GridMapOps = preload("res://addons/director/ops/gridmap_ops.gd")
 
 
 func _init():
@@ -43,6 +45,18 @@ func _init():
 			result = ResourceOps.op_style_box_create(args.params)
 		"resource_duplicate":
 			result = ResourceOps.op_resource_duplicate(args.params)
+		"tilemap_set_cells":
+			result = TileMapOps.op_tilemap_set_cells(args.params)
+		"tilemap_get_cells":
+			result = TileMapOps.op_tilemap_get_cells(args.params)
+		"tilemap_clear":
+			result = TileMapOps.op_tilemap_clear(args.params)
+		"gridmap_set_cells":
+			result = GridMapOps.op_gridmap_set_cells(args.params)
+		"gridmap_get_cells":
+			result = GridMapOps.op_gridmap_get_cells(args.params)
+		"gridmap_clear":
+			result = GridMapOps.op_gridmap_clear(args.params)
 		_:
 			result = {"success": false, "error": "Unknown operation: " + args.operation, "operation": args.operation, "context": {}}
 

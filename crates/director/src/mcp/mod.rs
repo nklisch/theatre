@@ -1,6 +1,8 @@
+pub mod gridmap;
 pub mod node;
 pub mod resource;
 pub mod scene;
+pub mod tilemap;
 
 use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::ErrorData as McpError;
@@ -11,12 +13,14 @@ use crate::backend::Backend;
 use crate::resolve::{resolve_godot_bin, validate_project_path};
 use crate::server::DirectorServer;
 
+use gridmap::{GridMapClearParams, GridMapGetCellsParams, GridMapSetCellsParams};
 use node::{NodeAddParams, NodeRemoveParams, NodeReparentParams, NodeSetPropertiesParams};
 use resource::{
     MaterialCreateParams, ResourceDuplicateParams, ResourceReadParams, ShapeCreateParams,
     StyleBoxCreateParams,
 };
 use scene::{SceneAddInstanceParams, SceneCreateParams, SceneListParams, SceneReadParams};
+use tilemap::{TileMapClearParams, TileMapGetCellsParams, TileMapSetCellsParams};
 
 // ---------------------------------------------------------------------------
 // Shared MCP helpers
@@ -250,6 +254,93 @@ impl DirectorServer {
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
         let data = run_operation(&self.backend, &params.project_path, "resource_duplicate", &op_params).await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "tilemap_set_cells",
+        description = "Set cells on a TileMapLayer node in a Godot scene. Each cell is placed by \
+            grid coordinates, TileSet source ID, and atlas coordinates. The TileMapLayer must already \
+            have a TileSet resource assigned. Always use this instead of editing .tscn files directly."
+    )]
+    pub async fn tilemap_set_cells(
+        &self,
+        Parameters(params): Parameters<TileMapSetCellsParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(&self.backend, &params.project_path, "tilemap_set_cells", &op_params).await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "tilemap_get_cells",
+        description = "Read used cells from a TileMapLayer node in a Godot scene. Returns cell \
+            coordinates, source IDs, atlas coordinates, and the used rect. Optionally filter by \
+            region or source ID."
+    )]
+    pub async fn tilemap_get_cells(
+        &self,
+        Parameters(params): Parameters<TileMapGetCellsParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(&self.backend, &params.project_path, "tilemap_get_cells", &op_params).await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "tilemap_clear",
+        description = "Clear cells from a TileMapLayer node in a Godot scene. Optionally specify \
+            a region to clear only cells within that rectangle; omit to clear all cells."
+    )]
+    pub async fn tilemap_clear(
+        &self,
+        Parameters(params): Parameters<TileMapClearParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(&self.backend, &params.project_path, "tilemap_clear", &op_params).await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "gridmap_set_cells",
+        description = "Set cells in a GridMap node in a Godot scene. Each cell is placed by 3D grid \
+            position and MeshLibrary item index. The GridMap must already have a MeshLibrary resource \
+            assigned. Always use this instead of editing .tscn files directly."
+    )]
+    pub async fn gridmap_set_cells(
+        &self,
+        Parameters(params): Parameters<GridMapSetCellsParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(&self.backend, &params.project_path, "gridmap_set_cells", &op_params).await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "gridmap_get_cells",
+        description = "Read used cells from a GridMap node in a Godot scene. Returns cell positions, \
+            MeshLibrary item indices, and orientations. Optionally filter by bounds or item."
+    )]
+    pub async fn gridmap_get_cells(
+        &self,
+        Parameters(params): Parameters<GridMapGetCellsParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(&self.backend, &params.project_path, "gridmap_get_cells", &op_params).await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "gridmap_clear",
+        description = "Clear cells from a GridMap node in a Godot scene. Optionally specify bounds \
+            to clear only cells within that box; omit to clear all cells."
+    )]
+    pub async fn gridmap_clear(
+        &self,
+        Parameters(params): Parameters<GridMapClearParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(&self.backend, &params.project_path, "gridmap_clear", &op_params).await?;
         serialize_response(&data)
     }
 }

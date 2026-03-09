@@ -6,6 +6,8 @@ extends SceneTree
 const SceneOps = preload("res://addons/director/ops/scene_ops.gd")
 const NodeOps = preload("res://addons/director/ops/node_ops.gd")
 const ResourceOps = preload("res://addons/director/ops/resource_ops.gd")
+const TileMapOps = preload("res://addons/director/ops/tilemap_ops.gd")
+const GridMapOps = preload("res://addons/director/ops/gridmap_ops.gd")
 
 const DEFAULT_PORT := 6550
 const IDLE_TIMEOUT_SEC := 300  # 5 minutes
@@ -177,6 +179,18 @@ func _dispatch(operation: String, params: Dictionary) -> Dictionary:
 			return ResourceOps.op_style_box_create(params)
 		"resource_duplicate":
 			return ResourceOps.op_resource_duplicate(params)
+		"tilemap_set_cells":
+			return TileMapOps.op_tilemap_set_cells(params)
+		"tilemap_get_cells":
+			return TileMapOps.op_tilemap_get_cells(params)
+		"tilemap_clear":
+			return TileMapOps.op_tilemap_clear(params)
+		"gridmap_set_cells":
+			return GridMapOps.op_gridmap_set_cells(params)
+		"gridmap_get_cells":
+			return GridMapOps.op_gridmap_get_cells(params)
+		"gridmap_clear":
+			return GridMapOps.op_gridmap_clear(params)
 		"ping":
 			return {"success": true, "data": {"status": "ok"}, "operation": "ping"}
 		_:

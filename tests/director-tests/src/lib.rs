@@ -3,6 +3,8 @@ mod harness;
 #[cfg(test)]
 mod test_daemon;
 #[cfg(test)]
+mod test_gridmap;
+#[cfg(test)]
 mod test_instance;
 #[cfg(test)]
 mod test_journey;
@@ -18,3 +20,5 @@ mod test_resource_create;
 mod test_scene;
 #[cfg(test)]
 mod test_scene_list;
+#[cfg(test)]
+mod test_tilemap;
