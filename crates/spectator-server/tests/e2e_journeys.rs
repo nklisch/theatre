@@ -811,3 +811,144 @@ async fn journey_2d_scene() {
         player_after_pos
     );
 }
+
+/// Journey: Screenshot API works end-to-end — status fields present, clip
+/// listing and retrieval succeed, and empty/missing-screenshot cases are handled.
+///
+/// Note: In headless mode (--headless), Godot does not render to the viewport,
+/// so `do_screenshot_capture()` returns None (empty image). This test verifies
+/// the API contract in both headless (no screenshots) and rendering (with
+/// screenshots) environments.
+///
+/// Steps:
+///   1. clips(status) → screenshot_buffer_count and screenshot_buffer_kb present
+///   2. wait_frames(180) → accumulate ~3 seconds
+///   3. clips(status) → both screenshot fields still present (values may be 0 in headless)
+///   4. clips(save) → flush clip, get clip_id
+///   5. clips(screenshots, clip_id) → valid JSON with total and screenshots array (any count)
+///   6. clips(screenshot_at, clip_id, at_frame=0) → valid response (no_screenshots OR image)
+///   7. clips(delete, clip_id) → cleanup
+#[tokio::test]
+async fn journey_screenshot_api_contract() {
+    let mut h = support::e2e_harness::E2EHarness::start_3d()
+        .await
+        .expect("Failed to start Godot 3D scene");
+
+    // Step 1: initial status — screenshot fields must be present
+    let status1 = h.expect(1, "clips", json!({ "action": "status" })).await;
+    assert_eq!(status1["state"], json!("buffering"));
+    assert!(
+        status1["screenshot_buffer_count"].as_u64().is_some(),
+        "screenshot_buffer_count must be present in status: {status1}"
+    );
+    assert!(
+        status1["screenshot_buffer_kb"].as_u64().is_some(),
+        "screenshot_buffer_kb must be present in status: {status1}"
+    );
+
+    // Step 2: wait ~3 seconds
+    h.wait_frames(180).await;
+
+    // Step 3: fields still present after wait
+    let status2 = h.expect(3, "clips", json!({ "action": "status" })).await;
+    assert!(
+        status2["screenshot_buffer_count"].as_u64().is_some(),
+        "screenshot_buffer_count must still be present: {status2}"
+    );
+    assert!(
+        status2["screenshot_buffer_kb"].as_u64().is_some(),
+        "screenshot_buffer_kb must still be present: {status2}"
+    );
+
+    // Step 4: save clip
+    let save = h
+        .expect(
+            4,
+            "clips",
+            json!({ "action": "save", "marker_label": "screenshot_api_test" }),
+        )
+        .await;
+    let clip_id = save["clip_id"]
+        .as_str()
+        .expect("save should return clip_id")
+        .to_string();
+
+    // Step 5: list screenshots — must succeed, total must be numeric, array must be present
+    let screenshots = h
+        .expect(
+            5,
+            "clips",
+            json!({ "action": "screenshots", "clip_id": clip_id }),
+        )
+        .await;
+    assert_eq!(screenshots["clip_id"], json!(clip_id));
+    assert!(
+        screenshots["total"].as_u64().is_some(),
+        "total must be a number: {screenshots}"
+    );
+    assert!(
+        screenshots["screenshots"].as_array().is_some(),
+        "screenshots must be an array: {screenshots}"
+    );
+
+    // Step 6: screenshot_at — must not error; response depends on whether screenshots exist
+    let result = h
+        .expect_result(
+            6,
+            "clips",
+            json!({ "action": "screenshot_at", "clip_id": clip_id, "at_frame": 0u64 }),
+        )
+        .await;
+
+    assert!(
+        !result.content.is_empty(),
+        "screenshot_at must return at least one content block"
+    );
+
+    let total = screenshots["total"].as_u64().unwrap();
+    if total == 0 {
+        // Headless mode or no screenshots captured: expect no_screenshots text
+        assert_eq!(
+            result.content.len(),
+            1,
+            "No screenshots → single text block"
+        );
+        let text = result.content[0].as_text().expect("Must be text content");
+        let body: serde_json::Value = serde_json::from_str(&text.text).unwrap();
+        assert_eq!(
+            body["error"],
+            json!("no_screenshots"),
+            "Expected no_screenshots error: {body}"
+        );
+    } else {
+        // Screenshots were captured — verify full image response
+        assert_eq!(
+            result.content.len(),
+            2,
+            "With screenshots: must return text + image blocks"
+        );
+        let text = result.content[0]
+            .as_text()
+            .expect("First block must be text");
+        let meta: serde_json::Value = serde_json::from_str(&text.text).unwrap();
+        assert_eq!(meta["clip_id"], json!(clip_id));
+        assert!(meta["frame"].as_u64().is_some());
+
+        let image = result.content[1]
+            .as_image()
+            .expect("Second block must be image");
+        assert_eq!(image.mime_type, "image/jpeg");
+        assert!(
+            !image.data.is_empty(),
+            "Image data must be non-empty base64"
+        );
+    }
+
+    // Step 7: cleanup
+    h.expect(
+        7,
+        "clips",
+        json!({ "action": "delete", "clip_id": clip_id }),
+    )
+    .await;
+}

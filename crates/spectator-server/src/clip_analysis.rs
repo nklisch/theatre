@@ -1240,6 +1240,126 @@ fn budget_truncate_count_json(items: &[serde_json::Value], budget_limit: u32) ->
 }
 
 // ---------------------------------------------------------------------------
+// Screenshot reading
+// ---------------------------------------------------------------------------
+
+/// A screenshot read from a clip's SQLite database.
+pub struct ClipScreenshot {
+    pub frame: u64,
+    pub timestamp_ms: u64,
+    pub jpeg_data: Vec<u8>,
+    pub width: u32,
+    pub height: u32,
+}
+
+/// Screenshot metadata (no image data) for listing.
+pub struct ScreenshotMeta {
+    pub frame: u64,
+    pub timestamp_ms: u64,
+    pub width: u32,
+    pub height: u32,
+    pub size_bytes: u64,
+}
+
+/// Returns true if the screenshots table exists in this clip's DB.
+fn screenshots_table_exists(db: &Connection) -> bool {
+    db.query_row(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='screenshots'",
+        [],
+        |_| Ok(()),
+    )
+    .is_ok()
+}
+
+/// Read the screenshot nearest to the given frame number.
+pub fn read_screenshot_near_frame(
+    db: &Connection,
+    frame: u64,
+) -> Result<Option<ClipScreenshot>, McpError> {
+    if !screenshots_table_exists(db) {
+        return Ok(None);
+    }
+    let result = db.query_row(
+        "SELECT frame, timestamp_ms, image_data, width, height \
+         FROM screenshots \
+         ORDER BY ABS(CAST(frame AS INTEGER) - ?1) LIMIT 1",
+        rusqlite::params![frame as i64],
+        |row| {
+            Ok(ClipScreenshot {
+                frame: row.get::<_, i64>(0)? as u64,
+                timestamp_ms: row.get::<_, i64>(1)? as u64,
+                jpeg_data: row.get(2)?,
+                width: row.get::<_, i64>(3)? as u32,
+                height: row.get::<_, i64>(4)? as u32,
+            })
+        },
+    );
+    match result {
+        Ok(s) => Ok(Some(s)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(McpError::internal_error(format!("SQLite error: {e}"), None)),
+    }
+}
+
+/// Read the screenshot nearest to the given timestamp in milliseconds.
+pub fn read_screenshot_near_time(
+    db: &Connection,
+    time_ms: u64,
+) -> Result<Option<ClipScreenshot>, McpError> {
+    if !screenshots_table_exists(db) {
+        return Ok(None);
+    }
+    let result = db.query_row(
+        "SELECT frame, timestamp_ms, image_data, width, height \
+         FROM screenshots \
+         ORDER BY ABS(CAST(timestamp_ms AS INTEGER) - ?1) LIMIT 1",
+        rusqlite::params![time_ms as i64],
+        |row| {
+            Ok(ClipScreenshot {
+                frame: row.get::<_, i64>(0)? as u64,
+                timestamp_ms: row.get::<_, i64>(1)? as u64,
+                jpeg_data: row.get(2)?,
+                width: row.get::<_, i64>(3)? as u32,
+                height: row.get::<_, i64>(4)? as u32,
+            })
+        },
+    );
+    match result {
+        Ok(s) => Ok(Some(s)),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+        Err(e) => Err(McpError::internal_error(format!("SQLite error: {e}"), None)),
+    }
+}
+
+/// List all screenshot metadata in a clip (no image data).
+pub fn list_screenshots(db: &Connection) -> Result<Vec<ScreenshotMeta>, McpError> {
+    if !screenshots_table_exists(db) {
+        return Ok(vec![]);
+    }
+    let mut stmt = db
+        .prepare(
+            "SELECT frame, timestamp_ms, width, height, LENGTH(image_data) \
+             FROM screenshots ORDER BY frame",
+        )
+        .map_err(|e| McpError::internal_error(format!("SQLite error: {e}"), None))?;
+
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(ScreenshotMeta {
+                frame: row.get::<_, i64>(0)? as u64,
+                timestamp_ms: row.get::<_, i64>(1)? as u64,
+                width: row.get::<_, i64>(2)? as u32,
+                height: row.get::<_, i64>(3)? as u32,
+                size_bytes: row.get::<_, i64>(4)? as u64,
+            })
+        })
+        .map_err(|e| McpError::internal_error(format!("SQLite error: {e}"), None))?;
+
+    rows.collect::<Result<Vec<_>, _>>()
+        .map_err(|e| McpError::internal_error(format!("SQLite error: {e}"), None))
+}
+
+// ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
@@ -1876,4 +1996,118 @@ CREATE INDEX IF NOT EXISTS idx_markers_frame ON markers(frame);
     }
 
     // --- RecordingParams deserialization tests are in recording.rs ---
+
+    // ---------------------------------------------------------------------------
+    // Screenshot reading tests
+    // ---------------------------------------------------------------------------
+
+    fn screenshot_db() -> Connection {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch(
+            "CREATE TABLE IF NOT EXISTS screenshots (
+                frame INTEGER PRIMARY KEY,
+                timestamp_ms INTEGER,
+                image_data BLOB,
+                width INTEGER,
+                height INTEGER
+            );",
+        )
+        .unwrap();
+        db
+    }
+
+    fn insert_screenshot(db: &Connection, frame: u64, timestamp_ms: u64, width: u32, height: u32) {
+        let jpeg = vec![0xFFu8, 0xD8, 0xFF, 0xE0, 0x00, frame as u8];
+        db.execute(
+            "INSERT INTO screenshots (frame, timestamp_ms, image_data, width, height) \
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![
+                frame as i64,
+                timestamp_ms as i64,
+                &jpeg,
+                width as i64,
+                height as i64
+            ],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_read_screenshot_near_frame() {
+        let db = screenshot_db();
+        insert_screenshot(&db, 100, 2000, 960, 540);
+        insert_screenshot(&db, 200, 4000, 960, 540);
+        insert_screenshot(&db, 300, 6000, 960, 540);
+
+        let s = read_screenshot_near_frame(&db, 210).unwrap().unwrap();
+        assert_eq!(s.frame, 200); // nearest to 210
+
+        let s = read_screenshot_near_frame(&db, 260).unwrap().unwrap();
+        assert_eq!(s.frame, 300); // nearest to 260
+
+        let s = read_screenshot_near_frame(&db, 100).unwrap().unwrap();
+        assert_eq!(s.frame, 100); // exact match
+    }
+
+    #[test]
+    fn test_read_screenshot_near_time() {
+        let db = screenshot_db();
+        insert_screenshot(&db, 100, 2000, 960, 540);
+        insert_screenshot(&db, 200, 4000, 960, 540);
+        insert_screenshot(&db, 300, 6000, 960, 540);
+
+        let s = read_screenshot_near_time(&db, 3500).unwrap().unwrap();
+        assert_eq!(s.frame, 200); // timestamp 4000 is nearest to 3500
+
+        let s = read_screenshot_near_time(&db, 5500).unwrap().unwrap();
+        assert_eq!(s.frame, 300); // timestamp 6000 is nearest to 5500
+    }
+
+    #[test]
+    fn test_list_screenshots_returns_metadata() {
+        let db = screenshot_db();
+        insert_screenshot(&db, 100, 2000, 960, 540);
+        insert_screenshot(&db, 200, 4000, 480, 270);
+
+        let list = list_screenshots(&db).unwrap();
+        assert_eq!(list.len(), 2);
+        assert_eq!(list[0].frame, 100);
+        assert_eq!(list[0].width, 960);
+        assert_eq!(list[0].height, 540);
+        assert!(list[0].size_bytes > 0);
+        assert_eq!(list[1].frame, 200);
+        assert_eq!(list[1].width, 480);
+    }
+
+    #[test]
+    fn test_screenshot_missing_table_returns_empty() {
+        // DB without screenshots table (pre-feature clip)
+        let db = Connection::open_in_memory().unwrap();
+
+        let result = read_screenshot_near_frame(&db, 100).unwrap();
+        assert!(result.is_none(), "Should return None when table is missing");
+
+        let result = read_screenshot_near_time(&db, 2000).unwrap();
+        assert!(result.is_none(), "Should return None when table is missing");
+
+        let list = list_screenshots(&db).unwrap();
+        assert!(
+            list.is_empty(),
+            "Should return empty list when table is missing"
+        );
+    }
+
+    #[test]
+    fn test_screenshot_empty_table_returns_none() {
+        let db = screenshot_db(); // table exists but no rows
+
+        let result = read_screenshot_near_frame(&db, 100).unwrap();
+        assert!(result.is_none());
+
+        let result = read_screenshot_near_time(&db, 2000).unwrap();
+        assert!(result.is_none());
+
+        let list = list_screenshots(&db).unwrap();
+        assert!(list.is_empty());
+    }
 }

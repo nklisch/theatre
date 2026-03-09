@@ -566,7 +566,7 @@ impl SpectatorServer {
     pub async fn clips(
         &self,
         Parameters(params): Parameters<clips::ClipsParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         let summary = crate::activity::clips_summary(&params);
         let result = clips::handle_clips(params, &self.state).await;
         self.log_activity("query", &summary, "clips").await;

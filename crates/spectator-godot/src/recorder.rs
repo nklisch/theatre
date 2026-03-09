@@ -20,6 +20,16 @@ struct CapturedFrame {
     data: Vec<u8>, // MessagePack-encoded Vec<FrameEntityData>
 }
 
+/// A captured viewport screenshot.
+#[derive(Clone)]
+struct CapturedScreenshot {
+    frame: u64,
+    timestamp_ms: u64,
+    jpeg_data: Vec<u8>,
+    width: u32,
+    height: u32,
+}
+
 // FrameEntityData is defined in spectator-protocol and imported above.
 
 // ---------------------------------------------------------------------------
@@ -60,6 +70,12 @@ pub struct DashcamConfig {
     pub min_after_sec: u32,
     pub system_min_interval_sec: u32,
     pub byte_cap_mb: u32,
+    // Screenshot settings
+    pub screenshot_enabled: bool,
+    pub screenshot_interval_sec: f64,
+    pub screenshot_quality: f32,
+    pub screenshot_max_dimension: u32,
+    pub screenshot_byte_cap_mb: u32,
 }
 
 impl Default for DashcamConfig {
@@ -75,6 +91,11 @@ impl Default for DashcamConfig {
             min_after_sec: 5,
             system_min_interval_sec: 2,
             byte_cap_mb: 1024,
+            screenshot_enabled: true,
+            screenshot_interval_sec: 2.0,
+            screenshot_quality: 0.75,
+            screenshot_max_dimension: 960,
+            screenshot_byte_cap_mb: 64,
         }
     }
 }
@@ -96,6 +117,8 @@ enum DashcamState {
         last_system_trigger_frame: u64,
         /// Absolute frame at which a system-tier clip is force-closed.
         force_close_at_frame: Option<u64>,
+        /// Screenshots captured after the trigger.
+        post_screenshots: Vec<CapturedScreenshot>,
     },
 }
 
@@ -123,6 +146,11 @@ pub struct SpectatorRecorder {
     avg_frame_bytes: usize,
     /// Cached physics FPS (from Engine.physics_ticks_per_second).
     physics_fps: u32,
+
+    // Screenshot ring buffer (separate from spatial frames)
+    screenshot_ring: VecDeque<CapturedScreenshot>,
+    screenshot_ring_bytes: usize,
+    last_screenshot_ms: u64,
 }
 
 #[godot_api]
@@ -159,6 +187,9 @@ impl INode for SpectatorRecorder {
             ring_buffer_bytes: 0,
             avg_frame_bytes: 0,
             physics_fps: 60,
+            screenshot_ring: VecDeque::new(),
+            screenshot_ring_bytes: 0,
+            last_screenshot_ms: 0,
         }
     }
 
@@ -171,6 +202,19 @@ impl INode for SpectatorRecorder {
         }
 
         self.frame_counter += 1;
+
+        // Screenshot capture (independent of spatial capture interval)
+        if self.dashcam_config.screenshot_enabled {
+            let now_ms = current_time_ms();
+            let interval_ms = (self.dashcam_config.screenshot_interval_sec * 1000.0) as u64;
+            if now_ms >= self.last_screenshot_ms + interval_ms {
+                if let Some(screenshot) = self.do_screenshot_capture() {
+                    self.screenshot_ingest(screenshot);
+                    self.last_screenshot_ms = now_ms;
+                }
+            }
+        }
+
         if !self
             .frame_counter
             .is_multiple_of(self.dashcam_config.capture_interval)
@@ -215,6 +259,8 @@ impl SpectatorRecorder {
             self.dashcam_state = DashcamState::Disabled;
             self.ring_buffer.clear();
             self.ring_buffer_bytes = 0;
+            self.screenshot_ring.clear();
+            self.screenshot_ring_bytes = 0;
         }
     }
 
@@ -237,6 +283,18 @@ impl SpectatorRecorder {
     #[func]
     pub fn get_dashcam_buffer_kb(&self) -> u32 {
         (self.ring_buffer_bytes / 1024) as u32
+    }
+
+    /// Returns current screenshot ring buffer count.
+    #[func]
+    pub fn get_screenshot_buffer_count(&self) -> u32 {
+        self.screenshot_ring.len() as u32
+    }
+
+    /// Returns current screenshot ring buffer memory usage in KB.
+    #[func]
+    pub fn get_screenshot_buffer_kb(&self) -> u32 {
+        (self.screenshot_ring_bytes / 1024) as u32
     }
 
     /// Returns dashcam clip state string: "buffering", "post_capture", or "disabled".
@@ -284,6 +342,7 @@ impl SpectatorRecorder {
                 }],
                 last_system_trigger_frame: 0,
                 force_close_at_frame: None,
+                post_screenshots: Vec::new(),
             };
         } else if let DashcamState::PostCapture {
             ref mut frames_remaining,
@@ -340,6 +399,29 @@ impl SpectatorRecorder {
         if let Some(n) = v.get("byte_cap_mb").and_then(|x| x.as_u64()) {
             self.dashcam_config.byte_cap_mb = n as u32;
         }
+        if let Some(b) = v.get("screenshot_enabled").and_then(|x| x.as_bool()) {
+            self.dashcam_config.screenshot_enabled = b;
+        }
+        if let Some(f) = v.get("screenshot_interval_sec").and_then(|x| x.as_f64()) {
+            if f > 0.0 {
+                self.dashcam_config.screenshot_interval_sec = f;
+            }
+        }
+        if let Some(f) = v.get("screenshot_quality").and_then(|x| x.as_f64()) {
+            if (0.0..=1.0).contains(&f) {
+                self.dashcam_config.screenshot_quality = f as f32;
+            }
+        }
+        if let Some(n) = v.get("screenshot_max_dimension").and_then(|x| x.as_u64()) {
+            if n > 0 {
+                self.dashcam_config.screenshot_max_dimension = n as u32;
+            }
+        }
+        if let Some(n) = v.get("screenshot_byte_cap_mb").and_then(|x| x.as_u64()) {
+            if n > 0 {
+                self.dashcam_config.screenshot_byte_cap_mb = n as u32;
+            }
+        }
         true
     }
 
@@ -356,6 +438,11 @@ impl SpectatorRecorder {
             "min_after_sec": cfg.min_after_sec,
             "system_min_interval_sec": cfg.system_min_interval_sec,
             "byte_cap_mb": cfg.byte_cap_mb,
+            "screenshot_enabled": cfg.screenshot_enabled,
+            "screenshot_interval_sec": cfg.screenshot_interval_sec,
+            "screenshot_quality": cfg.screenshot_quality,
+            "screenshot_max_dimension": cfg.screenshot_max_dimension,
+            "screenshot_byte_cap_mb": cfg.screenshot_byte_cap_mb,
         });
         GString::from(json.to_string().as_str())
     }
@@ -586,6 +673,79 @@ impl SpectatorRecorder {
 // ---------------------------------------------------------------------------
 
 impl SpectatorRecorder {
+    /// Capture a viewport screenshot and return it (without pushing to any buffer).
+    fn do_screenshot_capture(&mut self) -> Option<CapturedScreenshot> {
+        if Engine::singleton().is_editor_hint() {
+            return None;
+        }
+
+        let viewport = self.base().get_viewport()?;
+        let texture = viewport.get_texture()?;
+        let mut image = texture.get_image()?;
+
+        let orig_width = image.get_width() as u32;
+        let orig_height = image.get_height() as u32;
+
+        if orig_width == 0 || orig_height == 0 {
+            return None;
+        }
+
+        let max_dim = self.dashcam_config.screenshot_max_dimension;
+        if orig_width.max(orig_height) > max_dim {
+            let (new_width, new_height) = if orig_width >= orig_height {
+                (max_dim, (orig_height * max_dim / orig_width).max(1))
+            } else {
+                ((orig_width * max_dim / orig_height).max(1), max_dim)
+            };
+            image.resize(new_width as i32, new_height as i32);
+        }
+
+        let final_width = image.get_width() as u32;
+        let final_height = image.get_height() as u32;
+        let jpeg_bytes = image.save_jpg_to_buffer();
+        let jpeg_data: Vec<u8> = jpeg_bytes.to_vec();
+
+        if jpeg_data.is_empty() {
+            return None;
+        }
+
+        Some(CapturedScreenshot {
+            frame: current_physics_frame(),
+            timestamp_ms: current_time_ms(),
+            jpeg_data,
+            width: final_width,
+            height: final_height,
+        })
+    }
+
+    /// Ingest a screenshot into the ring buffer and post-capture state.
+    fn screenshot_ingest(&mut self, screenshot: CapturedScreenshot) {
+        self.screenshot_ring_bytes += screenshot.jpeg_data.len();
+        self.screenshot_ring.push_back(screenshot.clone());
+        self.enforce_screenshot_byte_cap();
+
+        if let DashcamState::PostCapture {
+            post_screenshots, ..
+        } = &mut self.dashcam_state
+        {
+            post_screenshots.push(screenshot);
+        }
+    }
+
+    /// Evict oldest screenshot ring buffer entries until within byte_cap.
+    fn enforce_screenshot_byte_cap(&mut self) {
+        let byte_cap = self.dashcam_config.screenshot_byte_cap_mb as usize * 1024 * 1024;
+        while self.screenshot_ring_bytes > byte_cap && !self.screenshot_ring.is_empty() {
+            if let Some(evicted) = self.screenshot_ring.pop_front() {
+                self.screenshot_ring_bytes = self
+                    .screenshot_ring_bytes
+                    .saturating_sub(evicted.jpeg_data.len());
+            } else {
+                break;
+            }
+        }
+    }
+
     /// Capture one frame of entity data and return it (without pushing to any buffer).
     fn do_capture(&mut self) -> Option<CapturedFrame> {
         let Some(ref collector) = self.collector else {
@@ -773,6 +933,7 @@ impl SpectatorRecorder {
                     0
                 },
                 force_close_at_frame,
+                post_screenshots: Vec::new(),
             };
 
             let tier_str = tier.as_str();
@@ -847,6 +1008,7 @@ impl SpectatorRecorder {
             pre_buffer,
             post_buffer,
             markers,
+            post_screenshots,
             ..
         } = state
         else {
@@ -902,6 +1064,8 @@ impl SpectatorRecorder {
             "dashcam": true,
             "tier": tier_str,
             "triggers": triggers_json,
+            "screenshot_interval_sec": self.dashcam_config.screenshot_interval_sec,
+            "screenshot_max_dimension": self.dashcam_config.screenshot_max_dimension,
         });
 
         let physics_ticks = self.physics_fps;
@@ -948,6 +1112,32 @@ impl SpectatorRecorder {
                         &m.source,
                         &m.label
                     ]);
+                }
+            }
+
+            // Write screenshots: ring entries in frame range + post_screenshots
+            let all_screenshots: Vec<&CapturedScreenshot> = self
+                .screenshot_ring
+                .iter()
+                .filter(|s| s.frame >= first_frame && s.frame <= last_frame)
+                .chain(post_screenshots.iter())
+                .collect();
+
+            if !all_screenshots.is_empty() {
+                if let Ok(mut stmt) = tx.prepare_cached(
+                    "INSERT OR REPLACE INTO screenshots \
+                     (frame, timestamp_ms, image_data, width, height) \
+                     VALUES (?1, ?2, ?3, ?4, ?5)",
+                ) {
+                    for s in &all_screenshots {
+                        let _ = stmt.execute(rusqlite::params![
+                            s.frame,
+                            s.timestamp_ms,
+                            &s.jpeg_data,
+                            s.width,
+                            s.height
+                        ]);
+                    }
                 }
             }
 
@@ -1017,10 +1207,19 @@ CREATE TABLE IF NOT EXISTS markers (
     FOREIGN KEY (frame) REFERENCES frames(frame)
 );
 
+CREATE TABLE IF NOT EXISTS screenshots (
+    frame INTEGER PRIMARY KEY,
+    timestamp_ms INTEGER,
+    image_data BLOB,
+    width INTEGER,
+    height INTEGER
+);
+
 CREATE INDEX IF NOT EXISTS idx_events_frame ON events(frame);
 CREATE INDEX IF NOT EXISTS idx_events_type ON events(event_type);
 CREATE INDEX IF NOT EXISTS idx_events_node ON events(node_path);
 CREATE INDEX IF NOT EXISTS idx_markers_frame ON markers(frame);
+CREATE INDEX IF NOT EXISTS idx_screenshots_timestamp ON screenshots(timestamp_ms);
 ";
 
 // ---------------------------------------------------------------------------
@@ -1131,7 +1330,7 @@ mod tests {
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(count, 4);
+        assert_eq!(count, 5); // recording, frames, events, markers, screenshots
     }
 
     #[test]
@@ -1145,7 +1344,126 @@ mod tests {
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(count, 4);
+        assert_eq!(count, 5); // events (3) + markers (1) + screenshots_timestamp (1)
+    }
+
+    #[test]
+    fn screenshot_ring_evicts_at_byte_cap() {
+        let mut ring: VecDeque<CapturedScreenshot> = VecDeque::new();
+        let mut ring_bytes = 0usize;
+        let byte_cap = 1usize * 1024 * 1024; // 1 MB
+
+        // Each screenshot is 20KB; 100 of them = 2MB, should be evicted to ~1MB
+        for i in 0..100u64 {
+            let s = CapturedScreenshot {
+                frame: i,
+                timestamp_ms: i * 2000,
+                jpeg_data: vec![0u8; 20_000],
+                width: 960,
+                height: 540,
+            };
+            ring_bytes += s.jpeg_data.len();
+            ring.push_back(s);
+
+            while ring_bytes > byte_cap && !ring.is_empty() {
+                if let Some(evicted) = ring.pop_front() {
+                    ring_bytes = ring_bytes.saturating_sub(evicted.jpeg_data.len());
+                } else {
+                    break;
+                }
+            }
+        }
+
+        assert!(
+            ring_bytes <= byte_cap,
+            "Ring bytes {ring_bytes} should be <= cap {byte_cap}"
+        );
+        assert!(
+            !ring.is_empty(),
+            "Ring should have some entries after eviction"
+        );
+    }
+
+    #[test]
+    fn screenshot_config_defaults_are_sane() {
+        let cfg = DashcamConfig::default();
+        assert!(cfg.screenshot_enabled);
+        assert!(cfg.screenshot_interval_sec > 0.0);
+        assert!(cfg.screenshot_quality > 0.0 && cfg.screenshot_quality <= 1.0);
+        assert!(cfg.screenshot_max_dimension > 0);
+        assert!(cfg.screenshot_byte_cap_mb > 0);
+    }
+
+    #[test]
+    fn screenshot_config_parsing() {
+        let json = serde_json::json!({
+            "screenshot_enabled": false,
+            "screenshot_interval_sec": 5.0,
+            "screenshot_quality": 0.9,
+            "screenshot_max_dimension": 720,
+            "screenshot_byte_cap_mb": 32,
+        });
+
+        let mut cfg = DashcamConfig::default();
+        if let Some(b) = json.get("screenshot_enabled").and_then(|x| x.as_bool()) {
+            cfg.screenshot_enabled = b;
+        }
+        if let Some(f) = json.get("screenshot_interval_sec").and_then(|x| x.as_f64()) {
+            if f > 0.0 {
+                cfg.screenshot_interval_sec = f;
+            }
+        }
+        if let Some(f) = json.get("screenshot_quality").and_then(|x| x.as_f64()) {
+            if (0.0..=1.0).contains(&f) {
+                cfg.screenshot_quality = f as f32;
+            }
+        }
+        if let Some(n) = json
+            .get("screenshot_max_dimension")
+            .and_then(|x| x.as_u64())
+        {
+            if n > 0 {
+                cfg.screenshot_max_dimension = n as u32;
+            }
+        }
+        if let Some(n) = json.get("screenshot_byte_cap_mb").and_then(|x| x.as_u64()) {
+            if n > 0 {
+                cfg.screenshot_byte_cap_mb = n as u32;
+            }
+        }
+
+        assert!(!cfg.screenshot_enabled);
+        assert_eq!(cfg.screenshot_interval_sec, 5.0);
+        assert!((cfg.screenshot_quality - 0.9f32).abs() < 0.01);
+        assert_eq!(cfg.screenshot_max_dimension, 720);
+        assert_eq!(cfg.screenshot_byte_cap_mb, 32);
+    }
+
+    #[test]
+    fn screenshots_table_insert_and_query() {
+        let db = rusqlite::Connection::open_in_memory().unwrap();
+        db.execute_batch(SCHEMA_SQL).unwrap();
+
+        let jpeg_data = vec![0xFFu8, 0xD8, 0xFF, 0xE0]; // JPEG header bytes
+        db.execute(
+            "INSERT INTO screenshots (frame, timestamp_ms, image_data, width, height) \
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![100u64, 2000u64, &jpeg_data, 960u32, 540u32],
+        )
+        .unwrap();
+
+        let (frame, width, height, size): (u64, u32, u32, usize) = db
+            .query_row(
+                "SELECT frame, width, height, LENGTH(image_data) FROM screenshots WHERE frame = 100",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get::<_, i64>(3)? as usize)),
+            )
+            .unwrap();
+
+        assert_eq!(frame, 100);
+        assert_eq!(width, 960);
+        assert_eq!(height, 540);
+        assert_eq!(size, 4);
     }
 
     #[test]

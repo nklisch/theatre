@@ -239,6 +239,8 @@ fn handle_dashcam_status(recorder: &mut Gd<SpectatorRecorder>) -> Result<Value, 
     let state_str = rec.get_dashcam_state().to_string();
     let buffer_frames = rec.get_dashcam_buffer_frames();
     let buffer_kb = rec.get_dashcam_buffer_kb();
+    let screenshot_count = rec.get_screenshot_buffer_count();
+    let screenshot_kb = rec.get_screenshot_buffer_kb();
     let dashcam_enabled =
         rec.is_dashcam_active() || state_str == "buffering" || state_str == "post_capture";
     let config_json_str = rec.get_dashcam_config_json().to_string();
@@ -251,6 +253,8 @@ fn handle_dashcam_status(recorder: &mut Gd<SpectatorRecorder>) -> Result<Value, 
         "state": state_str,
         "buffer_frames": buffer_frames,
         "buffer_kb": buffer_kb,
+        "screenshot_buffer_count": screenshot_count,
+        "screenshot_buffer_kb": screenshot_kb,
         "config": config,
     }))
 }

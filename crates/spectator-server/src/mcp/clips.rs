@@ -1,4 +1,5 @@
-use rmcp::model::ErrorData as McpError;
+use base64::Engine as Base64Engine;
+use rmcp::model::{CallToolResult, Content, ErrorData as McpError};
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde_json::json;
@@ -30,8 +31,10 @@ pub struct ClipsParams {
     /// "query_range" — search frames for spatial conditions.
     /// "diff_frames" — compare two frames in a clip.
     /// "find_event" — search events in a clip.
+    /// "screenshot_at" — get the viewport screenshot nearest to a frame or timestamp.
+    /// "screenshots" — list screenshot metadata in a clip.
     #[schemars(
-        description = "Action: add_marker, save, status, list, delete, markers, snapshot_at, trajectory, query_range, diff_frames, find_event"
+        description = "Action: add_marker, save, status, list, delete, markers, snapshot_at, trajectory, query_range, diff_frames, find_event, screenshot_at, screenshots"
     )]
     pub action: String,
 
@@ -106,35 +109,77 @@ pub struct ClipsParams {
 pub async fn handle_clips(
     params: ClipsParams,
     state: &Arc<Mutex<SessionState>>,
-) -> Result<String, McpError> {
+) -> Result<CallToolResult, McpError> {
     let config = crate::tcp::get_config(state).await;
     let hard_cap = config.token_hard_cap;
     let budget_limit = resolve_budget(params.token_budget, 1500, hard_cap);
 
     match params.action.as_str() {
-        "add_marker" => handle_add_marker(&params, state, budget_limit, hard_cap).await,
-        "save" => handle_save(&params, state, budget_limit, hard_cap).await,
+        "add_marker" => {
+            let s = handle_add_marker(&params, state, budget_limit, hard_cap).await?;
+            Ok(text_result(s))
+        }
+        "save" => {
+            let s = handle_save(&params, state, budget_limit, hard_cap).await?;
+            Ok(text_result(s))
+        }
         "status" => {
-            query_and_finalize(state, "dashcam_status", json!({}), budget_limit, hard_cap).await
+            let s = query_and_finalize(state, "dashcam_status", json!({}), budget_limit, hard_cap)
+                .await?;
+            Ok(text_result(s))
         }
         "list" => {
-            query_and_finalize(state, "recording_list", json!({}), budget_limit, hard_cap).await
+            let s = query_and_finalize(state, "recording_list", json!({}), budget_limit, hard_cap)
+                .await?;
+            Ok(text_result(s))
         }
-        "delete" => handle_delete(&params, state, budget_limit, hard_cap).await,
-        "markers" => handle_markers(&params, state, budget_limit, hard_cap).await,
-        "snapshot_at" => handle_snapshot_at(&params, state, budget_limit, hard_cap).await,
-        "trajectory" => handle_trajectory(&params, state, budget_limit, hard_cap).await,
-        "query_range" => handle_query_range(&params, state, budget_limit, hard_cap).await,
-        "diff_frames" => handle_diff_frames(&params, state, budget_limit, hard_cap).await,
-        "find_event" => handle_find_event(&params, state, budget_limit, hard_cap).await,
+        "delete" => {
+            let s = handle_delete(&params, state, budget_limit, hard_cap).await?;
+            Ok(text_result(s))
+        }
+        "markers" => {
+            let s = handle_markers(&params, state, budget_limit, hard_cap).await?;
+            Ok(text_result(s))
+        }
+        "snapshot_at" => {
+            let s = handle_snapshot_at(&params, state, budget_limit, hard_cap).await?;
+            Ok(text_result(s))
+        }
+        "trajectory" => {
+            let s = handle_trajectory(&params, state, budget_limit, hard_cap).await?;
+            Ok(text_result(s))
+        }
+        "query_range" => {
+            let s = handle_query_range(&params, state, budget_limit, hard_cap).await?;
+            Ok(text_result(s))
+        }
+        "diff_frames" => {
+            let s = handle_diff_frames(&params, state, budget_limit, hard_cap).await?;
+            Ok(text_result(s))
+        }
+        "find_event" => {
+            let s = handle_find_event(&params, state, budget_limit, hard_cap).await?;
+            Ok(text_result(s))
+        }
+        "screenshot_at" => handle_screenshot_at(&params, state).await,
+        "screenshots" => {
+            let s = handle_screenshots(&params, state).await?;
+            Ok(text_result(s))
+        }
         other => Err(McpError::invalid_params(
             format!(
                 "Unknown clips action: '{other}'. Valid: add_marker, save, status, list, delete, \
-                 markers, snapshot_at, trajectory, query_range, diff_frames, find_event"
+                 markers, snapshot_at, trajectory, query_range, diff_frames, find_event, \
+                 screenshot_at, screenshots"
             ),
             None,
         )),
     }
+}
+
+/// Wrap a string result in a single-text-block CallToolResult.
+fn text_result(s: String) -> CallToolResult {
+    CallToolResult::success(vec![Content::text(s)])
 }
 
 // ---------------------------------------------------------------------------
@@ -359,6 +404,73 @@ async fn handle_find_event(
         budget_limit,
     )?;
     session.finalize(&mut response, budget_limit, hard_cap)
+}
+
+async fn handle_screenshot_at(
+    params: &ClipsParams,
+    state: &Arc<Mutex<SessionState>>,
+) -> Result<CallToolResult, McpError> {
+    let session = clip_analysis::ClipSession::open(state, params.clip_id.as_deref()).await?;
+
+    let screenshot = if let Some(frame) = params.at_frame {
+        clip_analysis::read_screenshot_near_frame(&session.db, frame)?
+    } else if let Some(time_ms) = params.at_time_ms {
+        clip_analysis::read_screenshot_near_time(&session.db, time_ms)?
+    } else {
+        return Err(McpError::invalid_params(
+            "screenshot_at requires at_frame or at_time_ms".to_string(),
+            None,
+        ));
+    };
+
+    let Some(screenshot) = screenshot else {
+        return Ok(text_result(
+            json!({
+                "error": "no_screenshots",
+                "clip_id": session.clip_id,
+                "message": "This clip contains no screenshots",
+            })
+            .to_string(),
+        ));
+    };
+
+    let metadata = json!({
+        "clip_id": session.clip_id,
+        "frame": screenshot.frame,
+        "timestamp_ms": screenshot.timestamp_ms,
+        "width": screenshot.width,
+        "height": screenshot.height,
+        "size_bytes": screenshot.jpeg_data.len(),
+    });
+
+    let b64 = base64::engine::general_purpose::STANDARD.encode(&screenshot.jpeg_data);
+
+    Ok(CallToolResult::success(vec![
+        Content::text(metadata.to_string()),
+        Content::image(b64, "image/jpeg"),
+    ]))
+}
+
+async fn handle_screenshots(
+    params: &ClipsParams,
+    state: &Arc<Mutex<SessionState>>,
+) -> Result<String, McpError> {
+    let session = clip_analysis::ClipSession::open(state, params.clip_id.as_deref()).await?;
+    let list = clip_analysis::list_screenshots(&session.db)?;
+
+    let result = json!({
+        "clip_id": session.clip_id,
+        "screenshots": list.iter().map(|s| json!({
+            "frame": s.frame,
+            "timestamp_ms": s.timestamp_ms,
+            "width": s.width,
+            "height": s.height,
+            "size_bytes": s.size_bytes,
+        })).collect::<Vec<_>>(),
+        "total": list.len(),
+    });
+
+    Ok(result.to_string())
 }
 
 // ---------------------------------------------------------------------------

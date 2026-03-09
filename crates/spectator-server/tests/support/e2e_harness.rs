@@ -1,5 +1,5 @@
 /// Full-stack E2E harness: real Godot + real SpectatorServer.
-use rmcp::model::ErrorData as McpError;
+use rmcp::model::{CallToolResult, ErrorData as McpError};
 use spectator_server::{
     server::SpectatorServer,
     tcp::{SessionState, tcp_client_loop},
@@ -103,6 +103,49 @@ impl E2EHarness {
                 let trace = self.trace_dump();
                 panic!(
                     "Step {n} ({tool}): expected success but got error: {:?} — {}\n\n{trace}",
+                    e.code, e.message
+                );
+            }
+        }
+    }
+
+    /// Call a tool that may return mixed content (text + images).
+    /// Returns the full CallToolResult for inspection.
+    pub async fn expect_result(
+        &mut self,
+        n: usize,
+        tool: &str,
+        params: serde_json::Value,
+    ) -> CallToolResult {
+        let start = tokio::time::Instant::now();
+        let result = super::dispatch_tool_result(&self.server, tool, params.clone()).await;
+        let elapsed_ms = start.elapsed().as_millis() as u64;
+
+        match result {
+            Ok(call_result) => {
+                self.trace.push(StepTrace {
+                    step: n,
+                    tool: tool.to_string(),
+                    params,
+                    result: Ok(serde_json::Value::String(format!(
+                        "[{} content blocks]",
+                        call_result.content.len()
+                    ))),
+                    elapsed_ms,
+                });
+                call_result
+            }
+            Err(e) => {
+                self.trace.push(StepTrace {
+                    step: n,
+                    tool: tool.to_string(),
+                    params,
+                    result: Err(format!("{:?}: {}", e.code, e.message)),
+                    elapsed_ms,
+                });
+                let trace = self.trace_dump();
+                panic!(
+                    "Step {n} ({tool}): expected CallToolResult but got error: {:?} — {}\n\n{trace}",
                     e.code, e.message
                 );
             }
