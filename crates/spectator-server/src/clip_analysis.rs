@@ -1846,5 +1846,34 @@ CREATE INDEX IF NOT EXISTS idx_markers_frame ON markers(frame);
         assert!(result.is_ok());
     }
 
+    #[test]
+    fn test_trajectory_budget_truncation() {
+        let db = test_db();
+        // Insert 20 frames — more than any tight budget can hold
+        for i in 1..=20u64 {
+            insert_frame(
+                &db,
+                i,
+                i * 17,
+                &[test_entity("Player", [i as f64, 0.0, 0.0])],
+            );
+        }
+
+        // Each position sample is ~50 bytes → ~12 tokens.
+        // Overhead is 100 bytes → 25 tokens.
+        // budget_limit = 50 allows ~2 samples before exceeding.
+        let response = trajectory(&db, "Player", 1, 20, &[], 1, 50).unwrap();
+        let samples = response["samples"].as_array().unwrap();
+        let total = response["total_frames_in_range"].as_u64().unwrap();
+        let returned = response["samples_returned"].as_u64().unwrap();
+
+        assert_eq!(total, 20);
+        assert!(
+            returned < total,
+            "expected budget truncation: returned {returned} but total was {total}"
+        );
+        assert_eq!(returned, samples.len() as u64);
+    }
+
     // --- RecordingParams deserialization tests are in recording.rs ---
 }
