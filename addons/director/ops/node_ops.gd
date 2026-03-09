@@ -14,20 +14,20 @@ static func op_node_add(params: Dictionary) -> Dictionary:
 	var properties = params.get("properties", null)
 
 	if scene_path == "":
-		return _error("scene_path is required", "node_add", params)
+		return OpsUtil._error("scene_path is required", "node_add", params)
 	if node_type == "":
-		return _error("node_type is required", "node_add", params)
+		return OpsUtil._error("node_type is required", "node_add", params)
 	if node_name == "":
-		return _error("node_name is required", "node_add", params)
+		return OpsUtil._error("node_name is required", "node_add", params)
 
 	var full_path = "res://" + scene_path
 	if not ResourceLoader.exists(full_path):
-		return _error("Scene not found: " + scene_path, "node_add", {"scene_path": scene_path})
+		return OpsUtil._error("Scene not found: " + scene_path, "node_add", {"scene_path": scene_path})
 
 	if not ClassDB.class_exists(node_type):
-		return _error("Unknown node type: " + node_type, "node_add", {"node_type": node_type})
+		return OpsUtil._error("Unknown node type: " + node_type, "node_add", {"node_type": node_type})
 	if not ClassDB.is_parent_class(node_type, "Node"):
-		return _error(node_type + " is not a Node subclass", "node_add", {"node_type": node_type})
+		return OpsUtil._error(node_type + " is not a Node subclass", "node_add", {"node_type": node_type})
 
 	# Load and instantiate the scene
 	var packed: PackedScene = load(full_path)
@@ -41,7 +41,7 @@ static func op_node_add(params: Dictionary) -> Dictionary:
 		parent = root.get_node_or_null(parent_path)
 	if parent == null:
 		root.free()
-		return _error("Parent node not found: " + parent_path, "node_add", {"scene_path": scene_path, "parent_path": parent_path})
+		return OpsUtil._error("Parent node not found: " + parent_path, "node_add", {"scene_path": scene_path, "parent_path": parent_path})
 
 	# Create and add the new node
 	var new_node = ClassDB.instantiate(node_type)
@@ -79,15 +79,15 @@ static func op_node_set_properties(params: Dictionary) -> Dictionary:
 	var properties = params.get("properties", {})
 
 	if scene_path == "":
-		return _error("scene_path is required", "node_set_properties", params)
+		return OpsUtil._error("scene_path is required", "node_set_properties", params)
 	if node_path == "":
-		return _error("node_path is required", "node_set_properties", params)
+		return OpsUtil._error("node_path is required", "node_set_properties", params)
 	if not properties is Dictionary or properties.is_empty():
-		return _error("properties must be a non-empty dictionary", "node_set_properties", params)
+		return OpsUtil._error("properties must be a non-empty dictionary", "node_set_properties", params)
 
 	var full_path = "res://" + scene_path
 	if not ResourceLoader.exists(full_path):
-		return _error("Scene not found: " + scene_path, "node_set_properties", {"scene_path": scene_path})
+		return OpsUtil._error("Scene not found: " + scene_path, "node_set_properties", {"scene_path": scene_path})
 
 	var packed: PackedScene = load(full_path)
 	var root = packed.instantiate()
@@ -100,7 +100,7 @@ static func op_node_set_properties(params: Dictionary) -> Dictionary:
 		target = root.get_node_or_null(node_path)
 	if target == null:
 		root.free()
-		return _error("Node not found: " + node_path, "node_set_properties", {"scene_path": scene_path, "node_path": node_path})
+		return OpsUtil._error("Node not found: " + node_path, "node_set_properties", {"scene_path": scene_path, "node_path": node_path})
 
 	# Set properties with type conversion
 	var set_result = _set_properties_on_node(target, properties)
@@ -127,13 +127,13 @@ static func op_node_remove(params: Dictionary) -> Dictionary:
 	var node_path: String = params.get("node_path", "")
 
 	if scene_path == "":
-		return _error("scene_path is required", "node_remove", params)
+		return OpsUtil._error("scene_path is required", "node_remove", params)
 	if node_path == "" or node_path == ".":
-		return _error("Cannot remove root node", "node_remove", {"scene_path": scene_path})
+		return OpsUtil._error("Cannot remove root node", "node_remove", {"scene_path": scene_path})
 
 	var full_path = "res://" + scene_path
 	if not ResourceLoader.exists(full_path):
-		return _error("Scene not found: " + scene_path, "node_remove", {"scene_path": scene_path})
+		return OpsUtil._error("Scene not found: " + scene_path, "node_remove", {"scene_path": scene_path})
 
 	var packed: PackedScene = load(full_path)
 	var root = packed.instantiate()
@@ -141,7 +141,7 @@ static func op_node_remove(params: Dictionary) -> Dictionary:
 	var target = root.get_node_or_null(node_path)
 	if target == null:
 		root.free()
-		return _error("Node not found: " + node_path, "node_remove", {"scene_path": scene_path, "node_path": node_path})
+		return OpsUtil._error("Node not found: " + node_path, "node_remove", {"scene_path": scene_path, "node_path": node_path})
 
 	var children_count = _count_descendants(target)
 	target.get_parent().remove_child(target)
@@ -168,15 +168,15 @@ static func op_node_reparent(params: Dictionary) -> Dictionary:
 	var new_name = params.get("new_name", null)
 
 	if scene_path == "":
-		return _error("scene_path is required", "node_reparent", params)
+		return OpsUtil._error("scene_path is required", "node_reparent", params)
 	if node_path == "" or node_path == ".":
-		return _error("Cannot reparent root node", "node_reparent", {"scene_path": scene_path})
+		return OpsUtil._error("Cannot reparent root node", "node_reparent", {"scene_path": scene_path})
 	if new_parent_path == "":
-		return _error("new_parent_path is required", "node_reparent", params)
+		return OpsUtil._error("new_parent_path is required", "node_reparent", params)
 
 	var full_path = "res://" + scene_path
 	if not ResourceLoader.exists(full_path):
-		return _error("Scene not found: " + scene_path, "node_reparent", {"scene_path": scene_path})
+		return OpsUtil._error("Scene not found: " + scene_path, "node_reparent", {"scene_path": scene_path})
 
 	var packed: PackedScene = load(full_path)
 	var root = packed.instantiate()
@@ -185,7 +185,7 @@ static func op_node_reparent(params: Dictionary) -> Dictionary:
 	var target = root.get_node_or_null(node_path)
 	if target == null:
 		root.free()
-		return _error("Node not found: " + node_path, "node_reparent", {"scene_path": scene_path, "node_path": node_path})
+		return OpsUtil._error("Node not found: " + node_path, "node_reparent", {"scene_path": scene_path, "node_path": node_path})
 
 	# Find the new parent
 	var new_parent: Node
@@ -195,12 +195,12 @@ static func op_node_reparent(params: Dictionary) -> Dictionary:
 		new_parent = root.get_node_or_null(new_parent_path)
 	if new_parent == null:
 		root.free()
-		return _error("New parent not found: " + new_parent_path, "node_reparent", {"scene_path": scene_path, "new_parent_path": new_parent_path})
+		return OpsUtil._error("New parent not found: " + new_parent_path, "node_reparent", {"scene_path": scene_path, "new_parent_path": new_parent_path})
 
 	# Check for circular reparent: target cannot be moved to itself or its own descendant
 	if target == new_parent or target.is_ancestor_of(new_parent):
 		root.free()
-		return _error("Circular reparent: cannot move a node to itself or its own descendant", "node_reparent", {"node_path": node_path, "new_parent_path": new_parent_path})
+		return OpsUtil._error("Circular reparent: cannot move a node to itself or its own descendant", "node_reparent", {"node_path": node_path, "new_parent_path": new_parent_path})
 
 	# Determine final name
 	var final_name = new_name if new_name != null else str(target.name)
@@ -208,7 +208,7 @@ static func op_node_reparent(params: Dictionary) -> Dictionary:
 	# Name collision check
 	if new_parent.has_node(NodePath(final_name)):
 		root.free()
-		return _error("Name collision: " + final_name + " already exists under " + new_parent_path + ". Use new_name to resolve.", "node_reparent", {"node_path": node_path, "new_parent_path": new_parent_path})
+		return OpsUtil._error("Name collision: " + final_name + " already exists under " + new_parent_path + ". Use new_name to resolve.", "node_reparent", {"node_path": node_path, "new_parent_path": new_parent_path})
 
 	# Record old path
 	var old_path = str(root.get_path_to(target))
@@ -346,5 +346,3 @@ static func _count_descendants(node: Node) -> int:
 	return count
 
 
-static func _error(message: String, operation: String, context: Dictionary) -> Dictionary:
-	return {"success": false, "error": message, "operation": operation, "context": context}

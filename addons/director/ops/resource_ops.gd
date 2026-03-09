@@ -12,15 +12,15 @@ static func op_resource_read(params: Dictionary) -> Dictionary:
 
 	var resource_path: String = params.get("resource_path", "")
 	if resource_path == "":
-		return _error("resource_path is required", "resource_read", params)
+		return OpsUtil._error("resource_path is required", "resource_read", params)
 
 	var full_path = "res://" + resource_path
 	if not ResourceLoader.exists(full_path):
-		return _error("Resource not found: " + resource_path, "resource_read", {"resource_path": resource_path})
+		return OpsUtil._error("Resource not found: " + resource_path, "resource_read", {"resource_path": resource_path})
 
 	var resource = load(full_path)
 	if resource == null:
-		return _error("Failed to load resource: " + resource_path, "resource_read", {"resource_path": resource_path})
+		return OpsUtil._error("Failed to load resource: " + resource_path, "resource_read", {"resource_path": resource_path})
 
 	var data: Dictionary = {
 		"type": resource.get_class(),
@@ -59,8 +59,6 @@ static func _get_resource_properties(resource: Resource) -> Dictionary:
 
 		props[name] = _serialize_resource_value(value)
 
-	if defaults:
-		defaults.free()
 	return props
 
 
@@ -84,14 +82,14 @@ static func op_material_create(params: Dictionary) -> Dictionary:
 	var material_type: String = params.get("material_type", "")
 
 	if resource_path == "":
-		return _error("resource_path is required", "material_create", params)
+		return OpsUtil._error("resource_path is required", "material_create", params)
 	if material_type == "":
-		return _error("material_type is required", "material_create", params)
+		return OpsUtil._error("material_type is required", "material_create", params)
 	if not ClassDB.class_exists(material_type):
-		return _error("Unknown class: " + material_type, "material_create",
+		return OpsUtil._error("Unknown class: " + material_type, "material_create",
 			{"material_type": material_type})
 	if not ClassDB.is_parent_class(material_type, "Material"):
-		return _error(material_type + " is not a Material subclass",
+		return OpsUtil._error(material_type + " is not a Material subclass",
 			"material_create", {"material_type": material_type})
 
 	var material = ClassDB.instantiate(material_type)
@@ -100,13 +98,11 @@ static func op_material_create(params: Dictionary) -> Dictionary:
 	var shader_path: String = params.get("shader_path", "")
 	if shader_path != "":
 		if material_type != "ShaderMaterial":
-			material.free()
-			return _error("shader_path is only valid for ShaderMaterial",
+			return OpsUtil._error("shader_path is only valid for ShaderMaterial",
 				"material_create", {"material_type": material_type})
 		var full_shader = "res://" + shader_path
 		if not ResourceLoader.exists(full_shader):
-			material.free()
-			return _error("Shader not found: " + shader_path,
+			return OpsUtil._error("Shader not found: " + shader_path,
 				"material_create", {"shader_path": shader_path})
 		material.shader = load(full_shader)
 
@@ -115,16 +111,14 @@ static func op_material_create(params: Dictionary) -> Dictionary:
 	if properties is Dictionary and not properties.is_empty():
 		var result = _set_properties_on_resource(material, properties)
 		if not result.success:
-			material.free()
 			return result
 
 	# Save
 	var full_path = "res://" + resource_path
 	_ensure_directory(full_path)
 	var err = ResourceSaver.save(material, full_path)
-	material.free()
 	if err != OK:
-		return _error("Failed to save material: " + str(err),
+		return OpsUtil._error("Failed to save material: " + str(err),
 			"material_create", {"resource_path": resource_path})
 
 	return {"success": true, "data": {"path": resource_path, "type": material_type}}
@@ -142,21 +136,21 @@ static func op_shape_create(params: Dictionary) -> Dictionary:
 	var node_path: String = params.get("node_path", "")
 
 	if shape_type == "":
-		return _error("shape_type is required", "shape_create", params)
+		return OpsUtil._error("shape_type is required", "shape_create", params)
 	if save_path == "" and scene_path == "":
-		return _error("At least one of save_path or scene_path is required",
+		return OpsUtil._error("At least one of save_path or scene_path is required",
 			"shape_create", params)
 	if scene_path != "" and node_path == "":
-		return _error("node_path is required when scene_path is set",
+		return OpsUtil._error("node_path is required when scene_path is set",
 			"shape_create", {"scene_path": scene_path})
 
 	if not ClassDB.class_exists(shape_type):
-		return _error("Unknown class: " + shape_type, "shape_create",
+		return OpsUtil._error("Unknown class: " + shape_type, "shape_create",
 			{"shape_type": shape_type})
 	# Accept both Shape2D and Shape3D subclasses
 	if not (ClassDB.is_parent_class(shape_type, "Shape3D") or
 			ClassDB.is_parent_class(shape_type, "Shape2D")):
-		return _error(shape_type + " is not a Shape2D or Shape3D subclass",
+		return OpsUtil._error(shape_type + " is not a Shape2D or Shape3D subclass",
 			"shape_create", {"shape_type": shape_type})
 
 	var shape = ClassDB.instantiate(shape_type)
@@ -166,7 +160,6 @@ static func op_shape_create(params: Dictionary) -> Dictionary:
 	if shape_params is Dictionary and not shape_params.is_empty():
 		var result = _set_properties_on_resource(shape, shape_params)
 		if not result.success:
-			shape.free()
 			return result
 
 	var data: Dictionary = {"shape_type": shape_type}
@@ -177,8 +170,7 @@ static func op_shape_create(params: Dictionary) -> Dictionary:
 		_ensure_directory(full_save)
 		var err = ResourceSaver.save(shape, full_save)
 		if err != OK:
-			shape.free()
-			return _error("Failed to save shape: " + str(err),
+			return OpsUtil._error("Failed to save shape: " + str(err),
 				"shape_create", {"save_path": save_path})
 		data["saved_to"] = save_path
 
@@ -186,16 +178,14 @@ static func op_shape_create(params: Dictionary) -> Dictionary:
 	if scene_path != "":
 		var full_scene = "res://" + scene_path
 		if not ResourceLoader.exists(full_scene):
-			shape.free()
-			return _error("Scene not found: " + scene_path,
+			return OpsUtil._error("Scene not found: " + scene_path,
 				"shape_create", {"scene_path": scene_path})
 		var packed: PackedScene = load(full_scene)
 		var root = packed.instantiate()
 		var target = root.get_node_or_null(node_path)
 		if target == null:
 			root.free()
-			shape.free()
-			return _error("Node not found: " + node_path,
+			return OpsUtil._error("Node not found: " + node_path,
 				"shape_create", {"scene_path": scene_path, "node_path": node_path})
 
 		# Verify the node has a "shape" property
@@ -206,8 +196,7 @@ static func op_shape_create(params: Dictionary) -> Dictionary:
 				break
 		if not has_shape_prop:
 			root.free()
-			shape.free()
-			return _error("Node " + node_path + " (" + target.get_class() +
+			return OpsUtil._error("Node " + node_path + " (" + target.get_class() +
 				") has no 'shape' property",
 				"shape_create", {"node_path": node_path, "class": target.get_class()})
 
@@ -215,11 +204,9 @@ static func op_shape_create(params: Dictionary) -> Dictionary:
 		var save_result = NodeOps._repack_and_save(root, full_scene)
 		root.free()
 		if not save_result.success:
-			shape.free()
 			return save_result
 		data["attached_to"] = node_path
 
-	shape.free()
 	return {"success": true, "data": data}
 
 
@@ -233,13 +220,13 @@ static func op_style_box_create(params: Dictionary) -> Dictionary:
 	var style_type: String = params.get("style_type", "")
 
 	if resource_path == "":
-		return _error("resource_path is required", "style_box_create", params)
+		return OpsUtil._error("resource_path is required", "style_box_create", params)
 	if style_type == "":
-		return _error("style_type is required", "style_box_create", params)
+		return OpsUtil._error("style_type is required", "style_box_create", params)
 
 	var valid_types = ["StyleBoxFlat", "StyleBoxTexture", "StyleBoxLine", "StyleBoxEmpty"]
 	if not style_type in valid_types:
-		return _error("Invalid style_type: " + style_type +
+		return OpsUtil._error("Invalid style_type: " + style_type +
 			". Must be one of: " + ", ".join(valid_types),
 			"style_box_create", {"style_type": style_type})
 
@@ -249,15 +236,13 @@ static func op_style_box_create(params: Dictionary) -> Dictionary:
 	if properties is Dictionary and not properties.is_empty():
 		var result = _set_properties_on_resource(style_box, properties)
 		if not result.success:
-			style_box.free()
 			return result
 
 	var full_path = "res://" + resource_path
 	_ensure_directory(full_path)
 	var err = ResourceSaver.save(style_box, full_path)
-	style_box.free()
 	if err != OK:
-		return _error("Failed to save style box: " + str(err),
+		return OpsUtil._error("Failed to save style box: " + str(err),
 			"style_box_create", {"resource_path": resource_path})
 
 	return {"success": true, "data": {"path": resource_path, "type": style_type}}
@@ -274,18 +259,18 @@ static func op_resource_duplicate(params: Dictionary) -> Dictionary:
 	var deep_copy: bool = params.get("deep_copy", false)
 
 	if source_path == "":
-		return _error("source_path is required", "resource_duplicate", params)
+		return OpsUtil._error("source_path is required", "resource_duplicate", params)
 	if dest_path == "":
-		return _error("dest_path is required", "resource_duplicate", params)
+		return OpsUtil._error("dest_path is required", "resource_duplicate", params)
 
 	var full_source = "res://" + source_path
 	if not ResourceLoader.exists(full_source):
-		return _error("Source resource not found: " + source_path,
+		return OpsUtil._error("Source resource not found: " + source_path,
 			"resource_duplicate", {"source_path": source_path})
 
 	var source = load(full_source)
 	if source == null:
-		return _error("Failed to load source resource: " + source_path,
+		return OpsUtil._error("Failed to load source resource: " + source_path,
 			"resource_duplicate", {"source_path": source_path})
 
 	var duplicate = source.duplicate(deep_copy)
@@ -302,7 +287,7 @@ static func op_resource_duplicate(params: Dictionary) -> Dictionary:
 	_ensure_directory(full_dest)
 	var err = ResourceSaver.save(duplicate, full_dest)
 	if err != OK:
-		return _error("Failed to save duplicate: " + str(err),
+		return OpsUtil._error("Failed to save duplicate: " + str(err),
 			"resource_duplicate", {"dest_path": dest_path})
 
 	return {"success": true, "data": {
@@ -342,5 +327,3 @@ static func _ensure_directory(full_path: String) -> void:
 		DirAccess.make_dir_recursive_absolute(dir_path)
 
 
-static func _error(message: String, operation: String, context: Dictionary) -> Dictionary:
-	return {"success": false, "error": message, "operation": operation, "context": context}

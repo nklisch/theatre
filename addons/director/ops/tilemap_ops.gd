@@ -18,11 +18,11 @@ static func op_tilemap_set_cells(params: Dictionary) -> Dictionary:
 	var cells = params.get("cells", [])
 
 	if scene_path == "":
-		return _error("scene_path is required", "tilemap_set_cells", params)
+		return OpsUtil._error("scene_path is required", "tilemap_set_cells", params)
 	if node_path == "":
-		return _error("node_path is required", "tilemap_set_cells", params)
+		return OpsUtil._error("node_path is required", "tilemap_set_cells", params)
 	if not cells is Array or cells.is_empty():
-		return _error("cells must be a non-empty array", "tilemap_set_cells", params)
+		return OpsUtil._error("cells must be a non-empty array", "tilemap_set_cells", params)
 
 	var loaded = _load_scene_and_find_node(scene_path, node_path, "tilemap_set_cells")
 	if not loaded.success:
@@ -39,7 +39,7 @@ static func op_tilemap_set_cells(params: Dictionary) -> Dictionary:
 
 	if target.tile_set == null:
 		root.free()
-		return _error("TileMapLayer has no TileSet assigned. Assign one via " +
+		return OpsUtil._error("TileMapLayer has no TileSet assigned. Assign one via " +
 			"node_set_properties before setting cells.",
 			"tilemap_set_cells", {"node_path": node_path})
 
@@ -47,20 +47,20 @@ static func op_tilemap_set_cells(params: Dictionary) -> Dictionary:
 	for cell in cells:
 		if not cell is Dictionary:
 			root.free()
-			return _error("Each cell must be a dictionary with coords, source_id, atlas_coords",
+			return OpsUtil._error("Each cell must be a dictionary with coords, source_id, atlas_coords",
 				"tilemap_set_cells", {"cell": cell})
 
 		var coords_arr = cell.get("coords", null)
 		if coords_arr == null or not coords_arr is Array or coords_arr.size() != 2:
 			root.free()
-			return _error("Cell coords must be [x, y] array",
+			return OpsUtil._error("Cell coords must be [x, y] array",
 				"tilemap_set_cells", {"cell": cell})
 
 		var source_id: int = int(cell.get("source_id", 0))
 		var atlas_arr = cell.get("atlas_coords", null)
 		if atlas_arr == null or not atlas_arr is Array or atlas_arr.size() != 2:
 			root.free()
-			return _error("Cell atlas_coords must be [x, y] array",
+			return OpsUtil._error("Cell atlas_coords must be [x, y] array",
 				"tilemap_set_cells", {"cell": cell})
 
 		var alt_tile: int = int(cell.get("alternative_tile", 0))
@@ -99,9 +99,9 @@ static func op_tilemap_get_cells(params: Dictionary) -> Dictionary:
 	var filter_source_id = params.get("source_id", null)
 
 	if scene_path == "":
-		return _error("scene_path is required", "tilemap_get_cells", params)
+		return OpsUtil._error("scene_path is required", "tilemap_get_cells", params)
 	if node_path == "":
-		return _error("node_path is required", "tilemap_get_cells", params)
+		return OpsUtil._error("node_path is required", "tilemap_get_cells", params)
 
 	var loaded = _load_scene_and_find_node(scene_path, node_path, "tilemap_get_cells")
 	if not loaded.success:
@@ -182,9 +182,9 @@ static func op_tilemap_clear(params: Dictionary) -> Dictionary:
 	var region = params.get("region", null)
 
 	if scene_path == "":
-		return _error("scene_path is required", "tilemap_clear", params)
+		return OpsUtil._error("scene_path is required", "tilemap_clear", params)
 	if node_path == "":
-		return _error("node_path is required", "tilemap_clear", params)
+		return OpsUtil._error("node_path is required", "tilemap_clear", params)
 
 	var loaded = _load_scene_and_find_node(scene_path, node_path, "tilemap_clear")
 	if not loaded.success:
@@ -238,7 +238,7 @@ static func _load_scene_and_find_node(scene_path: String, node_path: String,
 	## Returns { success: true, root: Node, target: Node } or error dict.
 	var full_path = "res://" + scene_path
 	if not ResourceLoader.exists(full_path):
-		return _error("Scene not found: " + scene_path, operation,
+		return OpsUtil._error("Scene not found: " + scene_path, operation,
 			{"scene_path": scene_path})
 
 	var packed: PackedScene = load(full_path)
@@ -251,7 +251,7 @@ static func _load_scene_and_find_node(scene_path: String, node_path: String,
 		target = root.get_node_or_null(node_path)
 	if target == null:
 		root.free()
-		return _error("Node not found: " + node_path, operation,
+		return OpsUtil._error("Node not found: " + node_path, operation,
 			{"scene_path": scene_path, "node_path": node_path})
 
 	return {"success": true, "root": root, "target": target}
@@ -264,14 +264,10 @@ static func _validate_tilemap_layer(node: Node, operation: String,
 	if node is TileMapLayer:
 		return {"success": true}
 	if node.get_class() == "TileMap":
-		return _error("TileMap is deprecated in Godot 4.3+. Use TileMapLayer instead. " +
+		return OpsUtil._error("TileMap is deprecated in Godot 4.3+. Use TileMapLayer instead. " +
 			"Convert your TileMap to TileMapLayer nodes in the Godot editor.",
 			operation, context)
-	return _error("Node is " + node.get_class() + ", expected TileMapLayer",
+	return OpsUtil._error("Node is " + node.get_class() + ", expected TileMapLayer",
 		operation, context)
 
 
-static func _error(message: String, operation: String,
-		context: Dictionary) -> Dictionary:
-	return {"success": false, "error": message, "operation": operation,
-		"context": context}

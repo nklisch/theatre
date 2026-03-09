@@ -210,9 +210,7 @@ async fn handle_add_marker(
     if let Some(frame) = params.marker_frame {
         query["frame"] = json!(frame);
     }
-    let data = query_addon(state, "recording_marker", query).await?;
-    let mut response = data;
-    finalize_response(&mut response, budget_limit, hard_cap)
+    query_and_finalize(state, "recording_marker", query, budget_limit, hard_cap).await
 }
 
 async fn handle_save(
@@ -224,9 +222,7 @@ async fn handle_save(
     let query = json!({
         "marker_label": params.marker_label.as_deref().unwrap_or("agent save"),
     });
-    let data = query_addon(state, "dashcam_flush", query).await?;
-    let mut response = data;
-    finalize_response(&mut response, budget_limit, hard_cap)
+    query_and_finalize(state, "dashcam_flush", query, budget_limit, hard_cap).await
 }
 
 async fn handle_delete(
@@ -236,9 +232,7 @@ async fn handle_delete(
     hard_cap: u32,
 ) -> Result<String, McpError> {
     let id = require_param!(params.clip_id.as_deref(), "clip_id is required for delete");
-    let data = query_addon(state, "recording_delete", json!({ "clip_id": id })).await?;
-    let mut response = data;
-    finalize_response(&mut response, budget_limit, hard_cap)
+    query_and_finalize(state, "recording_delete", json!({ "clip_id": id }), budget_limit, hard_cap).await
 }
 
 async fn handle_markers(
@@ -248,9 +242,48 @@ async fn handle_markers(
     hard_cap: u32,
 ) -> Result<String, McpError> {
     let id = require_param!(params.clip_id.as_deref(), "clip_id is required for markers");
-    let data = query_addon(state, "recording_markers", json!({ "clip_id": id })).await?;
-    let mut response = data;
-    finalize_response(&mut response, budget_limit, hard_cap)
+    query_and_finalize(state, "recording_markers", json!({ "clip_id": id }), budget_limit, hard_cap).await
+}
+
+// ---------------------------------------------------------------------------
+// Frame resolution helpers
+// ---------------------------------------------------------------------------
+
+fn resolve_frame(
+    session: &clip_analysis::ClipSession,
+    at_frame: Option<u64>,
+    at_time_ms: Option<u64>,
+    action: &str,
+) -> Result<u64, McpError> {
+    if let Some(f) = at_frame {
+        session.meta.validate_frame(f)?;
+        Ok(f)
+    } else if let Some(t) = at_time_ms {
+        let (frame, _) = clip_analysis::read_frame_at_time(&session.db, t)?;
+        Ok(frame)
+    } else {
+        Err(McpError::invalid_params(
+            format!("{action} requires at_frame or at_time_ms"),
+            None,
+        ))
+    }
+}
+
+fn resolve_frame_range(
+    session: &clip_analysis::ClipSession,
+    from: Option<u64>,
+    to: Option<u64>,
+    action: &str,
+) -> Result<(u64, u64), McpError> {
+    let from = from.ok_or_else(|| {
+        McpError::invalid_params(format!("{action} requires 'from_frame'"), None)
+    })?;
+    let to = to.ok_or_else(|| {
+        McpError::invalid_params(format!("{action} requires 'to_frame'"), None)
+    })?;
+    session.meta.validate_frame(from)?;
+    session.meta.validate_frame(to)?;
+    Ok((from, to))
 }
 
 // ---------------------------------------------------------------------------
@@ -265,18 +298,7 @@ async fn handle_snapshot_at(
 ) -> Result<String, McpError> {
     let session = clip_analysis::ClipSession::open(state, params.clip_id.as_deref()).await?;
 
-    let frame = if let Some(f) = params.at_frame {
-        session.meta.validate_frame(f)?;
-        f
-    } else if let Some(t) = params.at_time_ms {
-        let (frame, _) = clip_analysis::read_frame_at_time(&session.db, t)?;
-        frame
-    } else {
-        return Err(McpError::invalid_params(
-            "snapshot_at requires at_frame or at_time_ms".to_string(),
-            None,
-        ));
-    };
+    let frame = resolve_frame(&session, params.at_frame, params.at_time_ms, "snapshot_at")?;
 
     let detail = params.detail.as_deref().unwrap_or("standard");
     let mut response =
@@ -296,10 +318,7 @@ async fn handle_trajectory(
         params.node.as_deref(),
         "trajectory requires 'node' parameter"
     );
-    let from = require_param!(params.from_frame, "trajectory requires 'from_frame'");
-    let to = require_param!(params.to_frame, "trajectory requires 'to_frame'");
-    session.meta.validate_frame(from)?;
-    session.meta.validate_frame(to)?;
+    let (from, to) = resolve_frame_range(&session, params.from_frame, params.to_frame, "trajectory")?;
 
     let properties = params.properties.as_deref().unwrap_or(&[]);
     let sample_interval = params.sample_interval.unwrap_or(1);
@@ -328,10 +347,7 @@ async fn handle_query_range(
         params.node.as_deref(),
         "query_range requires 'node' parameter"
     );
-    let from = require_param!(params.from_frame, "query_range requires 'from_frame'");
-    let to = require_param!(params.to_frame, "query_range requires 'to_frame'");
-    session.meta.validate_frame(from)?;
-    session.meta.validate_frame(to)?;
+    let (from, to) = resolve_frame_range(&session, params.from_frame, params.to_frame, "query_range")?;
     let condition: clip_analysis::QueryCondition = params
         .condition
         .as_ref()

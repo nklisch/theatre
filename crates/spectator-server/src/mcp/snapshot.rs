@@ -1,5 +1,6 @@
 use rmcp::model::ErrorData as McpError;
 
+use super::defaults::{default_detail, default_perspective, default_radius};
 use super::require_param;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -58,15 +59,6 @@ pub struct SpatialSnapshotParams {
     pub expand: Option<String>,
 }
 
-fn default_perspective() -> String {
-    "camera".to_string()
-}
-fn default_radius() -> f64 {
-    50.0
-}
-fn default_detail() -> String {
-    "standard".to_string()
-}
 
 /// Processed entity for MCP output.
 #[derive(Debug, Serialize)]

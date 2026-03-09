@@ -13,6 +13,7 @@ use spectator_protocol::query::{DetailLevel, GetSnapshotDataParams, PerspectiveP
 
 use crate::tcp::get_config;
 
+use super::defaults::{default_perspective, default_radius};
 use super::snapshot::to_entity_snapshot;
 use super::{finalize_response, query_and_deserialize};
 
@@ -37,11 +38,15 @@ pub struct SpatialDeltaParams {
     pub token_budget: Option<u32>,
 }
 
-fn default_perspective() -> String {
-    "camera".to_string()
-}
-fn default_radius() -> f64 {
-    50.0
+
+fn insert_if_nonempty<T: serde::Serialize>(
+    map: &mut serde_json::Map<String, serde_json::Value>,
+    key: &str,
+    val: &[T],
+) {
+    if !val.is_empty() {
+        map.insert(key.into(), serde_json::to_value(val).unwrap_or_default());
+    }
 }
 
 /// Build the shared delta JSON object (from_frame, to_frame, and the 5 optional
@@ -52,36 +57,11 @@ pub fn build_delta_json(delta: &DeltaResult, watch_triggers: &[WatchTrigger]) ->
         "to_frame": delta.to_frame,
     });
     if let serde_json::Value::Object(ref mut map) = out {
-        if !delta.moved.is_empty() {
-            map.insert(
-                "moved".into(),
-                serde_json::to_value(&delta.moved).unwrap_or_default(),
-            );
-        }
-        if !delta.state_changed.is_empty() {
-            map.insert(
-                "state_changed".into(),
-                serde_json::to_value(&delta.state_changed).unwrap_or_default(),
-            );
-        }
-        if !delta.entered.is_empty() {
-            map.insert(
-                "entered".into(),
-                serde_json::to_value(&delta.entered).unwrap_or_default(),
-            );
-        }
-        if !delta.exited.is_empty() {
-            map.insert(
-                "exited".into(),
-                serde_json::to_value(&delta.exited).unwrap_or_default(),
-            );
-        }
-        if !watch_triggers.is_empty() {
-            map.insert(
-                "watch_triggers".into(),
-                serde_json::to_value(watch_triggers).unwrap_or_default(),
-            );
-        }
+        insert_if_nonempty(map, "moved", &delta.moved);
+        insert_if_nonempty(map, "state_changed", &delta.state_changed);
+        insert_if_nonempty(map, "entered", &delta.entered);
+        insert_if_nonempty(map, "exited", &delta.exited);
+        insert_if_nonempty(map, "watch_triggers", watch_triggers);
     }
     out
 }

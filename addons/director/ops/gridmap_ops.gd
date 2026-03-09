@@ -19,11 +19,11 @@ static func op_gridmap_set_cells(params: Dictionary) -> Dictionary:
 	var cells = params.get("cells", [])
 
 	if scene_path == "":
-		return _error("scene_path is required", "gridmap_set_cells", params)
+		return OpsUtil._error("scene_path is required", "gridmap_set_cells", params)
 	if node_path == "":
-		return _error("node_path is required", "gridmap_set_cells", params)
+		return OpsUtil._error("node_path is required", "gridmap_set_cells", params)
 	if not cells is Array or cells.is_empty():
-		return _error("cells must be a non-empty array", "gridmap_set_cells", params)
+		return OpsUtil._error("cells must be a non-empty array", "gridmap_set_cells", params)
 
 	var loaded = TileMapOps._load_scene_and_find_node(
 		scene_path, node_path, "gridmap_set_cells")
@@ -33,7 +33,7 @@ static func op_gridmap_set_cells(params: Dictionary) -> Dictionary:
 	var root: Node = loaded.root
 	var target: Node = loaded.target
 
-	var valid = _validate_gridmap(target, "gridmap_set_cells",
+	var valid = OpsUtil._validate_node_type(target, "GridMap", "gridmap_set_cells",
 		{"scene_path": scene_path, "node_path": node_path})
 	if not valid.success:
 		root.free()
@@ -41,7 +41,7 @@ static func op_gridmap_set_cells(params: Dictionary) -> Dictionary:
 
 	if target.mesh_library == null:
 		root.free()
-		return _error("GridMap has no MeshLibrary assigned. Assign one via " +
+		return OpsUtil._error("GridMap has no MeshLibrary assigned. Assign one via " +
 			"node_set_properties before setting cells.",
 			"gridmap_set_cells", {"node_path": node_path})
 
@@ -49,19 +49,19 @@ static func op_gridmap_set_cells(params: Dictionary) -> Dictionary:
 	for cell in cells:
 		if not cell is Dictionary:
 			root.free()
-			return _error("Each cell must be a dictionary with position and item",
+			return OpsUtil._error("Each cell must be a dictionary with position and item",
 				"gridmap_set_cells", {"cell": cell})
 
 		var pos_arr = cell.get("position", null)
 		if pos_arr == null or not pos_arr is Array or pos_arr.size() != 3:
 			root.free()
-			return _error("Cell position must be [x, y, z] array",
+			return OpsUtil._error("Cell position must be [x, y, z] array",
 				"gridmap_set_cells", {"cell": cell})
 
 		var item: int = int(cell.get("item", -1))
 		if item < 0:
 			root.free()
-			return _error("Cell item must be a non-negative integer (mesh library index)",
+			return OpsUtil._error("Cell item must be a non-negative integer (mesh library index)",
 				"gridmap_set_cells", {"cell": cell})
 
 		var orientation: int = int(cell.get("orientation", 0))
@@ -96,9 +96,9 @@ static func op_gridmap_get_cells(params: Dictionary) -> Dictionary:
 	var filter_item = params.get("item", null)
 
 	if scene_path == "":
-		return _error("scene_path is required", "gridmap_get_cells", params)
+		return OpsUtil._error("scene_path is required", "gridmap_get_cells", params)
 	if node_path == "":
-		return _error("node_path is required", "gridmap_get_cells", params)
+		return OpsUtil._error("node_path is required", "gridmap_get_cells", params)
 
 	var loaded = TileMapOps._load_scene_and_find_node(
 		scene_path, node_path, "gridmap_get_cells")
@@ -108,7 +108,7 @@ static func op_gridmap_get_cells(params: Dictionary) -> Dictionary:
 	var root: Node = loaded.root
 	var target: Node = loaded.target
 
-	var valid = _validate_gridmap(target, "gridmap_get_cells",
+	var valid = OpsUtil._validate_node_type(target, "GridMap", "gridmap_get_cells",
 		{"scene_path": scene_path, "node_path": node_path})
 	if not valid.success:
 		root.free()
@@ -170,9 +170,9 @@ static func op_gridmap_clear(params: Dictionary) -> Dictionary:
 	var bounds = params.get("bounds", null)
 
 	if scene_path == "":
-		return _error("scene_path is required", "gridmap_clear", params)
+		return OpsUtil._error("scene_path is required", "gridmap_clear", params)
 	if node_path == "":
-		return _error("node_path is required", "gridmap_clear", params)
+		return OpsUtil._error("node_path is required", "gridmap_clear", params)
 
 	var loaded = TileMapOps._load_scene_and_find_node(
 		scene_path, node_path, "gridmap_clear")
@@ -182,7 +182,7 @@ static func op_gridmap_clear(params: Dictionary) -> Dictionary:
 	var root: Node = loaded.root
 	var target: Node = loaded.target
 
-	var valid = _validate_gridmap(target, "gridmap_clear",
+	var valid = OpsUtil._validate_node_type(target, "GridMap", "gridmap_clear",
 		{"scene_path": scene_path, "node_path": node_path})
 	if not valid.success:
 		root.free()
@@ -219,17 +219,3 @@ static func op_gridmap_clear(params: Dictionary) -> Dictionary:
 # Shared helpers
 # ---------------------------------------------------------------------------
 
-static func _validate_gridmap(node: Node, operation: String,
-		context: Dictionary) -> Dictionary:
-	## Validate that a node is a GridMap.
-	## Returns { success: true } or error dict.
-	if node is GridMap:
-		return {"success": true}
-	return _error("Node is " + node.get_class() + ", expected GridMap",
-		operation, context)
-
-
-static func _error(message: String, operation: String,
-		context: Dictionary) -> Dictionary:
-	return {"success": false, "error": message, "operation": operation,
-		"context": context}

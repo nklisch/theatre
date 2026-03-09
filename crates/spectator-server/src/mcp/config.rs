@@ -1,11 +1,12 @@
 use rmcp::model::ErrorData as McpError;
 use schemars::JsonSchema;
 use serde::Deserialize;
+use spectator_core::budget::resolve_budget;
 use spectator_core::cluster::ClusterStrategy;
 use spectator_core::config::{BearingFormat, ConfigUpdate};
 use std::collections::HashMap;
 
-use super::serialize_response;
+use super::finalize_response;
 
 fn parse_cluster_by(s: &str) -> Result<ClusterStrategy, McpError> {
     super::parse_enum_param(
@@ -95,15 +96,11 @@ pub async fn handle_spatial_config(
         s.config.clone()
     };
 
-    let response = serde_json::json!({
+    let mut response = serde_json::json!({
         "result": "ok",
         "config": effective_config,
-        "budget": {
-            "used": 50,
-            "limit": 200,
-            "hard_cap": effective_config.token_hard_cap,
-        }
     });
 
-    serialize_response(&response)
+    let budget_limit = resolve_budget(None, 200, effective_config.token_hard_cap);
+    finalize_response(&mut response, budget_limit, effective_config.token_hard_cap)
 }

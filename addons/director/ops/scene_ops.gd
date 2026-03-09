@@ -13,17 +13,17 @@ static func op_scene_create(params: Dictionary) -> Dictionary:
 	var root_type: String = params.get("root_type", "")
 
 	if scene_path == "":
-		return _error("scene_path is required", "scene_create", params)
+		return OpsUtil._error("scene_path is required", "scene_create", params)
 	if root_type == "":
-		return _error("root_type is required", "scene_create", params)
+		return OpsUtil._error("root_type is required", "scene_create", params)
 
 	# Validate the class exists
 	if not ClassDB.class_exists(root_type):
-		return _error("Unknown node type: " + root_type, "scene_create", {"scene_path": scene_path, "root_type": root_type})
+		return OpsUtil._error("Unknown node type: " + root_type, "scene_create", {"scene_path": scene_path, "root_type": root_type})
 
 	# Ensure the class is a Node subclass
 	if not ClassDB.is_parent_class(root_type, "Node"):
-		return _error(root_type + " is not a Node subclass", "scene_create", {"scene_path": scene_path, "root_type": root_type})
+		return OpsUtil._error(root_type + " is not a Node subclass", "scene_create", {"scene_path": scene_path, "root_type": root_type})
 
 	# Create the root node
 	var root = ClassDB.instantiate(root_type)
@@ -34,7 +34,7 @@ static func op_scene_create(params: Dictionary) -> Dictionary:
 	var err = packed.pack(root)
 	root.free()
 	if err != OK:
-		return _error("Failed to pack scene: " + str(err), "scene_create", {"scene_path": scene_path})
+		return OpsUtil._error("Failed to pack scene: " + str(err), "scene_create", {"scene_path": scene_path})
 
 	# Ensure parent directory exists
 	var full_path = "res://" + scene_path
@@ -45,7 +45,7 @@ static func op_scene_create(params: Dictionary) -> Dictionary:
 	# Save
 	err = ResourceSaver.save(packed, full_path)
 	if err != OK:
-		return _error("Failed to save scene: " + str(err), "scene_create", {"scene_path": scene_path})
+		return OpsUtil._error("Failed to save scene: " + str(err), "scene_create", {"scene_path": scene_path})
 
 	return {"success": true, "data": {"path": scene_path, "root_type": root_type}}
 
@@ -58,19 +58,19 @@ static func op_scene_read(params: Dictionary) -> Dictionary:
 
 	var scene_path: String = params.get("scene_path", "")
 	if scene_path == "":
-		return _error("scene_path is required", "scene_read", params)
+		return OpsUtil._error("scene_path is required", "scene_read", params)
 
 	var full_path = "res://" + scene_path
 	if not ResourceLoader.exists(full_path):
-		return _error("Scene not found: " + scene_path, "scene_read", {"scene_path": scene_path})
+		return OpsUtil._error("Scene not found: " + scene_path, "scene_read", {"scene_path": scene_path})
 
 	var packed: PackedScene = load(full_path)
 	if packed == null:
-		return _error("Failed to load scene: " + scene_path, "scene_read", {"scene_path": scene_path})
+		return OpsUtil._error("Failed to load scene: " + scene_path, "scene_read", {"scene_path": scene_path})
 
 	var root = packed.instantiate()
 	if root == null:
-		return _error("Failed to instantiate scene: " + scene_path, "scene_read", {"scene_path": scene_path})
+		return OpsUtil._error("Failed to instantiate scene: " + scene_path, "scene_read", {"scene_path": scene_path})
 
 	var max_depth: int = params.get("depth", -1)
 	var include_props: bool = params.get("properties", true)
@@ -96,7 +96,7 @@ static func op_scene_list(params: Dictionary) -> Dictionary:
 		base_path = "res://" + directory
 		var check_dir = DirAccess.open(base_path)
 		if check_dir == null:
-			return _error("Directory not found: " + directory, "scene_list", {"directory": directory})
+			return OpsUtil._error("Directory not found: " + directory, "scene_list", {"directory": directory})
 
 	var scene_paths: Array = []
 	_collect_scenes(base_path, scene_paths)
@@ -131,22 +131,22 @@ static func op_scene_add_instance(params: Dictionary) -> Dictionary:
 	var node_name = params.get("node_name", null)
 
 	if scene_path == "":
-		return _error("scene_path is required", "scene_add_instance", params)
+		return OpsUtil._error("scene_path is required", "scene_add_instance", params)
 	if instance_scene == "":
-		return _error("instance_scene is required", "scene_add_instance", params)
+		return OpsUtil._error("instance_scene is required", "scene_add_instance", params)
 
 	var full_path = "res://" + scene_path
 	if not ResourceLoader.exists(full_path):
-		return _error("Scene not found: " + scene_path, "scene_add_instance", {"scene_path": scene_path})
+		return OpsUtil._error("Scene not found: " + scene_path, "scene_add_instance", {"scene_path": scene_path})
 
 	var instance_full_path = "res://" + instance_scene
 	if not ResourceLoader.exists(instance_full_path):
-		return _error("Instance scene not found: " + instance_scene, "scene_add_instance", {"instance_scene": instance_scene})
+		return OpsUtil._error("Instance scene not found: " + instance_scene, "scene_add_instance", {"instance_scene": instance_scene})
 
 	# Load the instance scene as PackedScene
 	var instance_packed = load(instance_full_path)
 	if not instance_packed is PackedScene:
-		return _error("Not a valid scene file: " + instance_scene, "scene_add_instance", {"instance_scene": instance_scene})
+		return OpsUtil._error("Not a valid scene file: " + instance_scene, "scene_add_instance", {"instance_scene": instance_scene})
 
 	# Load and instantiate the target scene
 	var packed: PackedScene = load(full_path)
@@ -166,13 +166,14 @@ static func op_scene_add_instance(params: Dictionary) -> Dictionary:
 	if parent == null:
 		instance_node.free()
 		root.free()
-		return _error("Parent node not found: " + parent_path, "scene_add_instance", {"scene_path": scene_path, "parent_path": parent_path})
+		return OpsUtil._error("Parent node not found: " + parent_path, "scene_add_instance", {"scene_path": scene_path, "parent_path": parent_path})
 
 	# Name collision check
-	if parent.has_node(NodePath(str(instance_node.name))):
+	var instance_name := str(instance_node.name)
+	if parent.has_node(NodePath(instance_name)):
 		instance_node.free()
 		root.free()
-		return _error("Name collision: " + str(instance_node.name) + " already exists under " + parent_path + ". Use node_name to resolve.", "scene_add_instance", {"parent_path": parent_path, "instance_scene": instance_scene})
+		return OpsUtil._error("Name collision: " + instance_name + " already exists under " + parent_path + ". Use node_name to resolve.", "scene_add_instance", {"parent_path": parent_path, "instance_scene": instance_scene})
 
 	# Add instance and set owner — do NOT recurse into instance's children
 	parent.add_child(instance_node)
@@ -302,5 +303,3 @@ static func _name_from_path(scene_path: String) -> String:
 	return file_name.capitalize().replace(" ", "")
 
 
-static func _error(message: String, operation: String, context: Dictionary) -> Dictionary:
-	return {"success": false, "error": message, "operation": operation, "context": context}

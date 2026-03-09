@@ -1,6 +1,7 @@
 pub mod action;
 pub mod clips;
 pub mod config;
+pub mod defaults;
 pub mod delta;
 pub mod inspect;
 pub mod query;
