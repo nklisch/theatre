@@ -1,3 +1,4 @@
+pub mod animation;
 pub mod gridmap;
 pub mod node;
 pub mod resource;
@@ -13,6 +14,9 @@ use crate::backend::Backend;
 use crate::resolve::{resolve_godot_bin, validate_project_path};
 use crate::server::DirectorServer;
 
+use animation::{
+    AnimationAddTrackParams, AnimationCreateParams, AnimationReadParams, AnimationRemoveTrackParams,
+};
 use gridmap::{GridMapClearParams, GridMapGetCellsParams, GridMapSetCellsParams};
 use node::{NodeAddParams, NodeRemoveParams, NodeReparentParams, NodeSetPropertiesParams};
 use resource::{
@@ -341,6 +345,67 @@ impl DirectorServer {
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
         let data = run_operation(&self.backend, &params.project_path, "gridmap_clear", &op_params).await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "animation_create",
+        description = "Create a Godot Animation resource (.tres) with specified length and \
+            loop mode. The animation starts empty — use animation_add_track to add tracks \
+            and keyframes. Always use this instead of hand-writing .tres files."
+    )]
+    pub async fn animation_create(
+        &self,
+        Parameters(params): Parameters<AnimationCreateParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(&self.backend, &params.project_path, "animation_create", &op_params).await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "animation_add_track",
+        description = "Add a track with keyframes to a Godot Animation resource. Supports \
+            value, position_3d, rotation_3d, scale_3d, blend_shape, method, and bezier \
+            track types. Node paths are relative to the AnimationPlayer that will play this \
+            animation. Always use this instead of editing .tres files directly."
+    )]
+    pub async fn animation_add_track(
+        &self,
+        Parameters(params): Parameters<AnimationAddTrackParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(&self.backend, &params.project_path, "animation_add_track", &op_params).await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "animation_read",
+        description = "Read a Godot Animation resource (.tres) and return its full structure: \
+            length, loop mode, and all tracks with their keyframes serialized as JSON. Use \
+            this to inspect animation structure before making modifications."
+    )]
+    pub async fn animation_read(
+        &self,
+        Parameters(params): Parameters<AnimationReadParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(&self.backend, &params.project_path, "animation_read", &op_params).await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "animation_remove_track",
+        description = "Remove a track from a Godot Animation resource by index or node path. \
+            When removing by node_path, all tracks matching that path are removed. Always \
+            use this instead of editing .tres files directly."
+    )]
+    pub async fn animation_remove_track(
+        &self,
+        Parameters(params): Parameters<AnimationRemoveTrackParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(&self.backend, &params.project_path, "animation_remove_track", &op_params).await?;
         serialize_response(&data)
     }
 }

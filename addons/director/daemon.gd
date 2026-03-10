@@ -8,6 +8,7 @@ const NodeOps = preload("res://addons/director/ops/node_ops.gd")
 const ResourceOps = preload("res://addons/director/ops/resource_ops.gd")
 const TileMapOps = preload("res://addons/director/ops/tilemap_ops.gd")
 const GridMapOps = preload("res://addons/director/ops/gridmap_ops.gd")
+const AnimationOps = preload("res://addons/director/ops/animation_ops.gd")
 
 const DEFAULT_PORT := 6550
 const IDLE_TIMEOUT_SEC := 300  # 5 minutes
@@ -192,6 +193,14 @@ func _dispatch(operation: String, params: Dictionary) -> Dictionary:
 			return GridMapOps.op_gridmap_get_cells(params)
 		"gridmap_clear":
 			return GridMapOps.op_gridmap_clear(params)
+		"animation_create":
+			return AnimationOps.op_animation_create(params)
+		"animation_add_track":
+			return AnimationOps.op_animation_add_track(params)
+		"animation_read":
+			return AnimationOps.op_animation_read(params)
+		"animation_remove_track":
+			return AnimationOps.op_animation_remove_track(params)
 		"ping":
 			return {"success": true, "data": {"status": "ok"}, "operation": "ping"}
 		_:

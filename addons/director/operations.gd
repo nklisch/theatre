@@ -8,6 +8,7 @@ const NodeOps = preload("res://addons/director/ops/node_ops.gd")
 const ResourceOps = preload("res://addons/director/ops/resource_ops.gd")
 const TileMapOps = preload("res://addons/director/ops/tilemap_ops.gd")
 const GridMapOps = preload("res://addons/director/ops/gridmap_ops.gd")
+const AnimationOps = preload("res://addons/director/ops/animation_ops.gd")
 
 
 func _init():
@@ -57,6 +58,14 @@ func _init():
 			result = GridMapOps.op_gridmap_get_cells(args.params)
 		"gridmap_clear":
 			result = GridMapOps.op_gridmap_clear(args.params)
+		"animation_create":
+			result = AnimationOps.op_animation_create(args.params)
+		"animation_add_track":
+			result = AnimationOps.op_animation_add_track(args.params)
+		"animation_read":
+			result = AnimationOps.op_animation_read(args.params)
+		"animation_remove_track":
+			result = AnimationOps.op_animation_remove_track(args.params)
 		_:
 			result = {"success": false, "error": "Unknown operation: " + args.operation, "operation": args.operation, "context": {}}
 
