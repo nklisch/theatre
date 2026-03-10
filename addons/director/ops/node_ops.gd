@@ -316,6 +316,24 @@ static func _set_properties_on_node(node: Node, properties: Dictionary) -> Dicti
 # Helpers
 # ---------------------------------------------------------------------------
 
+static func _apply_properties(node: Node, properties: Dictionary) -> Array:
+	## Apply a dict of properties to a live node. Returns list of set property names.
+	## Unknown properties are skipped. Used by EditorOps for live tree manipulation.
+	var set_props: Array = []
+	var prop_list = node.get_property_list()
+	var type_map: Dictionary = {}
+	for prop_info in prop_list:
+		type_map[prop_info["name"]] = prop_info["type"]
+	for prop_name in properties:
+		if not type_map.has(prop_name):
+			continue
+		var expected_type = type_map[prop_name]
+		var converted = convert_value(properties[prop_name], expected_type)
+		node.set(prop_name, converted)
+		set_props.append(prop_name)
+	return set_props
+
+
 static func _repack_and_save(root: Node, full_path: String) -> Dictionary:
 	## Re-pack a modified node tree and save it to disk.
 	var packed = PackedScene.new()

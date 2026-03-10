@@ -3,6 +3,8 @@ mod harness;
 #[cfg(test)]
 mod test_animation;
 #[cfg(test)]
+mod test_editor;
+#[cfg(test)]
 mod test_daemon;
 #[cfg(test)]
 mod test_gridmap;

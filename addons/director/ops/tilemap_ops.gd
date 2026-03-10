@@ -32,52 +32,17 @@ static func op_tilemap_set_cells(params: Dictionary) -> Dictionary:
 	var root: Node = loaded.root
 	var target: Node = loaded.target
 
-	var valid = _validate_tilemap_layer(target, "tilemap_set_cells",
-		{"scene_path": scene_path, "node_path": node_path})
-	if not valid.success:
+	var result = _set_cells_on_node(target, params)
+	if not result.success:
 		root.free()
-		return valid
-
-	if target.tile_set == null:
-		root.free()
-		return OpsUtil._error("TileMapLayer has no TileSet assigned. Assign one via " +
-			"node_set_properties before setting cells.",
-			"tilemap_set_cells", {"node_path": node_path})
-
-	var cells_set := 0
-	for cell in cells:
-		if not cell is Dictionary:
-			root.free()
-			return OpsUtil._error("Each cell must be a dictionary with coords, source_id, atlas_coords",
-				"tilemap_set_cells", {"cell": cell})
-
-		var coords_arr = cell.get("coords", null)
-		if coords_arr == null or not coords_arr is Array or coords_arr.size() != 2:
-			root.free()
-			return OpsUtil._error("Cell coords must be [x, y] array",
-				"tilemap_set_cells", {"cell": cell})
-
-		var source_id: int = int(cell.get("source_id", 0))
-		var atlas_arr = cell.get("atlas_coords", null)
-		if atlas_arr == null or not atlas_arr is Array or atlas_arr.size() != 2:
-			root.free()
-			return OpsUtil._error("Cell atlas_coords must be [x, y] array",
-				"tilemap_set_cells", {"cell": cell})
-
-		var alt_tile: int = int(cell.get("alternative_tile", 0))
-
-		var coords = Vector2i(int(coords_arr[0]), int(coords_arr[1]))
-		var atlas_coords = Vector2i(int(atlas_arr[0]), int(atlas_arr[1]))
-
-		target.set_cell(coords, source_id, atlas_coords, alt_tile)
-		cells_set += 1
+		return result
 
 	var save_result = NodeOps._repack_and_save(root, "res://" + scene_path)
 	root.free()
 	if not save_result.success:
 		return save_result
 
-	return {"success": true, "data": {"cells_set": cells_set, "node_path": node_path}}
+	return result
 
 
 static func op_tilemap_get_cells(params: Dictionary) -> Dictionary:
@@ -96,8 +61,6 @@ static func op_tilemap_get_cells(params: Dictionary) -> Dictionary:
 	##     alternative_tile: int }
 	var scene_path: String = params.get("scene_path", "")
 	var node_path: String = params.get("node_path", "")
-	var region = params.get("region", null)
-	var filter_source_id = params.get("source_id", null)
 
 	if scene_path == "":
 		return OpsUtil._error("scene_path is required", "tilemap_get_cells", params)
@@ -111,18 +74,112 @@ static func op_tilemap_get_cells(params: Dictionary) -> Dictionary:
 	var root: Node = loaded.root
 	var target: Node = loaded.target
 
-	var valid = _validate_tilemap_layer(target, "tilemap_get_cells",
-		{"scene_path": scene_path, "node_path": node_path})
-	if not valid.success:
+	var result = _get_cells_from_node(target, params)
+	root.free()
+	return result
+
+
+static func op_tilemap_clear(params: Dictionary) -> Dictionary:
+	## Clear cells from a TileMapLayer node in a scene.
+	##
+	## Params:
+	##   scene_path: String — path to the .tscn file
+	##   node_path: String — path to the TileMapLayer node within the scene
+	##   region?: Dictionary — { position: [x, y], size: [w, h] } in cell coords.
+	##       Omit to clear all cells.
+	##
+	## Returns: { success, data: { cells_cleared: int, node_path: String } }
+	var scene_path: String = params.get("scene_path", "")
+	var node_path: String = params.get("node_path", "")
+
+	if scene_path == "":
+		return OpsUtil._error("scene_path is required", "tilemap_clear", params)
+	if node_path == "":
+		return OpsUtil._error("node_path is required", "tilemap_clear", params)
+
+	var loaded = _load_scene_and_find_node(scene_path, node_path, "tilemap_clear")
+	if not loaded.success:
+		return loaded
+
+	var root: Node = loaded.root
+	var target: Node = loaded.target
+
+	var result = _clear_node(target, params)
+	if not result.success:
 		root.free()
+		return result
+
+	var save_result = NodeOps._repack_and_save(root, "res://" + scene_path)
+	root.free()
+	if not save_result.success:
+		return save_result
+
+	return result
+
+
+# ---------------------------------------------------------------------------
+# Node-level helpers (callable with a live node — no scene loading or saving)
+# ---------------------------------------------------------------------------
+
+static func _set_cells_on_node(node: Node, params: Dictionary) -> Dictionary:
+	## Set cells on an already-resolved TileMapLayer node.
+	## Called by both op_tilemap_set_cells (headless) and EditorOps (live).
+	var node_path: String = params.get("node_path", "")
+	var cells = params.get("cells", [])
+
+	var valid = _validate_tilemap_layer(node, "tilemap_set_cells", {"node_path": node_path})
+	if not valid.success:
+		return valid
+
+	if node.tile_set == null:
+		return OpsUtil._error("TileMapLayer has no TileSet assigned. Assign one via " +
+			"node_set_properties before setting cells.",
+			"tilemap_set_cells", {"node_path": node_path})
+
+	var cells_set := 0
+	for cell in cells:
+		if not cell is Dictionary:
+			return OpsUtil._error("Each cell must be a dictionary with coords, source_id, atlas_coords",
+				"tilemap_set_cells", {"cell": cell})
+
+		var coords_arr = cell.get("coords", null)
+		if coords_arr == null or not coords_arr is Array or coords_arr.size() != 2:
+			return OpsUtil._error("Cell coords must be [x, y] array",
+				"tilemap_set_cells", {"cell": cell})
+
+		var source_id: int = int(cell.get("source_id", 0))
+		var atlas_arr = cell.get("atlas_coords", null)
+		if atlas_arr == null or not atlas_arr is Array or atlas_arr.size() != 2:
+			return OpsUtil._error("Cell atlas_coords must be [x, y] array",
+				"tilemap_set_cells", {"cell": cell})
+
+		var alt_tile: int = int(cell.get("alternative_tile", 0))
+		var coords = Vector2i(int(coords_arr[0]), int(coords_arr[1]))
+		var atlas_coords = Vector2i(int(atlas_arr[0]), int(atlas_arr[1]))
+
+		node.set_cell(coords, source_id, atlas_coords, alt_tile)
+		cells_set += 1
+
+	return {"success": true, "data": {"cells_set": cells_set, "node_path": node_path}}
+
+
+static func _get_cells_from_node(node: Node, params: Dictionary) -> Dictionary:
+	## Read cells from an already-resolved TileMapLayer node.
+	## Called by both op_tilemap_get_cells (headless) and EditorOps (live).
+	var node_path: String = params.get("node_path", "")
+	var region = params.get("region", null)
+	var filter_source_id = params.get("source_id", null)
+
+	var valid = _validate_tilemap_layer(node, "tilemap_get_cells", {"node_path": node_path})
+	if not valid.success:
 		return valid
 
 	# Get used cells — optionally filtered by source_id
 	var used_cells: Array[Vector2i]
 	if filter_source_id != null:
-		used_cells = target.get_used_cells_by_id(int(filter_source_id))
+		used_cells = node.get_used_cells_by_id(int(filter_source_id))
 	else:
-		used_cells = target.get_used_cells()
+		used_cells = node.get_used_cells()
 
 	# Apply region filter if specified
 	var region_rect: Rect2i
@@ -143,23 +200,20 @@ static func op_tilemap_get_cells(params: Dictionary) -> Dictionary:
 			continue
 		var cell_data: Dictionary = {
 			"coords": [coords.x, coords.y],
-			"source_id": target.get_cell_source_id(coords),
+			"source_id": node.get_cell_source_id(coords),
 			"atlas_coords": [
-				target.get_cell_atlas_coords(coords).x,
-				target.get_cell_atlas_coords(coords).y,
+				node.get_cell_atlas_coords(coords).x,
+				node.get_cell_atlas_coords(coords).y,
 			],
-			"alternative_tile": target.get_cell_alternative_tile(coords),
+			"alternative_tile": node.get_cell_alternative_tile(coords),
 		}
 		cells.append(cell_data)
 
-	# Get the used rect for context
-	var used_rect = target.get_used_rect()
+	var used_rect = node.get_used_rect()
 	var used_rect_data = {
 		"position": [used_rect.position.x, used_rect.position.y],
 		"size": [used_rect.size.x, used_rect.size.y],
 	}
-
-	root.free()
 
 	return {"success": true, "data": {
 		"cells": cells,
@@ -168,42 +222,19 @@ static func op_tilemap_get_cells(params: Dictionary) -> Dictionary:
 	}}
 
 
-static func op_tilemap_clear(params: Dictionary) -> Dictionary:
-	## Clear cells from a TileMapLayer node in a scene.
-	##
-	## Params:
-	##   scene_path: String — path to the .tscn file
-	##   node_path: String — path to the TileMapLayer node within the scene
-	##   region?: Dictionary — { position: [x, y], size: [w, h] } in cell coords.
-	##       Omit to clear all cells.
-	##
-	## Returns: { success, data: { cells_cleared: int, node_path: String } }
-	var scene_path: String = params.get("scene_path", "")
+static func _clear_node(node: Node, params: Dictionary) -> Dictionary:
+	## Clear cells on an already-resolved TileMapLayer node.
+	## Called by both op_tilemap_clear (headless) and EditorOps (live).
 	var node_path: String = params.get("node_path", "")
 	var region = params.get("region", null)
 
-	if scene_path == "":
-		return OpsUtil._error("scene_path is required", "tilemap_clear", params)
-	if node_path == "":
-		return OpsUtil._error("node_path is required", "tilemap_clear", params)
-
-	var loaded = _load_scene_and_find_node(scene_path, node_path, "tilemap_clear")
-	if not loaded.success:
-		return loaded
-
-	var root: Node = loaded.root
-	var target: Node = loaded.target
-
-	var valid = _validate_tilemap_layer(target, "tilemap_clear",
-		{"scene_path": scene_path, "node_path": node_path})
+	var valid = _validate_tilemap_layer(node, "tilemap_clear", {"node_path": node_path})
 	if not valid.success:
-		root.free()
 		return valid
 
 	var cells_cleared := 0
 
 	if region is Dictionary:
-		# Clear only within region
 		var pos = region.get("position", [0, 0])
 		var sz = region.get("size", [0, 0])
 		if pos is Array and pos.size() == 2 and sz is Array and sz.size() == 2:
@@ -211,20 +242,14 @@ static func op_tilemap_clear(params: Dictionary) -> Dictionary:
 				int(pos[0]), int(pos[1]),
 				int(sz[0]), int(sz[1])
 			)
-			var used_cells = target.get_used_cells()
+			var used_cells = node.get_used_cells()
 			for coords in used_cells:
 				if region_rect.has_point(coords):
-					target.erase_cell(coords)
+					node.erase_cell(coords)
 					cells_cleared += 1
 	else:
-		# Clear all
-		cells_cleared = target.get_used_cells().size()
-		target.clear()
-
-	var save_result = NodeOps._repack_and_save(root, "res://" + scene_path)
-	root.free()
-	if not save_result.success:
-		return save_result
+		cells_cleared = node.get_used_cells().size()
+		node.clear()
 
 	return {"success": true, "data": {"cells_cleared": cells_cleared, "node_path": node_path}}
 

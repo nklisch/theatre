@@ -3,29 +3,86 @@ use std::path::Path;
 use tokio::sync::Mutex;
 
 use crate::daemon::{DaemonHandle, resolve_daemon_port};
+use crate::editor::{EditorError, EditorHandle, resolve_editor_port};
 use crate::oneshot::{self, OperationError, OperationResult};
 
-/// Backend selection: daemon → one-shot fallback.
+/// Backend selection: editor plugin → daemon → one-shot fallback.
 ///
-/// Tries the persistent headless daemon first; falls back to one-shot
-/// subprocess if the daemon is unavailable or fails.
+/// Tries the editor plugin first; if not available, falls back to the
+/// persistent headless daemon, then one-shot subprocess.
 pub struct Backend {
+    editor: Mutex<Option<EditorHandle>>,
     daemon: Mutex<Option<DaemonHandle>>,
 }
 
 impl Backend {
     pub fn new() -> Self {
         Self {
+            editor: Mutex::new(None),
             daemon: Mutex::new(None),
         }
     }
 
     /// Run an operation via the best available backend.
     ///
-    /// Tries daemon first; if daemon fails or is for a different project,
-    /// falls back to one-shot. On daemon connection failure, attempts one
-    /// respawn before falling back.
+    /// Priority: editor plugin → daemon → one-shot.
     pub async fn run_operation(
+        &self,
+        godot_bin: &Path,
+        project_path: &Path,
+        operation: &str,
+        params: &serde_json::Value,
+    ) -> Result<OperationResult, OperationError> {
+        // 1. Try editor plugin
+        match self.try_editor(project_path, operation, params).await {
+            Ok(result) => return Ok(result),
+            Err(EditorError::NotReachable(_)) => {
+                // Editor not running — fall through to daemon silently.
+            }
+            Err(e) => {
+                tracing::warn!("editor plugin failed ({e}), falling through to daemon");
+            }
+        }
+
+        // 2. Try daemon → one-shot (existing logic)
+        self.try_daemon_then_oneshot(godot_bin, project_path, operation, params)
+            .await
+    }
+
+    /// Attempt to run an operation via the editor plugin.
+    async fn try_editor(
+        &self,
+        project_path: &Path,
+        operation: &str,
+        params: &serde_json::Value,
+    ) -> Result<OperationResult, EditorError> {
+        let port = resolve_editor_port(project_path);
+        let mut guard = self.editor.lock().await;
+
+        // Use cached connection if alive.
+        if let Some(ref mut handle) = *guard {
+            if handle.is_alive() {
+                match handle.send_operation(operation, params).await {
+                    Ok(result) => return Ok(result),
+                    Err(e) => {
+                        tracing::warn!("editor send failed ({e}), reconnecting");
+                        *guard = None;
+                    }
+                }
+            } else {
+                *guard = None;
+            }
+        }
+
+        // Try fresh connection.
+        let mut handle = EditorHandle::connect(port).await?;
+        let result = handle.send_operation(operation, params).await?;
+        *guard = Some(handle);
+        Ok(result)
+    }
+
+    /// Daemon → one-shot fallback logic.
+    async fn try_daemon_then_oneshot(
         &self,
         godot_bin: &Path,
         project_path: &Path,
@@ -106,13 +163,21 @@ impl Backend {
         oneshot::run_oneshot(godot_bin, project_path, operation, params).await
     }
 
-    /// Shut down any running daemon.
+    /// Shut down any running editor connection and daemon.
     pub async fn shutdown(&self) {
-        let mut guard = self.daemon.lock().await;
-        if let Some(handle) = guard.take()
-            && let Err(e) = handle.shutdown().await
+        // Disconnect editor (drop the handle — no process to kill).
         {
-            tracing::warn!("daemon shutdown error: {e}");
+            let mut guard = self.editor.lock().await;
+            *guard = None;
+        }
+        // Shut down daemon.
+        {
+            let mut guard = self.daemon.lock().await;
+            if let Some(handle) = guard.take()
+                && let Err(e) = handle.shutdown().await
+            {
+                tracing::warn!("daemon shutdown error: {e}");
+            }
         }
     }
 }

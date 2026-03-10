@@ -252,6 +252,126 @@ impl Drop for DaemonFixture {
     }
 }
 
+// ---------------------------------------------------------------------------
+// EditorFixture — synchronous test harness for the mock editor plugin server
+// ---------------------------------------------------------------------------
+
+const EDITOR_DEFAULT_PORT: u16 = 16551; // offset from production port to avoid conflicts
+
+/// A synchronous test harness for the Director editor plugin.
+///
+/// Spawns `godot --headless --path <project> --script addons/director/mock_editor_server.gd`,
+/// waits for the ready signal on stdout, then connects via TCP.
+/// Uses the same protocol as the real editor plugin (plugin.gd) but runs headlessly.
+pub struct EditorFixture {
+    child: Option<Child>,
+    stream: Option<TcpStream>,
+    port: u16,
+    project_dir: PathBuf,
+}
+
+impl EditorFixture {
+    pub fn start() -> Self {
+        Self::start_with_port(EDITOR_DEFAULT_PORT)
+    }
+
+    pub fn start_with_port(port: u16) -> Self {
+        let godot_bin = std::env::var("GODOT_BIN").unwrap_or_else(|_| "godot".into());
+        let project_dir = project_dir_path();
+
+        let mut child = Command::new(&godot_bin)
+            .args([
+                "--headless",
+                "--path",
+                &project_dir.to_string_lossy(),
+                "--script",
+                "addons/director/mock_editor_server.gd",
+            ])
+            .env("DIRECTOR_EDITOR_PORT", port.to_string())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .unwrap_or_else(|e| panic!("Failed to launch mock editor server ({godot_bin}): {e}"));
+
+        // Read stdout until ready signal, then drain in background.
+        let stdout = child.stdout.take().expect("stdout was piped");
+        let mut reader = std::io::BufReader::new(stdout);
+        let mut ready = false;
+
+        use std::io::BufRead;
+        for line in reader.by_ref().lines() {
+            let line = line.expect("reading mock editor stdout");
+            let trimmed = line.trim().to_string();
+            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&trimmed)
+                && val.get("source").and_then(|v| v.as_str()) == Some("director")
+                && val.get("status").and_then(|v| v.as_str()) == Some("ready")
+            {
+                ready = true;
+                break;
+            }
+        }
+
+        if !ready {
+            let _ = child.kill();
+            panic!("Mock editor server did not emit ready signal");
+        }
+
+        // Keep draining stdout so the pipe stays open.
+        std::thread::spawn(move || {
+            for _ in reader.lines() {}
+        });
+
+        // Connect TCP.
+        let addr = format!("127.0.0.1:{port}");
+        let stream = TcpStream::connect(&addr)
+            .unwrap_or_else(|e| panic!("Failed to connect to mock editor at {addr}: {e}"));
+        stream
+            .set_read_timeout(Some(std::time::Duration::from_secs(30)))
+            .expect("set_read_timeout");
+
+        EditorFixture {
+            child: Some(child),
+            stream: Some(stream),
+            port,
+            project_dir,
+        }
+    }
+
+    /// Send an operation via length-prefixed JSON and read the response.
+    pub fn run(
+        &mut self,
+        operation: &str,
+        params: serde_json::Value,
+    ) -> anyhow::Result<OperationResult> {
+        let request = serde_json::json!({
+            "operation": operation,
+            "params": params,
+        });
+        let stream = self.stream.as_mut().expect("stream is open");
+        daemon_write_message(stream, &request)?;
+        let response = daemon_read_message(stream)?;
+        serde_json::from_value(response).map_err(|e| anyhow::anyhow!("parse error: {e}"))
+    }
+
+    pub fn port(&self) -> u16 {
+        self.port
+    }
+
+    pub fn project_dir(&self) -> &Path {
+        &self.project_dir
+    }
+}
+
+impl Drop for EditorFixture {
+    fn drop(&mut self) {
+        // Best-effort kill — no quit operation in the editor protocol.
+        if let Some(ref mut child) = self.child {
+            let _ = child.kill();
+            let _ = child.wait();
+        }
+    }
+}
+
 /// Write a length-prefixed JSON message to a synchronous TCP stream.
 fn daemon_write_message(stream: &mut TcpStream, value: &serde_json::Value) -> anyhow::Result<()> {
     let json = serde_json::to_vec(value)?;
