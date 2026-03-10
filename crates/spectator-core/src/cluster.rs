@@ -21,7 +21,7 @@ pub struct Cluster {
 #[derive(Debug, Clone, Serialize)]
 pub struct ClusterNearest {
     pub node: String,
-    pub dist: f64,
+    pub distance: f64,
     pub bearing: Cardinal,
 }
 
@@ -75,14 +75,7 @@ pub(crate) fn cluster_by_group(
 
     // Add static cluster if any static entities
     if static_count > 0 {
-        clusters.push(Cluster {
-            label: "static_geometry".to_string(),
-            count: static_count,
-            nearest: None,
-            farthest_dist: 0.0,
-            summary: None,
-            note: Some("unchanged".to_string()),
-        });
+        clusters.push(static_cluster(static_count));
     }
 
     clusters
@@ -97,16 +90,16 @@ fn build_cluster(
 
     let nearest = members
         .iter()
-        .min_by(|a, b| a.1.dist.partial_cmp(&b.1.dist).unwrap_or(std::cmp::Ordering::Equal))
+        .min_by(|a, b| a.1.distance.partial_cmp(&b.1.distance).unwrap_or(std::cmp::Ordering::Equal))
         .map(|(entity, rel)| ClusterNearest {
             node: entity.path.clone(),
-            dist: rel.dist,
+            distance: rel.distance,
             bearing: rel.bearing,
         });
 
     let farthest_dist = members
         .iter()
-        .map(|(_, rel)| rel.dist)
+        .map(|(_, rel)| rel.distance)
         .fold(0.0_f64, f64::max);
 
     let entity_refs: Vec<&RawEntityData> = members.iter().map(|(e, _)| *e).collect();
@@ -119,6 +112,18 @@ fn build_cluster(
         farthest_dist,
         summary,
         note,
+    }
+}
+
+/// Build a static_geometry cluster with the given entity count.
+fn static_cluster(count: usize) -> Cluster {
+    Cluster {
+        label: "static_geometry".to_string(),
+        count,
+        nearest: None,
+        farthest_dist: 0.0,
+        summary: None,
+        note: Some("unchanged".to_string()),
     }
 }
 
@@ -158,14 +163,7 @@ pub(crate) fn cluster_by_class(
     clusters.sort_by(|a, b| a.label.cmp(&b.label));
 
     if static_count > 0 {
-        clusters.push(Cluster {
-            label: "static_geometry".to_string(),
-            count: static_count,
-            nearest: None,
-            farthest_dist: 0.0,
-            summary: None,
-            note: Some("unchanged".to_string()),
-        });
+        clusters.push(static_cluster(static_count));
     }
 
     clusters
@@ -185,14 +183,7 @@ pub(crate) fn cluster_by_proximity(
     if dynamic.is_empty() {
         let mut clusters = Vec::new();
         if static_count > 0 {
-            clusters.push(Cluster {
-                label: "static_geometry".to_string(),
-                count: static_count,
-                nearest: None,
-                farthest_dist: 0.0,
-                summary: None,
-                note: Some("unchanged".to_string()),
-            });
+            clusters.push(static_cluster(static_count));
         }
         return clusters;
     }
@@ -232,14 +223,7 @@ pub(crate) fn cluster_by_proximity(
         .collect();
 
     if static_count > 0 {
-        clusters.push(Cluster {
-            label: "static_geometry".to_string(),
-            count: static_count,
-            nearest: None,
-            farthest_dist: 0.0,
-            summary: None,
-            note: Some("unchanged".to_string()),
-        });
+        clusters.push(static_cluster(static_count));
     }
 
     clusters
@@ -262,24 +246,17 @@ fn cluster_none(
             count: 1,
             nearest: Some(ClusterNearest {
                 node: entity.path.clone(),
-                dist: rel.dist,
+                distance: rel.distance,
                 bearing: rel.bearing,
             }),
-            farthest_dist: rel.dist,
+            farthest_dist: rel.distance,
             summary: None,
             note: None,
         });
     }
 
     if static_count > 0 {
-        clusters.push(Cluster {
-            label: "static_geometry".to_string(),
-            count: static_count,
-            nearest: None,
-            farthest_dist: 0.0,
-            summary: None,
-            note: Some("unchanged".to_string()),
-        });
+        clusters.push(static_cluster(static_count));
     }
 
     clusters
@@ -357,7 +334,7 @@ mod tests {
 
     fn make_rel(dist: f64) -> RelativePosition {
         RelativePosition {
-            dist,
+            distance: dist,
             bearing: Cardinal::Ahead,
             bearing_deg: 0.0,
             elevation: None,
@@ -421,7 +398,7 @@ mod tests {
 
         let nearest = c.nearest.as_ref().unwrap();
         assert_eq!(nearest.node, "enemies/e3");
-        assert!((nearest.dist - 3.0).abs() < 1e-10);
+        assert!((nearest.distance - 3.0).abs() < 1e-10);
         assert!((c.farthest_dist - 10.0).abs() < 1e-10);
     }
 

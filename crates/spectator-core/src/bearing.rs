@@ -11,13 +11,13 @@ pub fn relative_position(
     target: Position3,
     occluded: bool,
 ) -> RelativePosition {
-    let dist = distance(perspective.position, target);
+    let distance = distance(perspective.position, target);
     let bdeg = bearing_deg(perspective, target);
     let bearing = to_cardinal(bdeg);
     let elev = elevation(perspective.position[1], target[1]);
 
     RelativePosition {
-        dist,
+        distance,
         bearing,
         bearing_deg: bdeg,
         elevation: Some(elev),
@@ -160,12 +160,12 @@ pub fn relative_position_2d(
     target: Position2,
     occluded: bool,
 ) -> RelativePosition {
-    let dist = distance_2d(perspective_pos, target);
+    let distance = distance_2d(perspective_pos, target);
     let bdeg = bearing_deg_2d(perspective_pos, perspective_forward, target);
     let bearing = to_cardinal(bdeg);
 
     RelativePosition {
-        dist,
+        distance,
         bearing,
         bearing_deg: bdeg,
         elevation: None,
@@ -327,6 +327,6 @@ mod tests {
     fn relative_position_2d_no_elevation() {
         let rel = relative_position_2d([0.0, 0.0], [1.0, 0.0], [10.0, 0.0], false);
         assert!(rel.elevation.is_none());
-        assert!(rel.dist > 9.9);
+        assert!(rel.distance > 9.9);
     }
 }

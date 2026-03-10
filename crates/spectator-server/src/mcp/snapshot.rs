@@ -206,13 +206,13 @@ fn format_rel(rel: &RelativePosition, format: BearingFormat) -> serde_json::Valu
     match format {
         BearingFormat::Both => serde_json::to_value(rel).unwrap_or_default(),
         BearingFormat::Cardinal => serde_json::json!({
-            "distance": rel.dist,
+            "distance": rel.distance,
             "bearing": rel.bearing,
             "elevation": rel.elevation,
             "occluded": rel.occluded,
         }),
         BearingFormat::Degrees => serde_json::json!({
-            "distance": rel.dist,
+            "distance": rel.distance,
             "bearing_deg": rel.bearing_deg,
             "elevation": rel.elevation,
             "occluded": rel.occluded,
@@ -446,7 +446,7 @@ fn build_snapshot_body(
                 showing: dynamic_entities.len(),
                 total,
                 cursor: format!("snap_{}_p{}", raw.frame, dynamic_entities.len()),
-                omitted_nearest_distance: rel.dist,
+                omitted_nearest_distance: rel.distance,
             };
             let mut resp = serde_json::json!({
                 "frame": raw.frame,

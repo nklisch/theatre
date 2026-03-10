@@ -5,8 +5,6 @@ use serde::Deserialize;
 use spectator_core::{
     budget::resolve_budget,
     delta::{DeltaResult, EntitySnapshot},
-    index::{IndexedEntity, SpatialIndex},
-    types::vec_to_array3,
     watch::WatchTrigger,
 };
 use spectator_protocol::query::{DetailLevel, GetSnapshotDataParams, PerspectiveParam};
@@ -15,7 +13,7 @@ use crate::tcp::get_config;
 
 use super::defaults::{default_perspective, default_radius};
 use super::snapshot::to_entity_snapshot;
-use super::{finalize_response, query_and_deserialize};
+use super::{finalize_response, insert_if_nonempty, query_and_deserialize, update_spatial_state};
 
 /// MCP parameters for the spatial_delta tool.
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -38,16 +36,6 @@ pub struct SpatialDeltaParams {
     pub token_budget: Option<u32>,
 }
 
-
-fn insert_if_nonempty<T: serde::Serialize>(
-    map: &mut serde_json::Map<String, serde_json::Value>,
-    key: &str,
-    val: &[T],
-) {
-    if !val.is_empty() {
-        map.insert(key.into(), serde_json::to_value(val).unwrap_or_default());
-    }
-}
 
 /// Build the shared delta JSON object (from_frame, to_frame, and the 5 optional
 /// change categories). Used by both spatial_delta and spatial_action return_delta.
@@ -133,22 +121,8 @@ pub async fn handle_spatial_delta(
         // Drain buffered signal events
         let events = s.delta_engine.drain_events();
 
-        // Update baseline with new state
-        s.delta_engine
-            .store_snapshot(raw_data.frame, current_snapshots.clone());
-
-        // Rebuild spatial index
-        let indexed: Vec<IndexedEntity> = raw_data
-            .entities
-            .iter()
-            .map(|e| IndexedEntity {
-                path: e.path.clone(),
-                class: e.class.clone(),
-                position: vec_to_array3(&e.position),
-                groups: e.groups.clone(),
-            })
-            .collect();
-        s.spatial_index = SpatialIndex::build(indexed);
+        // Rebuild spatial index and update baseline (respects scene_dimensions for 2D/3D)
+        update_spatial_state(&mut s, &raw_data);
 
         (delta, triggers, events)
     };

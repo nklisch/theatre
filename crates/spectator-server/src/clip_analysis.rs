@@ -252,7 +252,7 @@ pub fn snapshot_at(
         .map(|e| {
             let pos = spectator_core::types::vec_to_array3(&e.position);
             let rel = spectator_core::bearing::relative_position(&perspective, pos, !e.visible);
-            let dist = rel.dist;
+            let dist = rel.distance;
 
             let mut entry = json!({
                 "path": e.path,
@@ -264,7 +264,7 @@ pub fn snapshot_at(
 
             if detail != "summary" {
                 entry["relative"] = json!({
-                    "distance": rel.dist,
+                    "distance": rel.distance,
                     "bearing": rel.bearing,
                     "bearing_deg": rel.bearing_deg,
                 });

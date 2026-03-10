@@ -16,6 +16,7 @@ use spectator_protocol::query::{
 
 use crate::tcp::{SessionState, get_config, query_addon};
 
+use super::defaults::{default_k, default_query_radius};
 use super::{
     deserialize_response, finalize_response, query_and_deserialize, require_param, serialize_params,
 };
@@ -53,13 +54,6 @@ pub struct SpatialQueryParams {
 
     /// Token budget for the response.
     pub token_budget: Option<u32>,
-}
-
-fn default_k() -> usize {
-    5
-}
-fn default_query_radius() -> f64 {
-    20.0
 }
 
 /// Parse a `from`/`to` JSON value into a QueryOrigin.

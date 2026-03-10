@@ -25,7 +25,7 @@ use spectator_protocol::query::{
 };
 
 use crate::server::SpectatorServer;
-use crate::tcp::{get_config, query_addon};
+use crate::tcp::{SessionState, get_config, query_addon};
 
 // ---------------------------------------------------------------------------
 // Shared MCP helpers
@@ -113,6 +113,57 @@ fn parse_enum_list<T: Clone>(
         .collect()
 }
 
+/// Insert a key into a JSON map only if the slice is non-empty.
+pub(crate) fn insert_if_nonempty<T: serde::Serialize>(
+    map: &mut serde_json::Map<String, serde_json::Value>,
+    key: &str,
+    val: &[T],
+) {
+    if !val.is_empty() {
+        map.insert(key.into(), serde_json::to_value(val).unwrap_or_default());
+    }
+}
+
+/// Rebuild the spatial index and store a new delta baseline from a snapshot response.
+///
+/// Respects `state.scene_dimensions` for 2D vs 3D indexing.
+pub(crate) fn update_spatial_state(state: &mut SessionState, raw_data: &SnapshotResponse) {
+    let new_index = if state.scene_dimensions.is_2d() {
+        let indexed: Vec<IndexedEntity2D> = raw_data
+            .entities
+            .iter()
+            .map(|e| IndexedEntity2D {
+                path: e.path.clone(),
+                class: e.class.clone(),
+                position: vec_to_array2(&e.position),
+                groups: e.groups.clone(),
+            })
+            .collect();
+        SpatialIndex::build_2d(indexed)
+    } else {
+        let indexed: Vec<IndexedEntity> = raw_data
+            .entities
+            .iter()
+            .map(|e| IndexedEntity {
+                path: e.path.clone(),
+                class: e.class.clone(),
+                position: vec_to_array3(&e.position),
+                groups: e.groups.clone(),
+            })
+            .collect();
+        SpatialIndex::build(indexed)
+    };
+
+    let snapshots: Vec<spectator_core::delta::EntitySnapshot> = raw_data
+        .entities
+        .iter()
+        .map(snapshot::to_entity_snapshot)
+        .collect();
+
+    state.spatial_index = new_index;
+    state.delta_engine.store_snapshot(raw_data.frame, snapshots);
+}
+
 /// Estimate token usage, inject budget block, and serialize response to JSON string.
 pub(crate) fn finalize_response(
     response: &mut serde_json::Value,
@@ -196,7 +247,7 @@ impl SpectatorServer {
                     // 3D entity: use 3D bearing
                     bearing::relative_position(&persp, vec_to_array3(&e.position), !e.visible)
                 };
-                if rel.dist > params.radius {
+                if rel.distance > params.radius {
                     return None;
                 }
                 if !params.include_offscreen && !e.visible {
@@ -208,54 +259,15 @@ impl SpectatorServer {
 
         // 6. Sort by distance (nearest first)
         entities_with_rel.sort_by(|a, b| {
-            a.1.dist
-                .partial_cmp(&b.1.dist)
+            a.1.distance
+                .partial_cmp(&b.1.distance)
                 .unwrap_or(std::cmp::Ordering::Equal)
         });
 
         // 6b. Rebuild spatial index and store delta baseline
         {
-            let scene_dimensions = {
-                let s = self.state.lock().await;
-                s.scene_dimensions
-            };
-
-            let new_index = if scene_dimensions.is_2d() {
-                let indexed: Vec<IndexedEntity2D> = raw_data
-                    .entities
-                    .iter()
-                    .map(|e| IndexedEntity2D {
-                        path: e.path.clone(),
-                        class: e.class.clone(),
-                        position: vec_to_array2(&e.position),
-                        groups: e.groups.clone(),
-                    })
-                    .collect();
-                SpatialIndex::build_2d(indexed)
-            } else {
-                // 3D or mixed: use R-tree (2D entities in mixed scenes get Z=0 via vec_to_array3)
-                let indexed: Vec<IndexedEntity> = raw_data
-                    .entities
-                    .iter()
-                    .map(|e| IndexedEntity {
-                        path: e.path.clone(),
-                        class: e.class.clone(),
-                        position: vec_to_array3(&e.position),
-                        groups: e.groups.clone(),
-                    })
-                    .collect();
-                SpatialIndex::build(indexed)
-            };
-
-            let snapshots: Vec<spectator_core::delta::EntitySnapshot> = raw_data
-                .entities
-                .iter()
-                .map(snapshot::to_entity_snapshot)
-                .collect();
             let mut state = self.state.lock().await;
-            state.spatial_index = new_index;
-            // 6c. Store snapshot in delta engine for subsequent delta queries
-            state.delta_engine.store_snapshot(raw_data.frame, snapshots);
+            update_spatial_state(&mut state, &raw_data);
         }
 
         // 7. Resolve budget
