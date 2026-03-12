@@ -2,7 +2,7 @@ use std::path::Path;
 use std::time::Duration;
 
 /// Result of a headless Godot operation, parsed from stdout JSON.
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct OperationResult {
     pub success: bool,
     #[serde(default)]
