@@ -717,6 +717,6 @@ godot --headless --path tests/godot-project --script addons/director/daemon.gd
 # Expected: {"source":"director","status":"ready","port":6550} on stdout
 
 # Verify all workspace tests still pass
-spectator-deploy ~/dev/spectator/tests/godot-project
+theatre-deploy ~/dev/spectator/tests/godot-project
 cargo test --workspace
 ```

@@ -48,7 +48,7 @@ use tokio::time::{Duration, Instant, sleep};
 
 /// Manages a headless Godot process for E2E tests.
 ///
-/// Launches Godot with --headless --fixed-fps 60, sets SPECTATOR_PORT to
+/// Launches Godot with --headless --fixed-fps 60, sets THEATRE_PORT to
 /// an ephemeral port, and waits for the addon's TCP listener to be ready.
 pub struct GodotProcess {
     child: Child,
@@ -96,7 +96,7 @@ impl Drop for GodotProcess {
 **Implementation Notes**:
 
 Ephemeral port allocation: Bind a `TcpListener` to port 0 to get a free port,
-immediately close it, pass that port via `SPECTATOR_PORT` env var. There's a
+immediately close it, pass that port via `THEATRE_PORT` env var. There's a
 small TOCTOU window but it's fine for test environments.
 
 The Godot binary path comes from `GODOT_BIN` env var (default: `godot`).
@@ -113,7 +113,7 @@ godot --headless --fixed-fps 60 --path <project_dir> <scene>
 
 **Acceptance Criteria**:
 - [ ] Godot starts headless and TCP port becomes connectable
-- [ ] SPECTATOR_PORT env var overrides default 9077
+- [ ] THEATRE_PORT env var overrides default 9077
 - [ ] Drop kills the child process
 - [ ] stderr is capturable for debugging
 
@@ -563,7 +563,7 @@ Step 6 depends on all prior steps.
 
 ```bash
 # Prerequisites: Godot 4.x on PATH (or set GODOT_BIN), GDExtension built
-spectator-deploy ~/dev/spectator/tests/godot-project  # or copy .so manually
+theatre-deploy ~/dev/spectator/tests/godot-project  # or copy .so manually
 
 # Run E2E journey tests
 cargo test -p spectator-server --features e2e-tests -- --nocapture

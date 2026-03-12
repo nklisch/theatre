@@ -30,7 +30,7 @@ func _ready() -> void:
 		return
 
 	var auto_start: bool = ProjectSettings.get_setting(
-		"spectator/connection/auto_start", true)
+		"theatre/spectator/connection/auto_start", true)
 	if not auto_start:
 		return
 
@@ -52,14 +52,18 @@ func _ready() -> void:
 	tcp_server.set_recorder(recorder)
 
 	var port: int = 0
-	var env_port := OS.get_environment("SPECTATOR_PORT")
+	var env_port := OS.get_environment("THEATRE_PORT")
+	if env_port.is_empty():
+		env_port = OS.get_environment("SPECTATOR_PORT")
+		if not env_port.is_empty():
+			push_warning("[Spectator] SPECTATOR_PORT is deprecated, use THEATRE_PORT instead")
 	if not env_port.is_empty():
 		port = env_port.to_int()
 	if port == 0:
-		port = ProjectSettings.get_setting("spectator/connection/port", 9077)
+		port = ProjectSettings.get_setting("theatre/spectator/connection/port", 9077)
 	tcp_server.start(port)
 	var idle_timeout: int = ProjectSettings.get_setting(
-		"spectator/connection/client_idle_timeout_secs", 10)
+		"theatre/spectator/connection/client_idle_timeout_secs", 10)
 	tcp_server.set_idle_timeout(idle_timeout)
 
 	_setup_overlay()
@@ -103,9 +107,9 @@ func _on_debugger_command(message: String, data: Array) -> bool:
 
 func _resolve_shortcut_keys() -> void:
 	_marker_keycode = _key_name_to_code(ProjectSettings.get_setting(
-		"spectator/shortcuts/marker_key", "F9"))
+		"theatre/spectator/shortcuts/marker_key", "F9"))
 	_pause_keycode = _key_name_to_code(ProjectSettings.get_setting(
-		"spectator/shortcuts/pause_key", "F11"))
+		"theatre/spectator/shortcuts/pause_key", "F11"))
 
 
 static func _key_name_to_code(name: String) -> int:
@@ -243,7 +247,7 @@ func _on_dashcam_clip_saved(_clip_id: String, tier: String, frames: int) -> void
 
 func _on_dashcam_clip_started(_trigger_frame: int, tier: String) -> void:
 	_update_dashcam_label()
-	if ProjectSettings.get_setting("spectator/display/show_agent_notifications", true):
+	if ProjectSettings.get_setting("theatre/spectator/display/show_agent_notifications", true):
 		_show_toast("[dashcam] Capturing clip (%s)…" % tier)
 
 
@@ -256,7 +260,7 @@ func _on_activity_received(entry_type: String, summary: String, tool: String, ac
 
 
 func _show_toast(text: String) -> void:
-	if not ProjectSettings.get_setting("spectator/display/show_agent_notifications", true):
+	if not ProjectSettings.get_setting("theatre/spectator/display/show_agent_notifications", true):
 		return
 	if not _toast_container:
 		return

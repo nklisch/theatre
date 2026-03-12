@@ -38,7 +38,7 @@ Run Godot with the addon enabled → hit Play → `spectator-server` connects �
 
 - GDExtension built with `api-4-5` + `lazy-function-tables` (godot-rust). Runs on Godot 4.2–4.6+ without recompiling. `lazy-function-tables` defers method hash validation to first call, so hash changes in unused Godot APIs don't panic at init.
 - `runtime.gd` uses `ClassDB.instantiate(&"ClassName")` instead of `ClassName.new()` and untyped vars for GDExtension types. Prevents GDScript parse errors if the extension fails to load.
-- `spectator-deploy` script (`~/.local/bin/spectator-deploy`) handles build + copy to installed Godot projects in one command.
+- `theatre-deploy` script (`~/.local/bin/theatre-deploy`) handles build + copy to installed Godot projects in one command.
 
 ---
 

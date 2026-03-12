@@ -1489,7 +1489,7 @@ cargo build -p director
 cargo test -p director
 
 # E2E tests (requires Godot binary + test project deployed)
-spectator-deploy ~/dev/spectator/tests/godot-project
+theatre-deploy ~/dev/spectator/tests/godot-project
 cargo test -p director-tests -- --include-ignored
 
 # Lint

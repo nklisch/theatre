@@ -12,16 +12,16 @@ architectural change.
 | Item | Before | After |
 |---|---|---|
 | Project name | Spectator | Theatre |
-| GitHub org/repo | `spectator-godot/spectator` | `theatre-godot/theatre` |
-| Cargo.toml repository URL | `spectator-godot/spectator` | `theatre-godot/theatre` |
-| Env var for Spectator port | `SPECTATOR_PORT` | `THEATRE_PORT` (fallback: `SPECTATOR_PORT`) |
+| GitHub org/repo | `theatre-godot/theatre` | `theatre-godot/theatre` |
+| Cargo.toml repository URL | `theatre-godot/theatre` | `theatre-godot/theatre` |
+| Env var for Spectator port | `THEATRE_PORT` | `THEATRE_PORT` (fallback: `THEATRE_PORT`) |
 | Godot settings prefix | `spectator/connection/...` | `theatre/spectator/...` |
 | Plugin author fields | "Spectator Contributors" | "Theatre Contributors" |
 | README | Spectator-only intro | Theatre umbrella intro |
 | CLAUDE.md | "Spectator" project header | "Theatre" project header |
 | Skill files | Spectator-as-project references | Theatre-as-project references |
-| `spectator-deploy` script | `spectator-deploy` | `theatre-deploy` |
-| docs/ prose | "the Spectator project" | "the Theatre project" |
+| `theatre-deploy` script | `theatre-deploy` | `theatre-deploy` |
+| docs/ prose | "the Theatre project" | "the Theatre project" |
 
 ### What Does NOT Change
 
@@ -73,7 +73,7 @@ gh repo rename theatre
 
 ```toml
 # Before
-repository = "https://github.com/spectator-godot/spectator"
+repository = "https://github.com/theatre-godot/theatre"
 
 # After
 repository = "https://github.com/theatre-godot/theatre"
@@ -99,11 +99,11 @@ dependency declarations all stay.
 
 ```rust
 // Before
-let env_port: u16 = std::env::var("SPECTATOR_PORT")
-
-// After — try THEATRE_PORT first, fall back to SPECTATOR_PORT for backward compat
 let env_port: u16 = std::env::var("THEATRE_PORT")
-    .or_else(|_| std::env::var("SPECTATOR_PORT"))
+
+// After — try THEATRE_PORT first, fall back to THEATRE_PORT for backward compat
+let env_port: u16 = std::env::var("THEATRE_PORT")
+    .or_else(|_| std::env::var("THEATRE_PORT"))
 ```
 
 The fallback ensures existing deployments don't break. Log a deprecation
@@ -112,13 +112,13 @@ warning when the old var is used:
 ```rust
 let (env_port, deprecated) = match std::env::var("THEATRE_PORT") {
     Ok(v) => (v, false),
-    Err(_) => match std::env::var("SPECTATOR_PORT") {
+    Err(_) => match std::env::var("THEATRE_PORT") {
         Ok(v) => (v, true),
         Err(_) => // default handling
     },
 };
 if deprecated {
-    tracing::warn!("SPECTATOR_PORT is deprecated, use THEATRE_PORT instead");
+    tracing::warn!("THEATRE_PORT is deprecated, use THEATRE_PORT instead");
 }
 ```
 
@@ -126,7 +126,7 @@ if deprecated {
 
 ```rust
 // Before
-.env("SPECTATOR_PORT", port.to_string())
+.env("THEATRE_PORT", port.to_string())
 
 // After
 .env("THEATRE_PORT", port.to_string())
@@ -153,7 +153,7 @@ Note: MCP server key stays `"spectator"` (tool name). Binary path stays
 
 **Acceptance Criteria**:
 - [ ] `THEATRE_PORT=9077 cargo run -p spectator-server` starts on port 9077
-- [ ] `SPECTATOR_PORT=9077 cargo run -p spectator-server` still works (with deprecation warning)
+- [ ] `THEATRE_PORT=9077 cargo run -p spectator-server` still works (with deprecation warning)
 - [ ] Neither set → default 9077
 
 ---
@@ -308,8 +308,8 @@ Changes:
 2. "What This Is" section: describe Theatre as the umbrella with two tools
 3. Repository Layout: add Director entries (they may already be there)
 4. Build Commands: ensure Director commands are listed
-5. `SPECTATOR_PORT` references → `THEATRE_PORT`
-6. `spectator-deploy` → `theatre-deploy`
+5. `THEATRE_PORT` references → `THEATRE_PORT`
+6. `theatre-deploy` → `theatre-deploy`
 7. Key Constraints: generalize where appropriate
 8. Architecture Rules: add Director rules alongside Spectator rules
 
@@ -362,14 +362,14 @@ theatre/
     └── director-tests/       # Director E2E tests
 ```
 
-Update `SPECTATOR_PORT` references to `THEATRE_PORT`.
+Update `THEATRE_PORT` references to `THEATRE_PORT`.
 
 #### `.agents/skills/spectator/SKILL.md`
 
 This is the end-user skill for using Spectator MCP tools. The tool name stays
 "Spectator". Only update:
 - Line 6: Add context that Spectator is part of the Theatre toolkit
-- Any references to `SPECTATOR_PORT` → `THEATRE_PORT`
+- Any references to `THEATRE_PORT` → `THEATRE_PORT`
 
 #### `.agents/skills/godot-addon/SKILL.md`
 
@@ -378,7 +378,7 @@ keeping "Spectator addon" references.
 
 #### `.claude/skills/patterns/godot-e2e-harness.md`
 
-Update `SPECTATOR_PORT` references to `THEATRE_PORT`.
+Update `THEATRE_PORT` references to `THEATRE_PORT`.
 
 #### `.claude/skills/patterns/*.md`
 
@@ -388,7 +388,7 @@ project-name references to update.
 **Acceptance Criteria**:
 - [ ] spectator-dev skill introduces Theatre as the umbrella
 - [ ] spectator skill mentions Theatre context
-- [ ] All `SPECTATOR_PORT` references updated
+- [ ] All `THEATRE_PORT` references updated
 - [ ] Crate name references unchanged
 
 ---
@@ -400,10 +400,10 @@ project-name references to update.
 Strategy: These are historical design documents. Apply a targeted find-replace
 for project-level references only:
 
-1. **Headers/intros** that say "the Spectator project" → "the Theatre project"
-2. **Repository references** (`spectator-godot/spectator` URL) → new URL
-3. **`SPECTATOR_PORT`** → `THEATRE_PORT`
-4. **`spectator-deploy`** → `theatre-deploy`
+1. **Headers/intros** that say "the Theatre project" → "the Theatre project"
+2. **Repository references** (`theatre-godot/theatre` URL) → new URL
+3. **`THEATRE_PORT`** → `THEATRE_PORT`
+4. **`theatre-deploy`** → `theatre-deploy`
 5. **`spectator.toml`** (if referenced) → `theatre.toml`
 
 Do NOT change:
@@ -421,18 +421,18 @@ Files requiring significant prose changes (not just find-replace):
 
 Files that are purely design implementation docs (M0-M11, phases, refactors):
 these reference crate names and tool names, not the project name. Likely need
-minimal or no changes. Scan for `SPECTATOR_PORT` and `spectator-deploy` only.
+minimal or no changes. Scan for `THEATRE_PORT` and `theatre-deploy` only.
 
 **Acceptance Criteria**:
-- [ ] No docs refer to "the Spectator project" (should say "the Theatre project")
-- [ ] `SPECTATOR_PORT` not found in any doc (except in deprecation/migration notes)
+- [ ] No docs refer to "the Theatre project" (should say "the Theatre project")
+- [ ] `THEATRE_PORT` not found in any doc (except in deprecation/migration notes)
 - [ ] Crate name references preserved
 
 ---
 
 ### Unit 10: External Tooling — theatre-deploy
 
-The `spectator-deploy` script at `~/.local/bin/spectator-deploy` is
+The `theatre-deploy` script at `~/.local/bin/theatre-deploy` is
 referenced in CLAUDE.md and README but lives outside the repo.
 
 **Design**: Create a new `scripts/theatre-deploy` in the repo that handles
@@ -473,7 +473,7 @@ Also update `scripts/copy-gdext.sh` comments to reference Theatre.
 **Acceptance Criteria**:
 - [ ] `scripts/theatre-deploy` exists and works
 - [ ] CLAUDE.md references `theatre-deploy`
-- [ ] Old `spectator-deploy` references noted as deprecated
+- [ ] Old `theatre-deploy` references noted as deprecated
 
 ---
 
@@ -560,7 +560,7 @@ Create a migration guide for existing users:
 ## For Users of Spectator Addon
 
 ### Environment Variable
-- `SPECTATOR_PORT` → `THEATRE_PORT`
+- `THEATRE_PORT` → `THEATRE_PORT`
 - The old variable still works but logs a deprecation warning
 
 ### Godot Project Settings
@@ -572,11 +572,11 @@ Create a migration guide for existing users:
 - Or delete the old keys and re-enable the plugin (defaults apply)
 
 ### MCP Configuration
-- Update `.mcp.json` env block: `SPECTATOR_PORT` → `THEATRE_PORT`
+- Update `.mcp.json` env block: `THEATRE_PORT` → `THEATRE_PORT`
 - The `spectator` MCP server name is unchanged
 
 ### Deploy Script
-- `spectator-deploy` → `theatre-deploy`
+- `theatre-deploy` → `theatre-deploy`
 
 ## For Contributors
 
@@ -620,7 +620,7 @@ Dependencies:
 
 Suggested commit grouping:
 1. `rename: GitHub repo spectator → theatre` (Unit 1, if done via gh)
-2. `rename: env var SPECTATOR_PORT → THEATRE_PORT with fallback` (Units 2, 3, 4, 5)
+2. `rename: env var THEATRE_PORT → THEATRE_PORT with fallback` (Units 2, 3, 4, 5)
 3. `rename: rewrite README and CLAUDE.md for Theatre umbrella` (Units 6, 7)
 4. `rename: update skill files and docs for Theatre` (Units 8, 9)
 5. `rename: add theatre-deploy, update CI, test projects` (Units 10, 11, 12)
@@ -641,7 +641,7 @@ cargo test --workspace
 # Env var works
 THEATRE_PORT=9077 cargo run -p spectator-server
 # Backward compat
-SPECTATOR_PORT=9077 cargo run -p spectator-server  # expect deprecation warning
+THEATRE_PORT=9077 cargo run -p spectator-server  # expect deprecation warning
 # theatre-deploy script
 ./scripts/theatre-deploy ~/godot/test-harness
 ```
@@ -649,8 +649,8 @@ SPECTATOR_PORT=9077 cargo run -p spectator-server  # expect deprecation warning
 ### Grep Verification
 ```bash
 # Should find zero results (project-name references cleaned up):
-grep -r "the Spectator project" docs/ CLAUDE.md README.md
-grep -r "SPECTATOR_PORT" --include="*.rs" --include="*.json" --include="*.md" \
+grep -r "the Theatre project" docs/ CLAUDE.md README.md
+grep -r "THEATRE_PORT" --include="*.rs" --include="*.json" --include="*.md" \
   | grep -v "deprecated\|fallback\|migration\|THEATRE_PORT"
 
 # Should still find results (tool-name references preserved):
@@ -664,8 +664,8 @@ grep -r "addons/spectator" addons/
 - [ ] `cargo build --workspace` succeeds
 - [ ] `cargo test --workspace` passes
 - [ ] `cargo clippy --workspace` clean
-- [ ] No doc references "the Spectator project" (should say "Theatre")
-- [ ] `SPECTATOR_PORT` only appears in backward-compat code and migration docs
+- [ ] No doc references "the Theatre project" (should say "Theatre")
+- [ ] `THEATRE_PORT` only appears in backward-compat code and migration docs
 - [ ] All crate names, binary names, and addon paths unchanged
 - [ ] GitHub repo accessible at new URL
 - [ ] README introduces Theatre with both tools

@@ -21,7 +21,7 @@ impl GodotFixture {
     /// Launch Godot headless with the test project, connect, and complete the handshake.
     ///
     /// Set `GODOT_BIN` env var to override the default `godot` binary name.
-    /// Set `SPECTATOR_PORT` is passed to Godot automatically via this method.
+    /// `THEATRE_PORT` is passed to Godot automatically via this method.
     pub fn start(scene: &str) -> anyhow::Result<Self> {
         let port = portpicker::pick_unused_port()
             .ok_or_else(|| anyhow::anyhow!("no free port available"))?;
@@ -38,7 +38,7 @@ impl GodotFixture {
                 &project_dir.to_string_lossy(),
                 scene,
             ])
-            .env("SPECTATOR_PORT", port.to_string())
+            .env("THEATRE_PORT", port.to_string())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()

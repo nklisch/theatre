@@ -93,7 +93,7 @@ func _ready() -> void:
     tcp_server = SpectatorTCPServer.new()
     add_child(tcp_server)
     tcp_server.start(ProjectSettings.get_setting(
-        "spectator/connection/port", 9077
+        "theatre/spectator/connection/port", 9077
     ))
 
     recorder = SpectatorRecorder.new()
@@ -231,9 +231,9 @@ Register custom project settings from the EditorPlugin:
 
 ```gdscript
 func _enable_plugin() -> void:
-    _add_setting("spectator/connection/port", TYPE_INT, 9077)
-    _add_setting("spectator/connection/auto_start", TYPE_BOOL, true)
-    _add_setting("spectator/display/show_agent_notifications", TYPE_BOOL, true)
+    _add_setting("theatre/spectator/connection/port", TYPE_INT, 9077)
+    _add_setting("theatre/spectator/connection/auto_start", TYPE_BOOL, true)
+    _add_setting("theatre/spectator/display/show_agent_notifications", TYPE_BOOL, true)
 
 func _add_setting(name: String, type: int, default_value) -> void:
     if not ProjectSettings.has_setting(name):
@@ -248,7 +248,7 @@ func _add_setting(name: String, type: int, default_value) -> void:
 
 Read settings from any script:
 ```gdscript
-var port: int = ProjectSettings.get_setting("spectator/connection/port", 9077)
+var port: int = ProjectSettings.get_setting("theatre/spectator/connection/port", 9077)
 ```
 
 ## In-Game Overlay (CanvasLayer)

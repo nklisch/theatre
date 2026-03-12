@@ -20,11 +20,17 @@ async fn main() -> Result<()> {
 
     tracing::info!("spectator-server v{}", env!("CARGO_PKG_VERSION"));
 
-    // Parse port from env or use default
-    let env_port: u16 = std::env::var("SPECTATOR_PORT")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(DEFAULT_PORT);
+    // Parse port from env or use default (THEATRE_PORT preferred, SPECTATOR_PORT for backward compat)
+    let env_port: u16 = match std::env::var("THEATRE_PORT") {
+        Ok(v) => v.parse().unwrap_or(DEFAULT_PORT),
+        Err(_) => match std::env::var("SPECTATOR_PORT") {
+            Ok(v) => {
+                tracing::warn!("SPECTATOR_PORT is deprecated, use THEATRE_PORT instead");
+                v.parse().unwrap_or(DEFAULT_PORT)
+            }
+            Err(_) => DEFAULT_PORT,
+        },
+    };
 
     // Determine project directory for spectator.toml lookup
     let project_dir = std::env::var("SPECTATOR_PROJECT_DIR")

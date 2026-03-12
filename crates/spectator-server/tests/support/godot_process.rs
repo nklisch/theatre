@@ -46,7 +46,7 @@ impl GodotProcess {
             .args(["--headless", "--fixed-fps", "60", "--path"])
             .arg(&project_dir)
             .arg(scene)
-            .env("SPECTATOR_PORT", port.to_string())
+            .env("THEATRE_PORT", port.to_string())
             .stdout(Stdio::null())
             .stderr(stderr_file)
             .spawn()

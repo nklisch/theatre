@@ -34,19 +34,19 @@ func _disable_plugin() -> void:
 
 
 func _register_settings() -> void:
-	_add_setting("spectator/connection/port", TYPE_INT, 9077,
+	_add_setting("theatre/spectator/connection/port", TYPE_INT, 9077,
 		PROPERTY_HINT_RANGE, "1024,65535")
-	_add_setting("spectator/connection/auto_start", TYPE_BOOL, true)
-	_add_setting("spectator/connection/client_idle_timeout_secs", TYPE_INT, 10,
+	_add_setting("theatre/spectator/connection/auto_start", TYPE_BOOL, true)
+	_add_setting("theatre/spectator/connection/client_idle_timeout_secs", TYPE_INT, 10,
 		PROPERTY_HINT_RANGE, "0,3600")
-	_add_setting("spectator/display/show_agent_notifications", TYPE_BOOL, true)
-	_add_setting("spectator/shortcuts/marker_key", TYPE_STRING, "F9",
+	_add_setting("theatre/spectator/display/show_agent_notifications", TYPE_BOOL, true)
+	_add_setting("theatre/spectator/shortcuts/marker_key", TYPE_STRING, "F9",
 		PROPERTY_HINT_NONE, "Key name for marker/dashcam clip (e.g. F9). Avoid F5-F11 (Godot editor shortcuts).")
-	_add_setting("spectator/shortcuts/pause_key", TYPE_STRING, "F11",
+	_add_setting("theatre/spectator/shortcuts/pause_key", TYPE_STRING, "F11",
 		PROPERTY_HINT_NONE, "Key name for pausing the game tree (e.g. F11). Avoid F5-F10 (Godot editor shortcuts).")
-	_add_setting("spectator/tracking/default_static_patterns",
+	_add_setting("theatre/spectator/tracking/default_static_patterns",
 		TYPE_PACKED_STRING_ARRAY, PackedStringArray())
-	_add_setting("spectator/tracking/token_hard_cap", TYPE_INT, 5000,
+	_add_setting("theatre/spectator/tracking/token_hard_cap", TYPE_INT, 5000,
 		PROPERTY_HINT_RANGE, "500,50000")
 
 

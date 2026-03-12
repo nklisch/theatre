@@ -393,7 +393,7 @@ impl GodotProcess {
     /// Launch Godot headless with the test project.
     ///
     /// Uses an ephemeral port to avoid conflicts with parallel tests.
-    /// Sets SPECTATOR_PORT env var so the addon listens on the right port.
+    /// Sets THEATRE_PORT env var so the addon listens on the right port.
     /// Uses --fixed-fps 60 for deterministic physics.
     /// Waits for the addon's TCP listener to be ready before returning.
     pub async fn start(scene: &str) -> Result<Self> {
@@ -406,7 +406,7 @@ impl GodotProcess {
                 "--path", &project_dir.to_string_lossy(),
                 scene,
             ])
-            .env("SPECTATOR_PORT", port.to_string())
+            .env("THEATRE_PORT", port.to_string())
             // Godot uses stdout for some logging; capture it
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -715,12 +715,12 @@ The mock/Godot process reports its port back to the test harness.
 
 ### Handling Godot's addon port
 
-The test project must read `SPECTATOR_PORT` env var to override the default
+The test project must read `THEATRE_PORT` env var to override the default
 9077. The addon already reads `spectator/connection/port` from Project
 Settings — we can either:
 
 1. **Override in `project.godot`** — set port to a known value per test
-2. **Use env var in runtime.gd** — add a `SPECTATOR_PORT` env var check
+2. **Use env var in runtime.gd** — add a `THEATRE_PORT` env var check
    before reading Project Settings
 
 Option 2 is preferred: add a 3-line env var check to `runtime.gd` that
@@ -729,7 +729,7 @@ takes precedence over the Project Settings port. This is useful for testing
 
 ```gdscript
 # In runtime.gd _ready():
-var port: int = OS.get_environment("SPECTATOR_PORT").to_int()
+var port: int = OS.get_environment("THEATRE_PORT").to_int()
 if port == 0:
     port = ProjectSettings.get_setting("spectator/connection/port", 9077)
 ```

@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Build and deploy Theatre addons to a Godot project.
+# Usage: theatre-deploy [--release] [project_path...]
+
+set -euo pipefail
+
+MODE="debug"
+if [ "${1:-}" = "--release" ]; then
+    MODE="release"
+    shift
+fi
+
+TARGETS=("${@:-$HOME/godot/test-harness}")
+THEATRE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+
+# Build GDExtension
+cargo build -p spectator-godot ${MODE:+--$MODE}
+
+SRC="$THEATRE_ROOT/target/$MODE/libspectator_godot.so"
+for PROJECT in "${TARGETS[@]}"; do
+    DST="$PROJECT/addons/spectator/bin/linux/"
+    mkdir -p "$DST"
+    cp "$SRC" "$DST"
+    echo "Deployed spectator-godot → $PROJECT"
+done

@@ -1,22 +1,29 @@
-# Spectator — Agent Instructions
+# Theatre — Agent Instructions
 
 ## What This Is
 
-Spectator: Rust MCP server + Rust GDExtension addon giving AI agents spatial
-awareness of running Godot games. Two Rust compilation targets that communicate
-over TCP.
+Theatre is a Godot AI agent toolkit containing two tools:
+- **Spectator**: Rust MCP server + Rust GDExtension addon giving AI agents spatial awareness of running Godot games.
+- **Director**: Rust MCP server + GDScript addon giving AI agents the ability to create and modify Godot scenes, resources, tilemaps, and animations.
+
+Both tools communicate with Godot over TCP.
 
 ## Repository Layout
 
 ```
 crates/
-  spectator-server/     — MCP binary (rmcp + tokio), stdio transport
-  spectator-godot/      — GDExtension cdylib (gdext), loaded by Godot
+  spectator-server/     — Spectator MCP binary (rmcp + tokio), stdio transport
+  spectator-godot/      — Spectator GDExtension cdylib (gdext), loaded by Godot
   spectator-protocol/   — Shared TCP wire format types
   spectator-core/       — Shared spatial logic (no Godot, no MCP)
-addons/spectator/       — Godot addon (GDScript + GDExtension manifest)
+  director/             — Director MCP binary
+addons/spectator/       — Spectator Godot addon (GDScript + GDExtension manifest)
+addons/director/        — Director Godot addon (GDScript)
 docs/                   — Design documents
 docs/design/            — Implementation designs per milestone
+tests/
+  wire-tests/           — Spectator E2E tests
+  director-tests/       — Director E2E tests
 ```
 
 ## Build Commands
@@ -28,11 +35,12 @@ cargo build --workspace
 # Build specific crate
 cargo build -p spectator-server
 cargo build -p spectator-godot
+cargo build -p director
 
 # Run ALL tests — unit + integration + scenarios + E2E journeys
 # No feature flags — all tests run unconditionally
 # E2E tests require deploying GDExtension first:
-spectator-deploy ~/dev/spectator/tests/godot-project
+theatre-deploy ~/dev/spectator/tests/godot-project
 cargo test --workspace
 # IMPORTANT: All test layers must pass. Never skip E2E journey tests.
 
@@ -47,21 +55,21 @@ cargo fmt --check
 
 ## Deploying to a Godot Project
 
-Use the `spectator-deploy` shell script (`~/.local/bin/spectator-deploy`) to
+Use the `theatre-deploy` shell script (`scripts/theatre-deploy`, symlink to `~/.local/bin/theatre-deploy`) to
 build and copy the `.so` into one or more Godot projects in one step:
 
 ```bash
 # Debug build → default target (~/godot/test-harness)
-spectator-deploy
+theatre-deploy
 
 # Release build → default target
-spectator-deploy --release
+theatre-deploy --release
 
 # Debug build → specific project
-spectator-deploy ~/godot/my-game
+theatre-deploy ~/godot/my-game
 
 # Release build → multiple projects
-spectator-deploy --release ~/godot/test-harness ~/godot/my-game
+theatre-deploy --release ~/godot/test-harness ~/godot/my-game
 ```
 
 The script runs `cargo build -p spectator-godot` then copies
@@ -120,11 +128,17 @@ prevents GDScript parse errors when the extension fails to load. The
 
 ## Architecture Rules
 
+### Spectator
 - spectator-godot depends on spectator-protocol, NOT on spectator-core
 - spectator-server depends on both spectator-protocol and spectator-core
 - spectator-core has zero Godot or MCP dependencies — pure logic
 - TCP protocol: length-prefixed JSON (4-byte BE u32 + JSON payload)
 - Addon listens (port 9077), server connects (ephemeral)
+
+### Director
+- director crate is the MCP binary; addon is pure GDScript
+- Director talks to Godot headless via subprocess or daemon TCP connection
+- See `docs/director-spec.md` for full Director architecture
 
 ## Git Conventions
 

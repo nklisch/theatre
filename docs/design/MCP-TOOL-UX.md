@@ -884,7 +884,7 @@ through the existing test infrastructure once deployed.
 cargo build --workspace
 
 # All tests pass
-spectator-deploy ~/dev/spectator/tests/godot-project
+theatre-deploy ~/dev/spectator/tests/godot-project
 cargo test --workspace
 
 # Lint

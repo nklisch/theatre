@@ -2156,7 +2156,7 @@ mod tcp;
       "command": "cargo",
       "args": ["run", "-p", "spectator-server"],
       "env": {
-        "SPECTATOR_PORT": "9077"
+        "THEATRE_PORT": "9077"
       }
     }
   }

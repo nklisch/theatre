@@ -39,7 +39,7 @@ members = [
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-repository = "https://github.com/spectator-godot/spectator"
+repository = "https://github.com/theatre-godot/theatre"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -1102,7 +1102,7 @@ async fn main() -> Result<()> {
     tracing::info!("spectator-server v{}", env!("CARGO_PKG_VERSION"));
 
     // Parse port from env or use default
-    let port: u16 = std::env::var("SPECTATOR_PORT")
+    let port: u16 = std::env::var("THEATRE_PORT")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(DEFAULT_PORT);
@@ -1127,7 +1127,7 @@ async fn main() -> Result<()> {
 ```
 
 **Implementation Notes:**
-- Port is configurable via `SPECTATOR_PORT` environment variable
+- Port is configurable via `THEATRE_PORT` environment variable
 - The `#[tool_box]` macro with no tools still generates valid `list_tools` (empty list) and `call_tool` (returns error for any call) — this is fine for M0
 - `ServiceExt::serve` starts the MCP JSON-RPC handler on stdin/stdout
 - TCP client is spawned before `.serve()` so it starts connecting immediately
@@ -1137,7 +1137,7 @@ async fn main() -> Result<()> {
 - [ ] MCP handshake completes on stdio (AI client sees server info with name "spectator-server")
 - [ ] `tools/list` returns empty tool list
 - [ ] TCP client loop runs concurrently with MCP handler
-- [ ] `SPECTATOR_PORT=9078` makes server connect to port 9078 instead of 9077
+- [ ] `THEATRE_PORT=9078` makes server connect to port 9078 instead of 9077
 - [ ] Process exits cleanly when stdin closes (AI client disconnects)
 
 ---
@@ -1450,7 +1450,7 @@ jobs:
       "type": "stdio",
       "command": "./target/release/spectator-server",
       "env": {
-        "SPECTATOR_PORT": "9077"
+        "THEATRE_PORT": "9077"
       }
     }
   }
@@ -1460,7 +1460,7 @@ jobs:
 **Implementation Notes:**
 - This is the Claude Code MCP configuration format
 - Users copy this and adjust the command path to wherever they installed the binary
-- `SPECTATOR_PORT` env var is optional (defaults to 9077)
+- `THEATRE_PORT` env var is optional (defaults to 9077)
 
 **Acceptance Criteria:**
 - [ ] Claude Code recognizes the MCP config and spawns `spectator-server`

@@ -137,7 +137,7 @@ impl GodotFixture {
                 "--path", &project_dir.to_string_lossy(),
                 scene,
             ])
-            .env("SPECTATOR_PORT", port.to_string())
+            .env("THEATRE_PORT", port.to_string())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()?;
@@ -1679,7 +1679,7 @@ tests/wire-tests/             → Rust TCP wire test crate (Approach 1)
         test_*.rs
 ```
 
-### SPECTATOR_PORT env var support
+### THEATRE_PORT env var support
 
 All approaches need the addon to listen on a test-chosen port. Add to
 `runtime.gd`:
@@ -1687,7 +1687,7 @@ All approaches need the addon to listen on a test-chosen port. Add to
 ```gdscript
 # In runtime.gd _ready(), before tcp_server.start():
 var port: int = 0
-var env_port := OS.get_environment("SPECTATOR_PORT")
+var env_port := OS.get_environment("THEATRE_PORT")
 if not env_port.is_empty():
     port = env_port.to_int()
 if port == 0:

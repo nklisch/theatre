@@ -767,7 +767,7 @@ tool → `clips`, `recording_id` → `clip_id`.
 cargo build --workspace
 cargo clippy --workspace
 cargo fmt --check
-spectator-deploy ~/dev/spectator/tests/godot-project
+theatre-deploy ~/dev/spectator/tests/godot-project
 cargo test --workspace
 godot --headless --quit --path ~/dev/spectator/tests/godot-project 2>&1
 ```

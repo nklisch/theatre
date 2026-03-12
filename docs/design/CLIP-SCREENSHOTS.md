@@ -922,7 +922,7 @@ async fn journey_screenshot_status_fields() {
 cargo build --workspace
 
 # Run all tests (unit + integration + E2E)
-spectator-deploy ~/dev/spectator/tests/godot-project
+theatre-deploy ~/dev/spectator/tests/godot-project
 cargo test --workspace
 
 # Run only the new E2E screenshot journeys

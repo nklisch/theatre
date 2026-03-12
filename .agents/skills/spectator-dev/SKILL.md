@@ -3,31 +3,40 @@ name: spectator-dev
 description: Orientation for working on the Spectator codebase itself. Covers repo layout, crate responsibilities, design decisions, key patterns, and how the pieces connect.
 ---
 
-# Spectator — Developer Orientation
+# Theatre — Developer Orientation
 
-Spectator is a **Rust MCP server** (`spectator-server`) + **Rust GDExtension + GDScript addon** (`spectator-godot`) that gives AI agents spatial awareness of a running Godot game. See `docs/` for full design documentation.
+Theatre is a Godot AI agent toolkit containing two tools:
+- **Spectator**: Rust MCP server + GDExtension for runtime spatial observation
+- **Director**: Rust MCP server + GDScript addon for editor-time scene manipulation
+
+This skill covers Spectator development. See the Director crate and
+`docs/director-spec.md` for Director specifics.
 
 ## Crate Map
 
 ```
-spectator/
+theatre/
 ├── crates/
-│   ├── spectator-server/     # MCP binary — Claude Code connects here
-│   ├── spectator-godot/      # GDExtension cdylib — Godot loads this
+│   ├── spectator-server/     # Spectator MCP binary — Claude Code connects here
+│   ├── spectator-godot/      # Spectator GDExtension cdylib — Godot loads this
 │   ├── spectator-protocol/   # Shared: TCP wire format, message types
-│   └── spectator-core/       # Shared: spatial math, bearing, indexing, budget
-├── addons/spectator/         # Godot addon (copy into user projects)
+│   ├── spectator-core/       # Shared: spatial math, bearing, indexing, budget
+│   └── director/             # Director MCP binary
+├── addons/spectator/         # Spectator Godot addon (copy into user projects)
 │   ├── plugin.gd             # @tool EditorPlugin (GDScript)
 │   ├── runtime.gd            # Autoload singleton (GDScript)
 │   ├── dock.tscn / dock.gd   # Editor dock UI
 │   └── spectator.gdextension # Manifest pointing to GDExtension binaries
+├── addons/director/          # Director Godot addon
 ├── docs/                     # All design docs
-└── skills/spectator/         # End-user agent skill file
+└── tests/
+    ├── wire-tests/           # Spectator E2E tests
+    └── director-tests/       # Director E2E tests
 ```
 
 ## The Two-Artifact Rule
 
-There are two separate Rust compilation targets:
+There are two separate Rust compilation targets for Spectator:
 
 | Target | Crate | Type | Process |
 |---|---|---|---|

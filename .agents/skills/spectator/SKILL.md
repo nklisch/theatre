@@ -5,7 +5,7 @@ description: Use Spectator's MCP tools to spatially debug a running Godot game. 
 
 # Spectator — Spatial Debugging for Godot
 
-Spectator gives you 9 MCP tools to observe and interact with a running Godot game: 8 spatial tools + the `clips` tool for capturing and analyzing gameplay moments. These tools see the game's spatial reality: positions, distances, relationships, physics, signals — organized in space, not as code.
+Spectator is part of the **Theatre** toolkit (alongside Director). It gives you 9 MCP tools to observe and interact with a running Godot game: 8 spatial tools + the `clips` tool for capturing and analyzing gameplay moments. These tools see the game's spatial reality: positions, distances, relationships, physics, signals — organized in space, not as code.
 
 **Prerequisite:** Spectator addon must be enabled in the Godot project and the game must be running (Play mode). If tools return `not_connected`, the game isn't running yet.
 

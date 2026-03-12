@@ -1190,7 +1190,7 @@ cargo test --workspace
 cargo test -p spectator-server --features integration-tests
 
 # E2E journey tests (requires Godot + built GDExtension)
-spectator-deploy ~/dev/spectator/tests/godot-project
+theatre-deploy ~/dev/spectator/tests/godot-project
 cargo test -p spectator-server --features e2e-tests -- --nocapture
 
 # All together

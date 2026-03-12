@@ -1125,7 +1125,7 @@ cargo clippy --workspace
 cargo fmt --check
 
 # Deploy and verify in Godot headless
-spectator-deploy
+theatre-deploy
 godot --headless --quit --path ~/godot/test-harness 2>&1
 # Expected: no SCRIPT ERROR or [panic] lines
 ```

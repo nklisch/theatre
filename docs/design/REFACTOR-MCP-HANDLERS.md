@@ -85,7 +85,7 @@ inline `query_addon + finalize_response`.
 
 **Verification**:
 - `cargo test -p spectator-server`
-- E2E tests: `spectator-deploy ~/dev/spectator/tests/godot-project && cargo test --workspace`
+- E2E tests: `theatre-deploy ~/dev/spectator/tests/godot-project && cargo test --workspace`
 
 ### Step 4: Extract `resolve_frame` helper in clip analysis handlers
 

@@ -63,8 +63,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-release-
 
-      - name: Build server (release)
+      - name: Build Spectator server (release)
         run: cargo build --release -p spectator-server
+
+      - name: Build Director server (release)
+        run: cargo build --release -p director
 
       - name: Build GDExtension (release)
         run: cargo build --release -p spectator-godot

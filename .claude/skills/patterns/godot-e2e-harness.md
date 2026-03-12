@@ -177,7 +177,7 @@ fn daemon_creates_and_instantiates() {
 
 Both harnesses respect:
 - `GODOT_BIN` — override Godot binary name (default: `"godot"`)
-- `SPECTATOR_PORT` — set automatically by `GodotFixture::start` via `SPECTATOR_PORT` env
+- `THEATRE_PORT` — set automatically by `GodotFixture::start` via `THEATRE_PORT` env
 
 ---
 
