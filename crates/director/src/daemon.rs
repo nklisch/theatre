@@ -122,18 +122,15 @@ impl DaemonHandle {
 
         // Connect to the daemon's TCP port.
         let addr = format!("127.0.0.1:{port}");
-        let stream = tokio::time::timeout(
-            Duration::from_secs(5),
-            TcpStream::connect(&addr),
-        )
-        .await
-        .map_err(|_| {
-            DaemonError::ConnectionFailed(std::io::Error::new(
-                std::io::ErrorKind::TimedOut,
-                "TCP connect timed out",
-            ))
-        })?
-        .map_err(DaemonError::ConnectionFailed)?;
+        let stream = tokio::time::timeout(Duration::from_secs(5), TcpStream::connect(&addr))
+            .await
+            .map_err(|_| {
+                DaemonError::ConnectionFailed(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "TCP connect timed out",
+                ))
+            })?
+            .map_err(DaemonError::ConnectionFailed)?;
 
         Ok(DaemonHandle {
             child,
@@ -225,7 +222,10 @@ async fn write_message(
     })?;
     let len = (json.len() as u32).to_be_bytes();
     stream.write_all(&len).await.map_err(DaemonError::IoError)?;
-    stream.write_all(&json).await.map_err(DaemonError::IoError)?;
+    stream
+        .write_all(&json)
+        .await
+        .map_err(DaemonError::IoError)?;
     stream.flush().await.map_err(DaemonError::IoError)?;
     Ok(())
 }

@@ -29,15 +29,11 @@ impl From<EditorError> for McpError {
 impl From<OperationError> for McpError {
     fn from(e: OperationError) -> Self {
         match &e {
-            OperationError::OperationFailed { .. } => {
-                McpError::internal_error(e.to_string(), None)
-            }
+            OperationError::OperationFailed { .. } => McpError::internal_error(e.to_string(), None),
             OperationError::SpawnFailed(_)
             | OperationError::ProcessFailed { .. }
             | OperationError::Timeout(_)
-            | OperationError::ParseFailed { .. } => {
-                McpError::internal_error(e.to_string(), None)
-            }
+            | OperationError::ParseFailed { .. } => McpError::internal_error(e.to_string(), None),
         }
     }
 }

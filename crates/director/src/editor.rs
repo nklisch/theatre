@@ -150,24 +150,36 @@ fn parse_editor_port_from_project(contents: &str) -> Option<u16> {
 
 // -- Wire format (identical to daemon.rs) -----------------------------------
 
-async fn write_message(stream: &mut TcpStream, value: &serde_json::Value) -> Result<(), EditorError> {
+async fn write_message(
+    stream: &mut TcpStream,
+    value: &serde_json::Value,
+) -> Result<(), EditorError> {
     let json = serde_json::to_vec(value).map_err(|source| EditorError::ParseFailed {
         source,
         raw: String::new(),
     })?;
     let len = (json.len() as u32).to_be_bytes();
     stream.write_all(&len).await.map_err(EditorError::IoError)?;
-    stream.write_all(&json).await.map_err(EditorError::IoError)?;
+    stream
+        .write_all(&json)
+        .await
+        .map_err(EditorError::IoError)?;
     stream.flush().await.map_err(EditorError::IoError)?;
     Ok(())
 }
 
 async fn read_message(stream: &mut TcpStream) -> Result<serde_json::Value, EditorError> {
     let mut len_buf = [0u8; 4];
-    stream.read_exact(&mut len_buf).await.map_err(EditorError::IoError)?;
+    stream
+        .read_exact(&mut len_buf)
+        .await
+        .map_err(EditorError::IoError)?;
     let len = u32::from_be_bytes(len_buf) as usize;
     let mut buf = vec![0u8; len];
-    stream.read_exact(&mut buf).await.map_err(EditorError::IoError)?;
+    stream
+        .read_exact(&mut buf)
+        .await
+        .map_err(EditorError::IoError)?;
     let raw = String::from_utf8_lossy(&buf).into_owned();
     serde_json::from_slice(&buf).map_err(|source| EditorError::ParseFailed { source, raw })
 }

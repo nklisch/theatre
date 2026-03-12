@@ -28,3 +28,7 @@ mod test_scene;
 mod test_scene_list;
 #[cfg(test)]
 mod test_tilemap;
+#[cfg(test)]
+mod test_physics;
+#[cfg(test)]
+mod test_shader;

@@ -9,6 +9,8 @@ const ResourceOps = preload("res://addons/director/ops/resource_ops.gd")
 const TileMapOps = preload("res://addons/director/ops/tilemap_ops.gd")
 const GridMapOps = preload("res://addons/director/ops/gridmap_ops.gd")
 const AnimationOps = preload("res://addons/director/ops/animation_ops.gd")
+const PhysicsOps = preload("res://addons/director/ops/physics_ops.gd")
+const ShaderOps = preload("res://addons/director/ops/shader_ops.gd")
 
 const DEFAULT_PORT := 6550
 const IDLE_TIMEOUT_SEC := 300  # 5 minutes
@@ -201,6 +203,12 @@ func _dispatch(operation: String, params: Dictionary) -> Dictionary:
 			return AnimationOps.op_animation_read(params)
 		"animation_remove_track":
 			return AnimationOps.op_animation_remove_track(params)
+		"physics_set_layers":
+			return PhysicsOps.op_physics_set_layers(params)
+		"physics_set_layer_names":
+			return PhysicsOps.op_physics_set_layer_names(params)
+		"visual_shader_create":
+			return ShaderOps.op_visual_shader_create(params)
 		"ping":
 			return {"success": true, "data": {"status": "ok"}, "operation": "ping"}
 		_:

@@ -14,6 +14,8 @@ const ResourceOps = preload("res://addons/director/ops/resource_ops.gd")
 const TileMapOps = preload("res://addons/director/ops/tilemap_ops.gd")
 const GridMapOps = preload("res://addons/director/ops/gridmap_ops.gd")
 const AnimationOps = preload("res://addons/director/ops/animation_ops.gd")
+const PhysicsOps = preload("res://addons/director/ops/physics_ops.gd")
+const ShaderOps = preload("res://addons/director/ops/shader_ops.gd")
 const OpsUtil = preload("res://addons/director/ops/ops_util.gd")
 
 ## Scene-targeting operations that can use live tree manipulation.
@@ -22,6 +24,7 @@ const SCENE_OPS := [
 	"node_reparent", "scene_add_instance",
 	"tilemap_set_cells", "tilemap_get_cells", "tilemap_clear",
 	"gridmap_set_cells", "gridmap_get_cells", "gridmap_clear",
+	"physics_set_layers",
 ]
 
 
@@ -85,6 +88,8 @@ static func _dispatch_live(operation: String, params: Dictionary, scene_root: No
 			return _live_gridmap_get_cells(params, scene_root)
 		"gridmap_clear":
 			return _live_gridmap_clear(params, scene_root)
+		"physics_set_layers":
+			return _live_physics_set_layers(params, scene_root)
 		_:
 			return OpsUtil._error("Unknown live operation: " + operation, operation, params)
 
@@ -272,6 +277,45 @@ static func _live_gridmap_clear(params: Dictionary, scene_root: Node) -> Diction
 	return GridMapOps._clear_node(node, params)
 
 
+static func _live_physics_set_layers(params: Dictionary, scene_root: Node) -> Dictionary:
+	var node_path: String = params.get("node_path", "")
+	var collision_layer = params.get("collision_layer", null)
+	var collision_mask = params.get("collision_mask", null)
+
+	if node_path == "":
+		return OpsUtil._error("node_path is required", "physics_set_layers", params)
+	if collision_layer == null and collision_mask == null:
+		return OpsUtil._error(
+			"At least one of collision_layer or collision_mask is required",
+			"physics_set_layers", params)
+
+	var node: Node = _resolve_node(scene_root, node_path)
+	if node == null:
+		return OpsUtil._error("Node not found: " + node_path,
+			"physics_set_layers", params)
+
+	# Verify collision properties exist
+	var has_layer := "collision_layer" in node
+	var has_mask := "collision_mask" in node
+	if not has_layer and not has_mask:
+		return OpsUtil._error(
+			"Node " + node_path + " (" + node.get_class() +
+			") has no collision properties",
+			"physics_set_layers",
+			{"node_path": node_path, "class": node.get_class()})
+
+	if collision_layer != null:
+		node.collision_layer = int(collision_layer)
+	if collision_mask != null:
+		node.collision_mask = int(collision_mask)
+
+	return {"success": true, "data": {
+		"node_path": node_path,
+		"collision_layer": node.collision_layer,
+		"collision_mask": node.collision_mask,
+	}}
+
+
 # ---------------------------------------------------------------------------
 # Headless fallthrough (delegates to ops/ methods)
 # ---------------------------------------------------------------------------
@@ -302,6 +346,9 @@ static func _dispatch_headless(operation: String, params: Dictionary) -> Diction
 		"animation_add_track": return AnimationOps.op_animation_add_track(params)
 		"animation_read": return AnimationOps.op_animation_read(params)
 		"animation_remove_track": return AnimationOps.op_animation_remove_track(params)
+		"physics_set_layers": return PhysicsOps.op_physics_set_layers(params)
+		"physics_set_layer_names": return PhysicsOps.op_physics_set_layer_names(params)
+		"visual_shader_create": return ShaderOps.op_visual_shader_create(params)
 		"ping":
 			return {"success": true, "data": {"status": "ok", "backend": "editor"}, "operation": "ping"}
 		_:

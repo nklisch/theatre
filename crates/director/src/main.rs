@@ -48,8 +48,8 @@ async fn serve() -> Result<()> {
 }
 
 async fn cli(operation: &str, json_str: &str) -> Result<()> {
-    let params: serde_json::Value = serde_json::from_str(json_str)
-        .map_err(|e| anyhow::anyhow!("Invalid JSON: {e}"))?;
+    let params: serde_json::Value =
+        serde_json::from_str(json_str).map_err(|e| anyhow::anyhow!("Invalid JSON: {e}"))?;
 
     let project_path = params
         .get("project_path")

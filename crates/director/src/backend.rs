@@ -104,8 +104,7 @@ impl Backend {
                         // Attempt a single respawn.
                         match DaemonHandle::spawn(godot_bin, project_path, port).await {
                             Ok(mut new_handle) => {
-                                let result =
-                                    new_handle.send_operation(operation, params).await;
+                                let result = new_handle.send_operation(operation, params).await;
                                 *guard = Some(new_handle);
                                 match result {
                                     Ok(r) => return Ok(r),

@@ -9,6 +9,8 @@ const ResourceOps = preload("res://addons/director/ops/resource_ops.gd")
 const TileMapOps = preload("res://addons/director/ops/tilemap_ops.gd")
 const GridMapOps = preload("res://addons/director/ops/gridmap_ops.gd")
 const AnimationOps = preload("res://addons/director/ops/animation_ops.gd")
+const PhysicsOps = preload("res://addons/director/ops/physics_ops.gd")
+const ShaderOps = preload("res://addons/director/ops/shader_ops.gd")
 
 
 func _init():
@@ -66,6 +68,12 @@ func _init():
 			result = AnimationOps.op_animation_read(args.params)
 		"animation_remove_track":
 			result = AnimationOps.op_animation_remove_track(args.params)
+		"physics_set_layers":
+			result = PhysicsOps.op_physics_set_layers(args.params)
+		"physics_set_layer_names":
+			result = PhysicsOps.op_physics_set_layer_names(args.params)
+		"visual_shader_create":
+			result = ShaderOps.op_visual_shader_create(args.params)
 		_:
 			result = {"success": false, "error": "Unknown operation: " + args.operation, "operation": args.operation, "context": {}}
 

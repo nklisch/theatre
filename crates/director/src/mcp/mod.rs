@@ -1,8 +1,10 @@
 pub mod animation;
 pub mod gridmap;
 pub mod node;
+pub mod physics;
 pub mod resource;
 pub mod scene;
+pub mod shader;
 pub mod tilemap;
 
 use rmcp::handler::server::wrapper::Parameters;
@@ -19,11 +21,13 @@ use animation::{
 };
 use gridmap::{GridMapClearParams, GridMapGetCellsParams, GridMapSetCellsParams};
 use node::{NodeAddParams, NodeRemoveParams, NodeReparentParams, NodeSetPropertiesParams};
+use physics::{PhysicsSetLayerNamesParams, PhysicsSetLayersParams};
 use resource::{
     MaterialCreateParams, ResourceDuplicateParams, ResourceReadParams, ShapeCreateParams,
     StyleBoxCreateParams,
 };
 use scene::{SceneAddInstanceParams, SceneCreateParams, SceneListParams, SceneReadParams};
+use shader::VisualShaderCreateParams;
 use tilemap::{TileMapClearParams, TileMapGetCellsParams, TileMapSetCellsParams};
 
 // ---------------------------------------------------------------------------
@@ -51,15 +55,13 @@ async fn run_operation(
 }
 
 fn serialize_params<T: serde::Serialize>(params: &T) -> Result<serde_json::Value, McpError> {
-    serde_json::to_value(params).map_err(|e| {
-        McpError::internal_error(format!("Param serialization error: {e}"), None)
-    })
+    serde_json::to_value(params)
+        .map_err(|e| McpError::internal_error(format!("Param serialization error: {e}"), None))
 }
 
 fn serialize_response<T: serde::Serialize>(response: &T) -> Result<String, McpError> {
-    serde_json::to_string(response).map_err(|e| {
-        McpError::internal_error(format!("Response serialization error: {e}"), None)
-    })
+    serde_json::to_string(response)
+        .map_err(|e| McpError::internal_error(format!("Response serialization error: {e}"), None))
 }
 
 // ---------------------------------------------------------------------------
@@ -79,7 +81,13 @@ impl DirectorServer {
         Parameters(params): Parameters<SceneCreateParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&self.backend, &params.project_path, "scene_create", &op_params).await?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "scene_create",
+            &op_params,
+        )
+        .await?;
         serialize_response(&data)
     }
 
@@ -94,7 +102,13 @@ impl DirectorServer {
         Parameters(params): Parameters<SceneReadParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&self.backend, &params.project_path, "scene_read", &op_params).await?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "scene_read",
+            &op_params,
+        )
+        .await?;
         serialize_response(&data)
     }
 
@@ -109,7 +123,8 @@ impl DirectorServer {
         Parameters(params): Parameters<NodeAddParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&self.backend, &params.project_path, "node_add", &op_params).await?;
+        let data =
+            run_operation(&self.backend, &params.project_path, "node_add", &op_params).await?;
         serialize_response(&data)
     }
 
@@ -124,7 +139,13 @@ impl DirectorServer {
         Parameters(params): Parameters<NodeSetPropertiesParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&self.backend, &params.project_path, "node_set_properties", &op_params).await?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "node_set_properties",
+            &op_params,
+        )
+        .await?;
         serialize_response(&data)
     }
 
@@ -138,7 +159,13 @@ impl DirectorServer {
         Parameters(params): Parameters<NodeRemoveParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&self.backend, &params.project_path, "node_remove", &op_params).await?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "node_remove",
+            &op_params,
+        )
+        .await?;
         serialize_response(&data)
     }
 
@@ -152,7 +179,13 @@ impl DirectorServer {
         Parameters(params): Parameters<SceneListParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&self.backend, &params.project_path, "scene_list", &op_params).await?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "scene_list",
+            &op_params,
+        )
+        .await?;
         serialize_response(&data)
     }
 
@@ -167,7 +200,13 @@ impl DirectorServer {
         Parameters(params): Parameters<SceneAddInstanceParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&self.backend, &params.project_path, "scene_add_instance", &op_params).await?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "scene_add_instance",
+            &op_params,
+        )
+        .await?;
         serialize_response(&data)
     }
 
@@ -182,7 +221,13 @@ impl DirectorServer {
         Parameters(params): Parameters<NodeReparentParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&self.backend, &params.project_path, "node_reparent", &op_params).await?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "node_reparent",
+            &op_params,
+        )
+        .await?;
         serialize_response(&data)
     }
 
@@ -197,7 +242,13 @@ impl DirectorServer {
         Parameters(params): Parameters<ResourceReadParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&self.backend, &params.project_path, "resource_read", &op_params).await?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "resource_read",
+            &op_params,
+        )
+        .await?;
         serialize_response(&data)
     }
 
@@ -212,7 +263,13 @@ impl DirectorServer {
         Parameters(params): Parameters<MaterialCreateParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&self.backend, &params.project_path, "material_create", &op_params).await?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "material_create",
+            &op_params,
+        )
+        .await?;
         serialize_response(&data)
     }
 
@@ -228,7 +285,13 @@ impl DirectorServer {
         Parameters(params): Parameters<ShapeCreateParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&self.backend, &params.project_path, "shape_create", &op_params).await?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "shape_create",
+            &op_params,
+        )
+        .await?;
         serialize_response(&data)
     }
 
@@ -243,7 +306,13 @@ impl DirectorServer {
         Parameters(params): Parameters<StyleBoxCreateParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&self.backend, &params.project_path, "style_box_create", &op_params).await?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "style_box_create",
+            &op_params,
+        )
+        .await?;
         serialize_response(&data)
     }
 
@@ -257,7 +326,13 @@ impl DirectorServer {
         Parameters(params): Parameters<ResourceDuplicateParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&self.backend, &params.project_path, "resource_duplicate", &op_params).await?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "resource_duplicate",
+            &op_params,
+        )
+        .await?;
         serialize_response(&data)
     }
 
@@ -272,7 +347,13 @@ impl DirectorServer {
         Parameters(params): Parameters<TileMapSetCellsParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&self.backend, &params.project_path, "tilemap_set_cells", &op_params).await?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "tilemap_set_cells",
+            &op_params,
+        )
+        .await?;
         serialize_response(&data)
     }
 
@@ -287,7 +368,13 @@ impl DirectorServer {
         Parameters(params): Parameters<TileMapGetCellsParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&self.backend, &params.project_path, "tilemap_get_cells", &op_params).await?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "tilemap_get_cells",
+            &op_params,
+        )
+        .await?;
         serialize_response(&data)
     }
 
@@ -301,7 +388,13 @@ impl DirectorServer {
         Parameters(params): Parameters<TileMapClearParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&self.backend, &params.project_path, "tilemap_clear", &op_params).await?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "tilemap_clear",
+            &op_params,
+        )
+        .await?;
         serialize_response(&data)
     }
 
@@ -316,7 +409,13 @@ impl DirectorServer {
         Parameters(params): Parameters<GridMapSetCellsParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&self.backend, &params.project_path, "gridmap_set_cells", &op_params).await?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "gridmap_set_cells",
+            &op_params,
+        )
+        .await?;
         serialize_response(&data)
     }
 
@@ -330,7 +429,13 @@ impl DirectorServer {
         Parameters(params): Parameters<GridMapGetCellsParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&self.backend, &params.project_path, "gridmap_get_cells", &op_params).await?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "gridmap_get_cells",
+            &op_params,
+        )
+        .await?;
         serialize_response(&data)
     }
 
@@ -344,7 +449,13 @@ impl DirectorServer {
         Parameters(params): Parameters<GridMapClearParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&self.backend, &params.project_path, "gridmap_clear", &op_params).await?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "gridmap_clear",
+            &op_params,
+        )
+        .await?;
         serialize_response(&data)
     }
 
@@ -359,7 +470,13 @@ impl DirectorServer {
         Parameters(params): Parameters<AnimationCreateParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&self.backend, &params.project_path, "animation_create", &op_params).await?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "animation_create",
+            &op_params,
+        )
+        .await?;
         serialize_response(&data)
     }
 
@@ -375,7 +492,13 @@ impl DirectorServer {
         Parameters(params): Parameters<AnimationAddTrackParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&self.backend, &params.project_path, "animation_add_track", &op_params).await?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "animation_add_track",
+            &op_params,
+        )
+        .await?;
         serialize_response(&data)
     }
 
@@ -390,7 +513,13 @@ impl DirectorServer {
         Parameters(params): Parameters<AnimationReadParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&self.backend, &params.project_path, "animation_read", &op_params).await?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "animation_read",
+            &op_params,
+        )
+        .await?;
         serialize_response(&data)
     }
 
@@ -405,7 +534,81 @@ impl DirectorServer {
         Parameters(params): Parameters<AnimationRemoveTrackParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data = run_operation(&self.backend, &params.project_path, "animation_remove_track", &op_params).await?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "animation_remove_track",
+            &op_params,
+        )
+        .await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "physics_set_layers",
+        description = "Set collision_layer and/or collision_mask bitmasks on a physics \
+            node in a Godot scene. Works with any node that has collision properties \
+            (PhysicsBody2D/3D, Area2D/3D, TileMapLayer, etc.). Always use this tool \
+            instead of editing .tscn files directly."
+    )]
+    pub async fn physics_set_layers(
+        &self,
+        Parameters(params): Parameters<PhysicsSetLayersParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "physics_set_layers",
+            &op_params,
+        )
+        .await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "physics_set_layer_names",
+        description = "Set human-readable names for physics, render, navigation, or \
+            avoidance layers in project.godot. Layer numbers are 1-32. Valid layer types: \
+            2d_physics, 3d_physics, 2d_render, 3d_render, 2d_navigation, 3d_navigation, \
+            avoidance. Names appear in the editor's layer picker UI."
+    )]
+    pub async fn physics_set_layer_names(
+        &self,
+        Parameters(params): Parameters<PhysicsSetLayerNamesParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "physics_set_layer_names",
+            &op_params,
+        )
+        .await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "visual_shader_create",
+        description = "Create a Godot VisualShader resource (.tres) with a node graph. \
+            Define shader nodes and connections as JSON — the graph is built using \
+            Godot's VisualShader API. Each node specifies a shader_function (vertex, \
+            fragment, light, or particle functions) to target the correct processing \
+            stage. Supports spatial (3D), canvas_item (2D), particles, sky, and fog \
+            shader modes. Always use this instead of hand-writing shader .tres files."
+    )]
+    pub async fn visual_shader_create(
+        &self,
+        Parameters(params): Parameters<VisualShaderCreateParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "visual_shader_create",
+            &op_params,
+        )
+        .await?;
         serialize_response(&data)
     }
 }
