@@ -369,8 +369,6 @@ pub struct VisualShaderNode {
     /// Which shader function graph this node belongs to.
     /// Valid values: "vertex", "fragment", "light".
     /// For particles mode: "start", "process", "collide".
-    /// Default: "vertex".
-    #[serde(default = "default_vertex")]
     pub shader_function: String,
 
     /// Position in the visual shader editor graph (for layout).
@@ -383,9 +381,6 @@ pub struct VisualShaderNode {
     pub properties: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
-fn default_vertex() -> String {
-    "vertex".to_string()
-}
 
 /// A connection between two nodes in a VisualShader graph.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
@@ -404,8 +399,6 @@ pub struct VisualShaderConnection {
 
     /// Which shader function graph this connection belongs to.
     /// Must match the shader_function of the connected nodes.
-    /// Default: "vertex".
-    #[serde(default = "default_vertex")]
     pub shader_function: String,
 }
 
@@ -546,7 +539,7 @@ static func _add_shader_node(shader: VisualShader, node_def: Dictionary) -> Dict
     ## Add a single node to the visual shader graph.
     var node_id: int = node_def.get("node_id", -1)
     var node_type: String = node_def.get("type", "")
-    var shader_function: String = node_def.get("shader_function", "vertex")
+    var shader_function: String = node_def.get("shader_function", "")
 
     if node_id < 2:
         return OpsUtil._error(
@@ -554,6 +547,10 @@ static func _add_shader_node(shader: VisualShader, node_def: Dictionary) -> Dict
             "visual_shader_create", {"node_id": node_id})
     if node_type == "":
         return OpsUtil._error("Node type is required",
+            "visual_shader_create", {"node_id": node_id})
+    if shader_function == "":
+        return OpsUtil._error(
+            "shader_function is required on each node",
             "visual_shader_create", {"node_id": node_id})
     if not SHADER_FUNCTIONS.has(shader_function):
         return OpsUtil._error(
@@ -608,11 +605,15 @@ static func _add_connection(shader: VisualShader, conn: Dictionary) -> Dictionar
     var from_port: int = conn.get("from_port", -1)
     var to_node: int = conn.get("to_node", -1)
     var to_port: int = conn.get("to_port", -1)
-    var shader_function: String = conn.get("shader_function", "vertex")
+    var shader_function: String = conn.get("shader_function", "")
 
     if from_node < 0 or to_node < 0:
         return OpsUtil._error(
             "Connection requires from_node and to_node",
+            "visual_shader_create", conn)
+    if shader_function == "":
+        return OpsUtil._error(
+            "shader_function is required on each connection",
             "visual_shader_create", conn)
     if not SHADER_FUNCTIONS.has(shader_function):
         return OpsUtil._error(
