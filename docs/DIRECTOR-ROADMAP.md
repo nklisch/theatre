@@ -270,6 +270,41 @@ currently costs 21 MCP round-trips + 21 Godot cold-starts; with batch it costs
 
 ---
 
+## Phase 10 — Scene Wiring & Deferred Features
+
+**Goal:** Complete scene authoring coverage with signal connections, groups,
+script attachment, metadata, and node search. Also finish three deferred
+features from earlier phases.
+
+### New tools
+
+- `signal_connect` — connect signals between nodes in a scene
+- `signal_disconnect` — remove signal connections
+- `signal_list` — list all signal connections in a scene
+- `node_set_groups` — add/remove node group memberships
+- `node_set_script` — attach or detach a GDScript from a scene node
+- `node_set_meta` — set/clear metadata entries on a node
+- `node_find` — search scene tree by class, group, property, or name pattern
+
+### Deferred features completed
+
+- `scene_list` — add `pattern` glob filter param
+- `resource_read` — add `depth` param for nested resource serialization
+- `scene_diff` — add git ref support (`HEAD:path` syntax)
+
+### GDScript additions
+
+- `ops/signal_ops.gd` — `op_signal_connect`, `op_signal_disconnect`,
+  `op_signal_list`
+- `ops/node_ops.gd` — `op_node_set_groups`, `op_node_set_script`,
+  `op_node_set_meta`, `op_node_find`
+
+**Key implementation note:** Signal connections require `CONNECT_PERSIST` flag
+to survive `PackedScene.pack()`. Group membership requires `persistent=true`
+arg to `add_to_group()`. Both are easy to miss and cause silent data loss.
+
+---
+
 ## Parallel Work: Project Rename to Theatre
 
 The spec notes the repo should be renamed `spectator` → `theatre`. This is
@@ -298,6 +333,8 @@ Phase 3 (Daemon)                    — parallel with Phase 2; depends on Phase 
 Phase 8 (Advanced)                  — any order after Phase 1
 Phase 9 (Meta)                      — `batch` should come right after Phase 1;
                                        rest can be late
+Phase 10 (Wiring + Deferred)        — after Phase 1; deferred items touch
+                                       Phase 2/4/9 tools
 ```
 
 Phases 4, 5, 6 are independent of each other and of Phase 3 — implement in
