@@ -25,6 +25,7 @@ use serde_json::json;
 ///   6. spatial_query(nearest, from Player position, k=2) → two closest entities
 ///        Assert: results exist and distances are geometrically plausible
 #[tokio::test]
+#[ignore = "requires Godot binary"]
 async fn journey_explore_scene() {
     let mut h = support::e2e_harness::E2EHarness::start_3d()
         .await
@@ -243,6 +244,7 @@ async fn journey_explore_scene() {
 ///   9. spatial_inspect(Enemies/Scout) → health now 25
 ///  10. spatial_delta() → Scout in state_changed (health went 80→25)
 #[tokio::test]
+#[ignore = "requires Godot binary"]
 async fn journey_debug_spatial_bug() {
     let mut h = support::e2e_harness::E2EHarness::start_3d()
         .await
@@ -438,6 +440,7 @@ async fn journey_debug_spatial_bug() {
 ///  10. clips(list) → dashcam clip should appear in the list
 ///  11. Verify the clip has dashcam=true and clip_id starts with "clip_"
 #[tokio::test]
+#[ignore = "requires Godot binary"]
 async fn journey_dashcam_agent_workflow() {
     let mut h = support::e2e_harness::E2EHarness::start_3d()
         .await
@@ -580,6 +583,7 @@ async fn journey_dashcam_agent_workflow() {
 ///   4. clips(delete, clip_id) → delete the clip
 ///   5. clips(list) → clip should be gone
 #[tokio::test]
+#[ignore = "requires Godot binary"]
 async fn journey_dashcam_clip_lifecycle() {
     let mut h = support::e2e_harness::E2EHarness::start_3d()
         .await
@@ -649,6 +653,7 @@ async fn journey_dashcam_clip_lifecycle() {
 ///   6. wait_frames(3)
 ///   7. spatial_snapshot(standard) → Player now at ~(100, 50)
 #[tokio::test]
+#[ignore = "requires Godot binary"]
 async fn journey_2d_scene() {
     let mut h = support::e2e_harness::E2EHarness::start_2d()
         .await
@@ -827,6 +832,7 @@ async fn journey_2d_scene() {
 ///   6. clips(screenshot_at, clip_id, at_frame=0) → valid response (no_screenshots OR image)
 ///   7. clips(delete, clip_id) → cleanup
 #[tokio::test]
+#[ignore = "requires Godot binary"]
 async fn journey_screenshot_api_contract() {
     let mut h = support::e2e_harness::E2EHarness::start_3d()
         .await
