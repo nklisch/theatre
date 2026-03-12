@@ -32,3 +32,9 @@ mod test_tilemap;
 mod test_physics;
 #[cfg(test)]
 mod test_shader;
+#[cfg(test)]
+mod test_batch;
+#[cfg(test)]
+mod test_scene_diff;
+#[cfg(test)]
+mod test_project;

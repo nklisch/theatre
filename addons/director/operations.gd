@@ -11,6 +11,8 @@ const GridMapOps = preload("res://addons/director/ops/gridmap_ops.gd")
 const AnimationOps = preload("res://addons/director/ops/animation_ops.gd")
 const PhysicsOps = preload("res://addons/director/ops/physics_ops.gd")
 const ShaderOps = preload("res://addons/director/ops/shader_ops.gd")
+const MetaOps = preload("res://addons/director/ops/meta_ops.gd")
+const ProjectOps = preload("res://addons/director/ops/project_ops.gd")
 
 
 func _init():
@@ -74,6 +76,16 @@ func _init():
 			result = PhysicsOps.op_physics_set_layer_names(args.params)
 		"visual_shader_create":
 			result = ShaderOps.op_visual_shader_create(args.params)
+		"batch":
+			result = MetaOps.op_batch(args.params)
+		"scene_diff":
+			result = MetaOps.op_scene_diff(args.params)
+		"uid_get":
+			result = ProjectOps.op_uid_get(args.params)
+		"uid_update_project":
+			result = ProjectOps.op_uid_update_project(args.params)
+		"export_mesh_library":
+			result = ProjectOps.op_export_mesh_library(args.params)
 		_:
 			result = {"success": false, "error": "Unknown operation: " + args.operation, "operation": args.operation, "context": {}}
 

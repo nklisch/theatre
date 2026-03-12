@@ -1,7 +1,9 @@
 pub mod animation;
 pub mod gridmap;
+pub mod meta;
 pub mod node;
 pub mod physics;
+pub mod project;
 pub mod resource;
 pub mod scene;
 pub mod shader;
@@ -19,6 +21,8 @@ use crate::server::DirectorServer;
 use animation::{
     AnimationAddTrackParams, AnimationCreateParams, AnimationReadParams, AnimationRemoveTrackParams,
 };
+use meta::{BatchParams, SceneDiffParams};
+use project::{ExportMeshLibraryParams, UidGetParams, UidUpdateProjectParams};
 use gridmap::{GridMapClearParams, GridMapGetCellsParams, GridMapSetCellsParams};
 use node::{NodeAddParams, NodeRemoveParams, NodeReparentParams, NodeSetPropertiesParams};
 use physics::{PhysicsSetLayerNamesParams, PhysicsSetLayersParams};
@@ -606,6 +610,113 @@ impl DirectorServer {
             &self.backend,
             &params.project_path,
             "visual_shader_create",
+            &op_params,
+        )
+        .await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "batch",
+        description = "Execute multiple Director operations in a single Godot process \
+            invocation. Reduces cold-start overhead from N operations to 1. Operations \
+            run in sequence. Use stop_on_error to control failure behavior. Cannot \
+            contain nested batch calls."
+    )]
+    pub async fn batch(
+        &self,
+        Parameters(params): Parameters<BatchParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "batch",
+            &op_params,
+        )
+        .await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "scene_diff",
+        description = "Compare two Godot scene files structurally. Returns lists of \
+            added nodes, removed nodes, and changed properties. Useful for verifying \
+            what changed after a series of modifications."
+    )]
+    pub async fn scene_diff(
+        &self,
+        Parameters(params): Parameters<SceneDiffParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "scene_diff",
+            &op_params,
+        )
+        .await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "uid_get",
+        description = "Resolve the Godot UID for a file path. UIDs are stable identifiers \
+            that persist across file renames and are used internally by Godot for resource \
+            references."
+    )]
+    pub async fn uid_get(
+        &self,
+        Parameters(params): Parameters<UidGetParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "uid_get",
+            &op_params,
+        )
+        .await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "uid_update_project",
+        description = "Scan project files and register any missing Godot UIDs. Run this \
+            after creating files outside of Director to ensure the editor's UID cache \
+            stays consistent."
+    )]
+    pub async fn uid_update_project(
+        &self,
+        Parameters(params): Parameters<UidUpdateProjectParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "uid_update_project",
+            &op_params,
+        )
+        .await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "export_mesh_library",
+        description = "Export MeshInstance3D nodes from a Godot scene as a MeshLibrary \
+            resource (.tres) for use with GridMap. Optionally filter which meshes to \
+            include by node name. Collision shapes from CollisionShape3D children are \
+            included automatically."
+    )]
+    pub async fn export_mesh_library(
+        &self,
+        Parameters(params): Parameters<ExportMeshLibraryParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "export_mesh_library",
             &op_params,
         )
         .await?;

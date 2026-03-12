@@ -11,6 +11,8 @@ const GridMapOps = preload("res://addons/director/ops/gridmap_ops.gd")
 const AnimationOps = preload("res://addons/director/ops/animation_ops.gd")
 const PhysicsOps = preload("res://addons/director/ops/physics_ops.gd")
 const ShaderOps = preload("res://addons/director/ops/shader_ops.gd")
+const MetaOps = preload("res://addons/director/ops/meta_ops.gd")
+const ProjectOps = preload("res://addons/director/ops/project_ops.gd")
 
 const DEFAULT_PORT := 6550
 const IDLE_TIMEOUT_SEC := 300  # 5 minutes
@@ -209,6 +211,16 @@ func _dispatch(operation: String, params: Dictionary) -> Dictionary:
 			return PhysicsOps.op_physics_set_layer_names(params)
 		"visual_shader_create":
 			return ShaderOps.op_visual_shader_create(params)
+		"batch":
+			return MetaOps.op_batch(params)
+		"scene_diff":
+			return MetaOps.op_scene_diff(params)
+		"uid_get":
+			return ProjectOps.op_uid_get(params)
+		"uid_update_project":
+			return ProjectOps.op_uid_update_project(params)
+		"export_mesh_library":
+			return ProjectOps.op_export_mesh_library(params)
 		"ping":
 			return {"success": true, "data": {"status": "ok"}, "operation": "ping"}
 		_:
