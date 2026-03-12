@@ -13,6 +13,7 @@ const PhysicsOps = preload("res://addons/director/ops/physics_ops.gd")
 const ShaderOps = preload("res://addons/director/ops/shader_ops.gd")
 const MetaOps = preload("res://addons/director/ops/meta_ops.gd")
 const ProjectOps = preload("res://addons/director/ops/project_ops.gd")
+const SignalOps = preload("res://addons/director/ops/signal_ops.gd")
 
 
 func _init():
@@ -86,6 +87,20 @@ func _init():
 			result = ProjectOps.op_uid_update_project(args.params)
 		"export_mesh_library":
 			result = ProjectOps.op_export_mesh_library(args.params)
+		"signal_connect":
+			result = SignalOps.op_signal_connect(args.params)
+		"signal_disconnect":
+			result = SignalOps.op_signal_disconnect(args.params)
+		"signal_list":
+			result = SignalOps.op_signal_list(args.params)
+		"node_set_groups":
+			result = NodeOps.op_node_set_groups(args.params)
+		"node_set_script":
+			result = NodeOps.op_node_set_script(args.params)
+		"node_set_meta":
+			result = NodeOps.op_node_set_meta(args.params)
+		"node_find":
+			result = NodeOps.op_node_find(args.params)
 		_:
 			result = {"success": false, "error": "Unknown operation: " + args.operation, "operation": args.operation, "context": {}}
 

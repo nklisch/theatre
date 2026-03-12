@@ -38,3 +38,9 @@ mod test_batch;
 mod test_scene_diff;
 #[cfg(test)]
 mod test_project;
+#[cfg(test)]
+mod test_signal;
+#[cfg(test)]
+mod test_wiring;
+#[cfg(test)]
+mod test_deferred;

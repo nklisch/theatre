@@ -18,6 +18,7 @@ const PhysicsOps = preload("res://addons/director/ops/physics_ops.gd")
 const ShaderOps = preload("res://addons/director/ops/shader_ops.gd")
 const MetaOps = preload("res://addons/director/ops/meta_ops.gd")
 const ProjectOps = preload("res://addons/director/ops/project_ops.gd")
+const SignalOps = preload("res://addons/director/ops/signal_ops.gd")
 const OpsUtil = preload("res://addons/director/ops/ops_util.gd")
 
 ## Scene-targeting operations that can use live tree manipulation.
@@ -27,6 +28,8 @@ const SCENE_OPS := [
 	"tilemap_set_cells", "tilemap_get_cells", "tilemap_clear",
 	"gridmap_set_cells", "gridmap_get_cells", "gridmap_clear",
 	"physics_set_layers",
+	"signal_connect", "signal_disconnect", "signal_list",
+	"node_set_groups", "node_set_script", "node_set_meta", "node_find",
 ]
 
 
@@ -92,6 +95,20 @@ static func _dispatch_live(operation: String, params: Dictionary, scene_root: No
 			return _live_gridmap_clear(params, scene_root)
 		"physics_set_layers":
 			return _live_physics_set_layers(params, scene_root)
+		"signal_connect":
+			return _live_signal_connect(params, scene_root)
+		"signal_disconnect":
+			return _live_signal_disconnect(params, scene_root)
+		"signal_list":
+			return _live_signal_list(params, scene_root)
+		"node_set_groups":
+			return _live_node_set_groups(params, scene_root)
+		"node_set_script":
+			return _live_node_set_script(params, scene_root)
+		"node_set_meta":
+			return _live_node_set_meta(params, scene_root)
+		"node_find":
+			return _live_node_find(params, scene_root)
 		_:
 			return OpsUtil._error("Unknown live operation: " + operation, operation, params)
 
@@ -279,6 +296,252 @@ static func _live_gridmap_clear(params: Dictionary, scene_root: Node) -> Diction
 	return GridMapOps._clear_node(node, params)
 
 
+static func _live_signal_connect(params: Dictionary, scene_root: Node) -> Dictionary:
+	var source_path: String = params.get("source_path", "")
+	var signal_name: String = params.get("signal_name", "")
+	var target_path: String = params.get("target_path", "")
+	var method_name: String = params.get("method_name", "")
+	var flags: int = params.get("flags", 0)
+
+	if source_path == "":
+		return OpsUtil._error("source_path is required", "signal_connect", params)
+	if signal_name == "":
+		return OpsUtil._error("signal_name is required", "signal_connect", params)
+	if target_path == "":
+		return OpsUtil._error("target_path is required", "signal_connect", params)
+	if method_name == "":
+		return OpsUtil._error("method_name is required", "signal_connect", params)
+
+	var source: Node = _resolve_node(scene_root, source_path)
+	if source == null:
+		return OpsUtil._error("Source node not found: " + source_path, "signal_connect", params)
+
+	var target: Node = _resolve_node(scene_root, target_path)
+	if target == null:
+		return OpsUtil._error("Target node not found: " + target_path, "signal_connect", params)
+
+	# Validate signal exists
+	var signal_exists := false
+	for sig in source.get_signal_list():
+		if sig["name"] == signal_name:
+			signal_exists = true
+			break
+	if not signal_exists:
+		return OpsUtil._error(
+			"Signal '" + signal_name + "' not found on " + source.get_class(),
+			"signal_connect", params)
+
+	# Ensure CONNECT_PERSIST for scene serialization
+	flags = flags | 2  # CONNECT_PERSIST = 2
+
+	var callable := Callable(target, method_name)
+	var raw_binds = params.get("binds", null)
+	if raw_binds != null and raw_binds is Array and not raw_binds.is_empty():
+		callable = callable.bindv(raw_binds)
+
+	source.connect(signal_name, callable, flags)
+
+	return {"success": true, "data": {
+		"source_path": source_path,
+		"signal_name": signal_name,
+		"target_path": target_path,
+		"method_name": method_name,
+	}}
+
+
+static func _live_signal_disconnect(params: Dictionary, scene_root: Node) -> Dictionary:
+	var source_path: String = params.get("source_path", "")
+	var signal_name: String = params.get("signal_name", "")
+	var target_path: String = params.get("target_path", "")
+	var method_name: String = params.get("method_name", "")
+
+	if source_path == "":
+		return OpsUtil._error("source_path is required", "signal_disconnect", params)
+	if signal_name == "":
+		return OpsUtil._error("signal_name is required", "signal_disconnect", params)
+	if target_path == "":
+		return OpsUtil._error("target_path is required", "signal_disconnect", params)
+	if method_name == "":
+		return OpsUtil._error("method_name is required", "signal_disconnect", params)
+
+	var source: Node = _resolve_node(scene_root, source_path)
+	if source == null:
+		return OpsUtil._error("Source node not found: " + source_path, "signal_disconnect", params)
+
+	var target: Node = _resolve_node(scene_root, target_path)
+	if target == null:
+		return OpsUtil._error("Target node not found: " + target_path, "signal_disconnect", params)
+
+	var callable := Callable(target, method_name)
+	if not source.is_connected(signal_name, callable):
+		return OpsUtil._error(
+			"Connection does not exist: " + source_path + "." + signal_name + " → " + target_path + "." + method_name,
+			"signal_disconnect", params)
+
+	source.disconnect(signal_name, callable)
+
+	return {"success": true, "data": {
+		"source_path": source_path,
+		"signal_name": signal_name,
+		"target_path": target_path,
+		"method_name": method_name,
+	}}
+
+
+static func _live_signal_list(params: Dictionary, scene_root: Node) -> Dictionary:
+	## For live tree: walk the tree and collect connections via get_signal_connection_list.
+	var node_path_filter = params.get("node_path", null)
+	var connections: Array = []
+
+	_collect_live_connections(scene_root, scene_root, node_path_filter, connections)
+
+	return {"success": true, "data": {"connections": connections}}
+
+
+static func _collect_live_connections(node: Node, root: Node, filter, results: Array) -> void:
+	var node_path: String = str(root.get_path_to(node))
+	if node_path == ".":
+		node_path = "."
+
+	for sig in node.get_signal_list():
+		var sig_name: String = sig["name"]
+		for conn in node.get_signal_connection_list(sig_name):
+			var callable: Callable = conn["callable"]
+			var target = callable.get_object()
+			if target == null:
+				continue
+			var tgt_path: String = str(root.get_path_to(target))
+			if tgt_path.begins_with("./"):
+				tgt_path = tgt_path.trim_prefix("./")
+			if tgt_path == ".":
+				tgt_path = "."
+			var src_path: String = node_path
+
+			if filter != null and filter != "":
+				if src_path != filter and tgt_path != filter:
+					continue
+
+			results.append({
+				"source_path": src_path,
+				"signal_name": sig_name,
+				"target_path": tgt_path,
+				"method_name": callable.get_method(),
+				"flags": conn.get("flags", 0),
+			})
+
+	for child in node.get_children():
+		_collect_live_connections(child, root, filter, results)
+
+
+static func _live_node_set_groups(params: Dictionary, scene_root: Node) -> Dictionary:
+	var node_path: String = params.get("node_path", "")
+	var add = params.get("add", null)
+	var remove = params.get("remove", null)
+
+	if node_path == "":
+		return OpsUtil._error("node_path is required", "node_set_groups", params)
+	if (add == null or (add is Array and add.is_empty())) and \
+		(remove == null or (remove is Array and remove.is_empty())):
+		return OpsUtil._error("At least one of 'add' or 'remove' must be provided", "node_set_groups", params)
+
+	var node: Node = _resolve_node(scene_root, node_path)
+	if node == null:
+		return OpsUtil._error("Node not found: " + node_path, "node_set_groups", params)
+
+	if add is Array:
+		for group in add:
+			node.add_to_group(str(group), true)
+
+	if remove is Array:
+		for group in remove:
+			node.remove_from_group(str(group))
+
+	var final_groups: Array = []
+	for group in node.get_groups():
+		if not str(group).begins_with("_"):
+			final_groups.append(group)
+
+	return {"success": true, "data": {"node_path": node_path, "groups": final_groups}}
+
+
+static func _live_node_set_script(params: Dictionary, scene_root: Node) -> Dictionary:
+	var node_path: String = params.get("node_path", "")
+	var script_path = params.get("script_path", null)
+
+	if node_path == "":
+		return OpsUtil._error("node_path is required", "node_set_script", params)
+
+	var node: Node = _resolve_node(scene_root, node_path)
+	if node == null:
+		return OpsUtil._error("Node not found: " + node_path, "node_set_script", params)
+
+	var result_script_path = null
+
+	if script_path != null and str(script_path) != "":
+		var sp: String = str(script_path)
+		if not sp.begins_with("res://"):
+			sp = "res://" + sp
+
+		if not ResourceLoader.exists(sp):
+			return OpsUtil._error("Script not found: " + sp, "node_set_script", params)
+
+		var script = load(sp)
+		if not script is Script:
+			return OpsUtil._error("File is not a Script resource: " + sp, "node_set_script", params)
+
+		node.set_script(script)
+		result_script_path = sp.replace("res://", "")
+	else:
+		node.set_script(null)
+
+	return {"success": true, "data": {"node_path": node_path, "script_path": result_script_path}}
+
+
+static func _live_node_set_meta(params: Dictionary, scene_root: Node) -> Dictionary:
+	var node_path: String = params.get("node_path", "")
+	var meta = params.get("meta", null)
+
+	if node_path == "":
+		return OpsUtil._error("node_path is required", "node_set_meta", params)
+	if not meta is Dictionary:
+		return OpsUtil._error("meta must be a Dictionary", "node_set_meta", params)
+
+	var node: Node = _resolve_node(scene_root, node_path)
+	if node == null:
+		return OpsUtil._error("Node not found: " + node_path, "node_set_meta", params)
+
+	for key in meta:
+		var value = meta[key]
+		if value == null:
+			if node.has_meta(key):
+				node.remove_meta(key)
+		else:
+			node.set_meta(key, value)
+
+	var meta_keys: Array = node.get_meta_list()
+	return {"success": true, "data": {"node_path": node_path, "meta_keys": meta_keys}}
+
+
+static func _live_node_find(params: Dictionary, scene_root: Node) -> Dictionary:
+	var filter_class = params.get("class_name", null)
+	var filter_group = params.get("group", null)
+	var filter_name_pattern = params.get("name_pattern", null)
+	var filter_property = params.get("property", null)
+	var filter_property_value = params.get("property_value", null)
+	var limit: int = params.get("limit", 100)
+
+	if filter_class == null and filter_group == null and filter_name_pattern == null and filter_property == null:
+		return OpsUtil._error(
+			"At least one filter must be provided (class_name, group, name_pattern, or property)",
+			"node_find", params)
+
+	var results: Array = []
+	NodeOps._find_nodes_recursive(scene_root, scene_root, filter_class, filter_group,
+		filter_name_pattern, filter_property, filter_property_value, limit, results)
+
+	return {"success": true, "data": {"results": results}}
+
+
 static func _live_physics_set_layers(params: Dictionary, scene_root: Node) -> Dictionary:
 	var node_path: String = params.get("node_path", "")
 	var collision_layer = params.get("collision_layer", null)
@@ -356,6 +619,13 @@ static func _dispatch_headless(operation: String, params: Dictionary) -> Diction
 		"uid_get": return ProjectOps.op_uid_get(params)
 		"uid_update_project": return ProjectOps.op_uid_update_project(params)
 		"export_mesh_library": return ProjectOps.op_export_mesh_library(params)
+		"signal_connect": return SignalOps.op_signal_connect(params)
+		"signal_disconnect": return SignalOps.op_signal_disconnect(params)
+		"signal_list": return SignalOps.op_signal_list(params)
+		"node_set_groups": return NodeOps.op_node_set_groups(params)
+		"node_set_script": return NodeOps.op_node_set_script(params)
+		"node_set_meta": return NodeOps.op_node_set_meta(params)
+		"node_find": return NodeOps.op_node_find(params)
 		"ping":
 			return {"success": true, "data": {"status": "ok", "backend": "editor"}, "operation": "ping"}
 		_:

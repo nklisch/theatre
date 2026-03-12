@@ -9,6 +9,16 @@ pub struct ResourceReadParams {
 
     /// Resource file to read (relative to project, e.g. "materials/ground.tres").
     pub resource_path: String,
+
+    /// Depth for nested resource serialization. At depth 0, nested resources are
+    /// returned as path strings. At depth 1 (default), top-level properties are
+    /// serialized but nested resources within them are paths. Higher depths recurse.
+    #[serde(default = "default_depth")]
+    pub depth: u32,
+}
+
+fn default_depth() -> u32 {
+    1
 }
 
 /// Parameters for `material_create`.

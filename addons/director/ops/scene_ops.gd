@@ -85,10 +85,11 @@ static func op_scene_read(params: Dictionary) -> Dictionary:
 static func op_scene_list(params: Dictionary) -> Dictionary:
 	## List all .tscn files in the project (or a subdirectory).
 	##
-	## Params: directory (String, optional — default "")
+	## Params: directory (String, optional — default ""), pattern (String, optional — glob filter)
 	## Returns: { success, data: { scenes: [{ path, root_type, node_count }] } }
 
 	var directory: String = params.get("directory", "")
+	var pattern: String = params.get("pattern", "")
 
 	var base_path: String
 	if directory == "":
@@ -102,6 +103,15 @@ static func op_scene_list(params: Dictionary) -> Dictionary:
 	var scene_paths: Array = []
 	_collect_scenes(base_path, scene_paths)
 	scene_paths.sort()
+
+	# Apply glob pattern filter if provided
+	if pattern != "":
+		var filtered: Array = []
+		for full_path in scene_paths:
+			var rel: String = full_path.replace("res://", "")
+			if rel.match(pattern):
+				filtered.append(full_path)
+		scene_paths = filtered
 
 	var scenes: Array = []
 	for full_path in scene_paths:

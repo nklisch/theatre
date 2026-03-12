@@ -9,6 +9,7 @@ const AnimationOps = preload("res://addons/director/ops/animation_ops.gd")
 const PhysicsOps = preload("res://addons/director/ops/physics_ops.gd")
 const ShaderOps = preload("res://addons/director/ops/shader_ops.gd")
 const ProjectOps = preload("res://addons/director/ops/project_ops.gd")
+const SignalOps = preload("res://addons/director/ops/signal_ops.gd")
 const OpsUtil = preload("res://addons/director/ops/ops_util.gd")
 
 
@@ -85,8 +86,8 @@ static func op_scene_diff(params: Dictionary) -> Dictionary:
 	## Compare two scene files structurally.
 	##
 	## Params:
-	##   scene_a: String  — path relative to project
-	##   scene_b: String  — path relative to project
+	##   scene_a: String  — path relative to project, or git ref (e.g. "HEAD:scenes/player.tscn")
+	##   scene_b: String  — path relative to project, or git ref
 	## Returns:
 	##   { success, data: { added: [...], removed: [...], moved: [...],
 	##     changed: [...] } }
@@ -98,15 +99,27 @@ static func op_scene_diff(params: Dictionary) -> Dictionary:
 	if scene_b == "":
 		return OpsUtil._error("scene_b is required", "scene_diff", params)
 
-	var full_a = "res://" + scene_a
-	var full_b = "res://" + scene_b
+	# Resolve both sources (handles git ref syntax)
+	var src_a = _resolve_scene_source(scene_a)
+	if src_a.error != "":
+		return OpsUtil._error(src_a.error, "scene_diff", {"scene_a": scene_a})
+
+	var src_b = _resolve_scene_source(scene_b)
+	if src_b.error != "":
+		_cleanup_temp(src_a)
+		return OpsUtil._error(src_b.error, "scene_diff", {"scene_b": scene_b})
+
+	var full_a: String = src_a.path
+	var full_b: String = src_b.path
 
 	if not ResourceLoader.exists(full_a):
-		return OpsUtil._error("Scene not found: " + scene_a, "scene_diff",
-			{"scene_a": scene_a})
+		_cleanup_temp(src_a)
+		_cleanup_temp(src_b)
+		return OpsUtil._error("Scene not found: " + scene_a, "scene_diff", {"scene_a": scene_a})
 	if not ResourceLoader.exists(full_b):
-		return OpsUtil._error("Scene not found: " + scene_b, "scene_diff",
-			{"scene_b": scene_b})
+		_cleanup_temp(src_a)
+		_cleanup_temp(src_b)
+		return OpsUtil._error("Scene not found: " + scene_b, "scene_diff", {"scene_b": scene_b})
 
 	var packed_a: PackedScene = load(full_a)
 	var packed_b: PackedScene = load(full_b)
@@ -162,12 +175,58 @@ static func op_scene_diff(params: Dictionary) -> Dictionary:
 	root_a.free()
 	root_b.free()
 
+	_cleanup_temp(src_a)
+	_cleanup_temp(src_b)
+
 	return {"success": true, "data": {
 		"added": added,
 		"removed": removed,
 		"moved": [],
 		"changed": changed,
 	}}
+
+
+static func _resolve_scene_source(scene_ref: String) -> Dictionary:
+	## Resolve a scene reference to a res:// path.
+	## Supports git ref syntax: "HEAD:scenes/player.tscn" or "abc123:scenes/player.tscn"
+	## Returns { path: String, is_temp: bool, temp_path: String, error: String }
+	if ":" in scene_ref and not scene_ref.begins_with("res://"):
+		# Git ref syntax: split on first ":"
+		var colon_idx: int = scene_ref.find(":")
+		var git_ref: String = scene_ref.substr(0, colon_idx)
+		var file_path: String = scene_ref.substr(colon_idx + 1)
+
+		var project_root: String = ProjectSettings.globalize_path("res://")
+
+		var output: Array = []
+		var exit_code: int = OS.execute("git", [
+			"-C", project_root,
+			"show", git_ref + ":" + file_path,
+		], output, true)
+
+		if exit_code != 0:
+			return {"path": "", "is_temp": false, "temp_path": "", "error": "Git ref not found: " + scene_ref}
+
+		# Write content to a temp file
+		if not DirAccess.dir_exists_absolute(ProjectSettings.globalize_path("res://tmp")):
+			DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("res://tmp"))
+
+		var temp_name: String = "res://tmp/_scene_diff_" + str(Time.get_ticks_msec()) + ".tscn"
+		var f = FileAccess.open(temp_name, FileAccess.WRITE)
+		if f == null:
+			return {"path": "", "is_temp": false, "temp_path": "", "error": "Failed to create temp file for git ref: " + scene_ref}
+		f.store_string(output[0])
+		f.close()
+
+		return {"path": temp_name, "is_temp": true, "temp_path": temp_name, "error": ""}
+	else:
+		return {"path": "res://" + scene_ref, "is_temp": false, "temp_path": "", "error": ""}
+
+
+static func _cleanup_temp(src: Dictionary) -> void:
+	## Remove a temp file created by _resolve_scene_source.
+	if src.get("is_temp", false) and src.get("temp_path", "") != "":
+		DirAccess.remove_absolute(ProjectSettings.globalize_path(src.temp_path))
 
 
 static func _dispatch_single(operation: String, params: Dictionary) -> Dictionary:
@@ -202,6 +261,13 @@ static func _dispatch_single(operation: String, params: Dictionary) -> Dictionar
 		"uid_get": return ProjectOps.op_uid_get(params)
 		"uid_update_project": return ProjectOps.op_uid_update_project(params)
 		"export_mesh_library": return ProjectOps.op_export_mesh_library(params)
+		"signal_connect": return SignalOps.op_signal_connect(params)
+		"signal_disconnect": return SignalOps.op_signal_disconnect(params)
+		"signal_list": return SignalOps.op_signal_list(params)
+		"node_set_groups": return NodeOps.op_node_set_groups(params)
+		"node_set_script": return NodeOps.op_node_set_script(params)
+		"node_set_meta": return NodeOps.op_node_set_meta(params)
+		"node_find": return NodeOps.op_node_find(params)
 		_:
 			return OpsUtil._error("Unknown operation: " + operation, operation, {})
 

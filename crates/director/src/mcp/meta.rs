@@ -38,8 +38,11 @@ pub struct SceneDiffParams {
     pub project_path: String,
 
     /// Path to the first scene (relative to project, e.g. "scenes/player.tscn").
+    /// Supports git ref syntax (e.g. "HEAD:scenes/player.tscn") to compare against
+    /// previous versions.
     pub scene_a: String,
 
     /// Path to the second scene (relative to project).
+    /// Supports git ref syntax (e.g. "HEAD:scenes/player.tscn").
     pub scene_b: String,
 }

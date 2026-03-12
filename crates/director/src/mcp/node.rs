@@ -83,3 +83,97 @@ pub struct NodeReparentParams {
 fn default_root() -> String {
     ".".to_string()
 }
+
+/// Parameters for `node_set_groups`.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+pub struct NodeSetGroupsParams {
+    /// Absolute path to the Godot project directory.
+    pub project_path: String,
+
+    /// Path to the scene file relative to the project root.
+    pub scene_path: String,
+
+    /// Path to the target node within the scene tree.
+    pub node_path: String,
+
+    /// Groups to add the node to.
+    #[serde(default)]
+    pub add: Option<Vec<String>>,
+
+    /// Groups to remove the node from.
+    #[serde(default)]
+    pub remove: Option<Vec<String>>,
+}
+
+/// Parameters for `node_set_script`.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+pub struct NodeSetScriptParams {
+    /// Absolute path to the Godot project directory.
+    pub project_path: String,
+
+    /// Path to the scene file relative to the project root.
+    pub scene_path: String,
+
+    /// Path to the target node within the scene tree.
+    pub node_path: String,
+
+    /// Path to the .gd script file (relative to project, e.g., "scripts/player.gd").
+    /// Omit or set to null to detach the current script.
+    #[serde(default)]
+    pub script_path: Option<String>,
+}
+
+/// Parameters for `node_set_meta`.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+pub struct NodeSetMetaParams {
+    /// Absolute path to the Godot project directory.
+    pub project_path: String,
+
+    /// Path to the scene file relative to the project root.
+    pub scene_path: String,
+
+    /// Path to the target node within the scene tree.
+    pub node_path: String,
+
+    /// Metadata entries to set. Keys are metadata names, values are the data.
+    /// Set a value to null to remove that metadata key.
+    pub meta: serde_json::Map<String, serde_json::Value>,
+}
+
+/// Parameters for `node_find`.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+pub struct NodeFindParams {
+    /// Absolute path to the Godot project directory.
+    pub project_path: String,
+
+    /// Path to the scene file relative to the project root.
+    pub scene_path: String,
+
+    /// Filter by Godot class name (supports inheritance via is_class()).
+    #[serde(default)]
+    pub class_name: Option<String>,
+
+    /// Filter by group membership.
+    #[serde(default)]
+    pub group: Option<String>,
+
+    /// Filter by node name pattern (supports * and ? wildcards).
+    #[serde(default)]
+    pub name_pattern: Option<String>,
+
+    /// Filter: property must exist on the node.
+    #[serde(default)]
+    pub property: Option<String>,
+
+    /// Filter: property must equal this value (requires `property` to also be set).
+    #[serde(default)]
+    pub property_value: Option<serde_json::Value>,
+
+    /// Maximum number of results to return (default: 100).
+    #[serde(default = "default_find_limit")]
+    pub limit: u32,
+}
+
+fn default_find_limit() -> u32 {
+    100
+}

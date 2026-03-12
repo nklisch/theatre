@@ -366,3 +366,277 @@ static func _count_descendants(node: Node) -> int:
 	return count
 
 
+static func op_node_set_groups(params: Dictionary) -> Dictionary:
+	## Add or remove a node from groups.
+	##
+	## Params:
+	##   scene_path: String
+	##   node_path: String
+	##   add: Array[String]?      — groups to add
+	##   remove: Array[String]?   — groups to remove
+	##
+	## Returns: { success, data: { node_path, groups: [String] } }
+
+	var scene_path: String = params.get("scene_path", "")
+	var node_path: String = params.get("node_path", "")
+	var add = params.get("add", null)
+	var remove = params.get("remove", null)
+
+	if scene_path == "":
+		return OpsUtil._error("scene_path is required", "node_set_groups", params)
+	if node_path == "":
+		return OpsUtil._error("node_path is required", "node_set_groups", params)
+	if (add == null or (add is Array and add.is_empty())) and \
+		(remove == null or (remove is Array and remove.is_empty())):
+		return OpsUtil._error("At least one of 'add' or 'remove' must be provided", "node_set_groups", params)
+
+	var full_path = "res://" + scene_path
+	if not ResourceLoader.exists(full_path):
+		return OpsUtil._error("Scene not found: " + scene_path, "node_set_groups", {"scene_path": scene_path})
+
+	var packed: PackedScene = load(full_path)
+	var root = packed.instantiate()
+
+	var target: Node
+	if node_path == "." or node_path == "":
+		target = root
+	else:
+		target = root.get_node_or_null(node_path)
+	if target == null:
+		root.free()
+		return OpsUtil._error("Node not found: " + node_path, "node_set_groups", {"scene_path": scene_path, "node_path": node_path})
+
+	if add is Array:
+		for group in add:
+			target.add_to_group(str(group), true)  # persistent=true required for PackedScene
+
+	if remove is Array:
+		for group in remove:
+			target.remove_from_group(str(group))
+
+	# Collect final groups, filtering internal ones
+	var final_groups: Array = []
+	for group in target.get_groups():
+		if not str(group).begins_with("_"):
+			final_groups.append(group)
+
+	var save_result = _repack_and_save(root, full_path)
+	root.free()
+	if not save_result.success:
+		return save_result
+
+	return {"success": true, "data": {"node_path": node_path, "groups": final_groups}}
+
+
+static func op_node_set_script(params: Dictionary) -> Dictionary:
+	## Attach or detach a script from a node in a scene.
+	##
+	## Params:
+	##   scene_path: String
+	##   node_path: String
+	##   script_path: String?     — "res://" path or project-relative path to .gd file
+	##                               omit or null to detach
+	##
+	## Returns: { success, data: { node_path, script_path: String|null } }
+
+	var scene_path: String = params.get("scene_path", "")
+	var node_path: String = params.get("node_path", "")
+	var script_path = params.get("script_path", null)
+
+	if scene_path == "":
+		return OpsUtil._error("scene_path is required", "node_set_script", params)
+	if node_path == "":
+		return OpsUtil._error("node_path is required", "node_set_script", params)
+
+	var full_path = "res://" + scene_path
+	if not ResourceLoader.exists(full_path):
+		return OpsUtil._error("Scene not found: " + scene_path, "node_set_script", {"scene_path": scene_path})
+
+	var packed: PackedScene = load(full_path)
+	var root = packed.instantiate()
+
+	var target: Node
+	if node_path == "." or node_path == "":
+		target = root
+	else:
+		target = root.get_node_or_null(node_path)
+	if target == null:
+		root.free()
+		return OpsUtil._error("Node not found: " + node_path, "node_set_script", {"scene_path": scene_path, "node_path": node_path})
+
+	var result_script_path = null
+
+	if script_path != null and str(script_path) != "":
+		var sp: String = str(script_path)
+		# Normalize to res:// prefix
+		if not sp.begins_with("res://"):
+			sp = "res://" + sp
+
+		if not ResourceLoader.exists(sp):
+			root.free()
+			return OpsUtil._error("Script not found: " + sp, "node_set_script", {"script_path": sp})
+
+		var script = load(sp)
+		if not script is Script:
+			root.free()
+			return OpsUtil._error("File is not a Script resource: " + sp, "node_set_script", {"script_path": sp})
+
+		target.set_script(script)
+		result_script_path = sp.replace("res://", "")
+	else:
+		target.set_script(null)
+
+	var save_result = _repack_and_save(root, full_path)
+	root.free()
+	if not save_result.success:
+		return save_result
+
+	return {"success": true, "data": {"node_path": node_path, "script_path": result_script_path}}
+
+
+static func op_node_set_meta(params: Dictionary) -> Dictionary:
+	## Set or remove metadata entries on a node in a scene.
+	##
+	## Params:
+	##   scene_path: String
+	##   node_path: String
+	##   meta: Dictionary          — keys to set; value of null removes the key
+	##
+	## Returns: { success, data: { node_path, meta_keys: [String] } }
+
+	var scene_path: String = params.get("scene_path", "")
+	var node_path: String = params.get("node_path", "")
+	var meta = params.get("meta", null)
+
+	if scene_path == "":
+		return OpsUtil._error("scene_path is required", "node_set_meta", params)
+	if node_path == "":
+		return OpsUtil._error("node_path is required", "node_set_meta", params)
+	if not meta is Dictionary:
+		return OpsUtil._error("meta must be a Dictionary", "node_set_meta", params)
+
+	var full_path = "res://" + scene_path
+	if not ResourceLoader.exists(full_path):
+		return OpsUtil._error("Scene not found: " + scene_path, "node_set_meta", {"scene_path": scene_path})
+
+	var packed: PackedScene = load(full_path)
+	var root = packed.instantiate()
+
+	var target: Node
+	if node_path == "." or node_path == "":
+		target = root
+	else:
+		target = root.get_node_or_null(node_path)
+	if target == null:
+		root.free()
+		return OpsUtil._error("Node not found: " + node_path, "node_set_meta", {"scene_path": scene_path, "node_path": node_path})
+
+	for key in meta:
+		var value = meta[key]
+		if value == null:
+			if target.has_meta(key):
+				target.remove_meta(key)
+		else:
+			target.set_meta(key, value)
+
+	var meta_keys: Array = target.get_meta_list()
+
+	var save_result = _repack_and_save(root, full_path)
+	root.free()
+	if not save_result.success:
+		return save_result
+
+	return {"success": true, "data": {"node_path": node_path, "meta_keys": meta_keys}}
+
+
+static func op_node_find(params: Dictionary) -> Dictionary:
+	## Search for nodes in a scene tree by class, group, property, or name.
+	##
+	## Params:
+	##   scene_path: String
+	##   class_name: String?       — filter by Godot class (e.g., "Sprite2D")
+	##   group: String?            — filter by group membership
+	##   name_pattern: String?     — filter by node name (supports * wildcard)
+	##   property: String?         — property name that must exist
+	##   property_value: any?      — if set, property must equal this value
+	##   limit: int?               — max results (default 100)
+	##
+	## Returns: { success, data: { results: [{ node_path, type, name }] } }
+
+	var scene_path: String = params.get("scene_path", "")
+	var filter_class = params.get("class_name", null)
+	var filter_group = params.get("group", null)
+	var filter_name_pattern = params.get("name_pattern", null)
+	var filter_property = params.get("property", null)
+	var filter_property_value = params.get("property_value", null)
+	var limit: int = params.get("limit", 100)
+
+	if scene_path == "":
+		return OpsUtil._error("scene_path is required", "node_find", params)
+
+	# At least one filter must be provided
+	if filter_class == null and filter_group == null and filter_name_pattern == null and filter_property == null:
+		return OpsUtil._error(
+			"At least one filter must be provided (class_name, group, name_pattern, or property)",
+			"node_find", params
+		)
+
+	var full_path = "res://" + scene_path
+	if not ResourceLoader.exists(full_path):
+		return OpsUtil._error("Scene not found: " + scene_path, "node_find", {"scene_path": scene_path})
+
+	var packed: PackedScene = load(full_path)
+	var root = packed.instantiate()
+
+	var results: Array = []
+	_find_nodes_recursive(root, root, filter_class, filter_group, filter_name_pattern,
+		filter_property, filter_property_value, limit, results)
+
+	root.free()
+	return {"success": true, "data": {"results": results}}
+
+
+static func _find_nodes_recursive(
+		node: Node, root: Node,
+		filter_class, filter_group, filter_name_pattern,
+		filter_property, filter_property_value,
+		limit: int, results: Array) -> void:
+	if results.size() >= limit:
+		return
+
+	# Apply all filters as AND
+	var matches := true
+
+	if filter_class != null and filter_class != "":
+		if not node.is_class(str(filter_class)):
+			matches = false
+
+	if matches and filter_group != null and filter_group != "":
+		if not node.is_in_group(str(filter_group)):
+			matches = false
+
+	if matches and filter_name_pattern != null and filter_name_pattern != "":
+		if not str(node.name).match(str(filter_name_pattern)):
+			matches = false
+
+	if matches and filter_property != null and filter_property != "":
+		var prop_name: String = str(filter_property)
+		if not prop_name in node:
+			matches = false
+		elif filter_property_value != null:
+			if node.get(prop_name) != filter_property_value:
+				matches = false
+
+	if matches:
+		var node_path: String = str(root.get_path_to(node))
+		if node_path == ".":
+			node_path = "."
+		results.append({"node_path": node_path, "type": node.get_class(), "name": str(node.name)})
+
+	for child in node.get_children():
+		if results.size() >= limit:
+			return
+		_find_nodes_recursive(child, root, filter_class, filter_group, filter_name_pattern,
+			filter_property, filter_property_value, limit, results)
+
+

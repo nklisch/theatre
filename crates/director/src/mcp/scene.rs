@@ -45,6 +45,12 @@ pub struct SceneListParams {
     /// Subdirectory to list (relative to project root). Lists entire project if omitted.
     #[serde(default)]
     pub directory: Option<String>,
+
+    /// Glob pattern to filter scene paths (e.g., "scenes/**/*.tscn").
+    /// Uses Godot's String.match() which supports * and ? wildcards.
+    /// Omitting returns all scenes (backward-compatible).
+    #[serde(default)]
+    pub pattern: Option<String>,
 }
 
 /// Parameters for `scene_add_instance`.

@@ -13,6 +13,7 @@ const PhysicsOps = preload("res://addons/director/ops/physics_ops.gd")
 const ShaderOps = preload("res://addons/director/ops/shader_ops.gd")
 const MetaOps = preload("res://addons/director/ops/meta_ops.gd")
 const ProjectOps = preload("res://addons/director/ops/project_ops.gd")
+const SignalOps = preload("res://addons/director/ops/signal_ops.gd")
 
 const DEFAULT_PORT := 6550
 const IDLE_TIMEOUT_SEC := 300  # 5 minutes
@@ -221,6 +222,20 @@ func _dispatch(operation: String, params: Dictionary) -> Dictionary:
 			return ProjectOps.op_uid_update_project(params)
 		"export_mesh_library":
 			return ProjectOps.op_export_mesh_library(params)
+		"signal_connect":
+			return SignalOps.op_signal_connect(params)
+		"signal_disconnect":
+			return SignalOps.op_signal_disconnect(params)
+		"signal_list":
+			return SignalOps.op_signal_list(params)
+		"node_set_groups":
+			return NodeOps.op_node_set_groups(params)
+		"node_set_script":
+			return NodeOps.op_node_set_script(params)
+		"node_set_meta":
+			return NodeOps.op_node_set_meta(params)
+		"node_find":
+			return NodeOps.op_node_find(params)
 		"ping":
 			return {"success": true, "data": {"status": "ok"}, "operation": "ping"}
 		_:

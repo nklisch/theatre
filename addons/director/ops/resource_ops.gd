@@ -8,10 +8,12 @@ const OpsUtil = preload("res://addons/director/ops/ops_util.gd")
 static func op_resource_read(params: Dictionary) -> Dictionary:
 	## Read a resource file and serialize its properties.
 	##
-	## Params: resource_path (String)
+	## Params: resource_path (String), depth (int, optional — default 1)
 	## Returns: { success, data: { type, path, properties: { ... } } }
 
 	var resource_path: String = params.get("resource_path", "")
+	var depth: int = params.get("depth", 1)
+
 	if resource_path == "":
 		return OpsUtil._error("resource_path is required", "resource_read", params)
 
@@ -26,7 +28,7 @@ static func op_resource_read(params: Dictionary) -> Dictionary:
 	var data: Dictionary = {
 		"type": resource.get_class(),
 		"path": resource_path,
-		"properties": _get_resource_properties(resource),
+		"properties": _get_resource_properties(resource, 0, depth),
 	}
 
 	if resource_path.ends_with(".tscn"):
@@ -35,9 +37,9 @@ static func op_resource_read(params: Dictionary) -> Dictionary:
 	return {"success": true, "data": data}
 
 
-static func _get_resource_properties(resource: Resource) -> Dictionary:
-	## Extract non-default properties from a resource, one level deep.
-	## Nested Resource values serialize as their resource_path string.
+static func _get_resource_properties(resource: Resource, current_depth: int, max_depth: int) -> Dictionary:
+	## Extract non-default properties from a resource.
+	## Nested Resource values are serialized recursively up to max_depth.
 	var props: Dictionary = {}
 	var defaults = ClassDB.instantiate(resource.get_class())
 
@@ -58,19 +60,34 @@ static func _get_resource_properties(resource: Resource) -> Dictionary:
 		if defaults and value == default_value:
 			continue
 
-		props[name] = _serialize_resource_value(value)
+		props[name] = _serialize_resource_value_depth(value, current_depth, max_depth)
 
 	return props
 
 
-static func _serialize_resource_value(value) -> Variant:
-	## Like SceneOps._serialize_value but for resources.
-	## Resource references → path string (one level deep).
+static func _serialize_resource_value_depth(value, current_depth: int, max_depth: int) -> Variant:
+	## Serialize a resource property value with depth control.
+	## At max_depth: Resource → path string.
+	## Below max_depth: Resource → recursive property dict.
 	if value is Resource:
-		if value.resource_path != "":
-			return value.resource_path.replace("res://", "")
-		return "<" + value.get_class() + ">"
+		if current_depth >= max_depth:
+			if value.resource_path != "":
+				return value.resource_path.replace("res://", "")
+			return "<" + value.get_class() + ">"
+		else:
+			var nested: Dictionary = {
+				"type": value.get_class(),
+			}
+			if value.resource_path != "":
+				nested["path"] = value.resource_path.replace("res://", "")
+			nested["properties"] = _get_resource_properties(value, current_depth + 1, max_depth)
+			return nested
 	return SceneOps._serialize_value(value)
+
+
+static func _serialize_resource_value(value) -> Variant:
+	## Legacy wrapper: serialize at depth 0 (path only for nested resources).
+	return _serialize_resource_value_depth(value, 0, 1)
 
 
 static func op_material_create(params: Dictionary) -> Dictionary:

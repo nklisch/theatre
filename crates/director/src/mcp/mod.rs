@@ -7,6 +7,7 @@ pub mod project;
 pub mod resource;
 pub mod scene;
 pub mod shader;
+pub mod signal;
 pub mod tilemap;
 
 use rmcp::handler::server::wrapper::Parameters;
@@ -24,7 +25,11 @@ use animation::{
 use meta::{BatchParams, SceneDiffParams};
 use project::{ExportMeshLibraryParams, UidGetParams, UidUpdateProjectParams};
 use gridmap::{GridMapClearParams, GridMapGetCellsParams, GridMapSetCellsParams};
-use node::{NodeAddParams, NodeRemoveParams, NodeReparentParams, NodeSetPropertiesParams};
+use node::{
+    NodeAddParams, NodeFindParams, NodeRemoveParams, NodeReparentParams, NodeSetGroupsParams,
+    NodeSetMetaParams, NodeSetPropertiesParams, NodeSetScriptParams,
+};
+use signal::{SignalConnectParams, SignalDisconnectParams, SignalListParams};
 use physics::{PhysicsSetLayerNamesParams, PhysicsSetLayersParams};
 use resource::{
     MaterialCreateParams, ResourceDuplicateParams, ResourceReadParams, ShapeCreateParams,
@@ -633,8 +638,8 @@ impl DirectorServer {
     #[tool(
         name = "scene_diff",
         description = "Compare two Godot scene files structurally. Returns lists of \
-            added nodes, removed nodes, and changed properties. Useful for verifying \
-            what changed after a series of modifications."
+            added nodes, removed nodes, and changed properties. Supports git refs \
+            (e.g., \"HEAD:scenes/player.tscn\") to compare against previous versions."
     )]
     pub async fn scene_diff(
         &self,
@@ -709,6 +714,156 @@ impl DirectorServer {
             &self.backend,
             &params.project_path,
             "export_mesh_library",
+            &op_params,
+        )
+        .await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "signal_connect",
+        description = "Connect a signal between two nodes in a Godot scene file (.tscn). \
+            The connection is serialized into the scene and persists across loads. \
+            Always use this tool instead of editing .tscn files directly — signal \
+            connection blocks in .tscn are fragile and hand-editing will break them."
+    )]
+    pub async fn signal_connect(
+        &self,
+        Parameters(params): Parameters<SignalConnectParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "signal_connect",
+            &op_params,
+        )
+        .await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "signal_disconnect",
+        description = "Remove a signal connection between two nodes in a Godot scene file (.tscn). \
+            Always use this tool instead of editing .tscn files directly."
+    )]
+    pub async fn signal_disconnect(
+        &self,
+        Parameters(params): Parameters<SignalDisconnectParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "signal_disconnect",
+            &op_params,
+        )
+        .await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "signal_list",
+        description = "List all signal connections in a Godot scene file (.tscn). Optionally \
+            filter to connections involving a specific node. Returns source, signal name, \
+            target, method, and flags for each connection."
+    )]
+    pub async fn signal_list(
+        &self,
+        Parameters(params): Parameters<SignalListParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "signal_list",
+            &op_params,
+        )
+        .await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "node_set_groups",
+        description = "Add or remove a node from named groups in a Godot scene file (.tscn). \
+            Groups are used for gameplay logic (e.g., 'enemies', 'interactable') and are \
+            queryable at runtime via get_tree().get_nodes_in_group(). Always use this \
+            tool instead of editing .tscn files directly."
+    )]
+    pub async fn node_set_groups(
+        &self,
+        Parameters(params): Parameters<NodeSetGroupsParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "node_set_groups",
+            &op_params,
+        )
+        .await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "node_set_script",
+        description = "Attach or detach a GDScript (.gd) file to/from a node in a Godot \
+            scene file (.tscn). The script must already exist on disk. Omit script_path \
+            to detach. Always use this tool instead of editing .tscn files directly — \
+            script references use internal resource IDs that are fragile to hand-edit."
+    )]
+    pub async fn node_set_script(
+        &self,
+        Parameters(params): Parameters<NodeSetScriptParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "node_set_script",
+            &op_params,
+        )
+        .await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "node_set_meta",
+        description = "Set or remove metadata entries on a node in a Godot scene file (.tscn). \
+            Metadata is arbitrary key-value data stored on nodes, useful for editor \
+            annotations, gameplay tags, or tool configuration. Set a value to null to \
+            remove that key. Always use this tool instead of editing .tscn files directly."
+    )]
+    pub async fn node_set_meta(
+        &self,
+        Parameters(params): Parameters<NodeSetMetaParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "node_set_meta",
+            &op_params,
+        )
+        .await?;
+        serialize_response(&data)
+    }
+
+    #[tool(
+        name = "node_find",
+        description = "Search for nodes in a Godot scene file by class, group, name pattern, \
+            or property. Multiple filters combine as AND. Returns matching node paths \
+            and types. Use this to discover nodes without knowing the exact tree structure."
+    )]
+    pub async fn node_find(
+        &self,
+        Parameters(params): Parameters<NodeFindParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "node_find",
             &op_params,
         )
         .await?;
