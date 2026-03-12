@@ -120,10 +120,10 @@ async fn run_mock_connection(
         tokio::select! {
             result = async_io::read_message::<Message>(&mut reader) => {
                 match result {
-                    Ok(Message::Query { id, method, params }) => {
+                    Ok(Message::Query { request_id, method, params }) => {
                         let response = match handler(&method, &params) {
-                            Ok(data) => Message::Response { id, data },
-                            Err((code, message)) => Message::Error { id, code, message },
+                            Ok(data) => Message::Response { request_id, data },
+                            Err((code, message)) => Message::Error { request_id, code, message },
                         };
                         if async_io::write_message(&mut writer, &response).await.is_err() {
                             break;

@@ -45,6 +45,14 @@ use spectator_protocol::mcp_helpers::{serialize_params, serialize_response};
 // Shared MCP helpers
 // ---------------------------------------------------------------------------
 
+macro_rules! director_tool {
+    ($self:expr, $params:expr, $op:expr) => {{
+        let op_params = serialize_params(&$params)?;
+        let data = run_operation(&$self.backend, &$params.project_path, $op, &op_params).await?;
+        serialize_response(&data)
+    }};
+}
+
 /// Run an operation via the best available backend and return the parsed result data.
 /// Handles godot resolution, project validation, and backend routing.
 async fn run_operation(
@@ -81,15 +89,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<SceneCreateParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "scene_create",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "scene_create")
     }
 
     #[tool(
@@ -102,15 +102,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<SceneReadParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "scene_read",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "scene_read")
     }
 
     #[tool(
@@ -123,10 +115,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<NodeAddParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data =
-            run_operation(&self.backend, &params.project_path, "node_add", &op_params).await?;
-        serialize_response(&data)
+        director_tool!(self, params, "node_add")
     }
 
     #[tool(
@@ -139,15 +128,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<NodeSetPropertiesParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "node_set_properties",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "node_set_properties")
     }
 
     #[tool(
@@ -159,15 +140,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<NodeRemoveParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "node_remove",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "node_remove")
     }
 
     #[tool(
@@ -179,15 +152,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<SceneListParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "scene_list",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "scene_list")
     }
 
     #[tool(
@@ -200,15 +165,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<SceneAddInstanceParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "scene_add_instance",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "scene_add_instance")
     }
 
     #[tool(
@@ -221,15 +178,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<NodeReparentParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "node_reparent",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "node_reparent")
     }
 
     #[tool(
@@ -242,15 +191,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<ResourceReadParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "resource_read",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "resource_read")
     }
 
     #[tool(
@@ -263,15 +204,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<MaterialCreateParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "material_create",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "material_create")
     }
 
     #[tool(
@@ -285,15 +218,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<ShapeCreateParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "shape_create",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "shape_create")
     }
 
     #[tool(
@@ -306,15 +231,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<StyleBoxCreateParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "style_box_create",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "style_box_create")
     }
 
     #[tool(
@@ -326,15 +243,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<ResourceDuplicateParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "resource_duplicate",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "resource_duplicate")
     }
 
     #[tool(
@@ -347,15 +256,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<TileMapSetCellsParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "tilemap_set_cells",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "tilemap_set_cells")
     }
 
     #[tool(
@@ -368,15 +269,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<TileMapGetCellsParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "tilemap_get_cells",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "tilemap_get_cells")
     }
 
     #[tool(
@@ -388,15 +281,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<TileMapClearParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "tilemap_clear",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "tilemap_clear")
     }
 
     #[tool(
@@ -409,15 +294,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<GridMapSetCellsParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "gridmap_set_cells",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "gridmap_set_cells")
     }
 
     #[tool(
@@ -429,15 +306,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<GridMapGetCellsParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "gridmap_get_cells",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "gridmap_get_cells")
     }
 
     #[tool(
@@ -449,15 +318,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<GridMapClearParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "gridmap_clear",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "gridmap_clear")
     }
 
     #[tool(
@@ -470,15 +331,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<AnimationCreateParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "animation_create",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "animation_create")
     }
 
     #[tool(
@@ -492,15 +345,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<AnimationAddTrackParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "animation_add_track",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "animation_add_track")
     }
 
     #[tool(
@@ -513,15 +358,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<AnimationReadParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "animation_read",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "animation_read")
     }
 
     #[tool(
@@ -534,15 +371,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<AnimationRemoveTrackParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "animation_remove_track",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "animation_remove_track")
     }
 
     #[tool(
@@ -556,15 +385,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<PhysicsSetLayersParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "physics_set_layers",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "physics_set_layers")
     }
 
     #[tool(
@@ -578,15 +399,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<PhysicsSetLayerNamesParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "physics_set_layer_names",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "physics_set_layer_names")
     }
 
     #[tool(
@@ -602,15 +415,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<VisualShaderCreateParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "visual_shader_create",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "visual_shader_create")
     }
 
     #[tool(
@@ -624,15 +429,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<BatchParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "batch",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "batch")
     }
 
     #[tool(
@@ -645,15 +442,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<SceneDiffParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "scene_diff",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "scene_diff")
     }
 
     #[tool(
@@ -666,15 +455,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<UidGetParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "uid_get",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "uid_get")
     }
 
     #[tool(
@@ -687,15 +468,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<UidUpdateProjectParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "uid_update_project",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "uid_update_project")
     }
 
     #[tool(
@@ -709,15 +482,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<ExportMeshLibraryParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "export_mesh_library",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "export_mesh_library")
     }
 
     #[tool(
@@ -731,15 +496,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<SignalConnectParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "signal_connect",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "signal_connect")
     }
 
     #[tool(
@@ -751,15 +508,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<SignalDisconnectParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "signal_disconnect",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "signal_disconnect")
     }
 
     #[tool(
@@ -772,15 +521,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<SignalListParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "signal_list",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "signal_list")
     }
 
     #[tool(
@@ -794,15 +535,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<NodeSetGroupsParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "node_set_groups",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "node_set_groups")
     }
 
     #[tool(
@@ -816,15 +549,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<NodeSetScriptParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "node_set_script",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "node_set_script")
     }
 
     #[tool(
@@ -838,15 +563,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<NodeSetMetaParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "node_set_meta",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "node_set_meta")
     }
 
     #[tool(
@@ -859,14 +576,6 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<NodeFindParams>,
     ) -> Result<String, McpError> {
-        let op_params = serialize_params(&params)?;
-        let data = run_operation(
-            &self.backend,
-            &params.project_path,
-            "node_find",
-            &op_params,
-        )
-        .await?;
-        serialize_response(&data)
+        director_tool!(self, params, "node_find")
     }
 }

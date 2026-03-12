@@ -75,7 +75,7 @@ impl GodotFixture {
     ) -> anyhow::Result<QueryResult> {
         let id = uuid_simple();
         let msg = Message::Query {
-            id: id.clone(),
+            request_id: id.clone(),
             method: method.into(),
             params,
         };
@@ -83,8 +83,8 @@ impl GodotFixture {
 
         let response = codec::read_message::<Message>(&mut self.stream)?;
         match response {
-            Message::Response { id: rid, data } if rid == id => Ok(QueryResult::Ok(data)),
-            Message::Error { id: rid, code, message } if rid == id => {
+            Message::Response { request_id: rid, data } if rid == id => Ok(QueryResult::Ok(data)),
+            Message::Error { request_id: rid, code, message } if rid == id => {
                 Ok(QueryResult::Err { code, message })
             }
             other => anyhow::bail!("Unexpected response: {:?}", other),

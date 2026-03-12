@@ -4,33 +4,33 @@ use serde::Deserialize;
 use spectator_core::budget::resolve_budget;
 use spectator_core::cluster::ClusterStrategy;
 use spectator_core::config::{BearingFormat, ConfigUpdate};
+
+use super::ParseMcpEnum;
 use std::collections::HashMap;
 
 use super::finalize_response;
 
-fn parse_cluster_by(s: &str) -> Result<ClusterStrategy, McpError> {
-    super::parse_enum_param(
-        s,
-        "cluster_by",
+impl super::ParseMcpEnum for ClusterStrategy {
+    const FIELD_NAME: &'static str = "cluster_by";
+    fn variants() -> &'static [(&'static str, Self)] {
         &[
             ("group", ClusterStrategy::Group),
             ("class", ClusterStrategy::Class),
             ("proximity", ClusterStrategy::Proximity),
             ("none", ClusterStrategy::None),
-        ],
-    )
+        ]
+    }
 }
 
-fn parse_bearing_format(s: &str) -> Result<BearingFormat, McpError> {
-    super::parse_enum_param(
-        s,
-        "bearing_format",
+impl super::ParseMcpEnum for BearingFormat {
+    const FIELD_NAME: &'static str = "bearing_format";
+    fn variants() -> &'static [(&'static str, Self)] {
         &[
             ("cardinal", BearingFormat::Cardinal),
             ("degrees", BearingFormat::Degrees),
             ("both", BearingFormat::Both),
-        ],
-    )
+        ]
+    }
 }
 
 /// MCP parameters for the spatial_config tool.
@@ -68,12 +68,12 @@ impl SpatialConfigParams {
             cluster_by: self
                 .cluster_by
                 .as_deref()
-                .map(parse_cluster_by)
+                .map(ClusterStrategy::parse)
                 .transpose()?,
             bearing_format: self
                 .bearing_format
                 .as_deref()
-                .map(parse_bearing_format)
+                .map(BearingFormat::parse)
                 .transpose()?,
             expose_internals: self.expose_internals,
             poll_interval: self.poll_interval,

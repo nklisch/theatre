@@ -108,16 +108,15 @@ pub struct PaginationBlock {
 
 pub use super::conversions::to_entity_snapshot;
 
-pub fn parse_detail(s: &str) -> Result<DetailLevel, McpError> {
-    super::parse_enum_param(
-        s,
-        "detail level",
+impl super::ParseMcpEnum for DetailLevel {
+    const FIELD_NAME: &'static str = "detail level";
+    fn variants() -> &'static [(&'static str, Self)] {
         &[
             ("summary", DetailLevel::Summary),
             ("standard", DetailLevel::Standard),
             ("full", DetailLevel::Full),
-        ],
-    )
+        ]
+    }
 }
 
 pub fn build_perspective_param(
@@ -373,7 +372,6 @@ pub fn build_summary_response(
         "clusters": output_clusters,
         "total_nodes_tracked": total,
         "total_nodes_visible": visible,
-        "budget": enforcer.report(),
     })
 }
 
@@ -441,7 +439,6 @@ fn build_snapshot_body(
                 "perspective": perspective_json(&raw.perspective, perspective),
                 "entities": dynamic_entities,
                 "pagination": pagination,
-                "budget": enforcer.report(),
             });
             if full {
                 resp["static_nodes"] = serde_json::json!(static_nodes);
@@ -459,7 +456,6 @@ fn build_snapshot_body(
         "timestamp_ms": raw.timestamp_ms,
         "perspective": perspective_json(&raw.perspective, perspective),
         "entities": dynamic_entities,
-        "budget": enforcer.report(),
     });
     if full {
         resp["static_nodes"] = serde_json::json!(static_nodes);
@@ -550,6 +546,5 @@ pub fn build_expand_response(
         "timestamp_ms": raw.timestamp_ms,
         "expand": cluster_label,
         "entities": output_entities,
-        "budget": enforcer.report(),
     }))
 }

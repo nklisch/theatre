@@ -195,15 +195,15 @@ async fn handle_connection(stream: TcpStream, state: Arc<Mutex<SessionState>>) -
     // Step 5: Read loop — dispatch incoming messages
     loop {
         match async_io::read_message::<Message>(&mut reader).await {
-            Ok(Message::Response { id, data }) => {
+            Ok(Message::Response { request_id, data }) => {
                 let mut s = state.lock().await;
-                if let Some(sender) = s.pending_queries.remove(&id) {
+                if let Some(sender) = s.pending_queries.remove(&request_id) {
                     let _ = sender.send(QueryResult::Ok(data));
                 }
             }
-            Ok(Message::Error { id, code, message }) => {
+            Ok(Message::Error { request_id, code, message }) => {
                 let mut s = state.lock().await;
-                if let Some(sender) = s.pending_queries.remove(&id) {
+                if let Some(sender) = s.pending_queries.remove(&request_id) {
                     let _ = sender.send(QueryResult::Err { code, message });
                 }
             }
@@ -269,7 +269,7 @@ pub async fn query_addon(
         s.pending_queries.insert(request_id.clone(), tx);
 
         let msg = Message::Query {
-            id: request_id.clone(),
+            request_id: request_id.clone(),
             method: method.to_string(),
             params,
         };

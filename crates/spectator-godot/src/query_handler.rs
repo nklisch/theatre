@@ -13,23 +13,23 @@ use crate::collector::SpectatorCollector;
 /// Returns Some(response) for immediate replies, or None for deferred responses
 /// (e.g., advance_frames, which are sent after physics ticks complete).
 pub fn handle_query(
-    id: String,
+    request_id: String,
     method: &str,
     params: serde_json::Value,
     collector: &SpectatorCollector,
 ) -> Option<Message> {
     match method {
         "get_snapshot_data" => Some(simple_query(
-            id,
+            request_id,
             handle_get_snapshot_data(params, collector),
         )),
-        "get_frame_info" => Some(simple_query(id, handle_get_frame_info(collector))),
-        "get_node_inspect" => Some(simple_query(id, handle_get_node_inspect(params, collector))),
-        "get_scene_tree" => Some(simple_query(id, handle_get_scene_tree(params, collector))),
-        "execute_action" => handle_execute_action(id, params, collector),
-        "spatial_query" => Some(simple_query(id, handle_spatial_query(params, collector))),
+        "get_frame_info" => Some(simple_query(request_id, handle_get_frame_info(collector))),
+        "get_node_inspect" => Some(simple_query(request_id, handle_get_node_inspect(params, collector))),
+        "get_scene_tree" => Some(simple_query(request_id, handle_get_scene_tree(params, collector))),
+        "execute_action" => handle_execute_action(request_id, params, collector),
+        "spatial_query" => Some(simple_query(request_id, handle_spatial_query(params, collector))),
         _ => Some(Message::Error {
-            id,
+            request_id,
             code: "method_not_found".to_string(),
             message: format!("Unknown query method: {method}"),
         }),
@@ -41,11 +41,11 @@ struct QueryError {
     message: String,
 }
 
-fn simple_query(id: String, result: Result<serde_json::Value, QueryError>) -> Message {
+fn simple_query(request_id: String, result: Result<serde_json::Value, QueryError>) -> Message {
     match result {
-        Ok(data) => Message::Response { id, data },
+        Ok(data) => Message::Response { request_id, data },
         Err(e) => Message::Error {
-            id,
+            request_id,
             code: e.code,
             message: e.message,
         },
@@ -104,7 +104,7 @@ fn handle_get_scene_tree(
 }
 
 fn handle_execute_action(
-    id: String,
+    request_id: String,
     params: serde_json::Value,
     collector: &SpectatorCollector,
 ) -> Option<Message> {
@@ -112,18 +112,18 @@ fn handle_execute_action(
         Ok(r) => r,
         Err(e) => {
             return Some(Message::Error {
-                id,
+                request_id,
                 code: e.code,
                 message: e.message,
             });
         }
     };
 
-    match action_handler::execute_action(&request, collector, &id) {
+    match action_handler::execute_action(&request, collector, &request_id) {
         Ok(ActionResult::Done(response)) => match to_json_value(&response) {
-            Ok(data) => Some(Message::Response { id, data }),
+            Ok(data) => Some(Message::Response { request_id, data }),
             Err(e) => Some(Message::Error {
-                id,
+                request_id,
                 code: e.code,
                 message: e.message,
             }),
@@ -133,7 +133,7 @@ fn handle_execute_action(
             None
         }
         Err(e) => Some(Message::Error {
-            id,
+            request_id,
             code: "action_failed".to_string(),
             message: e,
         }),

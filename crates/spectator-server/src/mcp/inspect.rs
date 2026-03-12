@@ -1,4 +1,3 @@
-use rmcp::model::ErrorData as McpError;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use spectator_core::{
@@ -33,11 +32,9 @@ fn default_include() -> Vec<String> {
     ]
 }
 
-/// Parse include strings to InspectCategory enums.
-pub fn parse_include(strings: &[String]) -> Result<Vec<InspectCategory>, McpError> {
-    super::parse_enum_list(
-        strings,
-        "include category",
+impl super::ParseMcpEnum for InspectCategory {
+    const FIELD_NAME: &'static str = "include category";
+    fn variants() -> &'static [(&'static str, Self)] {
         &[
             ("transform", InspectCategory::Transform),
             ("physics", InspectCategory::Physics),
@@ -47,9 +44,10 @@ pub fn parse_include(strings: &[String]) -> Result<Vec<InspectCategory>, McpErro
             ("script", InspectCategory::Script),
             ("spatial_context", InspectCategory::SpatialContext),
             ("resources", InspectCategory::Resources),
-        ],
-    )
+        ]
+    }
 }
+
 
 /// Build the spatial_context block from raw addon data.
 /// Computes bearings server-side from the raw positions.
@@ -94,12 +92,13 @@ pub fn build_spatial_context(raw: &SpatialContextRaw) -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mcp::ParseMcpEnum;
     use spectator_protocol::query::NearbyEntityRaw;
 
     #[test]
     fn parse_include_valid() {
         let include = vec!["transform".into(), "physics".into()];
-        let result = parse_include(&include).unwrap();
+        let result = InspectCategory::parse_list(&include).unwrap();
         assert_eq!(result.len(), 2);
         assert_eq!(result[0], InspectCategory::Transform);
     }
@@ -107,13 +106,13 @@ mod tests {
     #[test]
     fn parse_include_invalid() {
         let include = vec!["invalid".into()];
-        assert!(parse_include(&include).is_err());
+        assert!(InspectCategory::parse_list(&include).is_err());
     }
 
     #[test]
     fn parse_include_resources() {
         let include = vec!["resources".into()];
-        let result = parse_include(&include).unwrap();
+        let result = InspectCategory::parse_list(&include).unwrap();
         assert_eq!(result.len(), 1);
         assert_eq!(result[0], InspectCategory::Resources);
     }

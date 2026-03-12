@@ -110,7 +110,7 @@ fn query_result_entry(r: &NearestResult, perspective: &Perspective) -> serde_jso
     let rel = bearing::relative_position(perspective, r.position, false);
     serde_json::json!({
         "path": r.path,
-        "distance": (r.distance * 10.0).round() / 10.0,
+        "distance": spectator_core::types::round1(r.distance),
         "bearing": rel.bearing,
         "class": r.class,
     })
@@ -212,7 +212,7 @@ pub async fn build_relationship_response(
     };
 
     let mut result = serde_json::json!({
-        "distance": (distance * 10.0).round() / 10.0,
+        "distance": spectator_core::types::round1(distance),
         "bearing_from_a": rel_a_to_b.bearing,
         "bearing_from_b": rel_b_to_a.bearing,
         "line_of_sight": raycast.clear,
@@ -232,7 +232,7 @@ pub async fn build_relationship_response(
         result["occluder"] = serde_json::json!(occ);
     }
     if let Some(nav) = nav_distance {
-        result["nav_distance"] = serde_json::json!((nav * 10.0).round() / 10.0);
+        result["nav_distance"] = serde_json::json!(spectator_core::types::round1(nav));
     }
 
     Ok(serde_json::json!({

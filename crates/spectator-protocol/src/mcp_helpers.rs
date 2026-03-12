@@ -5,6 +5,20 @@
 use rmcp::model::ErrorData as McpError;
 use serde::{Deserialize, Serialize};
 
+/// Implement `From<$ty> for McpError` mapping all variants to `internal_error`.
+#[macro_export]
+macro_rules! impl_mcp_internal {
+    ($($ty:ty),+ $(,)?) => {
+        $(
+            impl From<$ty> for ::rmcp::model::ErrorData {
+                fn from(e: $ty) -> Self {
+                    ::rmcp::model::ErrorData::internal_error(e.to_string(), None)
+                }
+            }
+        )+
+    };
+}
+
 /// Serialize a params struct to a JSON Value for forwarding to the addon.
 pub fn serialize_params<T: Serialize>(params: &T) -> Result<serde_json::Value, McpError> {
     serde_json::to_value(params)

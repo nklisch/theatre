@@ -161,7 +161,7 @@ fn dashcam_works_after_reconnect() {
     ) -> serde_json::Value {
         let id = "reconnect-q1".to_string();
         let msg = Message::Query {
-            id: id.clone(),
+            request_id: id.clone(),
             method: method.into(),
             params,
         };

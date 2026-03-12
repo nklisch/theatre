@@ -127,6 +127,11 @@ pub struct TransformData {
     pub scale: [f64; 3],
 }
 
+/// Round to 1 decimal place (0.1 precision).
+pub fn round1(v: f64) -> f64 {
+    (v * 10.0).round() / 10.0
+}
+
 /// Convert a `Vec<f64>` slice to a fixed `[f64; 2]`, filling missing elements with `0.0`.
 pub fn vec_to_array2(v: &[f64]) -> [f64; 2] {
     [

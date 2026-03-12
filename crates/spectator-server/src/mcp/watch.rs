@@ -4,6 +4,8 @@ use serde::Deserialize;
 
 use spectator_core::watch::{ConditionOperator, TrackCategory, WatchCondition};
 
+use super::ParseMcpEnum;
+
 use super::budget_context;
 use super::finalize_response;
 
@@ -51,31 +53,29 @@ fn default_track() -> Vec<String> {
     vec!["all".to_string()]
 }
 
-fn parse_operator(s: &str) -> Result<ConditionOperator, McpError> {
-    super::parse_enum_param(
-        s,
-        "operator",
+impl super::ParseMcpEnum for ConditionOperator {
+    const FIELD_NAME: &'static str = "operator";
+    fn variants() -> &'static [(&'static str, Self)] {
         &[
             ("lt", ConditionOperator::Lt),
             ("gt", ConditionOperator::Gt),
             ("eq", ConditionOperator::Eq),
             ("changed", ConditionOperator::Changed),
-        ],
-    )
+        ]
+    }
 }
 
-fn parse_track(s: &str) -> Result<TrackCategory, McpError> {
-    super::parse_enum_param(
-        s,
-        "track category",
+impl super::ParseMcpEnum for TrackCategory {
+    const FIELD_NAME: &'static str = "track category";
+    fn variants() -> &'static [(&'static str, Self)] {
         &[
             ("position", TrackCategory::Position),
             ("state", TrackCategory::State),
             ("signals", TrackCategory::Signals),
             ("physics", TrackCategory::Physics),
             ("all", TrackCategory::All),
-        ],
-    )
+        ]
+    }
 }
 
 fn format_conditions(conditions: &[WatchCondition]) -> String {
@@ -112,7 +112,7 @@ pub async fn handle_spatial_watch(
                 .map(|c| {
                     Ok(WatchCondition {
                         property: c.property.clone(),
-                        operator: parse_operator(&c.operator)?,
+                        operator: ConditionOperator::parse(&c.operator)?,
                         value: c.value.clone(),
                     })
                 })
@@ -121,7 +121,7 @@ pub async fn handle_spatial_watch(
             let track: Vec<TrackCategory> = spec
                 .track
                 .iter()
-                .map(|t| parse_track(t))
+                .map(|t| TrackCategory::parse(t))
                 .collect::<Result<Vec<_>, McpError>>()?;
 
             let watch = {
@@ -204,32 +204,32 @@ mod tests {
 
     #[test]
     fn parse_operator_valid() {
-        assert!(matches!(parse_operator("lt"), Ok(ConditionOperator::Lt)));
-        assert!(matches!(parse_operator("gt"), Ok(ConditionOperator::Gt)));
-        assert!(matches!(parse_operator("eq"), Ok(ConditionOperator::Eq)));
+        assert!(matches!(ConditionOperator::parse("lt"), Ok(ConditionOperator::Lt)));
+        assert!(matches!(ConditionOperator::parse("gt"), Ok(ConditionOperator::Gt)));
+        assert!(matches!(ConditionOperator::parse("eq"), Ok(ConditionOperator::Eq)));
         assert!(matches!(
-            parse_operator("changed"),
+            ConditionOperator::parse("changed"),
             Ok(ConditionOperator::Changed)
         ));
     }
 
     #[test]
     fn parse_operator_invalid() {
-        assert!(parse_operator("invalid").is_err());
+        assert!(ConditionOperator::parse("invalid").is_err());
     }
 
     #[test]
     fn parse_track_valid() {
-        assert!(matches!(parse_track("all"), Ok(TrackCategory::All)));
+        assert!(matches!(TrackCategory::parse("all"), Ok(TrackCategory::All)));
         assert!(matches!(
-            parse_track("position"),
+            TrackCategory::parse("position"),
             Ok(TrackCategory::Position)
         ));
     }
 
     #[test]
     fn parse_track_invalid() {
-        assert!(parse_track("everything").is_err());
+        assert!(TrackCategory::parse("everything").is_err());
     }
 
     #[test]

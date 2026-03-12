@@ -3,6 +3,8 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use spectator_protocol::query::{FindBy, GetSceneTreeParams, SceneTreeAction, TreeInclude};
 
+use super::ParseMcpEnum;
+
 /// Parameters for the scene_tree MCP tool.
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct SceneTreeToolParams {
@@ -39,58 +41,55 @@ fn default_include() -> Option<Vec<String>> {
     Some(vec!["class".into(), "groups".into()])
 }
 
-pub fn parse_action(s: &str) -> Result<SceneTreeAction, McpError> {
-    super::parse_enum_param(
-        s,
-        "action",
+impl super::ParseMcpEnum for SceneTreeAction {
+    const FIELD_NAME: &'static str = "action";
+    fn variants() -> &'static [(&'static str, Self)] {
         &[
             ("roots", SceneTreeAction::Roots),
             ("children", SceneTreeAction::Children),
             ("subtree", SceneTreeAction::Subtree),
             ("ancestors", SceneTreeAction::Ancestors),
             ("find", SceneTreeAction::Find),
-        ],
-    )
+        ]
+    }
 }
 
-pub fn parse_find_by(s: &str) -> Result<FindBy, McpError> {
-    super::parse_enum_param(
-        s,
-        "find_by",
+impl super::ParseMcpEnum for FindBy {
+    const FIELD_NAME: &'static str = "find_by";
+    fn variants() -> &'static [(&'static str, Self)] {
         &[
             ("name", FindBy::Name),
             ("class", FindBy::Class),
             ("group", FindBy::Group),
             ("script", FindBy::Script),
-        ],
-    )
+        ]
+    }
 }
 
-pub fn parse_tree_include(strings: &[String]) -> Result<Vec<TreeInclude>, McpError> {
-    super::parse_enum_list(
-        strings,
-        "include",
+impl super::ParseMcpEnum for TreeInclude {
+    const FIELD_NAME: &'static str = "include";
+    fn variants() -> &'static [(&'static str, Self)] {
         &[
             ("class", TreeInclude::Class),
             ("groups", TreeInclude::Groups),
             ("script", TreeInclude::Script),
             ("visible", TreeInclude::Visible),
             ("process_mode", TreeInclude::ProcessMode),
-        ],
-    )
+        ]
+    }
 }
 
 /// Build the GetSceneTreeParams from MCP tool params.
 pub fn build_scene_tree_params(
     params: &SceneTreeToolParams,
 ) -> Result<GetSceneTreeParams, McpError> {
-    let action = parse_action(&params.action)?;
+    let action = SceneTreeAction::parse(&params.action)?;
 
     let default_inc = vec!["class".to_string(), "groups".to_string()];
     let include_strs = params.include.as_deref().unwrap_or(&default_inc);
-    let include = parse_tree_include(include_strs)?;
+    let include = TreeInclude::parse_list(include_strs)?;
 
-    let find_by = params.find_by.as_deref().map(parse_find_by).transpose()?;
+    let find_by = params.find_by.as_deref().map(FindBy::parse).transpose()?;
 
     Ok(GetSceneTreeParams {
         action,
@@ -108,31 +107,31 @@ mod tests {
 
     #[test]
     fn parse_action_valid() {
-        assert_eq!(parse_action("roots").unwrap(), SceneTreeAction::Roots);
-        assert_eq!(parse_action("find").unwrap(), SceneTreeAction::Find);
+        assert_eq!(SceneTreeAction::parse("roots").unwrap(), SceneTreeAction::Roots);
+        assert_eq!(SceneTreeAction::parse("find").unwrap(), SceneTreeAction::Find);
     }
 
     #[test]
     fn parse_action_invalid() {
-        assert!(parse_action("invalid").is_err());
+        assert!(SceneTreeAction::parse("invalid").is_err());
     }
 
     #[test]
     fn parse_find_by_valid() {
-        assert_eq!(parse_find_by("class").unwrap(), FindBy::Class);
-        assert_eq!(parse_find_by("group").unwrap(), FindBy::Group);
+        assert_eq!(FindBy::parse("class").unwrap(), FindBy::Class);
+        assert_eq!(FindBy::parse("group").unwrap(), FindBy::Group);
     }
 
     #[test]
     fn parse_tree_include_valid() {
         let inc = vec!["class".into(), "script".into()];
-        let result = parse_tree_include(&inc).unwrap();
+        let result = TreeInclude::parse_list(&inc).unwrap();
         assert_eq!(result.len(), 2);
     }
 
     #[test]
     fn parse_tree_include_invalid() {
         let inc = vec!["invalid".into()];
-        assert!(parse_tree_include(&inc).is_err());
+        assert!(TreeInclude::parse_list(&inc).is_err());
     }
 }

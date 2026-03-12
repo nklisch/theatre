@@ -101,6 +101,24 @@ fn parse_enum_list<T: Clone>(
         .collect()
 }
 
+/// Trait for enums that can be parsed from MCP string parameters.
+///
+/// Implement this for each enum type used in MCP tool parameters. The default
+/// `parse` and `parse_list` methods delegate to `parse_enum_param` /
+/// `parse_enum_list` using the type's own `FIELD_NAME` and `variants`.
+pub(crate) trait ParseMcpEnum: Sized + Clone + 'static {
+    const FIELD_NAME: &'static str;
+    fn variants() -> &'static [(&'static str, Self)];
+
+    fn parse(s: &str) -> Result<Self, McpError> {
+        parse_enum_param(s, Self::FIELD_NAME, Self::variants())
+    }
+
+    fn parse_list(values: &[String]) -> Result<Vec<Self>, McpError> {
+        parse_enum_list(values, Self::FIELD_NAME, Self::variants())
+    }
+}
+
 /// Insert a key into a JSON map only if the slice is non-empty.
 pub(crate) fn insert_if_nonempty<T: serde::Serialize>(
     map: &mut serde_json::Map<String, serde_json::Value>,
@@ -198,12 +216,13 @@ pub(crate) async fn budget_context(
 use action::{SpatialActionParams, build_action_request};
 use config::{SpatialConfigParams, handle_spatial_config};
 use delta::SpatialDeltaParams;
-use inspect::{SpatialInspectParams, build_spatial_context, parse_include};
+use inspect::{SpatialInspectParams, build_spatial_context};
+use spectator_protocol::query::InspectCategory;
 use query::{SpatialQueryParams, handle_spatial_query};
 use scene_tree::{SceneTreeToolParams, build_scene_tree_params};
 use snapshot::{
     SpatialSnapshotParams, build_expand_response, build_full_response, build_perspective,
-    build_perspective_param, build_standard_response, build_summary_response, parse_detail,
+    build_perspective_param, build_standard_response, build_summary_response,
 };
 use watch::SpatialWatchParams;
 
@@ -224,7 +243,7 @@ impl SpectatorServer {
         let activity_summary = crate::activity::snapshot_summary(&params);
 
         // 1. Parse detail level
-        let detail = parse_detail(&params.detail)?;
+        let detail = DetailLevel::parse(&params.detail)?;
 
         // 2. Build perspective param for addon query
         let perspective_param = build_perspective_param(&params)?;
@@ -299,7 +318,7 @@ impl SpectatorServer {
 
         // 8. Handle expand (drill into a cluster from summary)
         if let Some(ref cluster_label) = params.expand {
-            let response = build_expand_response(
+            let mut response = build_expand_response(
                 &entities_with_rel,
                 cluster_label,
                 &raw_data,
@@ -307,14 +326,14 @@ impl SpectatorServer {
                 bctx.hard_cap,
                 &bctx.config,
             )?;
-            let result = serialize_response(&response);
+            let result = finalize_response(&mut response, budget_limit, bctx.hard_cap);
             self.log_activity("query", &activity_summary, "spatial_snapshot")
                 .await;
             return result;
         }
 
         // 9. Build response based on detail level
-        let response = match detail {
+        let mut response = match detail {
             DetailLevel::Summary => build_summary_response(
                 &raw_data,
                 &entities_with_rel,
@@ -341,7 +360,7 @@ impl SpectatorServer {
             ),
         };
 
-        let result = serialize_response(&response);
+        let result = finalize_response(&mut response, budget_limit, bctx.hard_cap);
         self.log_activity("query", &activity_summary, "spatial_snapshot")
             .await;
         result
@@ -360,7 +379,7 @@ impl SpectatorServer {
         let activity_summary = crate::activity::inspect_summary(&params.node);
         let bctx = budget_context(&self.state).await;
 
-        let include = parse_include(&params.include)?;
+        let include = InspectCategory::parse_list(&params.include)?;
 
         let query_params = GetNodeInspectParams {
             path: params.node.clone(),
