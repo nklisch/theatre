@@ -22,4 +22,5 @@ Available patterns:
 - [inline-test-fixtures.md](inline-test-fixtures.md) — Inline Test Module with Builder Fixtures
 - [activity-logging.md](activity-logging.md) — Activity Logging Tail (summary up front, log_activity at handler tail)
 - [clip-session.md](clip-session.md) — ClipSession Resource (open + analyze + finalize for clip analysis)
-- [godot-e2e-harness.md](godot-e2e-harness.md) — Godot E2E Test Harness (GodotFixture + DirectorFixture + DaemonFixture)
+- [godot-e2e-harness.md](godot-e2e-harness.md) — Godot E2E Test Harness (GodotFixture + TestHarness + E2EHarness + DirectorFixture + DaemonFixture)
+- [parse-mcp-enum.md](parse-mcp-enum.md) — ParseMcpEnum Trait (standardized string→enum parsing with consistent invalid_params errors)
