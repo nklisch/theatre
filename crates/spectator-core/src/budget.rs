@@ -44,7 +44,11 @@ pub struct BudgetEnforcer {
 
 impl BudgetEnforcer {
     pub fn new(limit: u32, hard_cap: u32) -> Self {
-        Self { limit, hard_cap, used_bytes: 0 }
+        Self {
+            limit,
+            hard_cap,
+            used_bytes: 0,
+        }
     }
 
     /// Check if adding `bytes` would exceed the budget.

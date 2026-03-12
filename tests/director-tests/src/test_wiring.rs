@@ -1,4 +1,4 @@
-use crate::harness::{project_dir_path, DirectorFixture};
+use crate::harness::{DirectorFixture, project_dir_path};
 use serde_json::json;
 
 #[test]
@@ -7,8 +7,11 @@ fn node_set_groups_add_and_remove() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("groups");
 
-    f.run("scene_create", json!({"scene_path": &scene, "root_type": "Node2D"}))
-        .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": &scene, "root_type": "Node2D"}),
+    )
+    .unwrap();
     f.run(
         "node_add",
         json!({"scene_path": &scene, "parent_path": ".", "node_type": "Node2D", "node_name": "Enemy"}),
@@ -55,8 +58,11 @@ fn node_set_groups_no_filter_returns_error() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("groups_no_filter");
 
-    f.run("scene_create", json!({"scene_path": &scene, "root_type": "Node2D"}))
-        .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": &scene, "root_type": "Node2D"}),
+    )
+    .unwrap();
 
     let result = f
         .run(
@@ -74,8 +80,11 @@ fn node_set_script_attach_and_detach() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("set_script");
 
-    f.run("scene_create", json!({"scene_path": &scene, "root_type": "Node2D"}))
-        .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": &scene, "root_type": "Node2D"}),
+    )
+    .unwrap();
     f.run(
         "node_add",
         json!({"scene_path": &scene, "parent_path": ".", "node_type": "Node2D", "node_name": "N"}),
@@ -88,7 +97,11 @@ fn node_set_script_attach_and_detach() {
     std::fs::create_dir_all(&script_dir).unwrap();
     let script_path = script_dir.join("test_attach.gd");
     let mut file = std::fs::File::create(&script_path).unwrap();
-    IoWrite::write_all(&mut file, b"extends Node2D\n\nfunc on_button_pressed():\n\tpass\n").unwrap();
+    IoWrite::write_all(
+        &mut file,
+        b"extends Node2D\n\nfunc on_button_pressed():\n\tpass\n",
+    )
+    .unwrap();
 
     // Attach script
     let data = f
@@ -104,7 +117,12 @@ fn node_set_script_attach_and_detach() {
         .unwrap_data();
 
     assert_eq!(data["node_path"], "N");
-    assert!(data["script_path"].as_str().unwrap().contains("test_attach.gd"));
+    assert!(
+        data["script_path"]
+            .as_str()
+            .unwrap()
+            .contains("test_attach.gd")
+    );
 
     // Detach script
     let data2 = f
@@ -124,8 +142,11 @@ fn node_set_meta_set_and_remove() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("set_meta");
 
-    f.run("scene_create", json!({"scene_path": &scene, "root_type": "Node2D"}))
-        .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": &scene, "root_type": "Node2D"}),
+    )
+    .unwrap();
     f.run(
         "node_add",
         json!({"scene_path": &scene, "parent_path": ".", "node_type": "Node2D", "node_name": "N"}),
@@ -173,8 +194,11 @@ fn node_find_by_class() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("find_class");
 
-    f.run("scene_create", json!({"scene_path": &scene, "root_type": "Node2D"}))
-        .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": &scene, "root_type": "Node2D"}),
+    )
+    .unwrap();
     f.run(
         "node_add",
         json!({"scene_path": &scene, "parent_path": ".", "node_type": "Sprite2D", "node_name": "S1"}),
@@ -210,8 +234,11 @@ fn node_find_by_group() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("find_group");
 
-    f.run("scene_create", json!({"scene_path": &scene, "root_type": "Node2D"}))
-        .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": &scene, "root_type": "Node2D"}),
+    )
+    .unwrap();
     f.run(
         "node_add",
         json!({"scene_path": &scene, "parent_path": ".", "node_type": "Node2D", "node_name": "E1"}),
@@ -258,8 +285,11 @@ fn node_find_combined_filters() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("find_combined");
 
-    f.run("scene_create", json!({"scene_path": &scene, "root_type": "Node2D"}))
-        .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": &scene, "root_type": "Node2D"}),
+    )
+    .unwrap();
     f.run(
         "node_add",
         json!({"scene_path": &scene, "parent_path": ".", "node_type": "Sprite2D", "node_name": "Enemy1"}),
@@ -294,11 +324,12 @@ fn node_find_no_filter_returns_error() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("find_no_filter");
 
-    f.run("scene_create", json!({"scene_path": &scene, "root_type": "Node2D"}))
-        .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": &scene, "root_type": "Node2D"}),
+    )
+    .unwrap();
 
-    let result = f
-        .run("node_find", json!({"scene_path": &scene}))
-        .unwrap();
+    let result = f.run("node_find", json!({"scene_path": &scene})).unwrap();
     assert!(!result.success);
 }

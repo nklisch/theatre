@@ -32,9 +32,7 @@ use crate::tcp::{SessionState, get_config, query_addon};
 // Shared MCP helpers
 // ---------------------------------------------------------------------------
 
-use spectator_protocol::mcp_helpers::{
-    deserialize_response, serialize_params, serialize_response,
-};
+use spectator_protocol::mcp_helpers::{deserialize_response, serialize_params, serialize_response};
 
 /// Inject a `budget` block into a JSON object value.
 fn inject_budget(response: &mut serde_json::Value, used: u32, limit: u32, hard_cap: u32) {
@@ -217,13 +215,13 @@ use action::{SpatialActionParams, build_action_request};
 use config::{SpatialConfigParams, handle_spatial_config};
 use delta::SpatialDeltaParams;
 use inspect::{SpatialInspectParams, build_spatial_context};
-use spectator_protocol::query::InspectCategory;
 use query::{SpatialQueryParams, handle_spatial_query};
 use scene_tree::{SceneTreeToolParams, build_scene_tree_params};
 use snapshot::{
     SpatialSnapshotParams, build_expand_response, build_full_response, build_perspective,
     build_perspective_param, build_standard_response, build_summary_response,
 };
+use spectator_protocol::query::InspectCategory;
 use watch::SpatialWatchParams;
 
 #[tool_router(vis = "pub")]

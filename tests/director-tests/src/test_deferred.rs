@@ -30,9 +30,11 @@ fn scene_list_with_pattern_filter() {
 
     let scenes = data["scenes"].as_array().unwrap();
     assert_eq!(scenes.len(), 2);
-    assert!(scenes
-        .iter()
-        .all(|s| s["path"].as_str().unwrap().starts_with("tmp/deferred/")));
+    assert!(
+        scenes
+            .iter()
+            .all(|s| s["path"].as_str().unwrap().starts_with("tmp/deferred/"))
+    );
 }
 
 #[test]
@@ -108,8 +110,11 @@ fn scene_diff_same_scene_no_changes() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("diff_same");
 
-    f.run("scene_create", json!({"scene_path": &scene, "root_type": "Node2D"}))
-        .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": &scene, "root_type": "Node2D"}),
+    )
+    .unwrap();
     f.run(
         "node_add",
         json!({"scene_path": &scene, "parent_path": ".", "node_type": "Node2D", "node_name": "Child"}),
@@ -118,10 +123,7 @@ fn scene_diff_same_scene_no_changes() {
 
     // Comparing the same scene with itself should return no changes
     let data = f
-        .run(
-            "scene_diff",
-            json!({"scene_a": &scene, "scene_b": &scene}),
-        )
+        .run("scene_diff", json!({"scene_a": &scene, "scene_b": &scene}))
         .unwrap()
         .unwrap_data();
 
@@ -136,8 +138,11 @@ fn scene_diff_git_ref_invalid_returns_error() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("diff_git_err");
 
-    f.run("scene_create", json!({"scene_path": &scene, "root_type": "Node2D"}))
-        .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": &scene, "root_type": "Node2D"}),
+    )
+    .unwrap();
 
     // Using a clearly invalid git ref should return an error
     let result = f

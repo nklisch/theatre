@@ -29,7 +29,11 @@ fn daemon_lifecycle() {
             }),
         )
         .expect("scene_create failed");
-    assert!(result.success, "scene_create should succeed: {:?}", result.error);
+    assert!(
+        result.success,
+        "scene_create should succeed: {:?}",
+        result.error
+    );
 
     // scene_read should return the created scene.
     let read = d

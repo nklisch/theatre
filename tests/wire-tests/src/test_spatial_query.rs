@@ -41,7 +41,10 @@ fn raycast_returns_hit_or_clear_field() {
         data.get("clear").is_some() || data.get("blocked_by").is_some(),
         "expected 'clear' or 'blocked_by' field in raycast response"
     );
-    assert!(data.get("total_distance").is_some(), "total_distance missing");
+    assert!(
+        data.get("total_distance").is_some(),
+        "total_distance missing"
+    );
 }
 
 #[test]

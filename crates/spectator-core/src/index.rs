@@ -112,11 +112,7 @@ impl SpatialIndex3D {
         results
     }
 
-    fn matches_filters(
-        entity: &IndexedEntity,
-        groups: &[String],
-        class_filter: &[String],
-    ) -> bool {
+    fn matches_filters(entity: &IndexedEntity, groups: &[String], class_filter: &[String]) -> bool {
         let group_ok = groups.is_empty() || entity.groups.iter().any(|g| groups.contains(g));
         let class_ok = class_filter.is_empty() || class_filter.iter().any(|c| c == &entity.class);
         group_ok && class_ok
@@ -145,7 +141,11 @@ impl GridHash2D {
             let key = Self::cell_key(entity.position, cell_size);
             cells.entry(key).or_default().push(entity.clone());
         }
-        Self { cells, all: entities, cell_size }
+        Self {
+            cells,
+            all: entities,
+            cell_size,
+        }
     }
 
     fn cell_key(pos: Position2, cell_size: f64) -> (i64, i64) {
@@ -175,7 +175,9 @@ impl GridHash2D {
             })
             .collect();
         results.sort_by(|a, b| {
-            a.distance.partial_cmp(&b.distance).unwrap_or(std::cmp::Ordering::Equal)
+            a.distance
+                .partial_cmp(&b.distance)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
         results.truncate(k);
         results
@@ -216,12 +218,18 @@ impl GridHash2D {
             }
         }
         results.sort_by(|a, b| {
-            a.distance.partial_cmp(&b.distance).unwrap_or(std::cmp::Ordering::Equal)
+            a.distance
+                .partial_cmp(&b.distance)
+                .unwrap_or(std::cmp::Ordering::Equal)
         });
         results
     }
 
-    fn matches_filters(entity: &IndexedEntity2D, groups: &[String], class_filter: &[String]) -> bool {
+    fn matches_filters(
+        entity: &IndexedEntity2D,
+        groups: &[String],
+        class_filter: &[String],
+    ) -> bool {
         let group_ok = groups.is_empty() || entity.groups.iter().any(|g| groups.contains(g));
         let class_ok = class_filter.is_empty() || class_filter.iter().any(|c| c == &entity.class);
         group_ok && class_ok
@@ -464,10 +472,7 @@ mod tests {
 
     #[test]
     fn spatial_index_3d_still_works() {
-        let entities = vec![
-            entity("a", [0.0, 0.0, 0.0]),
-            entity("b", [5.0, 0.0, 0.0]),
-        ];
+        let entities = vec![entity("a", [0.0, 0.0, 0.0]), entity("b", [5.0, 0.0, 0.0])];
         let index = SpatialIndex::build(entities);
         let results = index.nearest([0.0, 0.0, 0.0], 1, &[], &[]);
         assert_eq!(results.len(), 1);

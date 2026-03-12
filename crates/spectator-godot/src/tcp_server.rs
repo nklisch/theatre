@@ -386,14 +386,22 @@ impl SpectatorTCPServer {
 
     fn handle_query_message(&mut self, slot_idx: usize, msg: Message) {
         match msg {
-            Message::Query { request_id, method, params } => {
+            Message::Query {
+                request_id,
+                method,
+                params,
+            } => {
                 if method.starts_with("recording_") || method.starts_with("dashcam_") {
                     let response_msg = if let Some(ref mut recorder) = self.recorder {
                         match crate::recording_handler::handle_recording_query(
                             recorder, &method, &params,
                         ) {
                             Ok(data) => Message::Response { request_id, data },
-                            Err((code, message)) => Message::Error { request_id, code, message },
+                            Err((code, message)) => Message::Error {
+                                request_id,
+                                code,
+                                message,
+                            },
                         }
                     } else {
                         Message::Error {
@@ -404,8 +412,12 @@ impl SpectatorTCPServer {
                     };
                     self.send_response_to_slot(slot_idx, response_msg);
                 } else if let Some(ref collector) = self.collector {
-                    let response =
-                        crate::query_handler::handle_query(request_id, &method, params, &collector.bind());
+                    let response = crate::query_handler::handle_query(
+                        request_id,
+                        &method,
+                        params,
+                        &collector.bind(),
+                    );
                     match response {
                         Some(msg) => self.send_response_to_slot(slot_idx, msg),
                         // None = deferred (advance_frames): record which slot owns the response

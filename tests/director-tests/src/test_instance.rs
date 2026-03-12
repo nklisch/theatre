@@ -155,7 +155,5 @@ fn scene_add_instance_name_collision_returns_error() {
         .unwrap()
         .unwrap_err();
 
-    assert!(
-        err.to_lowercase().contains("name") || err.to_lowercase().contains("already exists")
-    );
+    assert!(err.to_lowercase().contains("name") || err.to_lowercase().contains("already exists"));
 }

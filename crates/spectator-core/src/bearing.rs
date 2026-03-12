@@ -274,18 +274,27 @@ mod tests {
 
         // Target directly ahead (-Z) should produce ~0° bearing
         let bdeg = bearing_deg(&persp, [0.0, 0.0, -10.0]);
-        assert!(bdeg < 1.0 || bdeg > 359.0, "ahead should be ~0°, got {bdeg}");
+        assert!(
+            bdeg < 1.0 || bdeg > 359.0,
+            "ahead should be ~0°, got {bdeg}"
+        );
 
         // Target behind (+Z) should produce ~180°
         let bdeg_behind = bearing_deg(&persp, [0.0, 0.0, 10.0]);
-        assert!((bdeg_behind - 180.0).abs() < 1.0, "behind should be ~180°, got {bdeg_behind}");
+        assert!(
+            (bdeg_behind - 180.0).abs() < 1.0,
+            "behind should be ~180°, got {bdeg_behind}"
+        );
     }
 
     #[test]
     fn compass_bearing_north() {
         // Facing -Z (default Godot forward) = north = 0°
         let (cardinal, deg) = compass_bearing([0.0, 0.0, -1.0]);
-        assert!((deg).abs() < 1.0 || (deg - 360.0).abs() < 1.0, "Expected 0°, got {deg}");
+        assert!(
+            (deg).abs() < 1.0 || (deg - 360.0).abs() < 1.0,
+            "Expected 0°, got {deg}"
+        );
         assert_eq!(cardinal, Cardinal::Ahead);
     }
 
@@ -300,8 +309,16 @@ mod tests {
     fn perspective_from_yaw_90deg() {
         // 90° yaw in Godot = facing -X
         let persp = perspective_from_yaw([0.0, 0.0, 0.0], 90.0);
-        assert!((persp.forward[0] + 1.0).abs() < 1e-6, "forward_x should be -1, got {}", persp.forward[0]);
-        assert!((persp.forward[2]).abs() < 1e-6, "forward_z should be 0, got {}", persp.forward[2]);
+        assert!(
+            (persp.forward[0] + 1.0).abs() < 1e-6,
+            "forward_x should be -1, got {}",
+            persp.forward[0]
+        );
+        assert!(
+            (persp.forward[2]).abs() < 1e-6,
+            "forward_z should be 0, got {}",
+            persp.forward[2]
+        );
     }
 
     #[test]

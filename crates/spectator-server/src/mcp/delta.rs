@@ -36,7 +36,6 @@ pub struct SpatialDeltaParams {
     pub token_budget: Option<u32>,
 }
 
-
 /// Build the shared delta JSON object (from_frame, to_frame, and the 5 optional
 /// change categories). Used by both spatial_delta and spatial_action return_delta.
 pub fn build_delta_json(

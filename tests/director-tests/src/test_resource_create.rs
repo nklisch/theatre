@@ -1,4 +1,4 @@
-use crate::harness::{assert_approx, DirectorFixture};
+use crate::harness::{DirectorFixture, assert_approx};
 use serde_json::json;
 
 #[test]
@@ -251,10 +251,12 @@ fn resource_duplicate_shallow() {
         .unwrap_data();
     assert_eq!(data["path"], "tmp/dup_dest.tres");
     assert_eq!(data["type"], "StandardMaterial3D");
-    assert!(data["overrides_applied"]
-        .as_array()
-        .unwrap()
-        .contains(&json!("metallic")));
+    assert!(
+        data["overrides_applied"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("metallic"))
+    );
 
     // Verify override took effect
     let read = f

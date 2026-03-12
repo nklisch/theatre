@@ -552,14 +552,9 @@ pub enum SpatialQueryRequest {
         collision_mask: Option<u32>,
     },
     /// Navigation mesh path distance.
-    PathDistance {
-        from: QueryOrigin,
-        to: QueryOrigin,
-    },
+    PathDistance { from: QueryOrigin, to: QueryOrigin },
     /// Get position and forward vector for a node (for server-side queries).
-    ResolveNode {
-        path: String,
-    },
+    ResolveNode { path: String },
 }
 
 /// Origin for a spatial query — either a node path or a world position.
@@ -651,12 +646,16 @@ mod tests {
 
     #[test]
     fn perspective_param_tagged_enum() {
-        let p = PerspectiveParam::Node { path: "Player".to_string() };
+        let p = PerspectiveParam::Node {
+            path: "Player".to_string(),
+        };
         let json = serde_json::to_string(&p).unwrap();
         assert!(json.contains(r#""type":"node""#));
         assert!(json.contains("Player"));
 
-        let p2 = PerspectiveParam::Point { position: vec![1.0, 2.0, 3.0] };
+        let p2 = PerspectiveParam::Point {
+            position: vec![1.0, 2.0, 3.0],
+        };
         let json2 = serde_json::to_string(&p2).unwrap();
         assert!(json2.contains(r#""type":"point""#));
     }

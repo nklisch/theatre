@@ -34,14 +34,11 @@ fn second_client_connects_after_clean_disconnect() {
     ///
     /// This guards against the GDExtension failing to call try_accept() on subsequent
     /// connections after the first one drops.
-
     let mut f1 = GodotFixture::start("test_scene_3d.tscn").unwrap();
     let port = f1.port;
 
     // Verify first connection is live
-    let status = f1
-        .query("get_frame_info", serde_json::json!({}))
-        .unwrap();
+    let status = f1.query("get_frame_info", serde_json::json!({})).unwrap();
     assert!(status.is_ok(), "first client should work");
 
     // Disconnect cleanly without killing Godot
@@ -79,7 +76,6 @@ fn second_client_gets_handshake_after_first_disconnects_abnormally() {
     /// This test uses a 2-second wait after drop (enough for a clean OS-level close
     /// even without FIN, because the process ends). For zombie connections that linger
     /// longer, the idle timeout (Bug 3B, 60s) covers that case.
-
     let mut f1 = GodotFixture::start("test_scene_3d.tscn").unwrap();
     let port = f1.port;
 
@@ -115,7 +111,6 @@ fn dashcam_works_after_reconnect() {
     /// dashcam must still be buffering and respond to status queries.
     ///
     /// This guards against state leaks in SpectatorRecorder when connections reset.
-
     let mut f1 = GodotFixture::start("test_scene_3d.tscn").unwrap();
     let port = f1.port;
 
@@ -190,7 +185,6 @@ fn two_clients_both_receive_handshake_simultaneously() {
     /// Multi-client: a second client must receive the Godot handshake immediately
     /// while the first client is still connected. Both connections are live at the
     /// same time — no need for the first to disconnect first.
-
     let mut f1 = GodotFixture::start("test_scene_3d.tscn").unwrap();
     let port = f1.port;
 
@@ -198,8 +192,8 @@ fn two_clients_both_receive_handshake_simultaneously() {
     f1.query("get_frame_info", serde_json::json!({})).unwrap();
 
     // Connect a second raw stream while f1 is still active
-    let mut stream2 = TcpStream::connect(("127.0.0.1", port))
-        .expect("second raw TCP connect must succeed");
+    let mut stream2 =
+        TcpStream::connect(("127.0.0.1", port)).expect("second raw TCP connect must succeed");
     stream2
         .set_read_timeout(Some(Duration::from_secs(5)))
         .unwrap();
@@ -215,5 +209,8 @@ fn two_clients_both_receive_handshake_simultaneously() {
 
     // f1 must still be usable
     let result = f1.query("get_frame_info", serde_json::json!({})).unwrap();
-    assert!(result.is_ok(), "first client must still work while second is connected");
+    assert!(
+        result.is_ok(),
+        "first client must still work while second is connected"
+    );
 }

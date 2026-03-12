@@ -50,7 +50,6 @@ pub struct SessionConfig {
     pub token_hard_cap: u32,
 
     // --- Dashcam config (M11) ---
-
     #[serde(default = "default_dashcam_enabled")]
     pub dashcam_enabled: bool,
 
@@ -203,17 +202,15 @@ impl SessionConfig {
     /// Check if a node path matches any static pattern (glob-style).
     /// Supports simple glob: "*" matches any segment, "walls/*" matches "walls/anything".
     pub fn matches_static_pattern(&self, path: &str) -> bool {
-        self.static_patterns.iter().any(|pattern| glob_match(pattern, path))
+        self.static_patterns
+            .iter()
+            .any(|pattern| glob_match(pattern, path))
     }
 
     /// Filter state properties for a node based on its groups and class.
     /// Returns None if no filtering configured (include all exported vars).
     /// Returns Some(list) if specific properties should be included.
-    pub fn filter_state_properties(
-        &self,
-        groups: &[String],
-        class: &str,
-    ) -> Option<Vec<String>> {
+    pub fn filter_state_properties(&self, groups: &[String], class: &str) -> Option<Vec<String>> {
         if self.state_properties.is_empty() {
             return None; // No filtering — include all
         }
@@ -293,9 +290,7 @@ fn glob_match_parts(pattern: &[&str], path: &[&str]) -> bool {
             // * matches this segment, continue
             glob_match_parts(&pattern[1..], &path[1..])
         }
-        (Some(p), Some(s)) if p == s => {
-            glob_match_parts(&pattern[1..], &path[1..])
-        }
+        (Some(p), Some(s)) if p == s => glob_match_parts(&pattern[1..], &path[1..]),
         _ => false,
     }
 }
@@ -352,7 +347,11 @@ mod tests {
     #[test]
     fn filter_state_properties_empty_config() {
         let config = SessionConfig::default();
-        assert!(config.filter_state_properties(&["enemies".into()], "CharacterBody3D").is_none());
+        assert!(
+            config
+                .filter_state_properties(&["enemies".into()], "CharacterBody3D")
+                .is_none()
+        );
     }
 
     #[test]
@@ -362,16 +361,16 @@ mod tests {
             "enemies".into(),
             vec!["health".into(), "alert_level".into()],
         );
-        let result = config.filter_state_properties(
-            &["enemies".into()], "CharacterBody3D"
-        );
+        let result = config.filter_state_properties(&["enemies".into()], "CharacterBody3D");
         assert_eq!(result, Some(vec!["alert_level".into(), "health".into()]));
     }
 
     #[test]
     fn filter_state_properties_wildcard() {
         let mut config = SessionConfig::default();
-        config.state_properties.insert("*".into(), vec!["visible".into()]);
+        config
+            .state_properties
+            .insert("*".into(), vec!["visible".into()]);
         let result = config.filter_state_properties(&[], "Node3D");
         assert_eq!(result, Some(vec!["visible".into()]));
     }
@@ -379,11 +378,13 @@ mod tests {
     #[test]
     fn filter_state_properties_merged() {
         let mut config = SessionConfig::default();
-        config.state_properties.insert("enemies".into(), vec!["health".into()]);
-        config.state_properties.insert("*".into(), vec!["visible".into()]);
-        let result = config.filter_state_properties(
-            &["enemies".into()], "CharacterBody3D"
-        );
+        config
+            .state_properties
+            .insert("enemies".into(), vec!["health".into()]);
+        config
+            .state_properties
+            .insert("*".into(), vec!["visible".into()]);
+        let result = config.filter_state_properties(&["enemies".into()], "CharacterBody3D");
         let mut expected = vec!["health".into(), "visible".into()];
         expected.sort();
         assert_eq!(result, Some(expected));

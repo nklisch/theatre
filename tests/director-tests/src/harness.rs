@@ -55,7 +55,11 @@ impl DirectorFixture {
     }
 
     /// Run a Director operation and return the parsed result.
-    pub fn run(&self, operation: &str, params: serde_json::Value) -> anyhow::Result<OperationResult> {
+    pub fn run(
+        &self,
+        operation: &str,
+        params: serde_json::Value,
+    ) -> anyhow::Result<OperationResult> {
         let output = Command::new(&self.godot_bin)
             .args([
                 "--headless",
@@ -185,9 +189,7 @@ impl DaemonFixture {
         }
 
         // Keep draining stdout so the pipe never fills and the daemon never gets SIGPIPE.
-        std::thread::spawn(move || {
-            for _ in reader.lines() {}
-        });
+        std::thread::spawn(move || for _ in reader.lines() {});
 
         // Connect TCP.
         let addr = format!("127.0.0.1:{port}");
@@ -317,9 +319,7 @@ impl EditorFixture {
         }
 
         // Keep draining stdout so the pipe stays open.
-        std::thread::spawn(move || {
-            for _ in reader.lines() {}
-        });
+        std::thread::spawn(move || for _ in reader.lines() {});
 
         // Connect TCP.
         let addr = format!("127.0.0.1:{port}");
@@ -401,11 +401,16 @@ impl CliFixture {
     /// Run a Director operation via the CLI and return the parsed result.
     ///
     /// Injects `project_path` into params automatically.
-    pub fn run(&self, operation: &str, mut params: serde_json::Value) -> anyhow::Result<OperationResult> {
+    pub fn run(
+        &self,
+        operation: &str,
+        mut params: serde_json::Value,
+    ) -> anyhow::Result<OperationResult> {
         // Inject project_path if not already set.
         if let serde_json::Value::Object(ref mut map) = params {
-            map.entry("project_path")
-                .or_insert_with(|| serde_json::Value::String(self.project_dir.to_string_lossy().into()));
+            map.entry("project_path").or_insert_with(|| {
+                serde_json::Value::String(self.project_dir.to_string_lossy().into())
+            });
         }
 
         let output = Command::new(&self.director_bin)
@@ -448,6 +453,5 @@ fn daemon_read_message(stream: &mut TcpStream) -> anyhow::Result<serde_json::Val
     let mut buf = vec![0u8; len];
     stream.read_exact(&mut buf)?;
     let raw = String::from_utf8_lossy(&buf).into_owned();
-    serde_json::from_slice(&buf)
-        .map_err(|e| anyhow::anyhow!("JSON parse error: {e}\nraw: {raw}"))
+    serde_json::from_slice(&buf).map_err(|e| anyhow::anyhow!("JSON parse error: {e}\nraw: {raw}"))
 }

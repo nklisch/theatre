@@ -204,9 +204,18 @@ mod tests {
 
     #[test]
     fn parse_operator_valid() {
-        assert!(matches!(ConditionOperator::parse("lt"), Ok(ConditionOperator::Lt)));
-        assert!(matches!(ConditionOperator::parse("gt"), Ok(ConditionOperator::Gt)));
-        assert!(matches!(ConditionOperator::parse("eq"), Ok(ConditionOperator::Eq)));
+        assert!(matches!(
+            ConditionOperator::parse("lt"),
+            Ok(ConditionOperator::Lt)
+        ));
+        assert!(matches!(
+            ConditionOperator::parse("gt"),
+            Ok(ConditionOperator::Gt)
+        ));
+        assert!(matches!(
+            ConditionOperator::parse("eq"),
+            Ok(ConditionOperator::Eq)
+        ));
         assert!(matches!(
             ConditionOperator::parse("changed"),
             Ok(ConditionOperator::Changed)
@@ -220,7 +229,10 @@ mod tests {
 
     #[test]
     fn parse_track_valid() {
-        assert!(matches!(TrackCategory::parse("all"), Ok(TrackCategory::All)));
+        assert!(matches!(
+            TrackCategory::parse("all"),
+            Ok(TrackCategory::All)
+        ));
         assert!(matches!(
             TrackCategory::parse("position"),
             Ok(TrackCategory::Position)

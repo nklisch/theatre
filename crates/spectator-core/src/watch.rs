@@ -126,19 +126,15 @@ impl WatchEngine {
 
             for entity in &matching_entities {
                 for condition in &watch.conditions {
-                    if let Some(trigger_msg) = evaluate_condition(
-                        condition,
-                        entity,
-                        prev_state.get(&entity.path),
-                    ) {
+                    if let Some(trigger_msg) =
+                        evaluate_condition(condition, entity, prev_state.get(&entity.path))
+                    {
                         triggers.push(WatchTrigger {
                             watch_id: watch.id.clone(),
                             node: entity.path.clone(),
                             trigger: trigger_msg,
                             frame,
-                            full_state: Some(
-                                serde_json::to_value(entity).unwrap_or_default(),
-                            ),
+                            full_state: Some(serde_json::to_value(entity).unwrap_or_default()),
                         });
                     }
                 }
@@ -181,10 +177,7 @@ impl WatchEngine {
                 .filter(|e| e.groups.iter().any(|g| g == group))
                 .collect()
         } else {
-            entities
-                .iter()
-                .filter(|e| e.path == target)
-                .collect()
+            entities.iter().filter(|e| e.path == target).collect()
         }
     }
 }
@@ -208,12 +201,10 @@ fn evaluate_condition(
         ConditionOperator::Changed => {
             let prev_value = prev.and_then(|p| p.state.get(&condition.property));
             match prev_value {
-                Some(old) if !crate::delta::values_equal(old, current_value) => {
-                    Some(format!(
-                        "{} changed from {} to {}",
-                        condition.property, old, current_value
-                    ))
-                }
+                Some(old) if !crate::delta::values_equal(old, current_value) => Some(format!(
+                    "{} changed from {} to {}",
+                    condition.property, old, current_value
+                )),
                 None => Some(format!(
                     "{} appeared with value {}",
                     condition.property, current_value
@@ -279,7 +270,11 @@ mod tests {
     #[test]
     fn add_and_list_watch() {
         let mut engine = WatchEngine::new();
-        engine.add("enemies/scout_02".to_string(), vec![], vec![TrackCategory::All]);
+        engine.add(
+            "enemies/scout_02".to_string(),
+            vec![],
+            vec![TrackCategory::All],
+        );
         let watches = engine.list();
         assert_eq!(watches.len(), 1);
         assert_eq!(watches[0].id, "w_001");
@@ -481,7 +476,11 @@ mod tests {
     #[test]
     fn watched_paths_expands_groups() {
         let mut engine = WatchEngine::new();
-        engine.add("group:enemies".to_string(), vec![], vec![TrackCategory::All]);
+        engine.add(
+            "group:enemies".to_string(),
+            vec![],
+            vec![TrackCategory::All],
+        );
 
         let entities = vec![
             test_entity("enemies/a", 100.0),

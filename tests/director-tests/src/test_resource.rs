@@ -1,4 +1,4 @@
-use crate::harness::{assert_approx, DirectorFixture};
+use crate::harness::{DirectorFixture, assert_approx};
 use serde_json::json;
 
 #[test]
@@ -39,9 +39,7 @@ fn resource_read_nonexistent_returns_error() {
         .unwrap()
         .unwrap_err();
 
-    assert!(
-        err.contains("not found") || err.contains("does not exist") || err.contains("Failed")
-    );
+    assert!(err.contains("not found") || err.contains("does not exist") || err.contains("Failed"));
 }
 
 #[test]

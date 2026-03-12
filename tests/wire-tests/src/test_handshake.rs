@@ -26,6 +26,12 @@ fn handshake_reports_2d_scene() {
 #[ignore = "requires Godot binary and built GDExtension"]
 fn handshake_has_non_empty_session_info() {
     let fixture = GodotFixture::start("test_scene_3d.tscn").unwrap();
-    assert!(!fixture.handshake.project_name.is_empty(), "project_name empty");
-    assert!(!fixture.handshake.godot_version.is_empty(), "godot_version empty");
+    assert!(
+        !fixture.handshake.project_name.is_empty(),
+        "project_name empty"
+    );
+    assert!(
+        !fixture.handshake.godot_version.is_empty(),
+        "godot_version empty"
+    );
 }

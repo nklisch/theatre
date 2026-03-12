@@ -17,7 +17,10 @@ fn inspect_returns_transform_category() {
         .unwrap()
         .unwrap_data();
 
-    assert!(data.get("transform").is_some(), "transform category missing");
+    assert!(
+        data.get("transform").is_some(),
+        "transform category missing"
+    );
 }
 
 #[test]
@@ -142,7 +145,11 @@ fn inspect_resources_returns_collision_shapes() {
     let shapes = resources["collision_shapes"]
         .as_array()
         .expect("collision_shapes should be an array");
-    assert_eq!(shapes.len(), 1, "Player should have exactly one collision shape");
+    assert_eq!(
+        shapes.len(),
+        1,
+        "Player should have exactly one collision shape"
+    );
 
     let shape = &shapes[0];
     assert_eq!(
@@ -179,7 +186,9 @@ fn inspect_resources_capsule_shape_3d_dimensions() {
         .unwrap_data();
 
     let shape = &data["resources"]["collision_shapes"][0];
-    let dims = shape["dimensions"].as_object().expect("dimensions map missing");
+    let dims = shape["dimensions"]
+        .as_object()
+        .expect("dimensions map missing");
 
     let radius = dims["radius"].as_f64().expect("radius missing");
     let height = dims["height"].as_f64().expect("height missing");
@@ -224,7 +233,9 @@ fn inspect_resources_box_shape_3d_dimensions() {
         "expected BoxShape3D"
     );
 
-    let dims = shape["dimensions"].as_object().expect("dimensions map missing");
+    let dims = shape["dimensions"]
+        .as_object()
+        .expect("dimensions map missing");
     let size = dims["size"].as_array().expect("size should be array");
     assert_eq!(size.len(), 3, "BoxShape3D size should have 3 components");
     assert!(
@@ -269,7 +280,9 @@ fn inspect_resources_2d_collision_shape_dimensions() {
         "expected CapsuleShape2D"
     );
 
-    let dims = shape["dimensions"].as_object().expect("dimensions map missing");
+    let dims = shape["dimensions"]
+        .as_object()
+        .expect("dimensions map missing");
     let radius = dims["radius"].as_f64().expect("radius missing");
     let height = dims["height"].as_f64().expect("height missing");
 

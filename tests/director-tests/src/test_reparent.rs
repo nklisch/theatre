@@ -8,9 +8,12 @@ fn node_reparent_basic() {
     let scene = DirectorFixture::temp_scene_path("reparent_basic");
 
     // Create scene with structure: Root > A > Child, Root > B
-    f.run("scene_create", json!({"scene_path": scene, "root_type": "Node2D"}))
-        .unwrap()
-        .unwrap_data();
+    f.run(
+        "scene_create",
+        json!({"scene_path": scene, "root_type": "Node2D"}),
+    )
+    .unwrap()
+    .unwrap_data();
     f.run(
         "node_add",
         json!({"scene_path": scene, "node_type": "Node2D", "node_name": "A"}),
@@ -56,9 +59,7 @@ fn node_reparent_basic() {
         .iter()
         .find(|c| c["name"] == "A")
         .unwrap();
-    assert!(
-        a.get("children").is_none() || a["children"].as_array().unwrap().is_empty()
-    );
+    assert!(a.get("children").is_none() || a["children"].as_array().unwrap().is_empty());
 
     // B should have Child
     let b = root["children"]
@@ -78,9 +79,12 @@ fn node_reparent_with_rename() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("reparent_rename");
 
-    f.run("scene_create", json!({"scene_path": scene, "root_type": "Node2D"}))
-        .unwrap()
-        .unwrap_data();
+    f.run(
+        "scene_create",
+        json!({"scene_path": scene, "root_type": "Node2D"}),
+    )
+    .unwrap()
+    .unwrap_data();
     f.run(
         "node_add",
         json!({"scene_path": scene, "node_type": "Node2D", "node_name": "Source"}),
@@ -122,9 +126,12 @@ fn node_reparent_root_returns_error() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("reparent_root");
 
-    f.run("scene_create", json!({"scene_path": scene, "root_type": "Node2D"}))
-        .unwrap()
-        .unwrap_data();
+    f.run(
+        "scene_create",
+        json!({"scene_path": scene, "root_type": "Node2D"}),
+    )
+    .unwrap()
+    .unwrap_data();
     f.run(
         "node_add",
         json!({"scene_path": scene, "node_type": "Node2D", "node_name": "Child"}),
@@ -149,9 +156,12 @@ fn node_reparent_circular_returns_error() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("reparent_circular");
 
-    f.run("scene_create", json!({"scene_path": scene, "root_type": "Node2D"}))
-        .unwrap()
-        .unwrap_data();
+    f.run(
+        "scene_create",
+        json!({"scene_path": scene, "root_type": "Node2D"}),
+    )
+    .unwrap()
+    .unwrap_data();
     f.run(
         "node_add",
         json!({"scene_path": scene, "node_type": "Node2D", "node_name": "Parent"}),
@@ -191,9 +201,12 @@ fn node_reparent_name_collision_returns_error() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("reparent_collision");
 
-    f.run("scene_create", json!({"scene_path": scene, "root_type": "Node2D"}))
-        .unwrap()
-        .unwrap_data();
+    f.run(
+        "scene_create",
+        json!({"scene_path": scene, "root_type": "Node2D"}),
+    )
+    .unwrap()
+    .unwrap_data();
     f.run(
         "node_add",
         json!({"scene_path": scene, "node_type": "Node2D", "node_name": "A"}),

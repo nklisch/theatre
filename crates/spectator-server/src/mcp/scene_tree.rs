@@ -107,8 +107,14 @@ mod tests {
 
     #[test]
     fn parse_action_valid() {
-        assert_eq!(SceneTreeAction::parse("roots").unwrap(), SceneTreeAction::Roots);
-        assert_eq!(SceneTreeAction::parse("find").unwrap(), SceneTreeAction::Find);
+        assert_eq!(
+            SceneTreeAction::parse("roots").unwrap(),
+            SceneTreeAction::Roots
+        );
+        assert_eq!(
+            SceneTreeAction::parse("find").unwrap(),
+            SceneTreeAction::Find
+        );
     }
 
     #[test]

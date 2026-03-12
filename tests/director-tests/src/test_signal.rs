@@ -7,9 +7,12 @@ fn signal_connect_basic() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("signal_connect");
 
-    f.run("scene_create", json!({"scene_path": &scene, "root_type": "Node2D"}))
-        .unwrap()
-        .unwrap_data();
+    f.run(
+        "scene_create",
+        json!({"scene_path": &scene, "root_type": "Node2D"}),
+    )
+    .unwrap()
+    .unwrap_data();
     f.run(
         "node_add",
         json!({"scene_path": &scene, "parent_path": ".", "node_type": "Button", "node_name": "MyButton"}),
@@ -59,8 +62,11 @@ fn signal_disconnect_removes_connection() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("signal_disconnect");
 
-    f.run("scene_create", json!({"scene_path": &scene, "root_type": "Node2D"}))
-        .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": &scene, "root_type": "Node2D"}),
+    )
+    .unwrap();
     f.run(
         "node_add",
         json!({"scene_path": &scene, "parent_path": ".", "node_type": "Button", "node_name": "Btn"}),
@@ -120,8 +126,11 @@ fn signal_connect_invalid_signal_returns_error() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("signal_invalid");
 
-    f.run("scene_create", json!({"scene_path": &scene, "root_type": "Node2D"}))
-        .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": &scene, "root_type": "Node2D"}),
+    )
+    .unwrap();
     f.run(
         "node_add",
         json!({"scene_path": &scene, "parent_path": ".", "node_type": "Node2D", "node_name": "A"}),
@@ -155,8 +164,11 @@ fn signal_list_empty_scene() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("signal_list_empty");
 
-    f.run("scene_create", json!({"scene_path": &scene, "root_type": "Node2D"}))
-        .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": &scene, "root_type": "Node2D"}),
+    )
+    .unwrap();
 
     let data = f
         .run("signal_list", json!({"scene_path": &scene}))
@@ -172,8 +184,11 @@ fn signal_list_filtered_by_node() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("signal_list_filter");
 
-    f.run("scene_create", json!({"scene_path": &scene, "root_type": "Node2D"}))
-        .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": &scene, "root_type": "Node2D"}),
+    )
+    .unwrap();
     f.run(
         "node_add",
         json!({"scene_path": &scene, "parent_path": ".", "node_type": "Button", "node_name": "Btn1"}),
@@ -209,7 +224,10 @@ fn signal_list_filtered_by_node() {
 
     // Filter to Btn1 only
     let data = f
-        .run("signal_list", json!({"scene_path": &scene, "node_path": "Btn1"}))
+        .run(
+            "signal_list",
+            json!({"scene_path": &scene, "node_path": "Btn1"}),
+        )
         .unwrap()
         .unwrap_data();
     let connections = data["connections"].as_array().unwrap();
@@ -218,7 +236,10 @@ fn signal_list_filtered_by_node() {
 
     // Filter to H — should see both (as target)
     let data2 = f
-        .run("signal_list", json!({"scene_path": &scene, "node_path": "H"}))
+        .run(
+            "signal_list",
+            json!({"scene_path": &scene, "node_path": "H"}),
+        )
         .unwrap()
         .unwrap_data();
     assert_eq!(data2["connections"].as_array().unwrap().len(), 2);

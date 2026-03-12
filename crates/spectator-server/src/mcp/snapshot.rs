@@ -58,7 +58,6 @@ pub struct SpatialSnapshotParams {
     pub expand: Option<String>,
 }
 
-
 /// Processed entity for MCP output.
 #[derive(Debug, Serialize)]
 pub struct OutputEntity {

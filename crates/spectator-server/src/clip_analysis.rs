@@ -407,8 +407,7 @@ pub fn query_range(
     let mut deepest_frame: Option<u64> = None;
 
     for row_result in rows {
-        let (frame, time_ms, data) =
-            row_result.map_err(sqlite_err)?;
+        let (frame, time_ms, data) = row_result.map_err(sqlite_err)?;
         total_frames += 1;
 
         let entities: Vec<FrameEntityData> = rmp_serde::from_slice(&data).map_err(|e| {
@@ -893,8 +892,7 @@ pub fn trajectory(
     let mut budget_bytes: usize = 100; // overhead
 
     for row_result in rows {
-        let (frame, time_ms, data) =
-            row_result.map_err(sqlite_err)?;
+        let (frame, time_ms, data) = row_result.map_err(sqlite_err)?;
 
         // Sample every Nth frame relative to from_frame
         if (frame - from_frame) % interval != 0 {
@@ -1134,9 +1132,7 @@ pub fn find_event(
 
     sql.push_str(" ORDER BY frame");
 
-    let mut stmt = db
-        .prepare(&sql)
-        .map_err(sqlite_err)?;
+    let mut stmt = db.prepare(&sql).map_err(sqlite_err)?;
 
     let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
 
@@ -1208,9 +1204,7 @@ fn find_markers(
     }
     sql.push_str(" ORDER BY frame");
 
-    let mut stmt = db
-        .prepare(&sql)
-        .map_err(sqlite_err)?;
+    let mut stmt = db.prepare(&sql).map_err(sqlite_err)?;
     let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
 
     let rows = stmt
@@ -1360,8 +1354,7 @@ pub fn list_screenshots(db: &Connection) -> Result<Vec<ScreenshotMeta>, McpError
         })
         .map_err(sqlite_err)?;
 
-    rows.collect::<Result<Vec<_>, _>>()
-        .map_err(sqlite_err)
+    rows.collect::<Result<Vec<_>, _>>().map_err(sqlite_err)
 }
 
 // ---------------------------------------------------------------------------

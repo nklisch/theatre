@@ -255,18 +255,12 @@ fn detect_state_changes(prev: &EntitySnapshot, curr: &EntitySnapshot) -> Option<
         match prev.state.get(key) {
             Some(old_val) => {
                 if !values_equal(old_val, new_val) {
-                    changes.insert(
-                        key.clone(),
-                        serde_json::json!([old_val, new_val]),
-                    );
+                    changes.insert(key.clone(), serde_json::json!([old_val, new_val]));
                 }
             }
             None => {
                 // New property appeared
-                changes.insert(
-                    key.clone(),
-                    serde_json::json!([null, new_val]),
-                );
+                changes.insert(key.clone(), serde_json::json!([null, new_val]));
             }
         }
     }
@@ -274,10 +268,7 @@ fn detect_state_changes(prev: &EntitySnapshot, curr: &EntitySnapshot) -> Option<
     // Check for removed properties
     for (key, old_val) in &prev.state {
         if !curr.state.contains_key(key) {
-            changes.insert(
-                key.clone(),
-                serde_json::json!([old_val, null]),
-            );
+            changes.insert(key.clone(), serde_json::json!([old_val, null]));
         }
     }
 
@@ -316,7 +307,10 @@ mod tests {
             rotation_deg: [0.0, 0.0, 0.0],
             velocity: [0.0, 0.0, 0.0],
             groups: vec!["enemies".to_string()],
-            state: state.iter().map(|(k, v)| (k.to_string(), v.clone())).collect(),
+            state: state
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.clone()))
+                .collect(),
             visible: true,
         }
     }
@@ -349,8 +343,16 @@ mod tests {
 
     #[test]
     fn detect_state_change() {
-        let prev = entity("enemy", [0.0, 0.0, 0.0], &[("health", serde_json::json!(100.0))]);
-        let curr = entity("enemy", [0.0, 0.0, 0.0], &[("health", serde_json::json!(80.0))]);
+        let prev = entity(
+            "enemy",
+            [0.0, 0.0, 0.0],
+            &[("health", serde_json::json!(100.0))],
+        );
+        let curr = entity(
+            "enemy",
+            [0.0, 0.0, 0.0],
+            &[("health", serde_json::json!(80.0))],
+        );
 
         let mut engine = DeltaEngine::new();
         engine.store_snapshot(1, vec![prev]);
@@ -363,8 +365,16 @@ mod tests {
 
     #[test]
     fn suppress_float_change_below_threshold() {
-        let prev = entity("enemy", [0.0, 0.0, 0.0], &[("speed", serde_json::json!(1.0))]);
-        let curr = entity("enemy", [0.0, 0.0, 0.0], &[("speed", serde_json::json!(1.0005))]);
+        let prev = entity(
+            "enemy",
+            [0.0, 0.0, 0.0],
+            &[("speed", serde_json::json!(1.0))],
+        );
+        let curr = entity(
+            "enemy",
+            [0.0, 0.0, 0.0],
+            &[("speed", serde_json::json!(1.0005))],
+        );
 
         let mut engine = DeltaEngine::new();
         engine.store_snapshot(1, vec![prev]);
@@ -450,9 +460,15 @@ mod tests {
     #[test]
     fn values_equal_float_threshold() {
         // Within threshold — equal
-        assert!(values_equal(&serde_json::json!(1.0), &serde_json::json!(1.0005)));
+        assert!(values_equal(
+            &serde_json::json!(1.0),
+            &serde_json::json!(1.0005)
+        ));
         // Outside threshold — not equal
-        assert!(!values_equal(&serde_json::json!(1.0), &serde_json::json!(1.002)));
+        assert!(!values_equal(
+            &serde_json::json!(1.0),
+            &serde_json::json!(1.002)
+        ));
     }
 
     #[test]

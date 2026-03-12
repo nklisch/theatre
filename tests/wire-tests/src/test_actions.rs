@@ -1,5 +1,5 @@
 /// Wire tests for `execute_action`.
-use crate::harness::{assert_approx, find_entity, GodotFixture};
+use crate::harness::{GodotFixture, assert_approx, find_entity};
 
 fn snapshot(f: &mut GodotFixture) -> serde_json::Value {
     f.query(

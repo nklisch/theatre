@@ -2175,7 +2175,11 @@ fn resource_path(res: &Gd<Resource>) -> Option<String> {
     let path = res.get_path().to_string();
     // Sub-resources embedded in a scene file have paths like
     // "res://scene.tscn::SubResourceId". Treat these as inline (no external file).
-    if path.is_empty() || path.contains("::") { None } else { Some(path) }
+    if path.is_empty() || path.contains("::") {
+        None
+    } else {
+        Some(path)
+    }
 }
 
 /// Convert a Godot `Vector3` to a `Vec<f64>`.

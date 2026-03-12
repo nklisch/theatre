@@ -10,15 +10,16 @@ fn cli_scene_create_and_read() {
 
     // Create via CLI
     let result = cli
-        .run("scene_create", json!({"scene_path": scene, "root_type": "Node2D"}))
+        .run(
+            "scene_create",
+            json!({"scene_path": scene, "root_type": "Node2D"}),
+        )
         .unwrap();
     let data = result.unwrap_data();
     assert_eq!(data["root_type"], "Node2D");
 
     // Read back via CLI
-    let result = cli
-        .run("scene_read", json!({"scene_path": scene}))
-        .unwrap();
+    let result = cli.run("scene_read", json!({"scene_path": scene})).unwrap();
     let data = result.unwrap_data();
     assert_eq!(data["root"]["type"], "Node2D");
 }
@@ -29,15 +30,21 @@ fn cli_node_add_and_read_back() {
     let cli = CliFixture::new();
     let scene = DirectorFixture::temp_scene_path("cli_node_add");
 
-    cli.run("scene_create", json!({"scene_path": scene, "root_type": "Node2D"}))
-        .unwrap()
-        .unwrap_data();
+    cli.run(
+        "scene_create",
+        json!({"scene_path": scene, "root_type": "Node2D"}),
+    )
+    .unwrap()
+    .unwrap_data();
 
-    cli.run("node_add", json!({
-        "scene_path": scene,
-        "node_type": "Sprite2D",
-        "node_name": "Hero",
-    }))
+    cli.run(
+        "node_add",
+        json!({
+            "scene_path": scene,
+            "node_type": "Sprite2D",
+            "node_name": "Hero",
+        }),
+    )
     .unwrap()
     .unwrap_data();
 
@@ -65,7 +72,10 @@ fn cli_rejects_missing_project_path() {
 
     assert!(result.is_err());
     let err = result.unwrap_err().to_string();
-    assert!(err.contains("project.godot"), "error should mention project.godot: {err}");
+    assert!(
+        err.contains("project.godot"),
+        "error should mention project.godot: {err}"
+    );
 }
 
 #[test]

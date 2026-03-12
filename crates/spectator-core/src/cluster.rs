@@ -43,9 +43,7 @@ pub enum ClusterStrategy {
 /// cluster.
 ///
 /// `entities` must already have `rel` data computed (distances, bearings).
-pub(crate) fn cluster_by_group(
-    entities: &[(RawEntityData, RelativePosition)],
-) -> Vec<Cluster> {
+pub(crate) fn cluster_by_group(entities: &[(RawEntityData, RelativePosition)]) -> Vec<Cluster> {
     let mut group_map: HashMap<String, Vec<(&RawEntityData, &RelativePosition)>> = HashMap::new();
     let mut static_count = 0usize;
 
@@ -90,7 +88,11 @@ fn build_cluster(
 
     let nearest = members
         .iter()
-        .min_by(|a, b| a.1.distance.partial_cmp(&b.1.distance).unwrap_or(std::cmp::Ordering::Equal))
+        .min_by(|a, b| {
+            a.1.distance
+                .partial_cmp(&b.1.distance)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
         .map(|(entity, rel)| ClusterNearest {
             node: entity.path.clone(),
             distance: rel.distance,
@@ -141,9 +143,7 @@ pub fn cluster_entities(
 }
 
 /// Cluster by Godot class name.
-pub(crate) fn cluster_by_class(
-    entities: &[(RawEntityData, RelativePosition)],
-) -> Vec<Cluster> {
+pub(crate) fn cluster_by_class(entities: &[(RawEntityData, RelativePosition)]) -> Vec<Cluster> {
     let mut class_map: HashMap<String, Vec<(&RawEntityData, &RelativePosition)>> = HashMap::new();
     let mut static_count = 0usize;
 
@@ -151,7 +151,10 @@ pub(crate) fn cluster_by_class(
         if entity.is_static {
             static_count += 1;
         } else {
-            class_map.entry(entity.class.clone()).or_default().push((entity, rel));
+            class_map
+                .entry(entity.class.clone())
+                .or_default()
+                .push((entity, rel));
         }
     }
 
@@ -170,9 +173,7 @@ pub(crate) fn cluster_by_class(
 }
 
 /// Cluster by spatial proximity (simple nearest-seed algorithm).
-pub(crate) fn cluster_by_proximity(
-    entities: &[(RawEntityData, RelativePosition)],
-) -> Vec<Cluster> {
+pub(crate) fn cluster_by_proximity(entities: &[(RawEntityData, RelativePosition)]) -> Vec<Cluster> {
     let dynamic: Vec<(&RawEntityData, &RelativePosition)> = entities
         .iter()
         .filter(|(e, _)| !e.is_static)
@@ -230,9 +231,7 @@ pub(crate) fn cluster_by_proximity(
 }
 
 /// No clustering — each entity is its own cluster (except static).
-fn cluster_none(
-    entities: &[(RawEntityData, RelativePosition)],
-) -> Vec<Cluster> {
+fn cluster_none(entities: &[(RawEntityData, RelativePosition)]) -> Vec<Cluster> {
     let mut clusters = Vec::new();
     let mut static_count = 0usize;
 
@@ -266,9 +265,7 @@ fn cluster_none(
 ///
 /// Examines common state properties (e.g., "state", "alert_level")
 /// and counts distinct values. Example output: "2 idle, 1 patrol".
-pub(crate) fn generate_cluster_summary(
-    entities: &[&RawEntityData],
-) -> Option<String> {
+pub(crate) fn generate_cluster_summary(entities: &[&RawEntityData]) -> Option<String> {
     if entities.is_empty() {
         return None;
     }
@@ -345,9 +342,18 @@ mod tests {
     #[test]
     fn cluster_by_group_basic() {
         let entities = vec![
-            (make_entity("enemies/e1", &["enemies"], false), make_rel(5.0)),
-            (make_entity("enemies/e2", &["enemies"], false), make_rel(10.0)),
-            (make_entity("enemies/e3", &["enemies"], false), make_rel(3.0)),
+            (
+                make_entity("enemies/e1", &["enemies"], false),
+                make_rel(5.0),
+            ),
+            (
+                make_entity("enemies/e2", &["enemies"], false),
+                make_rel(10.0),
+            ),
+            (
+                make_entity("enemies/e3", &["enemies"], false),
+                make_rel(3.0),
+            ),
         ];
         let clusters = cluster_by_group(&entities);
         assert_eq!(clusters.len(), 1);
@@ -357,9 +363,7 @@ mod tests {
 
     #[test]
     fn ungrouped_entities_in_other() {
-        let entities = vec![
-            (make_entity("node1", &[], false), make_rel(5.0)),
-        ];
+        let entities = vec![(make_entity("node1", &[], false), make_rel(5.0))];
         let clusters = cluster_by_group(&entities);
         assert_eq!(clusters.len(), 1);
         assert_eq!(clusters[0].label, "other");
@@ -389,9 +393,18 @@ mod tests {
     #[test]
     fn nearest_and_farthest_dist() {
         let entities = vec![
-            (make_entity("enemies/e1", &["enemies"], false), make_rel(5.0)),
-            (make_entity("enemies/e2", &["enemies"], false), make_rel(10.0)),
-            (make_entity("enemies/e3", &["enemies"], false), make_rel(3.0)),
+            (
+                make_entity("enemies/e1", &["enemies"], false),
+                make_rel(5.0),
+            ),
+            (
+                make_entity("enemies/e2", &["enemies"], false),
+                make_rel(10.0),
+            ),
+            (
+                make_entity("enemies/e3", &["enemies"], false),
+                make_rel(3.0),
+            ),
         ];
         let clusters = cluster_by_group(&entities);
         let c = &clusters[0];
@@ -405,11 +418,14 @@ mod tests {
     #[test]
     fn cluster_summary_generation() {
         let mut e1 = make_entity("e1", &["enemies"], false);
-        e1.state.insert("state".to_string(), serde_json::json!("idle"));
+        e1.state
+            .insert("state".to_string(), serde_json::json!("idle"));
         let mut e2 = make_entity("e2", &["enemies"], false);
-        e2.state.insert("state".to_string(), serde_json::json!("idle"));
+        e2.state
+            .insert("state".to_string(), serde_json::json!("idle"));
         let mut e3 = make_entity("e3", &["enemies"], false);
-        e3.state.insert("state".to_string(), serde_json::json!("patrol"));
+        e3.state
+            .insert("state".to_string(), serde_json::json!("patrol"));
 
         let refs: Vec<&RawEntityData> = [&e1, &e2, &e3].to_vec();
         let summary = generate_cluster_summary(&refs);
@@ -430,8 +446,14 @@ mod tests {
     #[test]
     fn cluster_by_class_basic() {
         let entities = vec![
-            (make_entity("enemies/e1", &["enemies"], false), make_rel(5.0)),
-            (make_entity("pickups/p1", &["pickups"], false), make_rel(3.0)),
+            (
+                make_entity("enemies/e1", &["enemies"], false),
+                make_rel(5.0),
+            ),
+            (
+                make_entity("pickups/p1", &["pickups"], false),
+                make_rel(3.0),
+            ),
         ];
         // Both entities have class "Node3D" (from make_entity)
         let clusters = cluster_by_class(&entities);
@@ -443,8 +465,14 @@ mod tests {
     #[test]
     fn cluster_none_each_entity() {
         let entities = vec![
-            (make_entity("enemies/e1", &["enemies"], false), make_rel(5.0)),
-            (make_entity("enemies/e2", &["enemies"], false), make_rel(10.0)),
+            (
+                make_entity("enemies/e1", &["enemies"], false),
+                make_rel(5.0),
+            ),
+            (
+                make_entity("enemies/e2", &["enemies"], false),
+                make_rel(10.0),
+            ),
         ];
         let clusters = cluster_none(&entities);
         assert_eq!(clusters.len(), 2);
@@ -452,18 +480,20 @@ mod tests {
 
     #[test]
     fn cluster_dispatch_group() {
-        let entities = vec![
-            (make_entity("enemies/e1", &["enemies"], false), make_rel(5.0)),
-        ];
+        let entities = vec![(
+            make_entity("enemies/e1", &["enemies"], false),
+            make_rel(5.0),
+        )];
         let clusters = cluster_entities(&entities, ClusterStrategy::Group);
         assert_eq!(clusters[0].label, "enemies");
     }
 
     #[test]
     fn cluster_dispatch_none() {
-        let entities = vec![
-            (make_entity("enemies/e1", &["enemies"], false), make_rel(5.0)),
-        ];
+        let entities = vec![(
+            make_entity("enemies/e1", &["enemies"], false),
+            make_rel(5.0),
+        )];
         let clusters = cluster_entities(&entities, ClusterStrategy::None);
         assert_eq!(clusters.len(), 1);
         assert_eq!(clusters[0].label, "enemies/e1");
@@ -476,10 +506,7 @@ mod tests {
         e1.position = [0.0, 0.0, 0.0];
         let mut e2 = make_entity("a/e2", &[], false);
         e2.position = [1.0, 0.0, 0.0]; // within 10 units
-        let entities = vec![
-            (e1, make_rel(1.0)),
-            (e2, make_rel(2.0)),
-        ];
+        let entities = vec![(e1, make_rel(1.0)), (e2, make_rel(2.0))];
         let clusters = cluster_by_proximity(&entities);
         assert_eq!(clusters.len(), 1);
         assert_eq!(clusters[0].count, 2);

@@ -48,7 +48,6 @@ impl super::ParseMcpEnum for InspectCategory {
     }
 }
 
-
 /// Build the spatial_context block from raw addon data.
 /// Computes bearings server-side from the raw positions.
 pub fn build_spatial_context(raw: &SpatialContextRaw) -> serde_json::Value {

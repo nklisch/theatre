@@ -14,10 +14,7 @@ fn scene_diff_identical_scenes_no_changes() {
     .unwrap_data();
 
     let data = f
-        .run(
-            "scene_diff",
-            json!({"scene_a": scene, "scene_b": scene}),
-        )
+        .run("scene_diff", json!({"scene_a": scene, "scene_b": scene}))
         .unwrap()
         .unwrap_data();
 

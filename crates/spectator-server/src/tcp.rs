@@ -201,7 +201,11 @@ async fn handle_connection(stream: TcpStream, state: Arc<Mutex<SessionState>>) -
                     let _ = sender.send(QueryResult::Ok(data));
                 }
             }
-            Ok(Message::Error { request_id, code, message }) => {
+            Ok(Message::Error {
+                request_id,
+                code,
+                message,
+            }) => {
                 let mut s = state.lock().await;
                 if let Some(sender) = s.pending_queries.remove(&request_id) {
                     let _ = sender.send(QueryResult::Err { code, message });

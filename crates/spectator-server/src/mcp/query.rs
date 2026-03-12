@@ -148,7 +148,13 @@ fn build_nearest_response(
     from_pos: Position3,
     from_forward: Option<[f64; 3]>,
 ) -> serde_json::Value {
-    build_list_query_response("nearest", results, from_pos, from_forward, serde_json::json!({}))
+    build_list_query_response(
+        "nearest",
+        results,
+        from_pos,
+        from_forward,
+        serde_json::json!({}),
+    )
 }
 
 fn build_radius_response(

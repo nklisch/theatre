@@ -64,7 +64,12 @@ impl GodotFixture {
         });
         codec::write_message(&mut stream, &ack)?;
 
-        Ok(Self { child: Some(child), port, stream, handshake })
+        Ok(Self {
+            child: Some(child),
+            port,
+            stream,
+            handshake,
+        })
     }
 
     /// Send a query and wait for the matching response.
@@ -83,10 +88,15 @@ impl GodotFixture {
 
         let response = codec::read_message::<Message>(&mut self.stream)?;
         match response {
-            Message::Response { request_id: rid, data } if rid == id => Ok(QueryResult::Ok(data)),
-            Message::Error { request_id: rid, code, message } if rid == id => {
-                Ok(QueryResult::Err { code, message })
-            }
+            Message::Response {
+                request_id: rid,
+                data,
+            } if rid == id => Ok(QueryResult::Ok(data)),
+            Message::Error {
+                request_id: rid,
+                code,
+                message,
+            } if rid == id => Ok(QueryResult::Err { code, message }),
             other => anyhow::bail!("Unexpected response: {:?}", other),
         }
     }
@@ -185,10 +195,7 @@ pub fn assert_approx(actual: f64, expected: f64) {
 }
 
 /// Find an entity in snapshot data by name fragment. Panics if not found.
-pub fn find_entity<'a>(
-    data: &'a serde_json::Value,
-    name: &str,
-) -> &'a serde_json::Value {
+pub fn find_entity<'a>(data: &'a serde_json::Value, name: &str) -> &'a serde_json::Value {
     data["entities"]
         .as_array()
         .expect("entities array missing")

@@ -1,5 +1,5 @@
 /// Wire tests for `get_snapshot_data`.
-use crate::harness::{assert_approx, find_entity, GodotFixture};
+use crate::harness::{GodotFixture, assert_approx, find_entity};
 
 #[test]
 #[ignore = "requires Godot binary and built GDExtension"]
@@ -142,5 +142,8 @@ fn snapshot_response_has_frame_and_timestamp() {
         .unwrap_data();
 
     assert!(data.get("frame").is_some(), "frame field missing");
-    assert!(data.get("timestamp_ms").is_some(), "timestamp_ms field missing");
+    assert!(
+        data.get("timestamp_ms").is_some(),
+        "timestamp_ms field missing"
+    );
 }

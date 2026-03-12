@@ -24,10 +24,19 @@ pub fn handle_query(
             handle_get_snapshot_data(params, collector),
         )),
         "get_frame_info" => Some(simple_query(request_id, handle_get_frame_info(collector))),
-        "get_node_inspect" => Some(simple_query(request_id, handle_get_node_inspect(params, collector))),
-        "get_scene_tree" => Some(simple_query(request_id, handle_get_scene_tree(params, collector))),
+        "get_node_inspect" => Some(simple_query(
+            request_id,
+            handle_get_node_inspect(params, collector),
+        )),
+        "get_scene_tree" => Some(simple_query(
+            request_id,
+            handle_get_scene_tree(params, collector),
+        )),
         "execute_action" => handle_execute_action(request_id, params, collector),
-        "spatial_query" => Some(simple_query(request_id, handle_spatial_query(params, collector))),
+        "spatial_query" => Some(simple_query(
+            request_id,
+            handle_spatial_query(params, collector),
+        )),
         _ => Some(Message::Error {
             request_id,
             code: "method_not_found".to_string(),

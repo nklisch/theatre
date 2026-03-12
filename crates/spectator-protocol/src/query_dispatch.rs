@@ -94,17 +94,17 @@ impl QueryMethod {
     /// than typed structs, so only minimal structural validation is done for them.
     pub fn validate_params(self, params: &serde_json::Value) -> Result<(), String> {
         match self {
-            Self::GetSnapshotData => serde_json::from_value::<GetSnapshotDataParams>(params.clone())
-                .map(|_| ())
-                .map_err(|e| e.to_string()),
-            Self::GetFrameInfo => serde_json::from_value::<GetFrameInfoParams>(params.clone())
-                .map(|_| ())
-                .map_err(|e| e.to_string()),
-            Self::GetNodeInspect => {
-                serde_json::from_value::<GetNodeInspectParams>(params.clone())
+            Self::GetSnapshotData => {
+                serde_json::from_value::<GetSnapshotDataParams>(params.clone())
                     .map(|_| ())
                     .map_err(|e| e.to_string())
             }
+            Self::GetFrameInfo => serde_json::from_value::<GetFrameInfoParams>(params.clone())
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
+            Self::GetNodeInspect => serde_json::from_value::<GetNodeInspectParams>(params.clone())
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
             Self::GetSceneTree => serde_json::from_value::<GetSceneTreeParams>(params.clone())
                 .map(|_| ())
                 .map_err(|e| e.to_string()),
@@ -127,7 +127,10 @@ impl QueryMethod {
             | Self::DashcamConfig => Ok(()), // no required params or ad-hoc object
             Self::RecordingMarkers | Self::RecordingList | Self::RecordingDelete => {
                 if !params.is_null() && !params.is_object() {
-                    return Err(format!("{} params must be an object or null", self.as_str()));
+                    return Err(format!(
+                        "{} params must be an object or null",
+                        self.as_str()
+                    ));
                 }
                 Ok(())
             }
@@ -161,7 +164,11 @@ mod tests {
             ("dashcam_config", QueryMethod::DashcamConfig),
         ];
         for (name, expected) in cases {
-            assert_eq!(QueryMethod::from_str(name), Some(expected), "failed for {name}");
+            assert_eq!(
+                QueryMethod::from_str(name),
+                Some(expected),
+                "failed for {name}"
+            );
         }
     }
 
@@ -192,7 +199,11 @@ mod tests {
         ];
         for method in methods {
             let name = method.as_str();
-            assert_eq!(QueryMethod::from_str(name), Some(method), "round-trip failed for {name}");
+            assert_eq!(
+                QueryMethod::from_str(name),
+                Some(method),
+                "round-trip failed for {name}"
+            );
         }
     }
 
@@ -227,19 +238,39 @@ mod tests {
     #[test]
     fn recording_marker_accepts_object() {
         let params = json!({"source": "agent", "label": "checkpoint"});
-        assert!(QueryMethod::RecordingMarker.validate_params(&params).is_ok());
+        assert!(
+            QueryMethod::RecordingMarker
+                .validate_params(&params)
+                .is_ok()
+        );
     }
 
     #[test]
     fn recording_marker_rejects_non_object() {
-        assert!(QueryMethod::RecordingMarker.validate_params(&json!("bad")).is_err());
+        assert!(
+            QueryMethod::RecordingMarker
+                .validate_params(&json!("bad"))
+                .is_err()
+        );
     }
 
     #[test]
     fn dashcam_methods_accept_empty_params() {
-        assert!(QueryMethod::DashcamStatus.validate_params(&json!({})).is_ok());
-        assert!(QueryMethod::DashcamFlush.validate_params(&json!({})).is_ok());
-        assert!(QueryMethod::DashcamConfig.validate_params(&json!({})).is_ok());
+        assert!(
+            QueryMethod::DashcamStatus
+                .validate_params(&json!({}))
+                .is_ok()
+        );
+        assert!(
+            QueryMethod::DashcamFlush
+                .validate_params(&json!({}))
+                .is_ok()
+        );
+        assert!(
+            QueryMethod::DashcamConfig
+                .validate_params(&json!({}))
+                .is_ok()
+        );
     }
 
     // --- validate_params: get_snapshot_data ---
@@ -252,7 +283,11 @@ mod tests {
             "include_offscreen": false,
             "detail": "standard"
         });
-        assert!(QueryMethod::GetSnapshotData.validate_params(&params).is_ok());
+        assert!(
+            QueryMethod::GetSnapshotData
+                .validate_params(&params)
+                .is_ok()
+        );
     }
 
     #[test]
@@ -263,7 +298,11 @@ mod tests {
             "include_offscreen": true,
             "detail": "full"
         });
-        assert!(QueryMethod::GetSnapshotData.validate_params(&params).is_ok());
+        assert!(
+            QueryMethod::GetSnapshotData
+                .validate_params(&params)
+                .is_ok()
+        );
     }
 
     #[test]
@@ -274,13 +313,21 @@ mod tests {
             "include_offscreen": false,
             "detail": "nonexistent"
         });
-        assert!(QueryMethod::GetSnapshotData.validate_params(&params).is_err());
+        assert!(
+            QueryMethod::GetSnapshotData
+                .validate_params(&params)
+                .is_err()
+        );
     }
 
     #[test]
     fn snapshot_params_reject_missing_required_fields() {
         let params = json!({"radius": 50.0});
-        assert!(QueryMethod::GetSnapshotData.validate_params(&params).is_err());
+        assert!(
+            QueryMethod::GetSnapshotData
+                .validate_params(&params)
+                .is_err()
+        );
     }
 
     // --- validate_params: get_frame_info ---
@@ -308,7 +355,11 @@ mod tests {
             "path": "Player",
             "include": ["bogus_category"]
         });
-        assert!(QueryMethod::GetNodeInspect.validate_params(&params).is_err());
+        assert!(
+            QueryMethod::GetNodeInspect
+                .validate_params(&params)
+                .is_err()
+        );
     }
 
     // --- validate_params: get_scene_tree ---
