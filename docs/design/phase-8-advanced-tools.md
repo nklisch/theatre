@@ -366,6 +366,13 @@ pub struct VisualShaderNode {
     #[serde(rename = "type")]
     pub node_type: String,
 
+    /// Which shader function graph this node belongs to.
+    /// Valid values: "vertex", "fragment", "light".
+    /// For particles mode: "start", "process", "collide".
+    /// Default: "vertex".
+    #[serde(default = "default_vertex")]
+    pub shader_function: String,
+
     /// Position in the visual shader editor graph (for layout).
     #[serde(default)]
     pub position: Option<[f64; 2]>,
@@ -374,6 +381,10 @@ pub struct VisualShaderNode {
     /// Type conversion is automatic (same as node_set_properties).
     #[serde(default)]
     pub properties: Option<serde_json::Map<String, serde_json::Value>>,
+}
+
+fn default_vertex() -> String {
+    "vertex".to_string()
 }
 
 /// A connection between two nodes in a VisualShader graph.
@@ -390,6 +401,12 @@ pub struct VisualShaderConnection {
 
     /// Destination port index on the to_node.
     pub to_port: i32,
+
+    /// Which shader function graph this connection belongs to.
+    /// Must match the shader_function of the connected nodes.
+    /// Default: "vertex".
+    #[serde(default = "default_vertex")]
+    pub shader_function: String,
 }
 
 /// Parameters for `visual_shader_create`.
@@ -448,6 +465,20 @@ const SHADER_MODES := {
     "particles": VisualShader.MODE_PARTICLES,
     "sky": VisualShader.MODE_SKY,
     "fog": VisualShader.MODE_FOG,
+}
+
+## Maps shader_function strings to VisualShader.Type enum values.
+const SHADER_FUNCTIONS := {
+    "vertex": VisualShader.TYPE_VERTEX,
+    "fragment": VisualShader.TYPE_FRAGMENT,
+    "light": VisualShader.TYPE_LIGHT,
+    "start": VisualShader.TYPE_START,
+    "process": VisualShader.TYPE_PROCESS,
+    "collide": VisualShader.TYPE_COLLIDE,
+    "start_custom": VisualShader.TYPE_START_CUSTOM,
+    "process_custom": VisualShader.TYPE_PROCESS_CUSTOM,
+    "sky": VisualShader.TYPE_SKY,
+    "fog": VisualShader.TYPE_FOG,
 }
 
 
@@ -515,6 +546,7 @@ static func _add_shader_node(shader: VisualShader, node_def: Dictionary) -> Dict
     ## Add a single node to the visual shader graph.
     var node_id: int = node_def.get("node_id", -1)
     var node_type: String = node_def.get("type", "")
+    var shader_function: String = node_def.get("shader_function", "vertex")
 
     if node_id < 2:
         return OpsUtil._error(
@@ -523,6 +555,12 @@ static func _add_shader_node(shader: VisualShader, node_def: Dictionary) -> Dict
     if node_type == "":
         return OpsUtil._error("Node type is required",
             "visual_shader_create", {"node_id": node_id})
+    if not SHADER_FUNCTIONS.has(shader_function):
+        return OpsUtil._error(
+            "Invalid shader_function: " + shader_function +
+            ". Must be one of: " + ", ".join(SHADER_FUNCTIONS.keys()),
+            "visual_shader_create",
+            {"node_id": node_id, "shader_function": shader_function})
     if not ClassDB.class_exists(node_type):
         return OpsUtil._error("Unknown class: " + node_type,
             "visual_shader_create", {"node_id": node_id, "type": node_type})
@@ -531,6 +569,7 @@ static func _add_shader_node(shader: VisualShader, node_def: Dictionary) -> Dict
             node_type + " is not a VisualShaderNode subclass",
             "visual_shader_create", {"node_id": node_id, "type": node_type})
 
+    var vs_type: int = SHADER_FUNCTIONS[shader_function]
     var node: VisualShaderNode = ClassDB.instantiate(node_type)
 
     # Set properties if provided
@@ -551,14 +590,13 @@ static func _add_shader_node(shader: VisualShader, node_def: Dictionary) -> Dict
                 properties[prop_name], type_map[prop_name])
             node.set(prop_name, converted)
 
-    # Add to shader graph (TYPE_VERTEX is default; nodes can serve any function)
-    shader.add_node(VisualShader.TYPE_VERTEX, node, Vector2.ZERO, node_id)
+    # Add to the specified shader function graph
+    shader.add_node(vs_type, node, Vector2.ZERO, node_id)
 
     # Set position if provided
     var position = node_def.get("position", null)
     if position is Array and position.size() == 2:
-        shader.set_node_position(
-            VisualShader.TYPE_VERTEX, node_id,
+        shader.set_node_position(vs_type, node_id,
             Vector2(position[0], position[1]))
 
     return {"success": true}
@@ -570,14 +608,20 @@ static func _add_connection(shader: VisualShader, conn: Dictionary) -> Dictionar
     var from_port: int = conn.get("from_port", -1)
     var to_node: int = conn.get("to_node", -1)
     var to_port: int = conn.get("to_port", -1)
+    var shader_function: String = conn.get("shader_function", "vertex")
 
     if from_node < 0 or to_node < 0:
         return OpsUtil._error(
             "Connection requires from_node and to_node",
             "visual_shader_create", conn)
+    if not SHADER_FUNCTIONS.has(shader_function):
+        return OpsUtil._error(
+            "Invalid shader_function: " + shader_function,
+            "visual_shader_create", conn)
 
+    var vs_type: int = SHADER_FUNCTIONS[shader_function]
     var err := shader.connect_nodes(
-        VisualShader.TYPE_VERTEX, from_node, from_port, to_node, to_port)
+        vs_type, from_node, from_port, to_node, to_port)
     if err != OK:
         return OpsUtil._error(
             "Failed to connect nodes: " + str(from_node) + ":" +
@@ -590,24 +634,32 @@ static func _add_connection(shader: VisualShader, conn: Dictionary) -> Dictionar
 
 **Implementation Notes**:
 
-- **Shader type routing**: VisualShader has `TYPE_VERTEX`, `TYPE_FRAGMENT`, `TYPE_LIGHT`, etc. as separate graphs. For simplicity in v1, all nodes are added to `TYPE_VERTEX`. The shader_mode determines the overall shader type (spatial, canvas_item, etc.), not the function type. This is acceptable because:
-  - Most visual shaders are vertex-only or single-function
-  - A future `shader_function` field on each node can extend this without breaking the contract
-  - The output node (ID 0) exists for each function type automatically
-
-- **Node ID 0**: The output node. Always exists. Agent connects to it, never creates it.
+- **Shader function routing**: VisualShader maintains separate node graphs for each processing function (vertex, fragment, light, and particle-specific functions). Each node and connection specifies which function graph it belongs to via the `shader_function` field (defaults to `"vertex"`). This maps directly to Godot's `VisualShader.Type` enum passed to `add_node()` and `connect_nodes()`.
+  - `shader_mode` sets the overall shader type (spatial, canvas_item, particles, sky, fog)
+  - `shader_function` on each node/connection sets which processing function graph within that mode
+  - The output node (ID 0) exists automatically for each function type — agent connects to it, never creates it
+  - Node IDs are unique per function type (same ID can exist in vertex and fragment graphs)
+  - Connections must reference nodes within the same function graph — Godot enforces this
+- **Function/mode compatibility**: Not all functions are valid for all modes. Godot silently accepts invalid combinations but the nodes won't do anything. The valid combinations are:
+  - spatial/canvas_item: vertex, fragment, light
+  - particles: start, process, collide, start_custom, process_custom
+  - sky: sky
+  - fog: fog
+  - The GDScript layer does not validate compatibility — Godot handles this gracefully. Invalid functions simply produce empty shader functions.
+- **Node ID 0**: The output node. Always exists per function type. Agent connects to it, never creates it.
 - **Node ID 1**: Reserved by Godot internally. Agent should not use it.
 - **Property setting**: Reuses `NodeOps.convert_value()` for type conversion, same as all other property-setting operations.
 - **Position**: Editor graph layout position. Optional — sensible default is `Vector2.ZERO`. Agent can provide positions for readable graph layout.
-
-**Known limitation (document in tool description)**: All nodes are added to the vertex function graph. To create nodes in fragment or light functions, the agent should use `node_set_properties` or a future extension. This keeps the v1 API simple.
 
 **Acceptance Criteria**:
 - [ ] Empty shader (no nodes, no connections) creates valid .tres
 - [ ] Single constant node creates and saves
 - [ ] Multiple nodes with connections create valid graph
+- [ ] Fragment-function nodes create correctly (e.g. albedo color shader)
+- [ ] Mixed vertex + fragment nodes in one call creates multi-function shader
 - [ ] Invalid node type returns error
 - [ ] Invalid node_id (< 2) returns error
+- [ ] Invalid shader_function returns error with valid options listed
 - [ ] Invalid connection (bad port) returns error with context
 - [ ] Properties on shader nodes are set correctly (e.g. `VisualShaderNodeInput.input_name`)
 - [ ] All five shader modes work (spatial, canvas_item, particles, sky, fog)
@@ -713,9 +765,10 @@ pub async fn physics_set_layer_names(
     name = "visual_shader_create",
     description = "Create a Godot VisualShader resource (.tres) with a node graph. \
         Define shader nodes and connections as JSON — the graph is built using \
-        Godot's VisualShader API. Supports spatial (3D), canvas_item (2D), particles, \
-        sky, and fog shader modes. Always use this instead of hand-writing shader \
-        .tres files."
+        Godot's VisualShader API. Each node specifies a shader_function (vertex, \
+        fragment, light, or particle functions) to target the correct processing \
+        stage. Supports spatial (3D), canvas_item (2D), particles, sky, and fog \
+        shader modes. Always use this instead of hand-writing shader .tres files."
 )]
 pub async fn visual_shader_create(
     &self,
@@ -826,6 +879,27 @@ fn visual_shader_create_with_nodes() {
 fn visual_shader_create_with_connections() {
     // Create shader with two nodes connected
     // Verify connection_count = 1 in response
+}
+
+#[test]
+#[ignore = "requires Godot binary"]
+fn visual_shader_create_fragment_nodes() {
+    // Create spatial shader with VisualShaderNodeColorConstant in fragment graph
+    // connected to output node port 0 (albedo)
+    // Verify node_count = 1, connection_count = 1
+}
+
+#[test]
+#[ignore = "requires Godot binary"]
+fn visual_shader_create_mixed_vertex_fragment() {
+    // Create spatial shader with nodes in both vertex and fragment graphs
+    // Verify total node_count covers both function types
+}
+
+#[test]
+#[ignore = "requires Godot binary"]
+fn visual_shader_create_rejects_invalid_shader_function() {
+    // shader_function = "invalid" → expect error
 }
 
 #[test]
