@@ -372,6 +372,64 @@ impl Drop for EditorFixture {
     }
 }
 
+// ---------------------------------------------------------------------------
+// CliFixture — test harness for the `director <op> '<json>'` CLI subcommand
+// ---------------------------------------------------------------------------
+
+/// A test harness that invokes the `director` binary CLI subcommand.
+///
+/// Runs `director <operation> '<json>'` and parses the JSON result from stdout.
+/// Tests the full Rust binary path (arg parsing, backend selection, Godot invocation).
+pub struct CliFixture {
+    director_bin: PathBuf,
+    project_dir: PathBuf,
+}
+
+impl CliFixture {
+    pub fn new() -> Self {
+        // The director binary is built by cargo in the workspace target dir.
+        let director_bin = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/debug/director")
+            .canonicalize()
+            .expect("director binary must be built (run `cargo build -p director` first)");
+        Self {
+            director_bin,
+            project_dir: project_dir_path(),
+        }
+    }
+
+    /// Run a Director operation via the CLI and return the parsed result.
+    ///
+    /// Injects `project_path` into params automatically.
+    pub fn run(&self, operation: &str, mut params: serde_json::Value) -> anyhow::Result<OperationResult> {
+        // Inject project_path if not already set.
+        if let serde_json::Value::Object(ref mut map) = params {
+            map.entry("project_path")
+                .or_insert_with(|| serde_json::Value::String(self.project_dir.to_string_lossy().into()));
+        }
+
+        let output = Command::new(&self.director_bin)
+            .args([operation, &params.to_string()])
+            .output()
+            .map_err(|e| anyhow::anyhow!("Failed to launch director CLI: {e}"))?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let stderr = String::from_utf8_lossy(&output.stderr);
+
+        if !output.status.success() {
+            return Err(anyhow::anyhow!(
+                "director CLI exited with status {}\nstdout: {stdout}\nstderr: {stderr}",
+                output.status
+            ));
+        }
+
+        // Parse the full stdout as JSON (CLI prints pretty JSON).
+        serde_json::from_str(stdout.trim()).map_err(|e| {
+            anyhow::anyhow!("Failed to parse CLI JSON: {e}\nstdout: {stdout}\nstderr: {stderr}")
+        })
+    }
+}
+
 /// Write a length-prefixed JSON message to a synchronous TCP stream.
 fn daemon_write_message(stream: &mut TcpStream, value: &serde_json::Value) -> anyhow::Result<()> {
     let json = serde_json::to_vec(value)?;

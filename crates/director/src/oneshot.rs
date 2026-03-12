@@ -97,11 +97,13 @@ pub async fn run_oneshot(
     let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
     let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
 
-    // Parse the last non-empty line of stdout as JSON
+    // Parse the last JSON-like line of stdout (starts with '{').
+    // Non-JSON lines like "[Spectator] TCP server stopped" may appear after
+    // the result when the GDExtension prints during Godot's shutdown.
     let json_line = stdout
         .lines()
         .rev()
-        .find(|line| !line.trim().is_empty())
+        .find(|line| line.trim().starts_with('{'))
         .ok_or_else(|| OperationError::ProcessFailed {
             status: output.status.code().unwrap_or(-1),
             stderr: stderr.clone(),
