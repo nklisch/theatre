@@ -43,7 +43,7 @@ pub struct IndexedEntity2D {
 }
 
 /// R-tree spatial index for 3D (implementation detail of SpatialIndex enum).
-pub(crate) struct SpatialIndex3D {
+pub struct SpatialIndex3D {
     tree: RTree<IndexedEntity>,
 }
 
@@ -128,7 +128,7 @@ impl SpatialIndex3D {
 }
 
 /// Grid hash for 2D spatial indexing (implementation detail of SpatialIndex enum).
-pub(crate) struct GridHash2D {
+pub struct GridHash2D {
     cells: HashMap<(i64, i64), Vec<IndexedEntity2D>>,
     all: Vec<IndexedEntity2D>,
     cell_size: f64,
