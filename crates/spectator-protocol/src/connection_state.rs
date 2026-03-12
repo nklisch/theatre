@@ -56,13 +56,13 @@ impl ConnectionState {
             return ConnectionAction::None;
         }
         self.advance_remaining -= 1;
-        if self.advance_remaining == 0 {
-            if let Some(id) = self.advance_request_id.take() {
-                return ConnectionAction::AdvanceComplete {
-                    response_id: id,
-                    frame: current_frame,
-                };
-            }
+        if self.advance_remaining == 0
+            && let Some(id) = self.advance_request_id.take()
+        {
+            return ConnectionAction::AdvanceComplete {
+                response_id: id,
+                frame: current_frame,
+            };
         }
         ConnectionAction::None
     }

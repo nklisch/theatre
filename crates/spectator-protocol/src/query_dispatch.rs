@@ -32,7 +32,7 @@ pub enum QueryMethod {
 
 impl QueryMethod {
     /// Resolve a wire method name to its enum variant. Returns `None` for unknown methods.
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s {
             "get_snapshot_data" => Some(Self::GetSnapshotData),
             "get_frame_info" => Some(Self::GetFrameInfo),
@@ -52,7 +52,7 @@ impl QueryMethod {
         }
     }
 
-    /// Wire name for this method (inverse of `from_str`).
+    /// Wire name for this method (inverse of `parse`).
     pub fn as_str(self) -> &'static str {
         match self {
             Self::GetSnapshotData => "get_snapshot_data",
@@ -143,7 +143,7 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    // --- from_str ---
+    // --- parse ---
 
     #[test]
     fn all_known_methods_resolve() {
@@ -165,7 +165,7 @@ mod tests {
         ];
         for (name, expected) in cases {
             assert_eq!(
-                QueryMethod::from_str(name),
+                QueryMethod::parse(name),
                 Some(expected),
                 "failed for {name}"
             );
@@ -174,9 +174,9 @@ mod tests {
 
     #[test]
     fn unknown_method_returns_none() {
-        assert_eq!(QueryMethod::from_str("bogus"), None);
-        assert_eq!(QueryMethod::from_str("get_snapshot"), None);
-        assert_eq!(QueryMethod::from_str(""), None);
+        assert_eq!(QueryMethod::parse("bogus"), None);
+        assert_eq!(QueryMethod::parse("get_snapshot"), None);
+        assert_eq!(QueryMethod::parse(""), None);
     }
 
     #[test]
@@ -200,7 +200,7 @@ mod tests {
         for method in methods {
             let name = method.as_str();
             assert_eq!(
-                QueryMethod::from_str(name),
+                QueryMethod::parse(name),
                 Some(method),
                 "round-trip failed for {name}"
             );
@@ -230,9 +230,9 @@ mod tests {
 
     #[test]
     fn recording_start_is_unknown_method() {
-        assert_eq!(QueryMethod::from_str("recording_start"), None);
-        assert_eq!(QueryMethod::from_str("recording_stop"), None);
-        assert_eq!(QueryMethod::from_str("recording_status"), None);
+        assert_eq!(QueryMethod::parse("recording_start"), None);
+        assert_eq!(QueryMethod::parse("recording_stop"), None);
+        assert_eq!(QueryMethod::parse("recording_status"), None);
     }
 
     #[test]
