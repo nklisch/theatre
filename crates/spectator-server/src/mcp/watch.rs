@@ -4,8 +4,7 @@ use serde::Deserialize;
 
 use spectator_core::watch::{ConditionOperator, TrackCategory, WatchCondition};
 
-use crate::tcp::get_config;
-
+use super::budget_context;
 use super::finalize_response;
 
 /// MCP parameters for the spatial_watch tool.
@@ -98,7 +97,8 @@ pub async fn handle_spatial_watch(
     params: SpatialWatchParams,
     state: &std::sync::Arc<tokio::sync::Mutex<crate::tcp::SessionState>>,
 ) -> Result<String, McpError> {
-    let hard_cap = get_config(state).await.token_hard_cap;
+    let bctx = budget_context(state).await;
+    let hard_cap = bctx.hard_cap;
 
     match params.action.as_str() {
         "add" => {
@@ -150,7 +150,7 @@ pub async fn handle_spatial_watch(
 
             let mut response = serde_json::json!({
                 "result": if removed { "ok" } else { "not_found" },
-                "removed": if removed { 1 } else { 0 },
+                "watch_id": watch_id,
             });
 
             finalize_response(&mut response, 200, hard_cap)

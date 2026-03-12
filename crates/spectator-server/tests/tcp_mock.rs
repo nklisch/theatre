@@ -742,7 +742,8 @@ async fn test_watch_add_list_remove_lifecycle() {
         .await
         .unwrap();
 
-    assert!(remove_result["removed"].as_u64().unwrap_or(0) > 0 || remove_result["removed"] == true);
+    // Contract: remove response echoes watch_id back (not a "removed" boolean/count)
+    assert_eq!(remove_result["watch_id"].as_str().unwrap_or(""), watch_id);
 
     // List is now empty
     let list_after = harness

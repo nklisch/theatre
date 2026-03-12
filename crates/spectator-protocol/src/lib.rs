@@ -3,6 +3,8 @@
 pub mod codec;
 pub mod connection_state;
 pub mod handshake;
+#[cfg(feature = "mcp")]
+pub mod mcp_helpers;
 pub mod messages;
 pub mod query;
 pub mod query_dispatch;

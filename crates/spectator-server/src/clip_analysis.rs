@@ -49,6 +49,11 @@ pub fn open_clip_db(storage_path: &str, clip_id: &str) -> Result<Connection, Mcp
     })
 }
 
+/// Convert any display-able error into an internal McpError with "SQLite error: " prefix.
+fn sqlite_err(e: impl std::fmt::Display) -> McpError {
+    McpError::internal_error(format!("SQLite error: {e}"), None)
+}
+
 // ---------------------------------------------------------------------------
 // Frame deserialization helpers
 // ---------------------------------------------------------------------------
@@ -65,7 +70,7 @@ pub fn read_frame(db: &Connection, frame: u64) -> Result<Vec<FrameEntityData>, M
             rusqlite::Error::QueryReturnedNoRows => {
                 McpError::invalid_params(format!("Frame {frame} not found in recording"), None)
             }
-            other => McpError::internal_error(format!("SQLite error: {other}"), None),
+            other => sqlite_err(other),
         })?;
     rmp_serde::from_slice(&data).map_err(|e| {
         McpError::internal_error(
@@ -86,7 +91,7 @@ pub fn read_frame_at_time(
             rusqlite::params![time_ms as i64],
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
-        .map_err(|e| McpError::internal_error(format!("SQLite error: {e}"), None))?;
+        .map_err(sqlite_err)?;
     let entities = rmp_serde::from_slice(&data)
         .map_err(|e| McpError::internal_error(format!("MessagePack decode error: {e}"), None))?;
     Ok((frame, entities))
@@ -381,7 +386,7 @@ pub fn query_range(
             "SELECT frame, timestamp_ms, data FROM frames \
              WHERE frame BETWEEN ?1 AND ?2 ORDER BY frame",
         )
-        .map_err(|e| McpError::internal_error(format!("SQLite error: {e}"), None))?;
+        .map_err(sqlite_err)?;
 
     let rows = stmt
         .query_map(rusqlite::params![from_frame, to_frame], |row| {
@@ -391,7 +396,7 @@ pub fn query_range(
                 row.get::<_, Vec<u8>>(2)?,
             ))
         })
-        .map_err(|e| McpError::internal_error(format!("SQLite error: {e}"), None))?;
+        .map_err(sqlite_err)?;
 
     let mut matches: Vec<RangeMatch> = Vec::new();
     let mut total_frames: u64 = 0;
@@ -403,7 +408,7 @@ pub fn query_range(
 
     for row_result in rows {
         let (frame, time_ms, data) =
-            row_result.map_err(|e| McpError::internal_error(format!("SQLite error: {e}"), None))?;
+            row_result.map_err(sqlite_err)?;
         total_frames += 1;
 
         let entities: Vec<FrameEntityData> = rmp_serde::from_slice(&data).map_err(|e| {
@@ -872,7 +877,7 @@ pub fn trajectory(
             "SELECT frame, timestamp_ms, data FROM frames \
              WHERE frame BETWEEN ?1 AND ?2 ORDER BY frame",
         )
-        .map_err(|e| McpError::internal_error(format!("SQLite error: {e}"), None))?;
+        .map_err(sqlite_err)?;
 
     let rows = stmt
         .query_map(rusqlite::params![from_frame, to_frame], |row| {
@@ -882,14 +887,14 @@ pub fn trajectory(
                 row.get::<_, Vec<u8>>(2)?,
             ))
         })
-        .map_err(|e| McpError::internal_error(format!("SQLite error: {e}"), None))?;
+        .map_err(sqlite_err)?;
 
     let mut samples: Vec<serde_json::Value> = Vec::new();
     let mut budget_bytes: usize = 100; // overhead
 
     for row_result in rows {
         let (frame, time_ms, data) =
-            row_result.map_err(|e| McpError::internal_error(format!("SQLite error: {e}"), None))?;
+            row_result.map_err(sqlite_err)?;
 
         // Sample every Nth frame relative to from_frame
         if (frame - from_frame) % interval != 0 {
@@ -1070,7 +1075,7 @@ fn query_markers_between(
             "SELECT frame, timestamp_ms, source, label FROM markers \
              WHERE frame BETWEEN ?1 AND ?2 ORDER BY frame",
         )
-        .map_err(|e| McpError::internal_error(format!("SQLite error: {e}"), None))?;
+        .map_err(sqlite_err)?;
 
     let rows = stmt
         .query_map(rusqlite::params![frame_a, frame_b], |row| {
@@ -1080,7 +1085,7 @@ fn query_markers_between(
                 "label": row.get::<_, String>(3)?,
             }))
         })
-        .map_err(|e| McpError::internal_error(format!("SQLite error: {e}"), None))?;
+        .map_err(sqlite_err)?;
 
     let markers: Vec<serde_json::Value> = rows.flatten().collect();
     Ok(markers)
@@ -1131,7 +1136,7 @@ pub fn find_event(
 
     let mut stmt = db
         .prepare(&sql)
-        .map_err(|e| McpError::internal_error(format!("SQLite error: {e}"), None))?;
+        .map_err(sqlite_err)?;
 
     let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
 
@@ -1149,7 +1154,7 @@ pub fn find_event(
                 "data": data,
             }))
         })
-        .map_err(|e| McpError::internal_error(format!("SQLite error: {e}"), None))?;
+        .map_err(sqlite_err)?;
 
     let mut events: Vec<serde_json::Value> = Vec::new();
     for row in rows.flatten() {
@@ -1205,7 +1210,7 @@ fn find_markers(
 
     let mut stmt = db
         .prepare(&sql)
-        .map_err(|e| McpError::internal_error(format!("SQLite error: {e}"), None))?;
+        .map_err(sqlite_err)?;
     let param_refs: Vec<&dyn rusqlite::types::ToSql> = params.iter().map(|p| p.as_ref()).collect();
 
     let rows = stmt
@@ -1217,7 +1222,7 @@ fn find_markers(
                 "label": row.get::<_, String>(3)?,
             }))
         })
-        .map_err(|e| McpError::internal_error(format!("SQLite error: {e}"), None))?;
+        .map_err(sqlite_err)?;
 
     let events: Vec<serde_json::Value> = rows.flatten().collect();
 
@@ -1297,7 +1302,7 @@ pub fn read_screenshot_near_frame(
     match result {
         Ok(s) => Ok(Some(s)),
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-        Err(e) => Err(McpError::internal_error(format!("SQLite error: {e}"), None)),
+        Err(e) => Err(sqlite_err(e)),
     }
 }
 
@@ -1327,7 +1332,7 @@ pub fn read_screenshot_near_time(
     match result {
         Ok(s) => Ok(Some(s)),
         Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-        Err(e) => Err(McpError::internal_error(format!("SQLite error: {e}"), None)),
+        Err(e) => Err(sqlite_err(e)),
     }
 }
 
@@ -1341,7 +1346,7 @@ pub fn list_screenshots(db: &Connection) -> Result<Vec<ScreenshotMeta>, McpError
             "SELECT frame, timestamp_ms, width, height, LENGTH(image_data) \
              FROM screenshots ORDER BY frame",
         )
-        .map_err(|e| McpError::internal_error(format!("SQLite error: {e}"), None))?;
+        .map_err(sqlite_err)?;
 
     let rows = stmt
         .query_map([], |row| {
@@ -1353,10 +1358,10 @@ pub fn list_screenshots(db: &Connection) -> Result<Vec<ScreenshotMeta>, McpError
                 size_bytes: row.get::<_, i64>(4)? as u64,
             })
         })
-        .map_err(|e| McpError::internal_error(format!("SQLite error: {e}"), None))?;
+        .map_err(sqlite_err)?;
 
     rows.collect::<Result<Vec<_>, _>>()
-        .map_err(|e| McpError::internal_error(format!("SQLite error: {e}"), None))
+        .map_err(sqlite_err)
 }
 
 // ---------------------------------------------------------------------------

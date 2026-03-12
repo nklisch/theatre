@@ -1,6 +1,7 @@
 pub mod action;
 pub mod clips;
 pub mod config;
+pub mod conversions;
 pub mod defaults;
 pub mod delta;
 pub mod inspect;
@@ -31,22 +32,9 @@ use crate::tcp::{SessionState, get_config, query_addon};
 // Shared MCP helpers
 // ---------------------------------------------------------------------------
 
-fn serialize_params<T: Serialize>(params: &T) -> Result<serde_json::Value, McpError> {
-    serde_json::to_value(params)
-        .map_err(|e| McpError::internal_error(format!("Param serialization error: {e}"), None))
-}
-
-fn deserialize_response<T: for<'de> Deserialize<'de>>(
-    data: serde_json::Value,
-) -> Result<T, McpError> {
-    serde_json::from_value(data)
-        .map_err(|e| McpError::internal_error(format!("Response deserialization error: {e}"), None))
-}
-
-fn serialize_response<T: Serialize>(response: &T) -> Result<String, McpError> {
-    serde_json::to_string(response)
-        .map_err(|e| McpError::internal_error(format!("Response serialization error: {e}"), None))
-}
+use spectator_protocol::mcp_helpers::{
+    deserialize_response, serialize_params, serialize_response,
+};
 
 /// Inject a `budget` block into a JSON object value.
 fn inject_budget(response: &mut serde_json::Value, used: u32, limit: u32, hard_cap: u32) {
@@ -118,10 +106,13 @@ pub(crate) fn insert_if_nonempty<T: serde::Serialize>(
     map: &mut serde_json::Map<String, serde_json::Value>,
     key: &str,
     val: &[T],
-) {
+) -> Result<(), McpError> {
     if !val.is_empty() {
-        map.insert(key.into(), serde_json::to_value(val).unwrap_or_default());
+        let v = serde_json::to_value(val)
+            .map_err(|e| McpError::internal_error(format!("Serialization error: {e}"), None))?;
+        map.insert(key.into(), v);
     }
+    Ok(())
 }
 
 /// Rebuild the spatial index and store a new delta baseline from a snapshot response.
@@ -170,10 +161,38 @@ pub(crate) fn finalize_response(
     budget_limit: u32,
     hard_cap: u32,
 ) -> Result<String, McpError> {
-    let json_bytes = serde_json::to_vec(response).unwrap_or_default().len();
+    let json_bytes = serde_json::to_vec(response)
+        .map_err(|e| McpError::internal_error(format!("Serialization error: {e}"), None))?
+        .len();
     let used = spectator_core::budget::estimate_tokens(json_bytes);
     inject_budget(response, used, budget_limit, hard_cap);
     serialize_response(response)
+}
+
+/// Bundles the session config fields needed for budget and expose_internals decisions.
+pub(crate) struct BudgetContext {
+    pub hard_cap: u32,
+    pub expose_internals: bool,
+    pub config: spectator_core::config::SessionConfig,
+}
+
+impl BudgetContext {
+    /// Resolve a soft token budget limit given an optional override and a tier default.
+    pub fn resolve(&self, override_budget: Option<u32>, tier_default: u32) -> u32 {
+        resolve_budget(override_budget, tier_default, self.hard_cap)
+    }
+}
+
+/// Fetch the current session config and extract budget-relevant fields.
+pub(crate) async fn budget_context(
+    state: &std::sync::Arc<tokio::sync::Mutex<SessionState>>,
+) -> BudgetContext {
+    let config = get_config(state).await;
+    BudgetContext {
+        hard_cap: config.token_hard_cap,
+        expose_internals: config.expose_internals,
+        config,
+    }
 }
 
 use action::{SpatialActionParams, build_action_request};
@@ -211,7 +230,7 @@ impl SpectatorServer {
         let perspective_param = build_perspective_param(&params)?;
 
         // 2b. Get current session config
-        let config = get_config(&self.state).await;
+        let bctx = budget_context(&self.state).await;
 
         // 3. Query addon for raw data
         let query_params = GetSnapshotDataParams {
@@ -221,7 +240,7 @@ impl SpectatorServer {
             groups: params.groups.clone().unwrap_or_default(),
             class_filter: params.class_filter.clone().unwrap_or_default(),
             detail,
-            expose_internals: config.expose_internals,
+            expose_internals: bctx.expose_internals,
         };
 
         let raw_data: SnapshotResponse =
@@ -276,8 +295,7 @@ impl SpectatorServer {
             DetailLevel::Standard => SnapshotBudgetDefaults::STANDARD,
             DetailLevel::Full => SnapshotBudgetDefaults::FULL,
         };
-        let hard_cap = config.token_hard_cap;
-        let budget_limit = resolve_budget(params.token_budget, tier_default, hard_cap);
+        let budget_limit = bctx.resolve(params.token_budget, tier_default);
 
         // 8. Handle expand (drill into a cluster from summary)
         if let Some(ref cluster_label) = params.expand {
@@ -286,8 +304,8 @@ impl SpectatorServer {
                 cluster_label,
                 &raw_data,
                 budget_limit,
-                hard_cap,
-                &config,
+                bctx.hard_cap,
+                &bctx.config,
             )?;
             let result = serialize_response(&response);
             self.log_activity("query", &activity_summary, "spatial_snapshot")
@@ -302,24 +320,24 @@ impl SpectatorServer {
                 &entities_with_rel,
                 &persp,
                 budget_limit,
-                hard_cap,
-                &config,
+                bctx.hard_cap,
+                &bctx.config,
             ),
             DetailLevel::Standard => build_standard_response(
                 &raw_data,
                 &entities_with_rel,
                 &persp,
                 budget_limit,
-                hard_cap,
-                &config,
+                bctx.hard_cap,
+                &bctx.config,
             ),
             DetailLevel::Full => build_full_response(
                 &raw_data,
                 &entities_with_rel,
                 &persp,
                 budget_limit,
-                hard_cap,
-                &config,
+                bctx.hard_cap,
+                &bctx.config,
             ),
         };
 
@@ -340,14 +358,14 @@ impl SpectatorServer {
         Parameters(params): Parameters<SpatialInspectParams>,
     ) -> Result<String, McpError> {
         let activity_summary = crate::activity::inspect_summary(&params.node);
-        let config = get_config(&self.state).await;
+        let bctx = budget_context(&self.state).await;
 
         let include = parse_include(&params.include)?;
 
         let query_params = GetNodeInspectParams {
             path: params.node.clone(),
             include: include.clone(),
-            expose_internals: config.expose_internals,
+            expose_internals: bctx.expose_internals,
         };
 
         let raw_data: NodeInspectResponse =
@@ -364,8 +382,8 @@ impl SpectatorServer {
             }
         }
 
-        let budget_limit = resolve_budget(None, 1500, config.token_hard_cap);
-        let result = finalize_response(&mut response, budget_limit, config.token_hard_cap);
+        let budget_limit = bctx.resolve(None, 1500);
+        let result = finalize_response(&mut response, budget_limit, bctx.hard_cap);
         self.log_activity("query", &activity_summary, "spatial_inspect")
             .await;
         result
@@ -390,11 +408,11 @@ impl SpectatorServer {
         )
         .await?;
 
-        let config = get_config(&self.state).await;
+        let bctx = budget_context(&self.state).await;
 
-        let budget_limit = resolve_budget(params.token_budget, 1500, config.token_hard_cap);
+        let budget_limit = bctx.resolve(params.token_budget, 1500);
         let mut response = data;
-        let result = finalize_response(&mut response, budget_limit, config.token_hard_cap);
+        let result = finalize_response(&mut response, budget_limit, bctx.hard_cap);
         self.log_activity("query", &activity_summary, "scene_tree")
             .await;
         result
@@ -413,7 +431,7 @@ impl SpectatorServer {
         Parameters(params): Parameters<SpatialActionParams>,
     ) -> Result<String, McpError> {
         let activity_summary = crate::activity::action_summary(&params);
-        let config = get_config(&self.state).await;
+        let bctx = budget_context(&self.state).await;
 
         let action_request = build_action_request(&params)?;
         let data = query_addon(
@@ -424,7 +442,7 @@ impl SpectatorServer {
         .await?;
 
         let mut response: serde_json::Value = data;
-        let action_budget = resolve_budget(None, 500, config.token_hard_cap);
+        let action_budget = bctx.resolve(None, 500);
 
         if params.return_delta {
             let has_baseline = {
@@ -440,7 +458,7 @@ impl SpectatorServer {
                     groups: vec![],
                     class_filter: vec![],
                     detail: spectator_protocol::query::DetailLevel::Standard,
-                    expose_internals: config.expose_internals,
+                    expose_internals: bctx.expose_internals,
                 };
 
                 if let Ok(snap_data) = query_addon(
@@ -473,9 +491,10 @@ impl SpectatorServer {
                     s.delta_engine
                         .store_snapshot(raw_data.frame, current_snapshots);
 
-                    let delta_json = delta::build_delta_json(&delta_result, &triggers);
-                    if let serde_json::Value::Object(ref mut map) = response {
-                        map.insert("delta".into(), delta_json);
+                    if let Ok(delta_json) = delta::build_delta_json(&delta_result, &triggers) {
+                        if let serde_json::Value::Object(ref mut map) = response {
+                            map.insert("delta".into(), delta_json);
+                        }
                     }
                 }
             } else {
@@ -493,7 +512,7 @@ impl SpectatorServer {
             }
         }
 
-        let result = finalize_response(&mut response, action_budget, config.token_hard_cap);
+        let result = finalize_response(&mut response, action_budget, bctx.hard_cap);
         self.log_activity("action", &activity_summary, "spatial_action")
             .await;
         result

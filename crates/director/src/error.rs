@@ -4,6 +4,19 @@ use crate::oneshot::OperationError;
 use crate::resolve::ResolveError;
 use rmcp::model::ErrorData as McpError;
 
+/// Implement `From<$ty> for McpError` mapping all variants to `internal_error`.
+macro_rules! impl_mcp_internal {
+    ($($ty:ty),+ $(,)?) => {
+        $(
+            impl From<$ty> for McpError {
+                fn from(e: $ty) -> Self {
+                    McpError::internal_error(e.to_string(), None)
+                }
+            }
+        )+
+    };
+}
+
 /// Convert ResolveError to McpError for use in tool handlers.
 impl From<ResolveError> for McpError {
     fn from(e: ResolveError) -> Self {
@@ -11,29 +24,4 @@ impl From<ResolveError> for McpError {
     }
 }
 
-/// Convert DaemonError to McpError for use in tool handlers.
-impl From<DaemonError> for McpError {
-    fn from(e: DaemonError) -> Self {
-        McpError::internal_error(e.to_string(), None)
-    }
-}
-
-/// Convert EditorError to McpError for use in tool handlers.
-impl From<EditorError> for McpError {
-    fn from(e: EditorError) -> Self {
-        McpError::internal_error(e.to_string(), None)
-    }
-}
-
-/// Convert OperationError to McpError for use in tool handlers.
-impl From<OperationError> for McpError {
-    fn from(e: OperationError) -> Self {
-        match &e {
-            OperationError::OperationFailed { .. } => McpError::internal_error(e.to_string(), None),
-            OperationError::SpawnFailed(_)
-            | OperationError::ProcessFailed { .. }
-            | OperationError::Timeout(_)
-            | OperationError::ParseFailed { .. } => McpError::internal_error(e.to_string(), None),
-        }
-    }
-}
+impl_mcp_internal!(DaemonError, EditorError, OperationError);

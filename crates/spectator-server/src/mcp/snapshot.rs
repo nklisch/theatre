@@ -9,7 +9,6 @@ use spectator_core::{
     budget::BudgetEnforcer,
     cluster::{self, Cluster},
     config::{BearingFormat, SessionConfig},
-    delta::EntitySnapshot,
     types::{Perspective, Position3, RawEntityData, RecentSignal, RelativePosition, vec_to_array3},
 };
 use spectator_protocol::query::{DetailLevel, EntityData, PerspectiveParam, SnapshotResponse};
@@ -107,19 +106,7 @@ pub struct PaginationBlock {
     pub omitted_nearest_distance: f64,
 }
 
-/// Convert protocol EntityData to a delta-compatible EntitySnapshot.
-pub fn to_entity_snapshot(e: &EntityData) -> EntitySnapshot {
-    EntitySnapshot {
-        path: e.path.clone(),
-        class: e.class.clone(),
-        position: vec_to_array3(&e.position),
-        rotation_deg: vec_to_array3(&e.rotation_deg),
-        velocity: vec_to_array3(&e.velocity),
-        groups: e.groups.clone(),
-        state: e.state.clone(),
-        visible: e.visible,
-    }
-}
+pub use super::conversions::to_entity_snapshot;
 
 pub fn parse_detail(s: &str) -> Result<DetailLevel, McpError> {
     super::parse_enum_param(

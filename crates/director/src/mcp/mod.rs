@@ -34,6 +34,8 @@ use scene::{SceneAddInstanceParams, SceneCreateParams, SceneListParams, SceneRea
 use shader::VisualShaderCreateParams;
 use tilemap::{TileMapClearParams, TileMapGetCellsParams, TileMapSetCellsParams};
 
+use spectator_protocol::mcp_helpers::{serialize_params, serialize_response};
+
 // ---------------------------------------------------------------------------
 // Shared MCP helpers
 // ---------------------------------------------------------------------------
@@ -56,16 +58,6 @@ async fn run_operation(
         .map_err(McpError::from)?;
 
     result.into_data().map_err(McpError::from)
-}
-
-fn serialize_params<T: serde::Serialize>(params: &T) -> Result<serde_json::Value, McpError> {
-    serde_json::to_value(params)
-        .map_err(|e| McpError::internal_error(format!("Param serialization error: {e}"), None))
-}
-
-fn serialize_response<T: serde::Serialize>(response: &T) -> Result<String, McpError> {
-    serde_json::to_string(response)
-        .map_err(|e| McpError::internal_error(format!("Response serialization error: {e}"), None))
 }
 
 // ---------------------------------------------------------------------------

@@ -152,6 +152,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
+ "spectator-protocol",
  "tempfile",
  "thiserror",
  "tokio",
@@ -1121,6 +1122,7 @@ dependencies = [
 name = "spectator-protocol"
 version = "0.1.0"
 dependencies = [
+ "rmcp",
  "rmp-serde",
  "serde",
  "serde_json",

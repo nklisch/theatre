@@ -3,17 +3,17 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 
 use spectator_core::{
-    budget::resolve_budget,
     delta::{DeltaResult, EntitySnapshot},
     watch::WatchTrigger,
 };
 use spectator_protocol::query::{DetailLevel, GetSnapshotDataParams, PerspectiveParam};
 
-use crate::tcp::get_config;
-
 use super::defaults::{default_perspective, default_radius};
 use super::snapshot::to_entity_snapshot;
-use super::{finalize_response, insert_if_nonempty, query_and_deserialize, update_spatial_state};
+use super::{
+    budget_context, finalize_response, insert_if_nonempty, query_and_deserialize,
+    update_spatial_state,
+};
 
 /// MCP parameters for the spatial_delta tool.
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -39,19 +39,22 @@ pub struct SpatialDeltaParams {
 
 /// Build the shared delta JSON object (from_frame, to_frame, and the 5 optional
 /// change categories). Used by both spatial_delta and spatial_action return_delta.
-pub fn build_delta_json(delta: &DeltaResult, watch_triggers: &[WatchTrigger]) -> serde_json::Value {
+pub fn build_delta_json(
+    delta: &DeltaResult,
+    watch_triggers: &[WatchTrigger],
+) -> Result<serde_json::Value, McpError> {
     let mut out = serde_json::json!({
         "from_frame": delta.from_frame,
         "to_frame": delta.to_frame,
     });
     if let serde_json::Value::Object(ref mut map) = out {
-        insert_if_nonempty(map, "moved", &delta.moved);
-        insert_if_nonempty(map, "state_changed", &delta.state_changed);
-        insert_if_nonempty(map, "entered", &delta.entered);
-        insert_if_nonempty(map, "exited", &delta.exited);
-        insert_if_nonempty(map, "watch_triggers", watch_triggers);
+        insert_if_nonempty(map, "moved", &delta.moved)?;
+        insert_if_nonempty(map, "state_changed", &delta.state_changed)?;
+        insert_if_nonempty(map, "entered", &delta.entered)?;
+        insert_if_nonempty(map, "exited", &delta.exited)?;
+        insert_if_nonempty(map, "watch_triggers", watch_triggers)?;
     }
-    out
+    Ok(out)
 }
 
 pub async fn handle_spatial_delta(
@@ -83,7 +86,7 @@ pub async fn handle_spatial_delta(
     };
 
     // 3. Get config and query addon for current state
-    let config = get_config(state).await;
+    let bctx = budget_context(state).await;
 
     let query_params = GetSnapshotDataParams {
         perspective: perspective_param,
@@ -92,7 +95,7 @@ pub async fn handle_spatial_delta(
         groups: params.groups.clone().unwrap_or_default(),
         class_filter: params.class_filter.clone().unwrap_or_default(),
         detail: DetailLevel::Standard,
-        expose_internals: config.expose_internals,
+        expose_internals: bctx.expose_internals,
     };
 
     let raw_data: spectator_protocol::query::SnapshotResponse =
@@ -128,7 +131,7 @@ pub async fn handle_spatial_delta(
     };
 
     // 6. Build response using shared helper, then add delta-only fields
-    let mut response = build_delta_json(&delta_result, &watch_triggers);
+    let mut response = build_delta_json(&delta_result, &watch_triggers)?;
     if let serde_json::Value::Object(ref mut map) = response {
         map.insert("static_changed".into(), serde_json::json!(false));
 
@@ -156,8 +159,8 @@ pub async fn handle_spatial_delta(
     }
 
     // 7. Budget
-    let budget_limit = resolve_budget(params.token_budget, 1000, config.token_hard_cap);
-    finalize_response(&mut response, budget_limit, config.token_hard_cap)
+    let budget_limit = bctx.resolve(params.token_budget, 1000);
+    finalize_response(&mut response, budget_limit, bctx.hard_cap)
 }
 
 #[cfg(test)]
@@ -183,7 +186,7 @@ mod tests {
             entered: vec![],
             exited: vec![],
         };
-        let json = build_delta_json(&delta, &[]);
+        let json = build_delta_json(&delta, &[]).unwrap();
         assert_eq!(json["from_frame"], 1);
         assert_eq!(json["to_frame"], 2);
         assert!(json.get("moved").is_none());

@@ -6,7 +6,6 @@ use tokio::sync::Mutex;
 
 use spectator_core::{
     bearing::{self, perspective_from_forward, perspective_from_yaw},
-    budget::resolve_budget,
     index::NearestResult,
     types::{Perspective, Position3, vec_to_array3},
 };
@@ -14,11 +13,12 @@ use spectator_protocol::query::{
     NavPathResponse, QueryOrigin, RaycastResponse, ResolveNodeResponse, SpatialQueryRequest,
 };
 
-use crate::tcp::{SessionState, get_config, query_addon};
+use crate::tcp::{SessionState, query_addon};
 
 use super::defaults::{default_k, default_query_radius};
 use super::{
-    deserialize_response, finalize_response, query_and_deserialize, require_param, serialize_params,
+    budget_context, deserialize_response, finalize_response, query_and_deserialize, require_param,
+    serialize_params,
 };
 
 /// MCP parameters for the spatial_query tool.
@@ -116,10 +116,14 @@ fn query_result_entry(r: &NearestResult, perspective: &Perspective) -> serde_jso
     })
 }
 
-fn build_nearest_response(
+/// Build a JSON response for any list-style spatial query (nearest, radius/area).
+/// `extra_fields` is merged into the response object after `results`.
+fn build_list_query_response(
+    query_name: &str,
     results: &[NearestResult],
     from_pos: Position3,
     from_forward: Option<[f64; 3]>,
+    extra_fields: serde_json::Value,
 ) -> serde_json::Value {
     let perspective = build_perspective_for_query(from_pos, from_forward);
     let entries: Vec<serde_json::Value> = results
@@ -127,10 +131,24 @@ fn build_nearest_response(
         .map(|r| query_result_entry(r, &perspective))
         .collect();
 
-    serde_json::json!({
-        "query": "nearest",
+    let mut out = serde_json::json!({
+        "query": query_name,
         "results": entries,
-    })
+    });
+    if let (serde_json::Value::Object(dst), serde_json::Value::Object(src)) =
+        (&mut out, extra_fields)
+    {
+        dst.extend(src);
+    }
+    out
+}
+
+fn build_nearest_response(
+    results: &[NearestResult],
+    from_pos: Position3,
+    from_forward: Option<[f64; 3]>,
+) -> serde_json::Value {
+    build_list_query_response("nearest", results, from_pos, from_forward, serde_json::json!({}))
 }
 
 fn build_radius_response(
@@ -139,17 +157,13 @@ fn build_radius_response(
     from_forward: Option<[f64; 3]>,
     radius: f64,
 ) -> serde_json::Value {
-    let perspective = build_perspective_for_query(from_pos, from_forward);
-    let entries: Vec<serde_json::Value> = results
-        .iter()
-        .map(|r| query_result_entry(r, &perspective))
-        .collect();
-
-    serde_json::json!({
-        "query": "radius",
-        "radius": radius,
-        "results": entries,
-    })
+    build_list_query_response(
+        "radius",
+        results,
+        from_pos,
+        from_forward,
+        serde_json::json!({ "radius": radius }),
+    )
 }
 
 pub async fn build_relationship_response(
@@ -234,12 +248,12 @@ pub async fn handle_spatial_query(
     params: SpatialQueryParams,
     state: &Arc<Mutex<SessionState>>,
 ) -> Result<String, McpError> {
-    let config = get_config(state).await;
+    let bctx = budget_context(state).await;
 
     let from_origin = parse_origin(&params.from)?;
     let groups = params.groups.as_deref().unwrap_or(&[]);
     let class_filter = params.class_filter.as_deref().unwrap_or(&[]);
-    let budget_limit = resolve_budget(params.token_budget, 500, config.token_hard_cap);
+    let budget_limit = bctx.resolve(params.token_budget, 500);
 
     let mut response = match params.query_type.as_str() {
         "nearest" => {
@@ -332,7 +346,7 @@ pub async fn handle_spatial_query(
         map.insert("from".into(), params.from.clone());
     }
 
-    finalize_response(&mut response, budget_limit, config.token_hard_cap)
+    finalize_response(&mut response, budget_limit, bctx.hard_cap)
 }
 
 #[cfg(test)]
