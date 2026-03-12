@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 /// Test harness: connects a real SpectatorServer to a MockAddon.
 use rmcp::model::ErrorData as McpError;
 use spectator_server::{

@@ -1400,7 +1400,7 @@ impl SpectatorCollector {
             child: child_name.into(),
             current_animation: current,
             animations,
-            position_sec: ap.get_current_animation_position() as f64,
+            position_sec: ap.get_current_animation_position(),
             length_sec,
             looping,
             playing,
@@ -1498,17 +1498,17 @@ impl SpectatorCollector {
         node: &Gd<Node>,
         params: &mut serde_json::Map<String, serde_json::Value>,
     ) {
-        if let Ok(gi) = node.clone().try_cast::<GeometryInstance3D>() {
-            if let Some(mat) = gi.get_material_override() {
-                let res: Gd<Resource> = mat.upcast();
-                self.extract_shader_params(&res, params);
-            }
+        if let Ok(gi) = node.clone().try_cast::<GeometryInstance3D>()
+            && let Some(mat) = gi.get_material_override()
+        {
+            let res: Gd<Resource> = mat.upcast();
+            self.extract_shader_params(&res, params);
         }
-        if let Ok(ci) = node.clone().try_cast::<CanvasItem>() {
-            if let Some(mat) = ci.get_material() {
-                let res: Gd<Resource> = mat.upcast();
-                self.extract_shader_params(&res, params);
-            }
+        if let Ok(ci) = node.clone().try_cast::<CanvasItem>()
+            && let Some(mat) = ci.get_material()
+        {
+            let res: Gd<Resource> = mat.upcast();
+            self.extract_shader_params(&res, params);
         }
     }
 
@@ -1532,19 +1532,19 @@ impl SpectatorCollector {
         material: &Gd<Resource>,
         params: &mut serde_json::Map<String, serde_json::Value>,
     ) {
-        if let Ok(shader_mat) = material.clone().try_cast::<ShaderMaterial>() {
-            if let Some(mut shader) = shader_mat.get_shader() {
-                let uniform_list = shader.get_shader_uniform_list();
-                for entry in uniform_list.iter_shared() {
-                    let dict = entry.to::<VarDictionary>();
-                    let Some(name_var) = dict.get("name") else {
-                        continue;
-                    };
-                    let name = name_var.to::<GString>().to_string();
-                    let value = shader_mat.get_shader_parameter(&StringName::from(&name));
-                    if let Some(json_val) = variant_to_json(&value) {
-                        params.insert(name, json_val);
-                    }
+        if let Ok(shader_mat) = material.clone().try_cast::<ShaderMaterial>()
+            && let Some(mut shader) = shader_mat.get_shader()
+        {
+            let uniform_list = shader.get_shader_uniform_list();
+            for entry in uniform_list.iter_shared() {
+                let dict = entry.to::<VarDictionary>();
+                let Some(name_var) = dict.get("name") else {
+                    continue;
+                };
+                let name = name_var.to::<GString>().to_string();
+                let value = shader_mat.get_shader_parameter(&StringName::from(&name));
+                if let Some(json_val) = variant_to_json(&value) {
+                    params.insert(name, json_val);
                 }
             }
         }

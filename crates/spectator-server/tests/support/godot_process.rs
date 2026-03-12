@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 /// Manages a headless Godot process for E2E tests.
 use std::fs::File;
 use std::io::Read;

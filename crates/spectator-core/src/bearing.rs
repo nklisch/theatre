@@ -251,7 +251,7 @@ mod tests {
         // Target directly ahead: -Z direction
         let target = [0.0, 0.0, -10.0];
         let bdeg = bearing_deg(&persp, target);
-        assert!(bdeg < 1.0 || bdeg > 359.0, "Expected ~0°, got {bdeg}");
+        assert!(!(1.0..=359.0).contains(&bdeg), "Expected ~0°, got {bdeg}");
     }
 
     #[test]
@@ -275,7 +275,7 @@ mod tests {
         // Target directly ahead (-Z) should produce ~0° bearing
         let bdeg = bearing_deg(&persp, [0.0, 0.0, -10.0]);
         assert!(
-            bdeg < 1.0 || bdeg > 359.0,
+            !(1.0..=359.0).contains(&bdeg),
             "ahead should be ~0°, got {bdeg}"
         );
 
@@ -330,7 +330,7 @@ mod tests {
     fn bearing_2d_ahead() {
         // Facing right (+X), target directly ahead
         let bdeg = bearing_deg_2d([0.0, 0.0], [1.0, 0.0], [10.0, 0.0]);
-        assert!(bdeg < 1.0 || bdeg > 359.0, "Expected ~0°, got {bdeg}");
+        assert!(!(1.0..=359.0).contains(&bdeg), "Expected ~0°, got {bdeg}");
     }
 
     #[test]

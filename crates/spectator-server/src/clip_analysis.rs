@@ -371,6 +371,7 @@ pub struct RangeMatch {
 }
 
 /// Search across a frame range for frames matching a spatial condition.
+#[allow(clippy::too_many_arguments)]
 pub fn query_range(
     db: &Connection,
     storage_path: &str,
@@ -895,7 +896,7 @@ pub fn trajectory(
         let (frame, time_ms, data) = row_result.map_err(sqlite_err)?;
 
         // Sample every Nth frame relative to from_frame
-        if (frame - from_frame) % interval != 0 {
+        if !(frame - from_frame).is_multiple_of(interval) {
             continue;
         }
 
@@ -1094,6 +1095,7 @@ fn query_markers_between(
 // ---------------------------------------------------------------------------
 
 /// Search the recording timeline for specific event types.
+#[allow(clippy::too_many_arguments)]
 pub fn find_event(
     db: &Connection,
     clip_id: &str,

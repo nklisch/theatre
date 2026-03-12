@@ -110,18 +110,18 @@ impl EditorHandle {
 /// Priority: DIRECTOR_EDITOR_PORT env var > project.godot setting > default 6551.
 pub fn resolve_editor_port(project_path: &Path) -> u16 {
     // 1. Env var
-    if let Ok(val) = std::env::var("DIRECTOR_EDITOR_PORT") {
-        if let Ok(port) = val.parse::<u16>() {
-            return port;
-        }
+    if let Ok(val) = std::env::var("DIRECTOR_EDITOR_PORT")
+        && let Ok(port) = val.parse::<u16>()
+    {
+        return port;
     }
 
     // 2. project.godot
     let godot_file = project_path.join("project.godot");
-    if let Ok(contents) = std::fs::read_to_string(&godot_file) {
-        if let Some(port) = parse_editor_port_from_project(&contents) {
-            return port;
-        }
+    if let Ok(contents) = std::fs::read_to_string(&godot_file)
+        && let Some(port) = parse_editor_port_from_project(&contents)
+    {
+        return port;
     }
 
     // 3. Default
@@ -139,10 +139,8 @@ fn parse_editor_port_from_project(contents: &str) -> Option<u16> {
             in_director_section = trimmed == "[director]";
             continue;
         }
-        if in_director_section {
-            if let Some(val) = trimmed.strip_prefix("connection/editor_port=") {
-                return val.trim().trim_matches('"').parse().ok();
-            }
+        if in_director_section && let Some(val) = trimmed.strip_prefix("connection/editor_port=") {
+            return val.trim().trim_matches('"').parse().ok();
         }
     }
     None

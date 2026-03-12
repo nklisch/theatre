@@ -1,4 +1,4 @@
-/// Default serde functions shared by snapshot, delta, and query parameter structs.
+//! Default serde functions shared by snapshot, delta, and query parameter structs.
 
 pub fn default_perspective() -> String {
     "camera".to_string()

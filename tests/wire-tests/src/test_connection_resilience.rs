@@ -29,11 +29,11 @@ fn connect_raw(port: u16) -> anyhow::Result<TcpStream> {
 #[test]
 #[ignore = "requires Godot binary and built GDExtension"]
 fn second_client_connects_after_clean_disconnect() {
-    /// Regression for Bug 3: after the active spectator-server disconnects cleanly,
-    /// the next connection must receive the Godot handshake and reach "connected" state.
-    ///
-    /// This guards against the GDExtension failing to call try_accept() on subsequent
-    /// connections after the first one drops.
+    // Regression for Bug 3: after the active spectator-server disconnects cleanly,
+    // the next connection must receive the Godot handshake and reach "connected" state.
+    //
+    // This guards against the GDExtension failing to call try_accept() on subsequent
+    // connections after the first one drops.
     let mut f1 = GodotFixture::start("test_scene_3d.tscn").unwrap();
     let port = f1.port;
 
@@ -70,12 +70,12 @@ fn second_client_connects_after_clean_disconnect() {
 #[test]
 #[ignore = "requires Godot binary and built GDExtension"]
 fn second_client_gets_handshake_after_first_disconnects_abnormally() {
-    /// Regression: even if the first client disconnects without a FIN (kill -9 style),
-    /// the GDExtension must eventually detect the dead connection and accept a new one.
-    ///
-    /// This test uses a 2-second wait after drop (enough for a clean OS-level close
-    /// even without FIN, because the process ends). For zombie connections that linger
-    /// longer, the idle timeout (Bug 3B, 60s) covers that case.
+    // Regression: even if the first client disconnects without a FIN (kill -9 style),
+    // the GDExtension must eventually detect the dead connection and accept a new one.
+    //
+    // This test uses a 2-second wait after drop (enough for a clean OS-level close
+    // even without FIN, because the process ends). For zombie connections that linger
+    // longer, the idle timeout (Bug 3B, 60s) covers that case.
     let mut f1 = GodotFixture::start("test_scene_3d.tscn").unwrap();
     let port = f1.port;
 
@@ -107,10 +107,10 @@ fn second_client_gets_handshake_after_first_disconnects_abnormally() {
 #[test]
 #[ignore = "requires Godot binary and built GDExtension"]
 fn dashcam_works_after_reconnect() {
-    /// Regression for snapshot Bug 5: after a disconnect + reconnect cycle, the
-    /// dashcam must still be buffering and respond to status queries.
-    ///
-    /// This guards against state leaks in SpectatorRecorder when connections reset.
+    // Regression for snapshot Bug 5: after a disconnect + reconnect cycle, the
+    // dashcam must still be buffering and respond to status queries.
+    //
+    // This guards against state leaks in SpectatorRecorder when connections reset.
     let mut f1 = GodotFixture::start("test_scene_3d.tscn").unwrap();
     let port = f1.port;
 
@@ -182,9 +182,9 @@ fn dashcam_works_after_reconnect() {
 #[test]
 #[ignore = "requires Godot binary and built GDExtension"]
 fn two_clients_both_receive_handshake_simultaneously() {
-    /// Multi-client: a second client must receive the Godot handshake immediately
-    /// while the first client is still connected. Both connections are live at the
-    /// same time — no need for the first to disconnect first.
+    // Multi-client: a second client must receive the Godot handshake immediately
+    // while the first client is still connected. Both connections are live at the
+    // same time — no need for the first to disconnect first.
     let mut f1 = GodotFixture::start("test_scene_3d.tscn").unwrap();
     let port = f1.port;
 

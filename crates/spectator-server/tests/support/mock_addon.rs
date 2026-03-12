@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 /// Mock TCP addon — acts as the Godot addon's TCP server side.
 ///
 /// Listens on an ephemeral port, completes the Spectator handshake, and

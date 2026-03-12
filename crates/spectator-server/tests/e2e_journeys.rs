@@ -132,14 +132,14 @@ async fn journey_explore_scene() {
     );
     // Check health=80 exported var
     let props = inspect["properties"].as_object();
-    if let Some(props) = props {
-        if let Some(health) = props.get("health") {
-            let health_val = health.as_f64().unwrap_or(0.0);
-            assert!(
-                (health_val - 80.0).abs() < 0.1,
-                "Scout health should be 80, got {health_val}"
-            );
-        }
+    if let Some(props) = props
+        && let Some(health) = props.get("health")
+    {
+        let health_val = health.as_f64().unwrap_or(0.0);
+        assert!(
+            (health_val - 80.0).abs() < 0.1,
+            "Scout health should be 80, got {health_val}"
+        );
     }
 
     // Step 6: spatial_query nearest from Player
@@ -262,9 +262,7 @@ async fn journey_debug_spatial_bug() {
                 .map(|p| p.contains("Scout"))
                 .unwrap_or(false)
         })
-        .expect(&format!(
-            "Scout should be in baseline snapshot, found: {entity_paths:?}"
-        ));
+        .unwrap_or_else(|| panic!("Scout should be in baseline snapshot, found: {entity_paths:?}"));
     let before_pos = scout_before["global_position"]
         .as_array()
         .expect("position array");
@@ -316,7 +314,7 @@ async fn journey_debug_spatial_bug() {
         // Compute displacement from delta_pos: sqrt(dx^2 + dy^2 + dz^2)
         let dp = scout_delta["delta_pos"].as_array();
         if let Some(dp) = dp {
-            let dx = dp.get(0).and_then(|v| v.as_f64()).unwrap_or(0.0);
+            let dx = dp.first().and_then(|v| v.as_f64()).unwrap_or(0.0);
             let dy = dp.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0);
             let dz = dp.get(2).and_then(|v| v.as_f64()).unwrap_or(0.0);
             let displacement = (dx * dx + dy * dy + dz * dz).sqrt();
@@ -357,14 +355,14 @@ async fn journey_debug_spatial_bug() {
         .expect(6, "spatial_inspect", json!({"node": "Enemies/Scout"}))
         .await;
     let props = inspect["properties"].as_object();
-    if let Some(props) = props {
-        if let Some(health) = props.get("health") {
-            let health_val = health.as_f64().unwrap_or(0.0);
-            assert!(
-                (health_val - 80.0).abs() < 0.1,
-                "Scout health should still be 80 before set_property, got {health_val}"
-            );
-        }
+    if let Some(props) = props
+        && let Some(health) = props.get("health")
+    {
+        let health_val = health.as_f64().unwrap_or(0.0);
+        assert!(
+            (health_val - 80.0).abs() < 0.1,
+            "Scout health should still be 80 before set_property, got {health_val}"
+        );
     }
 
     // Step 7: set health to 25
@@ -410,14 +408,14 @@ async fn journey_debug_spatial_bug() {
         .expect(10, "spatial_inspect", json!({"node": "Enemies/Scout"}))
         .await;
     let props2 = inspect2["properties"].as_object();
-    if let Some(props2) = props2 {
-        if let Some(health) = props2.get("health") {
-            let health_val = health.as_f64().unwrap_or(80.0);
-            assert!(
-                (health_val - 25.0).abs() < 0.1,
-                "Scout health should be 25 after set_property, got {health_val}"
-            );
-        }
+    if let Some(props2) = props2
+        && let Some(health) = props2.get("health")
+    {
+        let health_val = health.as_f64().unwrap_or(80.0);
+        assert!(
+            (health_val - 25.0).abs() < 0.1,
+            "Scout health should be 25 after set_property, got {health_val}"
+        );
     }
 }
 

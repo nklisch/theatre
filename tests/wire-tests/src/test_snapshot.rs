@@ -21,7 +21,7 @@ fn snapshot_returns_entities_with_positions() {
 
     let entities = data["entities"].as_array().expect("entities array");
     assert!(
-        entities.len() >= 1,
+        !entities.is_empty(),
         "expected at least 1 entity, got {}",
         entities.len()
     );

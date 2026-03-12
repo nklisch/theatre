@@ -157,9 +157,8 @@ fn inspect_resources_returns_collision_shapes() {
         "CapsuleShape3D",
         "expected CapsuleShape3D"
     );
-    assert_eq!(
-        shape["disabled"].as_bool().unwrap_or(true),
-        false,
+    assert!(
+        !shape["disabled"].as_bool().unwrap_or(true),
         "shape should not be disabled"
     );
     assert!(

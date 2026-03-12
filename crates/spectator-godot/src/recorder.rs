@@ -207,11 +207,11 @@ impl INode for SpectatorRecorder {
         if self.dashcam_config.screenshot_enabled {
             let now_ms = current_time_ms();
             let interval_ms = (self.dashcam_config.screenshot_interval_sec * 1000.0) as u64;
-            if now_ms >= self.last_screenshot_ms + interval_ms {
-                if let Some(screenshot) = self.do_screenshot_capture() {
-                    self.screenshot_ingest(screenshot);
-                    self.last_screenshot_ms = now_ms;
-                }
+            if now_ms >= self.last_screenshot_ms + interval_ms
+                && let Some(screenshot) = self.do_screenshot_capture()
+            {
+                self.screenshot_ingest(screenshot);
+                self.last_screenshot_ms = now_ms;
             }
         }
 
@@ -402,25 +402,25 @@ impl SpectatorRecorder {
         if let Some(b) = v.get("screenshot_enabled").and_then(|x| x.as_bool()) {
             self.dashcam_config.screenshot_enabled = b;
         }
-        if let Some(f) = v.get("screenshot_interval_sec").and_then(|x| x.as_f64()) {
-            if f > 0.0 {
-                self.dashcam_config.screenshot_interval_sec = f;
-            }
+        if let Some(f) = v.get("screenshot_interval_sec").and_then(|x| x.as_f64())
+            && f > 0.0
+        {
+            self.dashcam_config.screenshot_interval_sec = f;
         }
-        if let Some(f) = v.get("screenshot_quality").and_then(|x| x.as_f64()) {
-            if (0.0..=1.0).contains(&f) {
-                self.dashcam_config.screenshot_quality = f as f32;
-            }
+        if let Some(f) = v.get("screenshot_quality").and_then(|x| x.as_f64())
+            && (0.0..=1.0).contains(&f)
+        {
+            self.dashcam_config.screenshot_quality = f as f32;
         }
-        if let Some(n) = v.get("screenshot_max_dimension").and_then(|x| x.as_u64()) {
-            if n > 0 {
-                self.dashcam_config.screenshot_max_dimension = n as u32;
-            }
+        if let Some(n) = v.get("screenshot_max_dimension").and_then(|x| x.as_u64())
+            && n > 0
+        {
+            self.dashcam_config.screenshot_max_dimension = n as u32;
         }
-        if let Some(n) = v.get("screenshot_byte_cap_mb").and_then(|x| x.as_u64()) {
-            if n > 0 {
-                self.dashcam_config.screenshot_byte_cap_mb = n as u32;
-            }
+        if let Some(n) = v.get("screenshot_byte_cap_mb").and_then(|x| x.as_u64())
+            && n > 0
+        {
+            self.dashcam_config.screenshot_byte_cap_mb = n as u32;
         }
         true
     }
@@ -748,9 +748,7 @@ impl SpectatorRecorder {
 
     /// Capture one frame of entity data and return it (without pushing to any buffer).
     fn do_capture(&mut self) -> Option<CapturedFrame> {
-        let Some(ref collector) = self.collector else {
-            return None;
-        };
+        let collector = self.collector.as_ref()?;
 
         let params = GetSnapshotDataParams {
             perspective: PerspectiveParam::Camera,
@@ -1123,21 +1121,21 @@ impl SpectatorRecorder {
                 .chain(post_screenshots.iter())
                 .collect();
 
-            if !all_screenshots.is_empty() {
-                if let Ok(mut stmt) = tx.prepare_cached(
+            if !all_screenshots.is_empty()
+                && let Ok(mut stmt) = tx.prepare_cached(
                     "INSERT OR REPLACE INTO screenshots \
                      (frame, timestamp_ms, image_data, width, height) \
                      VALUES (?1, ?2, ?3, ?4, ?5)",
-                ) {
-                    for s in &all_screenshots {
-                        let _ = stmt.execute(rusqlite::params![
-                            s.frame,
-                            s.timestamp_ms,
-                            &s.jpeg_data,
-                            s.width,
-                            s.height
-                        ]);
-                    }
+                )
+            {
+                for s in &all_screenshots {
+                    let _ = stmt.execute(rusqlite::params![
+                        s.frame,
+                        s.timestamp_ms,
+                        &s.jpeg_data,
+                        s.width,
+                        s.height
+                    ]);
                 }
             }
 
@@ -1351,7 +1349,7 @@ mod tests {
     fn screenshot_ring_evicts_at_byte_cap() {
         let mut ring: VecDeque<CapturedScreenshot> = VecDeque::new();
         let mut ring_bytes = 0usize;
-        let byte_cap = 1usize * 1024 * 1024; // 1 MB
+        let byte_cap = 1024 * 1024; // 1 MB
 
         // Each screenshot is 20KB; 100 of them = 2MB, should be evicted to ~1MB
         for i in 0..100u64 {
@@ -1408,28 +1406,27 @@ mod tests {
         if let Some(b) = json.get("screenshot_enabled").and_then(|x| x.as_bool()) {
             cfg.screenshot_enabled = b;
         }
-        if let Some(f) = json.get("screenshot_interval_sec").and_then(|x| x.as_f64()) {
-            if f > 0.0 {
-                cfg.screenshot_interval_sec = f;
-            }
+        if let Some(f) = json.get("screenshot_interval_sec").and_then(|x| x.as_f64())
+            && f > 0.0
+        {
+            cfg.screenshot_interval_sec = f;
         }
-        if let Some(f) = json.get("screenshot_quality").and_then(|x| x.as_f64()) {
-            if (0.0..=1.0).contains(&f) {
-                cfg.screenshot_quality = f as f32;
-            }
+        if let Some(f) = json.get("screenshot_quality").and_then(|x| x.as_f64())
+            && (0.0..=1.0).contains(&f)
+        {
+            cfg.screenshot_quality = f as f32;
         }
         if let Some(n) = json
             .get("screenshot_max_dimension")
             .and_then(|x| x.as_u64())
+            && n > 0
         {
-            if n > 0 {
-                cfg.screenshot_max_dimension = n as u32;
-            }
+            cfg.screenshot_max_dimension = n as u32;
         }
-        if let Some(n) = json.get("screenshot_byte_cap_mb").and_then(|x| x.as_u64()) {
-            if n > 0 {
-                cfg.screenshot_byte_cap_mb = n as u32;
-            }
+        if let Some(n) = json.get("screenshot_byte_cap_mb").and_then(|x| x.as_u64())
+            && n > 0
+        {
+            cfg.screenshot_byte_cap_mb = n as u32;
         }
 
         assert!(!cfg.screenshot_enabled);

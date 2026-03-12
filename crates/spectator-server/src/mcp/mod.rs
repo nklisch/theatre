@@ -508,10 +508,10 @@ impl SpectatorServer {
                     s.delta_engine
                         .store_snapshot(raw_data.frame, current_snapshots);
 
-                    if let Ok(delta_json) = delta::build_delta_json(&delta_result, &triggers) {
-                        if let serde_json::Value::Object(ref mut map) = response {
-                            map.insert("delta".into(), delta_json);
-                        }
+                    if let Ok(delta_json) = delta::build_delta_json(&delta_result, &triggers)
+                        && let serde_json::Value::Object(ref mut map) = response
+                    {
+                        map.insert("delta".into(), delta_json);
                     }
                 }
             } else {

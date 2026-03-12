@@ -348,7 +348,7 @@ async fn test_teleport_reflected_in_subsequent_snapshot() {
             "execute_action" if params["action"].as_str() == Some("teleport") => {
                 let arr = params["position"].as_array();
                 if let Some(a) = arr {
-                    let x = a.get(0).and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    let x = a.first().and_then(|v| v.as_f64()).unwrap_or(0.0);
                     let y = a.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0);
                     let z = a.get(2).and_then(|v| v.as_f64()).unwrap_or(0.0);
                     *pos.lock().unwrap() = [x, y, z];
@@ -417,7 +417,7 @@ async fn test_teleport_then_snapshot_updates_spatial_index() {
         match method {
             "execute_action" if params["action"].as_str() == Some("teleport") => {
                 if let Some(a) = params["position"].as_array() {
-                    let x = a.get(0).and_then(|v| v.as_f64()).unwrap_or(0.0);
+                    let x = a.first().and_then(|v| v.as_f64()).unwrap_or(0.0);
                     let y = a.get(1).and_then(|v| v.as_f64()).unwrap_or(0.0);
                     let z = a.get(2).and_then(|v| v.as_f64()).unwrap_or(0.0);
                     *pos.lock().unwrap() = [x, y, z];

@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 /// Full-stack E2E harness: real Godot + real SpectatorServer.
 use rmcp::model::{CallToolResult, ErrorData as McpError};
 use spectator_server::{

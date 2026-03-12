@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 /// Canonical test scene data with known positions.
 use serde_json::json;
 use spectator_protocol::query::{EntityData, PerspectiveData, SnapshotResponse};

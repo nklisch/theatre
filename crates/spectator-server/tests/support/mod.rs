@@ -82,6 +82,7 @@ pub async fn dispatch_tool_raw(
     }
 }
 
+#[allow(dead_code)]
 /// Dispatch a tool call and return the full CallToolResult.
 /// For clips (which returns native CallToolResult), calls directly.
 /// For all other tools, wraps the string result in a single-text-block result.
