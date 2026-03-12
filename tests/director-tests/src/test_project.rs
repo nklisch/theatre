@@ -52,7 +52,7 @@ fn uid_update_project_scans_and_reports() {
         .unwrap()
         .unwrap_data();
 
-    assert!(data["files_scanned"].as_u64().unwrap() >= 0);
+    assert!(data["files_scanned"].as_u64().is_some());
     assert!(data.get("uids_registered").is_some());
 }
 

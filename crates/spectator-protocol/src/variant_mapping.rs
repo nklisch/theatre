@@ -78,7 +78,10 @@ mod tests {
 
     #[test]
     fn null_maps_to_nil() {
-        assert_eq!(VariantTarget::from_json(&json!(null)).unwrap(), VariantTarget::Nil);
+        assert_eq!(
+            VariantTarget::from_json(&json!(null)).unwrap(),
+            VariantTarget::Nil
+        );
     }
 
     #[test]
@@ -116,8 +119,8 @@ mod tests {
     #[test]
     fn float_maps_to_float() {
         assert_eq!(
-            VariantTarget::from_json(&json!(3.14)).unwrap(),
-            VariantTarget::Float(3.14)
+            VariantTarget::from_json(&json!(1.5)).unwrap(),
+            VariantTarget::Float(1.5)
         );
     }
 
