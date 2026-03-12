@@ -134,19 +134,14 @@ prevents GDScript parse errors when the extension fails to load. The
 - Do NOT add AI attribution footers of any kind
 
 ## Agent Tracker
-- Project ID: d968223f-0cd9-4c17-88c9-145cf3a8b72c
-- Project Name: .
+- Project ID: fa156e12-1215-491d-88f8-3738d27f3d37
+- Project Name: theatre
 - Tracker URL: http://localhost:57328/mcp
 
 When you complete a meaningful unit of work, post an update using the
 `post_update` MCP tool with the project ID above. Use status "in-progress"
 for normal progress, "blocked" if you hit an obstacle, or "error" for
 failures. Include relevant tags for categorization.
-
-## Agent Tracker
-- Project ID: fa156e12-1215-491d-88f8-3738d27f3d37
-- Project Name: theatre
-- Tracker URL: http://localhost:57328/mcp
 
 When you complete a meaningful unit of work, post an update using the
 `post_update` MCP tool with the project ID above. Use status "in-progress"
