@@ -19,8 +19,9 @@ crates/
   director/             — Director MCP binary
 addons/spectator/       — Spectator Godot addon (GDScript + GDExtension manifest)
 addons/director/        — Director Godot addon (GDScript)
-docs/                   — Design documents
-docs/design/            — Implementation designs per milestone
+docs/                   — Design documents & audit report
+docs/design/            — Active (in-progress) designs
+docs/design/completed/  — Archived completed designs (see warning below)
 tests/
   wire-tests/           — Spectator E2E tests
   director-tests/       — Director E2E tests
@@ -139,6 +140,21 @@ prevents GDScript parse errors when the extension fails to load. The
 - director crate is the MCP binary; addon is pure GDScript
 - Director talks to Godot headless via subprocess or daemon TCP connection
 - See `docs/director-spec.md` for full Director architecture
+
+## Documentation Trust Levels
+
+- **Code is always ground truth.** When docs and code disagree, the code wins.
+- **`docs/design/completed/`**: Archived design docs for implemented features.
+  These reflect the *design intent at planning time*, NOT the current
+  implementation. Field names, parameter lists, response shapes, and
+  architectural details may have diverged during implementation. **Never treat
+  completed designs as accurate API reference.** Always verify against the
+  actual Rust structs and handler code.
+- **`site/`**: Public-facing docs (VitePress). Being aligned with code as of
+  the docs audit (2026-03-13) — see `docs/DOCS-AUDIT-REPORT.md` for the full
+  discrepancy list and fix plan.
+- **`docs/design/`** (non-completed): Active designs for in-progress work.
+  These are closer to current intent but still require code verification.
 
 ## Git Conventions
 
