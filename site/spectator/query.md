@@ -1,4 +1,7 @@
 <script setup>
+import { data } from '../.vitepress/data/tools.data'
+const params = data.params['spatial_query'] ?? []
+
 const messages0 = [
   { role: 'human', text: `The player is not picking up coins. Can you check if any coins are actually near the player?` },
   { role: 'agent', text: `Radius query returned 2 Area3D nodes within 3 meters: Coin_04 at 1.8m and Coin_07 at 2.6m. The coins are physically close. Let me check the collision configuration.` },
@@ -208,19 +211,7 @@ Describe the spatial relationship between two specific nodes.
 
 ## All parameters
 
-| Parameter | Type | Applies to | Description |
-|---|---|---|---|
-| `query_type` | `string` | all | Query type: `nearest`, `radius`, `area`, `raycast`, `path_distance`, `relationship` |
-| `from` | `string \| [x,y,z]` | all except `area` | Reference point, node, or start node |
-| `to` | `string \| [x,y,z]` | `path_distance`, `relationship` | End node or point |
-| `direction` | `[x,y,z]` | `raycast` | Normalized ray direction |
-| `radius` | `float` | `radius` | Search radius in world units |
-| `min` | `[x,y,z]` | `area` | Bounding box minimum corner |
-| `max` | `[x,y,z]` | `area` | Bounding box maximum corner |
-| `k` | `integer` | `nearest`, `radius` | Max results to return (default: 10) |
-| `max_distance` | `float` | `raycast` | Max ray length (default: 100.0) |
-| `collision_mask` | `integer` | `raycast` | Layer bitmask for ray collision |
-| `class_filter` | `string[]` | `nearest`, `radius`, `area` | Filter to only these Godot classes |
+<ParamTable :params="params" />
 
 ## Example conversation
 

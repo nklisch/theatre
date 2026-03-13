@@ -3,8 +3,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vitepress dev",
-    "build": "vitepress build",
+    "generate": "cd .. && ./site/scripts/generate-schema.sh",
+    "dev": "npm run generate && vitepress dev",
+    "build": "npm run generate && vitepress build",
     "preview": "vitepress preview"
   },
   "devDependencies": {

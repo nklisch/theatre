@@ -1,4 +1,12 @@
 <script setup>
+import { data } from '../.vitepress/data/tools.data'
+
+const resource_read = data.params['resource_read'] ?? []
+const material_create = data.params['material_create'] ?? []
+const shape_create = data.params['shape_create'] ?? []
+const style_box_create = data.params['style_box_create'] ?? []
+const resource_duplicate = data.params['resource_duplicate'] ?? []
+
 const messages0 = [
   { role: 'human', text: `Create a bouncy physics material for the player and assign it.` },
   { role: 'agent', text: `PhysicsMaterial created and saved at assets/physics/player_bouncy.tres. Assigning to the player.` },
@@ -26,6 +34,8 @@ Read properties from an existing saved resource.
   "properties": ["albedo_color", "roughness", "metallic"]
 }
 ```
+
+<ParamTable :params="resource_read" />
 
 **Response:**
 ```json
@@ -58,6 +68,8 @@ Create a new material resource and save it to disk.
 }
 ```
 
+<ParamTable :params="material_create" />
+
 **Response:**
 ```json
 {
@@ -83,6 +95,8 @@ Create a collision shape resource.
 }
 ```
 
+<ParamTable :params="shape_create" />
+
 ### `style_box_create`
 
 Create a StyleBox resource (used by UI controls).
@@ -101,6 +115,8 @@ Create a StyleBox resource (used by UI controls).
 }
 ```
 
+<ParamTable :params="style_box_create" />
+
 ### `resource_duplicate`
 
 Duplicate an existing resource file.
@@ -113,6 +129,8 @@ Duplicate an existing resource file.
   "dest_path": "assets/materials/enemy_blue.tres"
 }
 ```
+
+<ParamTable :params="resource_duplicate" />
 
 **Response:**
 ```json
@@ -167,13 +185,6 @@ Used by `MeshInstance3D.material_override` or surface materials:
     "normal_enabled": true
   }
 }
-```
-
-### Curves and animation
-
-```json
-{ "type": "Curve", "properties": {} }
-{ "type": "Animation", "properties": { "length": 1.0, "loop_mode": 1 } }
 ```
 
 ## Example conversation

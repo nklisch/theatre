@@ -1,4 +1,7 @@
 <script setup>
+import { data } from '../.vitepress/data/tools.data'
+const params = data.params['spatial_watch'] ?? []
+
 const messages0 = [
   { role: 'human', text: `I want to monitor the player health and position during this boss fight. Set that up.` },
   { role: 'agent', text: `Watch created (watch_id: w_a1b2c3). I am now tracking Player.position, .velocity, and .health. Do the boss fight and tell me when something goes wrong — I will check the delta.` },
@@ -27,13 +30,7 @@ Do **not** set a watch on every node in your scene — watches add tracking over
 
 ## Parameters
 
-### Creating a watch
-
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `action` | `"create"` | required | Create a new watch |
-| `node` | `string` | required | Node name or scene path to watch |
-| `track` | `string[]` | `["position", "velocity"]` | Which properties to track |
+<ParamTable :params="params" />
 
 ### Other actions
 

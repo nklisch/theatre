@@ -1,3 +1,9 @@
+<script setup>
+import { data } from '../.vitepress/data/tools.data'
+
+const visual_shader_create = data.params['visual_shader_create'] ?? []
+</script>
+
 # Shaders
 
 Create VisualShader node graphs and set shader uniform values on materials.
@@ -19,10 +25,7 @@ Create a new VisualShader resource (node-graph based shader).
 }
 ```
 
-| Parameter | Type | Description |
-|---|---|---|
-| `save_path` | `string` | Path to save the VisualShader resource |
-| `shader_mode` | `string` | `"spatial"`, `"canvas_item"`, or `"particles"` (default: `"spatial"`) |
+<ParamTable :params="visual_shader_create" />
 
 **Response:**
 ```json

@@ -1,4 +1,13 @@
 <script setup>
+import { data } from '../.vitepress/data/tools.data'
+
+const tilemap_set_cells = data.params['tilemap_set_cells'] ?? []
+const tilemap_get_cells = data.params['tilemap_get_cells'] ?? []
+const tilemap_clear = data.params['tilemap_clear'] ?? []
+const gridmap_set_cells = data.params['gridmap_set_cells'] ?? []
+const gridmap_get_cells = data.params['gridmap_get_cells'] ?? []
+const gridmap_clear = data.params['gridmap_clear'] ?? []
+
 const messages0 = [
   { role: 'human', text: `Build a simple platformer level in the TileMap. A floor at row 0 from columns 0-30, and three floating platforms.` },
   { role: 'agent', text: `Floor placed (30 tiles). Adding the three platforms.` },
@@ -26,40 +35,14 @@ Set one or more specific tiles.
   "node": "World/TileMap",
   "cells": [
     { "position": [0, 0], "source_id": 0, "atlas_coords": [0, 0], "layer": 0 },
-    { "position": [1, 0], "source_id": 0, "atlas_coords": [0, 0], "layer": 0 },
-    { "position": [2, 0], "source_id": 0, "atlas_coords": [0, 0], "layer": 0 },
-    { "position": [0, -1], "source_id": 0, "atlas_coords": [1, 0], "layer": 0 }
+    { "position": [1, 0], "source_id": 0, "atlas_coords": [0, 0], "layer": 0 }
   ]
 }
 ```
 
-| Parameter | Type | Description |
-|---|---|---|
-| `node` | `string` | Path to the TileMap node |
-| `cells` | `array` | List of tile placements |
-| `cells[].position` | `[col, row]` | Tile grid coordinates |
-| `cells[].source_id` | `integer` | TileSet source ID (which tileset to use) |
-| `cells[].atlas_coords` | `[x, y]` | Which tile in the atlas (0-based) |
-| `cells[].layer` | `integer` | TileMap layer index (default: 0) |
+<ParamTable :params="tilemap_set_cells" />
 
-To erase a tile, set `atlas_coords` to `[-1, -1]`:
-```json
-{ "position": [5, 3], "source_id": 0, "atlas_coords": [-1, -1], "layer": 0 }
-```
-
-To fill a large uniform region (e.g. a floor), pass all cell positions in the `cells` array. For 20 tiles at row 0:
-```json
-{
-  "op": "tilemap_set_cells",
-  "node": "World/TileMap",
-  "cells": [
-    { "position": [0, 0], "source_id": 0, "atlas_coords": [0, 0] },
-    { "position": [1, 0], "source_id": 0, "atlas_coords": [0, 0] },
-    ...
-    { "position": [19, 0], "source_id": 0, "atlas_coords": [0, 0] }
-  ]
-}
-```
+To erase a tile, set `atlas_coords` to `[-1, -1]`.
 
 **Response:**
 ```json
@@ -85,15 +68,15 @@ Read tile data from a region.
 }
 ```
 
+<ParamTable :params="tilemap_get_cells" />
+
 **Response:**
 ```json
 {
   "op": "tilemap_get_cells",
   "region": { "min": [0, -5], "max": [20, 5] },
   "cells": [
-    { "position": [0, 0], "source_id": 0, "atlas_coords": [0, 0] },
-    { "position": [1, 0], "source_id": 0, "atlas_coords": [0, 0] },
-    { "position": [3, -1], "source_id": 0, "atlas_coords": [2, 1] }
+    { "position": [0, 0], "source_id": 0, "atlas_coords": [0, 0] }
   ]
 }
 ```
@@ -114,6 +97,8 @@ Remove all tiles from a layer.
 }
 ```
 
+<ParamTable :params="tilemap_clear" />
+
 ## GridMap (3D)
 
 `GridMap` is Godot's 3D tile system, using a 3D integer grid. Director can set individual cells or regions.
@@ -130,19 +115,12 @@ Set one or more cells in a GridMap.
   "node": "World/GridMap",
   "cells": [
     { "position": [0, 0, 0], "item": 0, "orientation": 0 },
-    { "position": [1, 0, 0], "item": 0, "orientation": 0 },
-    { "position": [2, 0, 0], "item": 0, "orientation": 0 },
-    { "position": [0, 1, 0], "item": 2, "orientation": 0 },
-    { "position": [2, 1, 0], "item": 2, "orientation": 0 }
+    { "position": [1, 0, 0], "item": 0, "orientation": 0 }
   ]
 }
 ```
 
-| Parameter | Type | Description |
-|---|---|---|
-| `cells[].position` | `[x, y, z]` | 3D grid coordinates (integer) |
-| `cells[].item` | `integer` | MeshLibrary item index (-1 to erase) |
-| `cells[].orientation` | `integer` | Rotation (0-23, mapping to 24 orientations) |
+<ParamTable :params="gridmap_set_cells" />
 
 **Orientation values**: Godot's GridMap uses integer orientations 0-23 for each of the 24 possible orthogonal rotations. Common values: 0=default, 10=rotated 90° around Y, 16=rotated 180° around Y, 22=rotated 270° around Y.
 
@@ -169,16 +147,7 @@ Read cells in a region.
 }
 ```
 
-**Response:**
-```json
-{
-  "op": "gridmap_get_cells",
-  "cells": [
-    { "position": [0, 0, 0], "item": 0, "orientation": 0 },
-    { "position": [1, 0, 0], "item": 0, "orientation": 0 }
-  ]
-}
-```
+<ParamTable :params="gridmap_get_cells" />
 
 ### `gridmap_clear`
 
@@ -192,6 +161,8 @@ Remove all cells from the GridMap.
   "node": "World/GridMap"
 }
 ```
+
+<ParamTable :params="gridmap_clear" />
 
 ## Example conversation: Building a platformer level
 

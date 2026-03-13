@@ -1,4 +1,8 @@
 <script setup>
+import { data } from '../.vitepress/data/tools.data'
+
+const batch = data.params['batch'] ?? []
+
 const messages0 = [
   { role: 'human', text: `Build the intro platform section: floor, three step platforms at increasing heights, and a point light.` },
   { role: 'agent', text: `Building in one batch to minimize round-trips. Sending 4 operations at once.` },
@@ -48,35 +52,6 @@ Run a list of operations atomically in sequence.
         "name": "Floor",
         "class": "StaticBody3D"
       }
-    },
-    {
-      "operation": "node_add",
-      "params": {
-        "scene": "scenes/room_b.tscn",
-        "parent": "RoomB/Floor",
-        "name": "CollisionShape3D",
-        "class": "CollisionShape3D"
-      }
-    },
-    {
-      "operation": "node_add",
-      "params": {
-        "scene": "scenes/room_b.tscn",
-        "parent": "RoomB/Floor",
-        "name": "MeshInstance3D",
-        "class": "MeshInstance3D"
-      }
-    },
-    {
-      "operation": "node_set_properties",
-      "params": {
-        "scene": "scenes/room_b.tscn",
-        "node": "RoomB/Floor",
-        "properties": {
-          "collision_layer": 4,
-          "collision_mask": 0
-        }
-      }
     }
   ]
 }
@@ -84,11 +59,7 @@ Run a list of operations atomically in sequence.
 
 ### Parameters
 
-| Parameter | Type | Description |
-|---|---|---|
-| `project_path` | `string` | Applied to all operations (no need to repeat in each) |
-| `operations` | `array` | List of operation objects |
-| `stop_on_error` | `boolean` | Default `true`. If `false`, continue on errors. |
+<ParamTable :params="batch" />
 
 Note: Each operation in the `operations` array does **not** need `project_path` — it is inherited from the batch wrapper.
 
@@ -102,30 +73,12 @@ Note: Each operation in the `operations` array does **not** need `project_path` 
   "failed": 0,
   "results": [
     { "operation": "scene_create", "path": "scenes/room_b.tscn", "result": "ok" },
-    { "operation": "node_add", "name": "Floor", "result": "ok" },
-    { "operation": "node_add", "name": "CollisionShape3D", "result": "ok" },
-    { "operation": "node_add", "name": "MeshInstance3D", "result": "ok" },
-    { "operation": "node_set_properties", "node": "RoomB/Floor", "result": "ok" }
+    { "operation": "node_add", "name": "Floor", "result": "ok" }
   ]
 }
 ```
 
-If an error occurs with `stop_on_error: true` (default), the batch stops at the failing operation and the rest are not executed:
-
-```json
-{
-  "op": "batch",
-  "total": 5,
-  "succeeded": 2,
-  "failed": 1,
-  "error_at": 2,
-  "results": [
-    { "operation": "scene_create", "result": "ok" },
-    { "operation": "node_add", "name": "Floor", "result": "ok" },
-    { "operation": "node_add", "name": "CollisionShape3D", "result": "error", "error": "Parent node 'RoomB/Floor' not found" }
-  ]
-}
-```
+If an error occurs with `stop_on_error: true` (default), the batch stops at the failing operation and the rest are not executed.
 
 ## Example: Building a platform level
 

@@ -6,6 +6,8 @@ import ScenarioCard from './components/ScenarioCard.vue'
 import AgentConversation from './components/AgentConversation.vue'
 import ArchDiagram from './components/ArchDiagram.vue'
 import HeroSection from './components/HeroSection.vue'
+import ParamTable from './components/ParamTable.vue'
+import ResponseSchema from './components/ResponseSchema.vue'
 
 export default {
   extends: DefaultTheme,
@@ -15,5 +17,7 @@ export default {
     app.component('AgentConversation', AgentConversation)
     app.component('ArchDiagram', ArchDiagram)
     app.component('HeroSection', HeroSection)
+    app.component('ParamTable', ParamTable)
+    app.component('ResponseSchema', ResponseSchema)
   }
 } satisfies Theme

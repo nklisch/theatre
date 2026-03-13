@@ -1,4 +1,7 @@
 <script setup>
+import { data } from '../.vitepress/data/tools.data'
+const params = data.params['scene_tree'] ?? []
+
 const messages0 = [
   { role: 'human', text: `I am new to this project. What does the scene look like?` },
   { role: 'agent', text: `The scene has 4 top-level groups: Player (CharacterBody3D with 5 children including Camera3D and AnimationPlayer), Enemies (Node3D containing 3 CharacterBody3D enemies, each with NavigationAgent3D and an Area3D detection zone), Level (StaticBody3D ground, walls, and a TileMap), and UI (CanvasLayer with HUD). There are 47 total nodes.` },
@@ -31,13 +34,7 @@ Use `spatial_snapshot` when you need spatial data. Use `scene_tree` when you nee
 
 ## Parameters
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `root` | `string` | `"/"` | Start from this node's subtree |
-| `max_depth` | `integer` | `5` | Maximum depth of tree to return |
-| `find_by` | `string` | `null` | Filter nodes by property name |
-| `find_value` | `any` | `null` | Match value for `find_by` |
-| `show_properties` | `string[]` | `null` | Include these properties inline (compact form) |
+<ParamTable :params="params" />
 
 ### `root`
 
@@ -92,36 +89,6 @@ Add a few key properties inline without switching to `spatial_snapshot`:
               { "name": "MuzzleFlash", "class": "GPUParticles3D", "children": [] }
             ]
           }
-        ]
-      },
-      {
-        "name": "Enemies",
-        "class": "Node3D",
-        "children": [
-          {
-            "name": "Enemy_0",
-            "class": "CharacterBody3D",
-            "children": [
-              { "name": "EnemyDetectionZone", "class": "Area3D", "children": [] },
-              { "name": "NavigationAgent3D", "class": "NavigationAgent3D", "children": [] }
-            ]
-          }
-        ]
-      },
-      {
-        "name": "Level",
-        "class": "Node3D",
-        "children": [
-          { "name": "Ground", "class": "StaticBody3D", "children": [] },
-          { "name": "Walls", "class": "StaticBody3D", "children": [] },
-          { "name": "TileMap", "class": "TileMap", "children": [] }
-        ]
-      },
-      {
-        "name": "UI",
-        "class": "CanvasLayer",
-        "children": [
-          { "name": "HUD", "class": "Control", "children": [] }
         ]
       }
     ]

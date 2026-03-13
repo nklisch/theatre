@@ -19,6 +19,38 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry and build
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-docs-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Validate docs schema
+        run: |
+          cargo build -p theatre-docs-gen
+          cargo run -p theatre-docs-gen > /tmp/tools.json
+          python3 -c "
+          import json
+          tools = json.load(open('/tmp/tools.json'))
+          assert len(tools) >= 42, f'Expected 42+ tools, got {len(tools)}'
+          for t in tools:
+              assert 'name' in t, f'Tool missing name'
+              assert 'input_schema' in t, f'{t[\"name\"]} missing input_schema'
+              schema = t['input_schema']
+              assert 'properties' in schema or schema.get('type') == 'object', \
+                  f'{t[\"name\"]} schema has no properties'
+          print(f'Schema validation passed: {len(tools)} tools')
+          "
+
       - uses: actions/setup-node@v5
         with:
           node-version: 22

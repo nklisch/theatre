@@ -1,4 +1,8 @@
 <script setup>
+import { data } from '../.vitepress/data/tools.data'
+const tool = data.tools.find(t => t.name === 'spatial_snapshot')
+const params = data.params['spatial_snapshot'] ?? []
+
 const messages0 = [
   { role: 'human', text: `The game is running. What does my scene look like right now?` },
   { role: 'agent', text: `Let me take a spatial snapshot to see the current state.` },
@@ -25,13 +29,7 @@ Do **not** use `spatial_snapshot` repeatedly to detect changes — use `spatial_
 
 ## Parameters
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `detail` | `"summary" \| "standard" \| "full"` | `"summary"` | How much data to include per node |
-| `token_budget` | `integer` | `2000` | Approximate token budget for the response |
-| `focal_node` | `string` | `null` | Scene path of a node to prioritize in the response |
-| `class_filter` | `string[]` | `null` | Only include nodes of these Godot classes |
-| `include_properties` | `string[]` | `null` | Additional properties to include alongside standard fields |
+<ParamTable :params="params" />
 
 ### `detail` values
 

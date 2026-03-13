@@ -1,4 +1,7 @@
 <script setup>
+import { data } from '../.vitepress/data/tools.data'
+const params = data.params['clips'] ?? []
+
 const messages0 = [
   { role: 'human', text: `I recorded the tunneling bug. The marker was at frame 337. What was happening?` },
   { role: 'agent', text: `Found clip chase_bug_01 with 512 frames and 1 marker at frame 337 labeled player_clips_wall. Querying the frames around the marker.` },
@@ -18,6 +21,10 @@ The `clips` tool is the backbone of the dashcam workflow. It writes every physic
 - **Post-mortem analysis**: something went wrong in a playtest — query what happened
 - **Regression testing**: record expected behavior, compare against future runs
 - **Long sessions**: in-memory ring buffer holds ~10 seconds; recordings hold hours
+
+## Parameters
+
+<ParamTable :params="params" />
 
 ## Actions
 
@@ -110,13 +117,6 @@ List all available clips.
       "markers": [
         { "frame": 337, "label": "player_clips_wall" }
       ]
-    },
-    {
-      "clip_id": "clip_1741987200",
-      "frame_count": 1800,
-      "duration_ms": 30000,
-      "created_at": "2026-03-12T13:00:00Z",
-      "markers": []
     }
   ]
 }
@@ -206,33 +206,6 @@ Use `condition` to include only frames where something specific is true:
 Other condition types:
 - `{ "type": "velocity_above", "node": "Player", "threshold": 20.0 }` — frames where the node's speed exceeds threshold
 - `{ "type": "property_equals", "node": "Player", "property": "on_floor", "value": false }` — frames where a property matches a value
-
-**Response:**
-```json
-{
-  "clip_id": "chase_bug_01",
-  "start_frame": 325,
-  "end_frame": 350,
-  "frame_count": 26,
-  "frames": [
-    {
-      "frame": 325,
-      "timestamp_ms": 5417,
-      "nodes": { "Player": { "global_position": [5.1, 0.0, -3.1], "velocity": [8.0, 0.0, 0.0] } }
-    },
-    {
-      "frame": 330,
-      "timestamp_ms": 5500,
-      "nodes": { "Player": { "global_position": [6.5, 0.0, -3.1], "velocity": [14.2, 0.0, 0.0] } }
-    },
-    {
-      "frame": 337,
-      "timestamp_ms": 5617,
-      "nodes": { "Player": { "global_position": [8.92, 0.0, -3.14], "velocity": [45.3, 0.0, 0.0] } }
-    }
-  ]
-}
-```
 
 ### `delete`
 

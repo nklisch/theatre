@@ -1,4 +1,10 @@
 <script setup>
+import { data } from '../.vitepress/data/tools.data'
+
+const signal_connect = data.params['signal_connect'] ?? []
+const signal_disconnect = data.params['signal_disconnect'] ?? []
+const signal_list = data.params['signal_list'] ?? []
+
 const messages0 = [
   { role: 'human', text: `I added a JumpPad Area3D to the level. Wire it up to launch the player when they step on it.` },
   { role: 'agent', text: `I need to connect the JumpPad body_entered signal to a handler on the JumpPad node (which should have a script with _on_body_entered). Let me check what signals are available.` },
@@ -33,14 +39,7 @@ Connect a signal from one node to a method on another.
 }
 ```
 
-| Parameter | Type | Description |
-|---|---|---|
-| `from_node` | `string` | Node that owns the signal |
-| `signal` | `string` | Signal name |
-| `to_node` | `string` | Node that owns the receiving method |
-| `method` | `string` | Method name to call when signal fires |
-| `flags` | `integer` | Connection flags (default 0; use 1 for one-shot) |
-| `binds` | `array` | Additional arguments to pass when signal fires |
+<ParamTable :params="signal_connect" />
 
 **Response:**
 ```json
@@ -70,6 +69,8 @@ Remove a signal connection.
 }
 ```
 
+<ParamTable :params="signal_disconnect" />
+
 **Response:**
 ```json
 {
@@ -93,6 +94,8 @@ List all signal connections on a node.
 }
 ```
 
+<ParamTable :params="signal_list" />
+
 **Response:**
 ```json
 {
@@ -101,12 +104,6 @@ List all signal connections on a node.
       "signal": "body_entered",
       "to_node": "Level/Enemy_0",
       "method": "_on_detection_zone_body_entered",
-      "flags": 0
-    },
-    {
-      "signal": "body_exited",
-      "to_node": "Level/Enemy_0",
-      "method": "_on_detection_zone_body_exited",
       "flags": 0
     }
   ]

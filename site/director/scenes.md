@@ -1,4 +1,15 @@
 <script setup>
+import { data } from '../.vitepress/data/tools.data'
+
+const scene_create = data.params['scene_create'] ?? []
+const scene_read = data.params['scene_read'] ?? []
+const scene_list = data.params['scene_list'] ?? []
+const scene_add_instance = data.params['scene_add_instance'] ?? []
+const scene_diff = data.params['scene_diff'] ?? []
+const uid_get = data.params['uid_get'] ?? []
+const uid_update_project = data.params['uid_update_project'] ?? []
+const export_mesh_library = data.params['export_mesh_library'] ?? []
+
 const messages0 = [
   { role: 'human', text: `Create a new player scene with a CharacterBody3D root, and add a CapsuleShape3D collision shape.` },
   { role: 'agent', text: `Player scene created at scenes/player.tscn. Now adding the collision shape.` },
@@ -26,12 +37,7 @@ Create a new empty scene with a root node.
 }
 ```
 
-| Parameter | Type | Description |
-|---|---|---|
-| `project_path` | `string` | Absolute path to Godot project |
-| `path` | `string` | Relative path for the new scene (from project root) |
-| `root_class` | `string` | Godot class for the root node |
-| `root_name` | `string` | Name of the root node (default: class name) |
+<ParamTable :params="scene_create" />
 
 **Response:**
 ```json
@@ -57,6 +63,8 @@ Read the structure of an existing scene — all nodes, their classes, properties
 }
 ```
 
+<ParamTable :params="scene_read" />
+
 **Response:**
 ```json
 {
@@ -73,15 +81,6 @@ Read the structure of an existing scene — all nodes, their classes, properties
         "motion_mode": "grounded"
       },
       "children": ["CollisionShape3D", "MeshInstance3D", "Camera3D", "AnimationPlayer"]
-    },
-    {
-      "name": "CollisionShape3D",
-      "class": "CollisionShape3D",
-      "path": "CollisionShape3D",
-      "properties": {
-        "shape": "CapsuleShape3D(radius=0.4, height=1.8)"
-      },
-      "children": []
     }
   ]
 }
@@ -99,13 +98,14 @@ List all `.tscn` files in the project (or a subdirectory).
 }
 ```
 
+<ParamTable :params="scene_list" />
+
 **Response:**
 ```json
 {
   "scenes": [
     { "path": "scenes/enemies/basic_enemy.tscn", "root_class": "CharacterBody3D" },
-    { "path": "scenes/enemies/boss.tscn", "root_class": "CharacterBody3D" },
-    { "path": "scenes/enemies/flying_enemy.tscn", "root_class": "CharacterBody3D" }
+    { "path": "scenes/enemies/boss.tscn", "root_class": "CharacterBody3D" }
   ]
 }
 ```
@@ -126,13 +126,7 @@ Add an instance of another scene as a child node.
 }
 ```
 
-| Parameter | Type | Description |
-|---|---|---|
-| `scene` | `string` | The scene to add the instance to |
-| `parent` | `string` | Node path within the scene to parent the instance under |
-| `source_scene` | `string` | The scene to instantiate |
-| `name` | `string` | Name for the instance node |
-| `position` | `[x,y,z]` | Initial position (optional) |
+<ParamTable :params="scene_add_instance" />
 
 **Response:**
 ```json
@@ -156,6 +150,8 @@ Compare two scenes and return a list of differences.
   "scene_b": "scenes/level_01_backup.tscn"
 }
 ```
+
+<ParamTable :params="scene_diff" />
 
 **Response:**
 ```json
@@ -190,6 +186,8 @@ Look up the UID for a resource path.
 }
 ```
 
+<ParamTable :params="uid_get" />
+
 **Response:**
 ```json
 {
@@ -210,6 +208,8 @@ Rescan all resources and rebuild the project UID cache. Run after adding or movi
 }
 ```
 
+<ParamTable :params="uid_update_project" />
+
 ### `export_mesh_library`
 
 Export meshes from a scene into a MeshLibrary resource for use with GridMap.
@@ -222,6 +222,8 @@ Export meshes from a scene into a MeshLibrary resource for use with GridMap.
   "save_path": "assets/dungeon_tiles.meshlib"
 }
 ```
+
+<ParamTable :params="export_mesh_library" />
 
 ## Example conversation
 

@@ -1,4 +1,9 @@
 <script setup>
+import { data } from '../.vitepress/data/tools.data'
+
+const animation_create = data.params['animation_create'] ?? []
+const animation_add_track = data.params['animation_add_track'] ?? []
+
 const messages0 = [
   { role: 'human', text: `Create a bounce animation on the coin: it should move up 2 meters and back over 0.6 seconds, looping.` },
   { role: 'agent', text: `Animation created (0.6s, ping_pong loop). Adding the position track with keyframes.` },
@@ -30,12 +35,7 @@ Create a new animation in an AnimationPlayer.
 }
 ```
 
-| Parameter | Type | Description |
-|---|---|---|
-| `node` | `string` | Path to the AnimationPlayer node |
-| `animation_name` | `string` | Name of the animation to create |
-| `length` | `float` | Duration in seconds |
-| `loop_mode` | `string` | `"none"`, `"loop"`, `"ping_pong"` |
+<ParamTable :params="animation_create" />
 
 **Response:**
 ```json
@@ -68,12 +68,7 @@ Add a property track to an animation, with all keyframes specified up front. A t
 }
 ```
 
-| Parameter | Type | Description |
-|---|---|---|
-| `animation_name` | `string` | Which animation to add the track to |
-| `track_path` | `string` | Node path + property in Godot track format |
-| `track_type` | `string` | `"property"`, `"method"`, `"audio"`, `"animation"` |
-| `keyframes` | `array` | Array of keyframe objects (each with `time`, `value`, and optional `easing`) |
+<ParamTable :params="animation_add_track" />
 
 **Track path format**: `"NodePath:property_name"` where the NodePath is relative to the AnimationPlayer's root. `"."` means the animated node itself. Examples:
 - `".:position"` — position of the AnimationPlayer's root

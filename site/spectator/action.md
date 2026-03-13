@@ -1,4 +1,7 @@
 <script setup>
+import { data } from '../.vitepress/data/tools.data'
+const params = data.params['spatial_action'] ?? []
+
 const messages0 = [
   { role: 'human', text: `I think the collision_mask on the detection zone is wrong. Can you test setting it to 1 right now without restarting?` },
   { role: 'agent', text: `Done. collision_mask is now 1. Walk the player through the detection zone and see if the enemy alerts.` },
@@ -25,16 +28,7 @@ Changes made via `spatial_action` are **not persistent** — they affect the cur
 
 ## Parameters
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `node` | `string` | required | Node name or scene path |
-| `action` | `string` | required | `"set_property"`, `"call_method"`, or `"emit_signal"` |
-| `property` | `string` | required for `set_property` | Property name to set |
-| `value` | any | required for `set_property` | New value for the property |
-| `method` | `string` | required for `call_method` | Method name to call |
-| `args` | `array` | `[]` | Arguments for `call_method` |
-| `signal` | `string` | required for `emit_signal` | Signal name to emit |
-| `signal_args` | `array` | `[]` | Arguments for `emit_signal` |
+<ParamTable :params="params" />
 
 ## Action types
 

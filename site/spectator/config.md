@@ -1,4 +1,7 @@
 <script setup>
+import { data } from '../.vitepress/data/tools.data'
+const params = data.params['spatial_config'] ?? []
+
 const messages0 = [
   { role: 'human', text: `The scene has 300 nodes and snapshots are huge. I only care about physics bodies and enemies.` },
   { role: 'agent', text: `Configuration updated. Spectator will now only track CharacterBody3D, RigidBody3D, Area3D, and Enemy nodes. Your snapshots should be much smaller now. Take a new snapshot to confirm.` },
@@ -24,15 +27,7 @@ For most use cases, the defaults work well. You only need `spatial_config` when 
 
 ## Parameters
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `tick_rate` | `integer` | `60` | How many physics ticks to sample per second (1–120) |
-| `capture_radius` | `float` | `200.0` | Maximum distance from scene origin to track nodes (meters) |
-| `tracked_types` | `string[]` | see below | Godot class names to track |
-| `buffer_depth_frames` | `integer` | `600` | Ring buffer size in frames (~10s at 60Hz) |
-| `default_token_budget` | `integer` | `2000` | Default token budget for snapshot-style responses |
-| `default_detail` | `string` | `"summary"` | Default detail level for snapshot responses |
-| `record_path` | `string` | temp dir | Where to write clip files |
+<ParamTable :params="params" />
 
 ### Default tracked types
 

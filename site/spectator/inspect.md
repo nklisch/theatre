@@ -1,4 +1,7 @@
 <script setup>
+import { data } from '../.vitepress/data/tools.data'
+const params = data.params['spatial_inspect'] ?? []
+
 const messages0 = [
   { role: 'human', text: `The EnemyDetectionZone is not triggering. What is wrong with it?` },
   { role: 'agent', text: `Found the issue. EnemyDetectionZone has monitoring=true and collision_layer=2, but collision_mask=0 — it is not monitoring any layers. It will never detect anything. Also, the body_entered signal has no connections — even if it detected something, nothing would respond. Set collision_mask to include the player layer (layer 1), and connect body_entered to the enemy script.` },
@@ -30,10 +33,7 @@ Do **not** use `spatial_inspect` to scan many nodes — it is designed for targe
 
 ## Parameters
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `node` | `string` | required | Node name or scene path (e.g. `"Player"` or `"World/Player"`) |
-| `include` | `string[]` | `["properties", "spatial_context"]` | What data to include |
+<ParamTable :params="params" />
 
 ### `include` options
 

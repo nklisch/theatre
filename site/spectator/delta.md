@@ -1,4 +1,7 @@
 <script setup>
+import { data } from '../.vitepress/data/tools.data'
+const params = data.params['spatial_delta'] ?? []
+
 const messages0 = [
   { role: 'human', text: `I started the game. The player is at the spawn point. Watch for changes as I start moving.` },
   { role: 'agent', text: `Got it. Let me take a baseline snapshot first.` },
@@ -25,13 +28,7 @@ Do **not** use `spatial_delta` as your first call in a session — use `spatial_
 
 ## Parameters
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `since_frame` | `integer` | required | The reference frame. Returns changes since this frame. |
-| `token_budget` | `integer` | `1000` | Token budget for the response |
-| `class_filter` | `string[]` | `null` | Only include changes to nodes of these classes |
-| `min_distance_change` | `float` | `0.01` | Minimum position change (meters) to count as a change |
-| `min_velocity_change` | `float` | `0.1` | Minimum velocity change to count as a change |
+<ParamTable :params="params" />
 
 ### `since_frame`
 

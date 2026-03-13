@@ -1,4 +1,9 @@
 <script setup>
+import { data } from '../.vitepress/data/tools.data'
+
+const physics_set_layer_names = data.params['physics_set_layer_names'] ?? []
+const physics_set_layers = data.params['physics_set_layers'] ?? []
+
 const messages0 = [
   { role: 'human', text: `Bullets are not hitting enemies. I think the collision layers are wrong. Check and fix them.` },
   { role: 'agent', text: `Enemy: collision_layer=2, collision_mask=1. Bullet scene: the Area3D has collision_layer=8 (layer 4), collision_mask=0. The bullet Area3D has mask=0 — it monitors zero layers, so it will never detect anything. Set bullet Area3D collision_mask to 2 (enemy layer).` },
@@ -32,17 +37,19 @@ Player detects Enemies (player mask has layer 2 set) and Walls (player mask has 
 
 ## Operations
 
-### `physics_layer_names`
+### `physics_set_layer_names`
 
 Get or set the display names for collision layers. Names appear in the Godot editor's layer picker.
 
 **Get all names:**
 ```json
 {
-  "op": "physics_layer_names",
+  "op": "physics_set_layer_names",
   "project_path": "/home/user/my-game"
 }
 ```
+
+<ParamTable :params="physics_set_layer_names" />
 
 **Response:**
 ```json
@@ -58,29 +65,13 @@ Get or set the display names for collision layers. Names appear in the Godot edi
 }
 ```
 
-**Set names:**
-```json
-{
-  "op": "physics_layer_names",
-  "project_path": "/home/user/my-game",
-  "set": {
-    "1": "Player",
-    "2": "Enemies",
-    "3": "World",
-    "4": "Pickups",
-    "5": "Projectiles",
-    "6": "Triggers"
-  }
-}
-```
+### `physics_set_layers`
 
-### `physics_layer_set`
-
-Set the `collision_layer` on a node using either a bitmask integer or a list of layer numbers.
+Set collision layer and mask configuration on nodes.
 
 ```json
 {
-  "op": "physics_layer_set",
+  "op": "physics_set_layers",
   "project_path": "/home/user/my-game",
   "scene": "scenes/player.tscn",
   "node": "Player",
@@ -88,51 +79,14 @@ Set the `collision_layer` on a node using either a bitmask integer or a list of 
 }
 ```
 
-Using a bitmask directly:
-```json
-{
-  "op": "physics_layer_set",
-  "project_path": "/home/user/my-game",
-  "scene": "scenes/enemy.tscn",
-  "node": "Enemy",
-  "collision_layer": 2
-}
-```
+<ParamTable :params="physics_set_layers" />
 
 **Response:**
 ```json
 {
-  "op": "physics_layer_set",
+  "op": "physics_set_layers",
   "node": "Enemy",
   "collision_layer": 2,
-  "layers_set": [2],
-  "result": "ok"
-}
-```
-
-### `physics_mask_set`
-
-Set the `collision_mask` on a node.
-
-```json
-{
-  "op": "physics_mask_set",
-  "project_path": "/home/user/my-game",
-  "scene": "scenes/enemy.tscn",
-  "node": "Enemy",
-  "masks": [1, 3]
-}
-```
-
-This sets the enemy to detect layer 1 (Player) and layer 3 (World) — the enemy collides with the player and the ground, but not with other enemies (layer 2) or pickups (layer 4).
-
-**Response:**
-```json
-{
-  "op": "physics_mask_set",
-  "node": "Enemy",
-  "collision_mask": 5,
-  "masks_set": [1, 3],
   "result": "ok"
 }
 ```
@@ -160,7 +114,7 @@ Director accepts both bitmask integers and layer number arrays — use whichever
 
 ## Tips
 
-**Name your layers before assigning them.** Use `physics_layer_names` to set up a consistent naming scheme (Player, Enemies, World, Projectiles, Triggers). This makes layer assignments readable — "layer 2" means nothing; "Enemies" is clear.
+**Name your layers before assigning them.** Use `physics_set_layer_names` to set up a consistent naming scheme (Player, Enemies, World, Projectiles, Triggers). This makes layer assignments readable — "layer 2" means nothing; "Enemies" is clear.
 
 **Use the layer list format for readability.** `"masks": [1, 3]` is clearer than `"collision_mask": 5`. Both work; use whichever is less error-prone.
 
