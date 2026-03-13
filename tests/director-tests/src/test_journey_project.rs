@@ -36,9 +36,7 @@ fn journey_uid_workflow() {
     // 3. uid_get — In one-shot mode each invocation is a separate Godot process,
     //    so UIDs registered by uid_update_project may not persist. Test that uid_get
     //    at least returns a valid response (success or a known "No UID" error).
-    let uid_result = f
-        .run("uid_get", json!({"file_path": scene_a}))
-        .unwrap();
+    let uid_result = f.run("uid_get", json!({"file_path": scene_a})).unwrap();
     if uid_result.success {
         let ua = uid_result.data["uid"].as_str().unwrap();
         assert!(

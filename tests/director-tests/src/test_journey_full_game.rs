@@ -1,4 +1,4 @@
-use crate::harness::{DirectorFixture, assert_approx, project_dir_path, OperationResultExt};
+use crate::harness::{DirectorFixture, OperationResultExt, assert_approx, project_dir_path};
 use serde_json::json;
 use std::io::Write as IoWrite;
 
@@ -384,9 +384,7 @@ fn journey_full_game_scene_everything_together() {
     // uid_get may not find UIDs in one-shot mode (each invocation is a separate
     // Godot process, so in-memory UID registration doesn't persist). Test that
     // uid_get runs without crashing and returns a well-formed response.
-    let uid_result = f
-        .run("uid_get", json!({"file_path": level_scene}))
-        .unwrap();
+    let uid_result = f.run("uid_get", json!({"file_path": level_scene})).unwrap();
     if uid_result.success {
         let uid_str = uid_result.data["uid"].as_str().unwrap();
         assert!(

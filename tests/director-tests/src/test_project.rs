@@ -17,9 +17,7 @@ fn uid_get_returns_uid_for_scene() {
 
     // In one-shot mode, UIDs may not be available since each invocation is a
     // separate Godot process and UID registration doesn't persist between them.
-    let result = f
-        .run("uid_get", json!({"file_path": scene}))
-        .unwrap();
+    let result = f.run("uid_get", json!({"file_path": scene})).unwrap();
     if result.success {
         assert_eq!(result.data["file_path"], scene);
         let uid = result.data["uid"].as_str().unwrap();

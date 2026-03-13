@@ -131,15 +131,12 @@ async fn handle_connection(stream: TcpStream, state: Arc<Mutex<SessionState>>) -
     let (mut reader, writer) = tokio::io::split(stream);
 
     // Step 1: Read handshake from addon (timeout: Godot may have another client active)
-    let msg: Message =
-        tokio::time::timeout(HANDSHAKE_TIMEOUT, async_io::read_message(&mut reader))
-            .await
-            .map_err(|_| {
-                anyhow::anyhow!(
-                    "Handshake timeout after 10s — Godot may have another active client"
-                )
-            })?
-            .map_err(|e| anyhow::anyhow!("Failed to read handshake: {}", e))?;
+    let msg: Message = tokio::time::timeout(HANDSHAKE_TIMEOUT, async_io::read_message(&mut reader))
+        .await
+        .map_err(|_| {
+            anyhow::anyhow!("Handshake timeout after 10s — Godot may have another active client")
+        })?
+        .map_err(|e| anyhow::anyhow!("Failed to read handshake: {}", e))?;
 
     let handshake = match msg {
         Message::Handshake(h) => h,

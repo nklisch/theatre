@@ -1,4 +1,4 @@
-use crate::harness::{DirectorFixture, assert_approx, OperationResultExt};
+use crate::harness::{DirectorFixture, OperationResultExt, assert_approx};
 use serde_json::json;
 
 #[test]

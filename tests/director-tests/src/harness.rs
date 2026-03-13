@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
-use std::io::Read;
 use spectator_protocol::codec;
+use std::io::Read;
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -453,4 +453,3 @@ impl CliFixture {
         })
     }
 }
-

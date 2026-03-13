@@ -13,6 +13,8 @@ mod test_deferred;
 #[cfg(test)]
 mod test_editor;
 #[cfg(test)]
+mod test_gaps;
+#[cfg(test)]
 mod test_gridmap;
 #[cfg(test)]
 mod test_instance;
@@ -76,5 +78,3 @@ mod test_signal;
 mod test_tilemap;
 #[cfg(test)]
 mod test_wiring;
-#[cfg(test)]
-mod test_gaps;

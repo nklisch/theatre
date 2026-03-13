@@ -2,7 +2,7 @@
 //!
 //! Each test cites the spec condition it verifies.
 
-use crate::harness::{DirectorFixture, assert_approx, OperationResultExt};
+use crate::harness::{DirectorFixture, OperationResultExt, assert_approx};
 use serde_json::json;
 
 // ---------------------------------------------------------------------------
@@ -16,12 +16,21 @@ fn signal_connect_with_binds() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("signal_binds");
 
-    f.run("scene_create", json!({"scene_path": &scene, "root_type": "Node2D"}))
-        .unwrap();
-    f.run("node_add", json!({"scene_path": &scene, "node_type": "Button", "node_name": "Btn"}))
-        .unwrap();
-    f.run("node_add", json!({"scene_path": &scene, "node_type": "Node2D", "node_name": "H"}))
-        .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": &scene, "root_type": "Node2D"}),
+    )
+    .unwrap();
+    f.run(
+        "node_add",
+        json!({"scene_path": &scene, "node_type": "Button", "node_name": "Btn"}),
+    )
+    .unwrap();
+    f.run(
+        "node_add",
+        json!({"scene_path": &scene, "node_type": "Node2D", "node_name": "H"}),
+    )
+    .unwrap();
 
     let data = f
         .run(
@@ -61,12 +70,21 @@ fn signal_connect_with_flags_deferred() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("signal_flags");
 
-    f.run("scene_create", json!({"scene_path": &scene, "root_type": "Node2D"}))
-        .unwrap();
-    f.run("node_add", json!({"scene_path": &scene, "node_type": "Button", "node_name": "Btn"}))
-        .unwrap();
-    f.run("node_add", json!({"scene_path": &scene, "node_type": "Node2D", "node_name": "H"}))
-        .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": &scene, "root_type": "Node2D"}),
+    )
+    .unwrap();
+    f.run(
+        "node_add",
+        json!({"scene_path": &scene, "node_type": "Button", "node_name": "Btn"}),
+    )
+    .unwrap();
+    f.run(
+        "node_add",
+        json!({"scene_path": &scene, "node_type": "Node2D", "node_name": "H"}),
+    )
+    .unwrap();
 
     // CONNECT_DEFERRED (1) | CONNECT_ONE_SHOT (4) = 5
     let data = f
@@ -94,9 +112,18 @@ fn signal_connect_with_flags_deferred() {
     let conn = &list["connections"].as_array().unwrap()[0];
     // flags should include at least our bits (1 and 4)
     let flags = conn["flags"].as_u64().unwrap();
-    assert!(flags & 1 != 0, "CONNECT_DEFERRED should be set, flags={flags}");
-    assert!(flags & 4 != 0, "CONNECT_ONE_SHOT should be set, flags={flags}");
-    assert!(flags & 2 != 0, "CONNECT_PERSIST should be auto-added, flags={flags}");
+    assert!(
+        flags & 1 != 0,
+        "CONNECT_DEFERRED should be set, flags={flags}"
+    );
+    assert!(
+        flags & 4 != 0,
+        "CONNECT_ONE_SHOT should be set, flags={flags}"
+    );
+    assert!(
+        flags & 2 != 0,
+        "CONNECT_PERSIST should be auto-added, flags={flags}"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -137,11 +164,19 @@ fn resource_duplicate_deep_copy() {
 
     assert_eq!(data["path"], "tmp/deep_dest.tres");
     assert_eq!(data["type"], "StandardMaterial3D");
-    assert!(data["overrides_applied"].as_array().unwrap().contains(&json!("metallic")));
+    assert!(
+        data["overrides_applied"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("metallic"))
+    );
 
     // Verify the duplicate is readable and has overridden value
     let read = f
-        .run("resource_read", json!({"resource_path": "tmp/deep_dest.tres"}))
+        .run(
+            "resource_read",
+            json!({"resource_path": "tmp/deep_dest.tres"}),
+        )
         .unwrap()
         .unwrap_data();
     assert_approx(read["properties"]["metallic"].as_f64().unwrap(), 0.9);
@@ -158,8 +193,11 @@ fn shader_material_set_params_basic() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("shader_params");
 
-    f.run("scene_create", json!({"scene_path": &scene, "root_type": "Node2D"}))
-        .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": &scene, "root_type": "Node2D"}),
+    )
+    .unwrap();
     f.run(
         "node_add",
         json!({"scene_path": &scene, "node_type": "Sprite2D", "node_name": "Sprite"}),
@@ -180,7 +218,10 @@ fn shader_material_set_params_basic() {
         .unwrap();
 
     // Without a ShaderMaterial assigned, this should error
-    assert!(!result.success, "should error when node has no ShaderMaterial");
+    assert!(
+        !result.success,
+        "should error when node has no ShaderMaterial"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -195,8 +236,11 @@ fn node_find_by_property_exists() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("find_prop");
 
-    f.run("scene_create", json!({"scene_path": &scene, "root_type": "Node2D"}))
-        .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": &scene, "root_type": "Node2D"}),
+    )
+    .unwrap();
     f.run(
         "node_add",
         json!({
@@ -237,8 +281,11 @@ fn node_find_by_property_value() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("find_prop_val");
 
-    f.run("scene_create", json!({"scene_path": &scene, "root_type": "Node2D"}))
-        .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": &scene, "root_type": "Node2D"}),
+    )
+    .unwrap();
     f.run(
         "node_add",
         json!({
@@ -288,8 +335,11 @@ fn scene_read_properties_false_omits_properties() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("read_no_props");
 
-    f.run("scene_create", json!({"scene_path": &scene, "root_type": "Node2D"}))
-        .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": &scene, "root_type": "Node2D"}),
+    )
+    .unwrap();
     f.run(
         "node_add",
         json!({
@@ -303,22 +353,34 @@ fn scene_read_properties_false_omits_properties() {
 
     // Read with properties=true (default) — properties should be present
     let with = f
-        .run("scene_read", json!({"scene_path": &scene, "properties": true}))
+        .run(
+            "scene_read",
+            json!({"scene_path": &scene, "properties": true}),
+        )
         .unwrap()
         .unwrap_data();
     let child_with = &with["root"]["children"][0];
-    assert!(child_with.get("properties").is_some(), "properties should be present by default");
+    assert!(
+        child_with.get("properties").is_some(),
+        "properties should be present by default"
+    );
 
     // Read with properties=false — properties should be omitted
     let without = f
-        .run("scene_read", json!({"scene_path": &scene, "properties": false}))
+        .run(
+            "scene_read",
+            json!({"scene_path": &scene, "properties": false}),
+        )
         .unwrap()
         .unwrap_data();
     let child_without = &without["root"]["children"][0];
     assert!(
         child_without.get("properties").is_none()
             || child_without["properties"].is_null()
-            || child_without["properties"].as_object().map(|m| m.is_empty()).unwrap_or(false),
+            || child_without["properties"]
+                .as_object()
+                .map(|m| m.is_empty())
+                .unwrap_or(false),
         "properties should be omitted when properties=false"
     );
 }
@@ -336,8 +398,11 @@ fn scene_diff_detects_moved_node() {
     let scene_b = DirectorFixture::temp_scene_path("diff_b_moved");
 
     // Scene A: Root > Parent1 > Child
-    f.run("scene_create", json!({"scene_path": scene_a, "root_type": "Node2D"}))
-        .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": scene_a, "root_type": "Node2D"}),
+    )
+    .unwrap();
     f.run(
         "node_add",
         json!({"scene_path": scene_a, "node_type": "Node2D", "node_name": "Parent1"}),
@@ -355,8 +420,11 @@ fn scene_diff_detects_moved_node() {
     .unwrap();
 
     // Scene B: Root > Parent2 > Child (Child moved from Parent1 to Parent2)
-    f.run("scene_create", json!({"scene_path": scene_b, "root_type": "Node2D"}))
-        .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": scene_b, "root_type": "Node2D"}),
+    )
+    .unwrap();
     f.run(
         "node_add",
         json!({"scene_path": scene_b, "node_type": "Node2D", "node_name": "Parent1"}),
@@ -374,7 +442,10 @@ fn scene_diff_detects_moved_node() {
     .unwrap();
 
     let data = f
-        .run("scene_diff", json!({"scene_a": scene_a, "scene_b": scene_b}))
+        .run(
+            "scene_diff",
+            json!({"scene_a": scene_a, "scene_b": scene_b}),
+        )
         .unwrap()
         .unwrap_data();
 
@@ -384,9 +455,12 @@ fn scene_diff_detects_moved_node() {
     let removed = data["removed"].as_array().unwrap();
 
     // Either the `moved` array captures it, or it shows as removed+added
-    let detected = moved.map(|m| !m.is_empty()).unwrap_or(false)
-        || (!added.is_empty() && !removed.is_empty());
-    assert!(detected, "scene_diff should detect node movement between parents");
+    let detected =
+        moved.map(|m| !m.is_empty()).unwrap_or(false) || (!added.is_empty() && !removed.is_empty());
+    assert!(
+        detected,
+        "scene_diff should detect node movement between parents"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -401,8 +475,11 @@ fn shape_create_save_and_attach() {
     let scene = DirectorFixture::temp_scene_path("shape_both");
     let save_path = "tmp/test_shape_both.tres";
 
-    f.run("scene_create", json!({"scene_path": &scene, "root_type": "StaticBody3D"}))
-        .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": &scene, "root_type": "StaticBody3D"}),
+    )
+    .unwrap();
     f.run(
         "node_add",
         json!({"scene_path": &scene, "node_type": "CollisionShape3D", "node_name": "Col"}),
@@ -464,12 +541,21 @@ fn signal_disconnect_nonexistent_connection() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("signal_dc_missing");
 
-    f.run("scene_create", json!({"scene_path": &scene, "root_type": "Node2D"}))
-        .unwrap();
-    f.run("node_add", json!({"scene_path": &scene, "node_type": "Node2D", "node_name": "A"}))
-        .unwrap();
-    f.run("node_add", json!({"scene_path": &scene, "node_type": "Node2D", "node_name": "B"}))
-        .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": &scene, "root_type": "Node2D"}),
+    )
+    .unwrap();
+    f.run(
+        "node_add",
+        json!({"scene_path": &scene, "node_type": "Node2D", "node_name": "A"}),
+    )
+    .unwrap();
+    f.run(
+        "node_add",
+        json!({"scene_path": &scene, "node_type": "Node2D", "node_name": "B"}),
+    )
+    .unwrap();
 
     // Try to disconnect a signal that was never connected
     let result = f
@@ -485,7 +571,10 @@ fn signal_disconnect_nonexistent_connection() {
         )
         .unwrap();
 
-    assert!(!result.success, "disconnecting nonexistent connection should error");
+    assert!(
+        !result.success,
+        "disconnecting nonexistent connection should error"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -499,8 +588,11 @@ fn node_add_nonexistent_parent_returns_error() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("add_bad_parent");
 
-    f.run("scene_create", json!({"scene_path": &scene, "root_type": "Node2D"}))
-        .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": &scene, "root_type": "Node2D"}),
+    )
+    .unwrap();
 
     let result = f
         .run(
@@ -528,10 +620,16 @@ fn node_set_script_nonexistent_script_returns_error() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("script_missing");
 
-    f.run("scene_create", json!({"scene_path": &scene, "root_type": "Node2D"}))
-        .unwrap();
-    f.run("node_add", json!({"scene_path": &scene, "node_type": "Node2D", "node_name": "N"}))
-        .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": &scene, "root_type": "Node2D"}),
+    )
+    .unwrap();
+    f.run(
+        "node_add",
+        json!({"scene_path": &scene, "node_type": "Node2D", "node_name": "N"}),
+    )
+    .unwrap();
 
     let result = f
         .run(
@@ -624,9 +722,12 @@ fn scene_create_overwrites_existing() {
     let scene = DirectorFixture::temp_scene_path("overwrite");
 
     // Create scene with Node2D root
-    f.run("scene_create", json!({"scene_path": &scene, "root_type": "Node2D"}))
-        .unwrap()
-        .unwrap_data();
+    f.run(
+        "scene_create",
+        json!({"scene_path": &scene, "root_type": "Node2D"}),
+    )
+    .unwrap()
+    .unwrap_data();
     f.run(
         "node_add",
         json!({"scene_path": &scene, "node_type": "Sprite2D", "node_name": "Child"}),
@@ -635,7 +736,10 @@ fn scene_create_overwrites_existing() {
 
     // Overwrite with Node3D root — should succeed and replace the scene
     let data = f
-        .run("scene_create", json!({"scene_path": &scene, "root_type": "Node3D"}))
+        .run(
+            "scene_create",
+            json!({"scene_path": &scene, "root_type": "Node3D"}),
+        )
         .unwrap()
         .unwrap_data();
     assert_eq!(data["root_type"], "Node3D");
@@ -703,8 +807,11 @@ fn resource_read_depth_zero() {
 fn animation_add_track_interpolation_nearest() {
     let f = DirectorFixture::new();
     let path = "tmp/test_anim_nearest.tres";
-    f.run("animation_create", json!({"resource_path": path, "length": 1.0}))
-        .unwrap();
+    f.run(
+        "animation_create",
+        json!({"resource_path": path, "length": 1.0}),
+    )
+    .unwrap();
 
     f.run(
         "animation_add_track",
@@ -753,12 +860,18 @@ fn material_create_hex_color() {
 
     // Verify the color was applied
     let read = f
-        .run("resource_read", json!({"resource_path": "tmp/hex_color_mat.tres"}))
+        .run(
+            "resource_read",
+            json!({"resource_path": "tmp/hex_color_mat.tres"}),
+        )
         .unwrap()
         .unwrap_data();
     // albedo_color should be red-ish
     let color = &read["properties"]["albedo_color"];
-    assert!(color.is_object() || color.is_string(), "color should be serialized");
+    assert!(
+        color.is_object() || color.is_string(),
+        "color should be serialized"
+    );
 }
 
 // ---------------------------------------------------------------------------
@@ -870,8 +983,11 @@ fn node_find_name_pattern_question_mark_wildcard() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("find_qmark");
 
-    f.run("scene_create", json!({"scene_path": &scene, "root_type": "Node2D"}))
-        .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": &scene, "root_type": "Node2D"}),
+    )
+    .unwrap();
     f.run(
         "node_add",
         json!({"scene_path": &scene, "node_type": "Node2D", "node_name": "E1"}),
@@ -912,10 +1028,16 @@ fn scene_list_with_directory_filter() {
     let f = DirectorFixture::new();
 
     // Create scenes in different subdirectories
-    f.run("scene_create", json!({"scene_path": "tmp/subdir_a/test.tscn", "root_type": "Node2D"}))
-        .unwrap();
-    f.run("scene_create", json!({"scene_path": "tmp/subdir_b/test.tscn", "root_type": "Node2D"}))
-        .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": "tmp/subdir_a/test.tscn", "root_type": "Node2D"}),
+    )
+    .unwrap();
+    f.run(
+        "scene_create",
+        json!({"scene_path": "tmp/subdir_b/test.tscn", "root_type": "Node2D"}),
+    )
+    .unwrap();
 
     let data = f
         .run("scene_list", json!({"directory": "tmp/subdir_a"}))
@@ -924,8 +1046,10 @@ fn scene_list_with_directory_filter() {
 
     let scenes = data["scenes"].as_array().unwrap();
     // Should only include scenes from subdir_a
-    assert!(scenes.iter().all(|s| {
-        s["path"].as_str().unwrap().contains("subdir_a")
-    }));
+    assert!(
+        scenes
+            .iter()
+            .all(|s| { s["path"].as_str().unwrap().contains("subdir_a") })
+    );
     assert!(!scenes.is_empty());
 }

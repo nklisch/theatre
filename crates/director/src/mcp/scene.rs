@@ -71,4 +71,3 @@ pub struct SceneAddInstanceParams {
     #[serde(default)]
     pub node_name: Option<String>,
 }
-
