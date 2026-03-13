@@ -118,13 +118,13 @@ Remove all tiles from a layer.
 
 `GridMap` is Godot's 3D tile system, using a 3D integer grid. Director can set individual cells or regions.
 
-### `gridmap_set`
+### `gridmap_set_cells`
 
 Set one or more cells in a GridMap.
 
 ```json
 {
-  "op": "gridmap_set",
+  "op": "gridmap_set_cells",
   "project_path": "/home/user/my-game",
   "scene": "scenes/dungeon.tscn",
   "node": "World/GridMap",
@@ -149,7 +149,7 @@ Set one or more cells in a GridMap.
 **Response:**
 ```json
 {
-  "op": "gridmap_set",
+  "op": "gridmap_set_cells",
   "cells_set": 5,
   "result": "ok"
 }

@@ -53,8 +53,7 @@ Get only what changed since a specific frame.
 {
   since_frame: number                      // required
   token_budget?: number                    // default: 1000
-  include_types?: string[]
-  exclude_types?: string[]
+  class_filter?: string[]
   min_distance_change?: number             // default: 0.01 (meters)
   min_velocity_change?: number             // default: 0.1
 }
@@ -95,21 +94,18 @@ Run geometric queries against the scene.
   // For query_type="nearest":
   from: string | [number, number, number]
   k?: number                               // max results, default: 10
-  include_types?: string[]
-  exclude_types?: string[]
+  class_filter?: string[]
 
   // For query_type="radius":
   from: string | [number, number, number]
   radius: number
   k?: number
-  include_types?: string[]
-  exclude_types?: string[]
+  class_filter?: string[]
 
   // For query_type="area":
   min: [number, number, number]
   max: [number, number, number]
-  include_types?: string[]
-  exclude_types?: string[]
+  class_filter?: string[]
 
   // For query_type="raycast":
   from: string | [number, number, number]
@@ -400,8 +396,8 @@ Get scene tree structure.
 {
   root?: string                            // default: "/" (full tree)
   max_depth?: number                       // default: 5
-  include_types?: string[]
-  exclude_types?: string[]
+  find_by?: string                         // filter by property name
+  find_value?: any                         // match value for find_by
   show_properties?: string[]               // inline properties to include
 }
 ```

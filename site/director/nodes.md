@@ -131,40 +131,15 @@ Setting `Vector3` values:
 }
 ```
 
-### `node_get_property`
+To read properties back from a node, use `scene_read` with `properties: true` — it returns all node properties in the scene file.
 
-Read one or more properties from a node.
+### `node_reparent`
 
-```json
-{
-  "op": "node_get_property",
-  "project_path": "/home/user/my-game",
-  "scene": "scenes/enemy.tscn",
-  "node": "Enemy/DetectionZone",
-  "properties": ["collision_layer", "collision_mask", "monitoring"]
-}
-```
-
-**Response:**
-```json
-{
-  "op": "node_get_property",
-  "node": "Enemy/DetectionZone",
-  "properties": {
-    "collision_layer": 2,
-    "collision_mask": 0,
-    "monitoring": true
-  }
-}
-```
-
-### `node_move`
-
-Change a node's parent (reparent).
+Change a node's parent or rename it in place.
 
 ```json
 {
-  "op": "node_move",
+  "op": "node_reparent",
   "project_path": "/home/user/my-game",
   "scene": "scenes/level_01.tscn",
   "node": "Level/Pickups/Coin_0",
@@ -172,26 +147,15 @@ Change a node's parent (reparent).
 }
 ```
 
-**Response:**
-```json
-{
-  "op": "node_move",
-  "node": "Level/Pickups/Coin_0",
-  "new_path": "Level/Room2/Pickups/Coin_0",
-  "result": "ok"
-}
-```
-
-### `node_rename`
-
-Rename a node (changes its name in the scene tree, not its parent).
+To rename a node without changing its parent, use `node_reparent` with the `new_name` parameter:
 
 ```json
 {
-  "op": "node_rename",
+  "op": "node_reparent",
   "project_path": "/home/user/my-game",
   "scene": "scenes/level_01.tscn",
   "node": "Level/Enemy_0",
+  "new_parent": "Level",
   "new_name": "GuardCaptain"
 }
 ```
@@ -199,9 +163,9 @@ Rename a node (changes its name in the scene tree, not its parent).
 **Response:**
 ```json
 {
-  "op": "node_rename",
-  "old_path": "Level/Enemy_0",
-  "new_path": "Level/GuardCaptain",
+  "op": "node_reparent",
+  "node": "Level/Pickups/Coin_0",
+  "new_path": "Level/Room2/Pickups/Coin_0",
   "result": "ok"
 }
 ```

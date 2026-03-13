@@ -50,7 +50,7 @@ The text content is a JSON object with at minimum an `"error"` field, and often 
 
 | Error | Cause | Resolution |
 |---|---|---|
-| `Clip not found: "X"` | clip_id does not exist | Use `recording { "action": "list" }` to see available clips |
+| `Clip not found: "X"` | clip_id does not exist | Use `clips { "action": "list" }` to see available clips |
 | `No active recording` | `stop` or `mark` called when not recording | Start a recording first with `action: "start"` |
 | `Frame out of clip range` | `frame` is beyond the clip's frame count | Check `frame_count` in the clip list before querying |
 | `Write error: disk full` | No space for clip file | Free disk space; change `record_path` via `spatial_config` |
@@ -89,7 +89,7 @@ The text content is a JSON object with at minimum an `"error"` field, and often 
 | `Scene not found: "X"` | Scene path does not exist | Use `scene_list` to find available scenes |
 | `Node not found: "X"` | Node path does not exist in scene | Use `scene_read` to see the scene structure |
 | `Parent not found: "X"` | Parent path does not exist | Create parent nodes first |
-| `Duplicate node name: "X"` | A node with this name already exists under the parent | Use a different name or use `node_rename` first |
+| `Duplicate node name: "X"` | A node with this name already exists under the parent | Use a different name or use `node_reparent` with `new_name` first |
 
 ### Property errors
 

@@ -11,14 +11,14 @@ Theatre uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Spectator
 - `spatial_query` type `relationship` now returns `in_fov` field for Camera3D `from` nodes
-- `recording` query conditions: added `velocity_above` and `property_equals` filter types
+- `clips` query conditions: added `velocity_above` and `property_equals` filter types
 - `spatial_config`: added `auto_record` and `max_clip_duration_s` for continuous background recording
 - Editor dock: clip list now shows duration and marker count inline
 - `spatial_snapshot`: `include_properties` now supports dot-notation for nested properties
 
 ### Director
-- `batch_execute`: added `stop_on_error: false` mode for partial application
-- `animation_set_key`: added `easing` parameter with `linear`, `ease_in`, `ease_out`, `ease_in_out` options
+- `batch`: added `stop_on_error: false` mode for partial application
+- `animation_add_track`: keyframes now support `easing` parameter with `linear`, `ease_in`, `ease_out`, `ease_in_out` options
 - `scene_diff`: new operation to compare two scene files
 - `gridmap_fill`: new operation for batch-filling 3D regions in GridMap
 - Daemon backend: improved startup detection (no longer requires a 3-second sleep in CI)
@@ -38,7 +38,7 @@ Initial release of Theatre — an AI agent toolkit for Godot game engine.
 
 **9 MCP tools for observing running Godot games:**
 
-- `spatial_snapshot` — Instant spatial snapshot of all tracked nodes. Supports `detail` levels (summary/full/custom), `budget_tokens` for response size control, `focus_node` for priority ordering, and type filtering.
+- `spatial_snapshot` — Instant spatial snapshot of all tracked nodes. Supports `detail` levels (`summary`/`standard`/`full`), `token_budget` for response size control, `focal_node` for priority ordering, and `class_filter` for type filtering.
 
 - `spatial_delta` — Changes-only response since a given frame. Token-efficient alternative to repeated snapshots. Supports `min_distance_change` threshold to filter physics noise.
 
@@ -54,7 +54,7 @@ Initial release of Theatre — an AI agent toolkit for Godot game engine.
 
 - `scene_tree` — Scene tree structure without spatial data. Compact and fast — good for orientation and path lookup.
 
-- `recording` — Record gameplay to clip files, mark bug moments (F9), and query the spatial timeline. Supports condition filtering (`proximity`, `velocity_above`, `property_equals`) over frame ranges.
+- `clips` — Record gameplay to clip files, mark bug moments (F9), and query the spatial timeline. Supports condition filtering (`proximity`, `velocity_above`, `property_equals`) over frame ranges.
 
 **GDExtension (spectator-godot):**
 - Targets Godot 4.2+ with `compatibility_minimum = "4.2"`
@@ -66,7 +66,7 @@ Initial release of Theatre — an AI agent toolkit for Godot game engine.
 
 **Editor dock:**
 - Recording controls (Start / Mark Bug / Stop)
-- Keyboard shortcuts: F8 (record), F9 (mark), F10 (stop)
+- Keyboard shortcuts: F9 (marker), F11 (pause)
 - Clip list with duration, frame count, and marker display
 - Active watches display with delete controls
 - Activity feed showing recent agent tool calls
@@ -77,21 +77,21 @@ Initial release of Theatre — an AI agent toolkit for Godot game engine.
 
 Scenes: `scene_create`, `scene_read`, `scene_list`, `scene_instance`, `scene_diff`
 
-Nodes: `node_add`, `node_remove`, `node_set_property`, `node_get_property`, `node_move`, `node_rename`
+Nodes: `node_add`, `node_remove`, `node_set_properties`, `node_reparent`, `node_find`, `node_set_groups`, `node_set_script`, `node_set_meta`
 
-Resources: `resource_create`, `resource_set`, `resource_get`, `resource_list`
+Resources: `resource_read`, `material_create`, `shape_create`, `style_box_create`, `resource_duplicate`
 
-TileMap/GridMap: `tilemap_set`, `tilemap_get`, `tilemap_fill`, `tilemap_clear`, `gridmap_set`, `gridmap_get`, `gridmap_fill`
+TileMap/GridMap: `tilemap_set_cells`, `tilemap_get_cells`, `tilemap_clear`, `gridmap_set_cells`, `gridmap_get_cells`, `gridmap_clear`
 
-Animation: `animation_create`, `animation_add_track`, `animation_set_key`, `animation_play`
+Animation: `animation_create`, `animation_add_track`
 
-Shaders: `shader_set`, `shader_get_param`, `shader_set_param`
+Shaders: `visual_shader_create`
 
 Physics: `physics_layer_names`, `physics_layer_set`, `physics_mask_set`
 
-Wiring: `signal_connect`, `signal_disconnect`, `signal_list`, `export_set`
+Wiring: `signal_connect`, `signal_disconnect`, `signal_list`
 
-Batch: `batch_execute`
+Batch: `batch`
 
 **Three-backend routing:**
 - Editor plugin backend (port 6550) — preferred when editor is open

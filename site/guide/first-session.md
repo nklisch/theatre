@@ -38,11 +38,11 @@ You have already tried reading the detection script and the collision layer sett
 
 ## Step 1: Start a recording session
 
-Press **F8** in the Godot editor (or click "Start Recording" in the Spectator dock) to begin recording.
+Click the **Start Recording** button in the Spectator dock to begin recording.
 
 Walk the player in front of the enemy a few times. On the third or fourth pass, the enemy fails to detect you — you see the player enters the zone visually but the alert animation does not play.
 
-Press **F9** to mark this as a bug moment (the dock shows "Bug marker set at frame 312"). Press **F10** to stop recording.
+Press **F9** to mark this as a bug moment (the dock shows "Bug marker set at frame 312"). Click the **Stop Recording** button in the Spectator dock.
 
 ## Step 2: Ask the agent to analyze the clip
 

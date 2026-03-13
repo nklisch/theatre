@@ -35,8 +35,8 @@ Use `spatial_snapshot` when you need spatial data. Use `scene_tree` when you nee
 |---|---|---|---|
 | `root` | `string` | `"/"` | Start from this node's subtree |
 | `max_depth` | `integer` | `5` | Maximum depth of tree to return |
-| `include_types` | `string[]` | `null` | Only include nodes of these classes |
-| `exclude_types` | `string[]` | `null` | Exclude nodes of these classes |
+| `find_by` | `string` | `null` | Filter nodes by property name |
+| `find_value` | `any` | `null` | Match value for `find_by` |
 | `show_properties` | `string[]` | `null` | Include these properties inline (compact form) |
 
 ### `root`

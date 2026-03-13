@@ -32,7 +32,7 @@ Find the closest nodes to a point or node.
   "query_type": "nearest",
   "from": "Player",
   "k": 5,
-  "include_types": ["CharacterBody3D", "Area3D"]
+  "class_filter": ["CharacterBody3D", "Area3D"]
 }
 ```
 
@@ -63,7 +63,7 @@ Find all nodes within a distance of a point.
   "query_type": "radius",
   "from": "Player",
   "radius": 10.0,
-  "include_types": ["CollectibleItem", "Enemy"]
+  "class_filter": ["CollectibleItem", "Enemy"]
 }
 ```
 
@@ -220,8 +220,7 @@ Describe the spatial relationship between two specific nodes.
 | `k` | `integer` | `nearest`, `radius` | Max results to return (default: 10) |
 | `max_distance` | `float` | `raycast` | Max ray length (default: 100.0) |
 | `collision_mask` | `integer` | `raycast` | Layer bitmask for ray collision |
-| `include_types` | `string[]` | `nearest`, `radius`, `area` | Filter by Godot class |
-| `exclude_types` | `string[]` | `nearest`, `radius`, `area` | Exclude by Godot class |
+| `class_filter` | `string[]` | `nearest`, `radius`, `area` | Filter to only these Godot classes |
 
 ## Example conversation
 

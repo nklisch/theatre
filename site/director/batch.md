@@ -19,9 +19,9 @@ Every Director operation requires a round-trip through the MCP protocol to Godot
 - Headless daemon: ~50-200ms
 - One-shot: ~500-2000ms (Godot startup overhead)
 
-Building a level with 21 individual `tilemap_set` calls takes 21 round-trips. With the daemon backend, that is 1-4 seconds of pure latency. With one-shot, it could take over 40 seconds.
+Building a level with 21 individual `tilemap_set_cells` calls takes 21 round-trips. With the daemon backend, that is 1-4 seconds of pure latency. With one-shot, it could take over 40 seconds.
 
-`batch_execute` collapses all of that into one round-trip.
+`batch` collapses all of that into one round-trip.
 
 ## `batch`
 

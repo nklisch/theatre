@@ -92,7 +92,7 @@ theatre/
 
 2. spectator-server receives MCP tool call via stdin
 
-3. server serializes SnapshotRequest { detail, budget_tokens, ... }
+3. server serializes SnapshotRequest { detail, token_budget, ... }
    → 4-byte length prefix + JSON
    → writes to TCP socket
 
@@ -104,7 +104,7 @@ theatre/
 
 5. spectator-server reads response
    → passes raw node list to spectator-core budget trimmer
-   → trims to budget_tokens (prioritizing focus_node / include_types)
+   → trims to token_budget (prioritizing focal_node / class_filter)
    → serializes final MCP response JSON
    → writes to stdout
 

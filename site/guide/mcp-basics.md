@@ -63,7 +63,7 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | \
 
 ## Parallel tool calls
 
-Agents can call multiple tools in parallel when the calls are independent. Theatre servers handle concurrent requests correctly. For example, an agent investigating a bug might call `spatial_snapshot` and `recording { "action": "list" }` simultaneously to gather context before deciding which to drill into.
+Agents can call multiple tools in parallel when the calls are independent. Theatre servers handle concurrent requests correctly. For example, an agent investigating a bug might call `spatial_snapshot` and `clips { "action": "list" }` simultaneously to gather context before deciding which to drill into.
 
 You cannot depend on ordering between parallel calls — if you need the result of one call to decide what parameters to pass to the next, the agent will sequence them. Modern agents (Claude 3.5+, GPT-4o) handle this reasoning correctly.
 
@@ -84,9 +84,9 @@ Used when there is a reported problem and the agent wants to understand the curr
 ### Pattern 2: Record → Query → Diagnose → Fix
 
 ```
-[human presses F8, plays, F9 to mark, F10 to stop]
-recording { "action": "list" }
-  → recording { "action": "query_range", ... }
+[human clicks Start Recording in the Spectator dock, plays, F9 to mark, clicks Stop Recording]
+clips { "action": "list" }
+  → clips { "action": "query_range", ... }
     → spatial_inspect (on a specific node at a specific frame)
       → director operation (fix the problem)
 ```

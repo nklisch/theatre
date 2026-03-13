@@ -29,8 +29,7 @@ Do **not** use `spatial_delta` as your first call in a session — use `spatial_
 |---|---|---|---|
 | `since_frame` | `integer` | required | The reference frame. Returns changes since this frame. |
 | `token_budget` | `integer` | `1000` | Token budget for the response |
-| `include_types` | `string[]` | `null` | Only include changes to nodes of these types |
-| `exclude_types` | `string[]` | `null` | Exclude changes to nodes of these types |
+| `class_filter` | `string[]` | `null` | Only include changes to nodes of these classes |
 | `min_distance_change` | `float` | `0.01` | Minimum position change (meters) to count as a change |
 | `min_velocity_change` | `float` | `0.1` | Minimum velocity change to count as a change |
 

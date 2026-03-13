@@ -1,17 +1,8 @@
-<script setup>
-const messages0 = [
-  { role: 'human', text: `The lava material needs to glow more intensely and move faster. Update the shader params.` },
-  { role: 'agent', text: `Current glow_intensity: 0.3. Let me also check flow_speed.` },
-  { role: 'agent', text: `flow_speed: 0.5. Updating both values.` },
-  { role: 'agent', text: `Done. glow_intensity: 0.3 → 1.2, flow_speed: 0.5 → 1.5. The lava should appear much brighter and flow at 3x the previous speed.` },
-]
-</script>
-
 # Shaders
 
-Set shader code and modify shader parameters on materials.
+Create VisualShader node graphs and set shader uniform values on materials.
 
-Director can assign shader code to a `ShaderMaterial` and get/set the uniform parameters that control shader appearance at runtime.
+Director provides one operation for shaders: `visual_shader_create`. To set shader uniform values on a `ShaderMaterial` node, use `node_set_properties` with the `shader_parameters` dictionary.
 
 ## Operations
 
@@ -42,122 +33,34 @@ Create a new VisualShader resource (node-graph based shader).
 }
 ```
 
-After creation, assign the VisualShader to a ShaderMaterial and use `shader_set_param` to configure uniform values.
+After creation, assign the VisualShader to a ShaderMaterial node via `node_set_properties`.
 
-### `shader_set`
+## Setting shader uniform values
 
-Assign GLSL shader code to a material. Creates or replaces the `Shader` resource on a `ShaderMaterial`.
+To set uniform values on a `ShaderMaterial` node, use `node_set_properties` with the `shader_parameters` dictionary:
 
 ```json
 {
-  "op": "shader_set",
+  "op": "node_set_properties",
   "project_path": "/home/user/my-game",
-  "material_path": "assets/materials/water.tres",
-  "shader_code": "shader_type spatial;\nuniform float wave_height = 0.5;\nuniform vec4 water_color : source_color = vec4(0.0, 0.4, 0.8, 0.8);\n\nvoid vertex() {\n  VERTEX.y += sin(TIME + VERTEX.x * 2.0) * wave_height;\n}\n\nvoid fragment() {\n  ALBEDO = water_color.rgb;\n  ALPHA = water_color.a;\n}"
-}
-```
-
-| Parameter | Type | Description |
-|---|---|---|
-| `material_path` | `string` | Path to a `ShaderMaterial` resource (.tres) |
-| `shader_code` | `string` | Complete GLSL shader code |
-| `save_shader_path` | `string` | If set, saves the Shader as a `.gdshader` file at this path |
-
-**Response:**
-```json
-{
-  "op": "shader_set",
-  "material_path": "assets/materials/water.tres",
-  "uniforms_found": ["wave_height", "water_color"],
-  "result": "ok"
-}
-```
-
-The response lists the uniforms detected in the shader code, which you can then set with `shader_set_param`.
-
-### `shader_get_param`
-
-Read the current value of a shader uniform.
-
-```json
-{
-  "op": "shader_get_param",
-  "project_path": "/home/user/my-game",
-  "material_path": "assets/materials/water.tres",
-  "param": "wave_height"
-}
-```
-
-**Response:**
-```json
-{
-  "op": "shader_get_param",
-  "material_path": "assets/materials/water.tres",
-  "param": "wave_height",
-  "value": 0.5
-}
-```
-
-### `shader_set_param`
-
-Set the value of a shader uniform.
-
-```json
-{
-  "op": "shader_set_param",
-  "project_path": "/home/user/my-game",
-  "material_path": "assets/materials/water.tres",
-  "param": "wave_height",
-  "value": 1.2
-}
-```
-
-Multiple params at once:
-
-```json
-{
-  "op": "shader_set_param",
-  "project_path": "/home/user/my-game",
-  "material_path": "assets/materials/water.tres",
-  "params": {
-    "wave_height": 1.2,
-    "water_color": [0.0, 0.3, 0.7, 0.9]
+  "scene": "scenes/level_01.tscn",
+  "node": "World/LavaMesh",
+  "properties": {
+    "shader_parameters": {
+      "glow_intensity": 1.2,
+      "flow_speed": 1.5,
+      "water_color": [0.0, 0.3, 0.7, 0.9]
+    }
   }
 }
 ```
 
-**Response:**
-```json
-{
-  "op": "shader_set_param",
-  "material_path": "assets/materials/water.tres",
-  "params_set": ["wave_height", "water_color"],
-  "result": "ok"
-}
-```
-
-## Uniform type mapping
-
-| Shader uniform type | JSON value format |
-|---|---|
-| `float` | `number` |
-| `int` | `integer` |
-| `bool` | `boolean` |
-| `vec2` | `[x, y]` |
-| `vec3` | `[x, y, z]` |
-| `vec4` / `color` | `[r, g, b, a]` |
-| `sampler2D` | `"res://path/to/texture.png"` (resource path) |
-
-## Example conversation
-
-<AgentConversation :messages="messages0" />
+The `shader_parameters` property on a `ShaderMaterial` node holds all uniform values as a dictionary. Setting it via `node_set_properties` saves the values to the scene file.
 
 ## Tips
 
-**Read params before changing them.** Always call `shader_get_param` first to understand current values and make informed adjustments.
+**Use `spatial_action` for live tuning.** For quick iteration while the game is running, use `spatial_action` to set `shader_parameters` on a `ShaderMaterial` node — no restart required. Use Director when you want to save the values to the scene file.
 
-**Use `shader_set` for code changes, `shader_set_param` for tuning.** Write the shader logic once (with `shader_set`), then iterate on values with `shader_set_param` without recompiling the shader.
+**Read current params with `scene_read`.** Use `scene_read` with `properties: true` to read the current `shader_parameters` dictionary from a node before modifying it.
 
-**Texture uniforms use resource paths.** Assign textures as `"res://assets/textures/noise.png"` — Godot will resolve the resource.
-
-**Test at runtime with `spatial_action`.** For quick iteration, use `spatial_action` to set shader params on a `ShaderMaterial` attached to a running `MeshInstance3D` node — no restart required. Use Director when you want to save the values.
+**Texture uniforms use resource paths.** Assign textures as `"res://assets/textures/noise.png"` in the `shader_parameters` dictionary — Godot resolves the resource path.

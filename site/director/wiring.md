@@ -4,7 +4,7 @@ const messages0 = [
   { role: 'agent', text: `I need to connect the JumpPad body_entered signal to a handler on the JumpPad node (which should have a script with _on_body_entered). Let me check what signals are available.` },
   { role: 'agent', text: `JumpPad is an Area3D with monitoring=true, collision_mask=1 (player layer). No signals connected yet. Connecting body_entered to the JumpPad script.` },
   { role: 'agent', text: `Signal connected. When the player steps on JumpPad, _on_body_entered will be called on the JumpPad script. Make sure that script has a _on_body_entered method that applies the upward velocity to the body.` },
-  { role: 'human', text: `Also set the launch_force export to 20 on the JumpPad.` },
+  { role: 'human', text: `Also set the launch_force property to 20 on the JumpPad.` },
   { role: 'agent', text: `Done. launch_force = 20.0 set on JumpPad.` },
 ]
 </script>
@@ -113,39 +113,13 @@ List all signal connections on a node.
 }
 ```
 
-### `export_set`
+## Setting `@export` variables
 
-Set the value of an `@export` variable on a node's script.
-
-```json
-{
-  "op": "export_set",
-  "project_path": "/home/user/my-game",
-  "scene": "scenes/enemy.tscn",
-  "node": "Enemy",
-  "property": "patrol_speed",
-  "value": 3.5
-}
-```
-
-This is functionally identical to `node_set_properties` — both set properties via Godot's property system. The distinction is conceptual: `export_set` is for script-defined `@export` variables, while `node_set_properties` is for built-in Godot node properties.
-
-**Response:**
-```json
-{
-  "op": "export_set",
-  "node": "Enemy",
-  "property": "patrol_speed",
-  "value": 3.5,
-  "result": "ok"
-}
-```
-
-### Setting multiple exports at once
+`@export` variables are set the same way as any built-in property — use `node_set_properties`. Godot's property system makes no distinction between script-defined exports and built-in node properties at the API level.
 
 ```json
 {
-  "op": "export_set",
+  "op": "node_set_properties",
   "project_path": "/home/user/my-game",
   "scene": "scenes/enemy.tscn",
   "node": "Enemy",
@@ -213,4 +187,4 @@ This is functionally identical to `node_set_properties` — both set properties 
 
 **Use `spatial_inspect` with `include: ["signals"]`** to see connections in the running game. This is the fastest way to verify that wiring applied correctly.
 
-**`export_set` is the right tool for game designer parameters.** Things like enemy health, damage, speed, and range are usually `@export` variables — use `export_set` to tune them without touching the script.
+**`node_set_properties` works for `@export` variables too.** Things like enemy health, damage, speed, and range are usually `@export` variables — set them with `node_set_properties` just like any built-in property.

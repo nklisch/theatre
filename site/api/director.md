@@ -144,45 +144,15 @@ Complete parameter schemas for all Director operations. All operations require `
 }
 ```
 
-### `node_get_property`
+### `node_reparent`
 ```typescript
 {
-  op: "node_get_property"
-  project_path: string
-  scene: string
-  node: string
-  properties: string[]
-}
-```
-
-**Response:**
-```typescript
-{
-  op: "node_get_property"
-  node: string
-  properties: { [key: string]: any }
-}
-```
-
-### `node_move`
-```typescript
-{
-  op: "node_move"
+  op: "node_reparent"
   project_path: string
   scene: string
   node: string
   new_parent: string
-}
-```
-
-### `node_rename`
-```typescript
-{
-  op: "node_rename"
-  project_path: string
-  scene: string
-  node: string
-  new_name: string
+  new_name?: string              // also rename the node in place
 }
 ```
 
@@ -299,10 +269,10 @@ Complete parameter schemas for all Director operations. All operations require `
 
 ## GridMap Operations
 
-### `gridmap_set`
+### `gridmap_set_cells`
 ```typescript
 {
-  op: "gridmap_set"
+  op: "gridmap_set_cells"
   project_path: string
   scene: string
   node: string
@@ -398,38 +368,6 @@ Complete parameter schemas for all Director operations. All operations require `
 }
 ```
 
-### `shader_set`
-```typescript
-{
-  op: "shader_set"
-  project_path: string
-  material_path: string          // ShaderMaterial .tres path
-  shader_code: string            // GLSL code
-  save_shader_path?: string      // save as .gdshader if set
-}
-```
-
-### `shader_get_param`
-```typescript
-{
-  op: "shader_get_param"
-  project_path: string
-  material_path: string
-  param: string
-}
-```
-
-### `shader_set_param`
-```typescript
-{
-  op: "shader_set_param"
-  project_path: string
-  material_path: string
-  param?: string                 // single param
-  value?: any
-  params?: { [key: string]: any }  // multiple params
-}
-```
 
 ---
 
@@ -507,19 +445,6 @@ Complete parameter schemas for all Director operations. All operations require `
   project_path: string
   scene: string
   node: string
-}
-```
-
-### `export_set`
-```typescript
-{
-  op: "export_set"
-  project_path: string
-  scene: string
-  node: string
-  property?: string
-  value?: any
-  properties?: { [key: string]: any }
 }
 ```
 
