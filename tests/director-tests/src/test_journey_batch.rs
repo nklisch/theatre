@@ -112,7 +112,8 @@ fn journey_batch_partial_failure_recovery() {
     .unwrap_data();
 
     // 2. Batch with stop_on_error=false — one bad operation in the middle
-    let batch_data = f
+    // Note: batch returns success=false when any sub-op fails, but data is still populated
+    let batch_result = f
         .run(
             "batch",
             json!({
@@ -141,8 +142,8 @@ fn journey_batch_partial_failure_recovery() {
                 ]
             }),
         )
-        .unwrap()
-        .unwrap_data();
+        .unwrap();
+    let batch_data = &batch_result.data;
 
     // 3. Verify: completed=3, failed=1
     assert_eq!(batch_data["completed"], 3, "3 operations should succeed");

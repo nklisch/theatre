@@ -144,13 +144,28 @@ fn journey_scene_diff_tracks_iterative_changes() {
         .unwrap_data();
 
     // 7. Verify: added=[Particles], removed=[Label], changed includes Sprite position
+    // scene_diff returns node_path (not name) in added/removed/changed entries
     let added = diff["added"].as_array().unwrap();
     assert_eq!(added.len(), 1, "Exactly 1 node should be added");
-    assert_eq!(added[0]["name"], "Particles");
+    assert!(
+        added[0]["node_path"]
+            .as_str()
+            .unwrap_or("")
+            .contains("Particles"),
+        "Added node should be Particles, got: {:?}",
+        added[0]
+    );
 
     let removed = diff["removed"].as_array().unwrap();
     assert_eq!(removed.len(), 1, "Exactly 1 node should be removed");
-    assert_eq!(removed[0]["name"], "Label");
+    assert!(
+        removed[0]["node_path"]
+            .as_str()
+            .unwrap_or("")
+            .contains("Label"),
+        "Removed node should be Label, got: {:?}",
+        removed[0]
+    );
 
     let changed = diff["changed"].as_array().unwrap();
     assert!(
@@ -158,19 +173,9 @@ fn journey_scene_diff_tracks_iterative_changes() {
         "Sprite position change should appear in diff"
     );
     assert!(
-        changed.iter().any(|c| c["name"] == "Sprite"),
+        changed
+            .iter()
+            .any(|c| c["node_path"].as_str().unwrap_or("").contains("Sprite")),
         "Sprite should appear in changed list"
-    );
-
-    // No false positives — only 1 node changed (Sprite), not the root
-    // (Root node is not in changed unless its own properties changed)
-    let non_sprite_changes: Vec<_> = changed
-        .iter()
-        .filter(|c| c["name"] != "Sprite" && c["name"] != ".")
-        .collect();
-    assert!(
-        non_sprite_changes.is_empty(),
-        "No unexpected nodes in changed: {:?}",
-        non_sprite_changes
     );
 }

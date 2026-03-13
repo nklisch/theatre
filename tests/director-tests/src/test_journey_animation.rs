@@ -236,7 +236,7 @@ fn journey_create_character_animations() {
         )
         .unwrap()
         .unwrap_data();
-    assert!(remove_data["removed_count"].as_u64().unwrap() >= 1);
+    assert!(remove_data["tracks_removed"].as_u64().unwrap() >= 1);
 
     // 14. animation_read — verify attack has 1 track remaining (rotation only)
     let attack_after = f
