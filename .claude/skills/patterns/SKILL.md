@@ -24,3 +24,5 @@ Available patterns:
 - [clip-session.md](clip-session.md) — ClipSession Resource (open + analyze + finalize for clip analysis)
 - [godot-e2e-harness.md](godot-e2e-harness.md) — Godot E2E Test Harness (GodotFixture + TestHarness + E2EHarness + DirectorFixture + DaemonFixture)
 - [parse-mcp-enum.md](parse-mcp-enum.md) — ParseMcpEnum Trait (standardized string→enum parsing with consistent invalid_params errors)
+- [director-tool-macro.md](director-tool-macro.md) — Director Tool Macro (director_tool! wraps serialize_params + run_operation + serialize_response for all 38 Director tools)
+- [serde-defaults.md](serde-defaults.md) — Serde Default Functions (#[serde(default = "fn")] for non-zero MCP param defaults)
