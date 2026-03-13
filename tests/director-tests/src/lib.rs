@@ -76,3 +76,5 @@ mod test_signal;
 mod test_tilemap;
 #[cfg(test)]
 mod test_wiring;
+#[cfg(test)]
+mod test_gaps;
