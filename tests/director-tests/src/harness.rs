@@ -1,35 +1,24 @@
 #![allow(dead_code)]
 
-use std::io::{Read, Write};
+use std::io::Read;
+use spectator_protocol::codec;
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 
-/// A Director operation runner for E2E tests.
-///
-/// Spawns `godot --headless --path <project> --script addons/director/operations.gd
-/// -- <op> '<json>'` and parses the JSON result from stdout.
-pub struct DirectorFixture {
-    godot_bin: String,
-    project_dir: PathBuf,
+pub use director::oneshot::OperationResult;
+
+/// Extension methods for `OperationResult` used in tests.
+pub trait OperationResultExt {
+    /// Unwrap a successful result, panicking with the error message if not successful.
+    fn unwrap_data(self) -> serde_json::Value;
+
+    /// Unwrap a failed result, panicking with the data if successful.
+    fn unwrap_err(self) -> String;
 }
 
-/// Parsed operation result from GDScript stdout.
-#[derive(Debug, serde::Deserialize)]
-pub struct OperationResult {
-    pub success: bool,
-    #[serde(default)]
-    pub data: serde_json::Value,
-    #[serde(default)]
-    pub error: Option<String>,
-    #[serde(default)]
-    pub operation: Option<String>,
-    #[serde(default)]
-    pub context: Option<serde_json::Value>,
-}
-
-impl OperationResult {
-    pub fn unwrap_data(self) -> serde_json::Value {
+impl OperationResultExt for OperationResult {
+    fn unwrap_data(self) -> serde_json::Value {
         if !self.success {
             panic!(
                 "Expected success, got error: {}",
@@ -39,12 +28,21 @@ impl OperationResult {
         self.data
     }
 
-    pub fn unwrap_err(self) -> String {
+    fn unwrap_err(self) -> String {
         if self.success {
             panic!("Expected error, got success: {:?}", self.data);
         }
         self.error.unwrap_or_else(|| "unknown error".into())
     }
+}
+
+/// A Director operation runner for E2E tests.
+///
+/// Spawns `godot --headless --path <project> --script addons/director/operations.gd
+/// -- <op> '<json>'` and parses the JSON result from stdout.
+pub struct DirectorFixture {
+    godot_bin: String,
+    project_dir: PathBuf,
 }
 
 impl DirectorFixture {
@@ -167,6 +165,77 @@ pub fn assert_approx(actual: f64, expected: f64) {
 }
 
 // ---------------------------------------------------------------------------
+// Shared Godot fixture helper
+// ---------------------------------------------------------------------------
+
+/// Spawn a headless Godot process, wait for the director ready signal on stdout,
+/// then connect via TCP.
+///
+/// Returns `(child, stream)` on success. Panics if Godot fails to start,
+/// the ready signal is not received, or the TCP connection fails.
+///
+/// - `script`: relative script path passed as `--script` (e.g. `"addons/director/daemon.gd"`)
+/// - `port_env`: environment variable name for the port (e.g. `"DIRECTOR_DAEMON_PORT"`)
+/// - `port`: port number to pass via the env var and connect to
+fn spawn_godot_fixture(script: &str, port_env: &str, port: u16) -> (Child, TcpStream) {
+    use std::io::BufRead;
+
+    let godot_bin = std::env::var("GODOT_BIN").unwrap_or_else(|_| "godot".into());
+    let project_dir = project_dir_path();
+
+    let mut child = Command::new(&godot_bin)
+        .args([
+            "--headless",
+            "--path",
+            &project_dir.to_string_lossy(),
+            "--script",
+            script,
+        ])
+        .env(port_env, port.to_string())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .unwrap_or_else(|e| panic!("Failed to launch Godot ({godot_bin}) for {script}: {e}"));
+
+    // Read stdout line-by-line until we see the ready signal, then keep
+    // draining it in a background thread so the pipe stays open and Godot
+    // doesn't get SIGPIPE when printing later output (e.g. Spectator logs).
+    let stdout = child.stdout.take().expect("stdout was piped");
+    let mut reader = std::io::BufReader::new(stdout);
+    let mut ready = false;
+
+    for line in reader.by_ref().lines() {
+        let line = line.expect("reading Godot stdout");
+        let trimmed = line.trim().to_string();
+        if let Ok(val) = serde_json::from_str::<serde_json::Value>(&trimmed)
+            && val.get("source").and_then(|v| v.as_str()) == Some("director")
+            && val.get("status").and_then(|v| v.as_str()) == Some("ready")
+        {
+            ready = true;
+            break;
+        }
+    }
+
+    if !ready {
+        let _ = child.kill();
+        panic!("Godot process ({script}) did not emit ready signal");
+    }
+
+    // Keep draining stdout so the pipe never fills and Godot never gets SIGPIPE.
+    std::thread::spawn(move || for _ in reader.lines() {});
+
+    // Connect TCP.
+    let addr = format!("127.0.0.1:{port}");
+    let stream = TcpStream::connect(&addr)
+        .unwrap_or_else(|e| panic!("Failed to connect to {script} at {addr}: {e}"));
+    stream
+        .set_read_timeout(Some(std::time::Duration::from_secs(30)))
+        .expect("set_read_timeout");
+
+    (child, stream)
+}
+
+// ---------------------------------------------------------------------------
 // DaemonFixture — synchronous test harness for the headless daemon
 // ---------------------------------------------------------------------------
 
@@ -189,59 +258,9 @@ impl DaemonFixture {
     }
 
     pub fn start_with_port(port: u16) -> Self {
-        let godot_bin = std::env::var("GODOT_BIN").unwrap_or_else(|_| "godot".into());
         let project_dir = project_dir_path();
-
-        let mut child = Command::new(&godot_bin)
-            .args([
-                "--headless",
-                "--path",
-                &project_dir.to_string_lossy(),
-                "--script",
-                "addons/director/daemon.gd",
-            ])
-            .env("DIRECTOR_DAEMON_PORT", port.to_string())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-            .unwrap_or_else(|e| panic!("Failed to launch Godot daemon ({godot_bin}): {e}"));
-
-        // Read stdout line-by-line until we see the ready signal, then keep
-        // draining it in a background thread so the pipe stays open and Godot
-        // doesn't get SIGPIPE when printing later output (e.g. Spectator logs).
-        let stdout = child.stdout.take().expect("stdout was piped");
-        let mut reader = std::io::BufReader::new(stdout);
-        let mut ready = false;
-
-        use std::io::BufRead;
-        for line in reader.by_ref().lines() {
-            let line = line.expect("reading daemon stdout");
-            let trimmed = line.trim().to_string();
-            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&trimmed)
-                && val.get("source").and_then(|v| v.as_str()) == Some("director")
-                && val.get("status").and_then(|v| v.as_str()) == Some("ready")
-            {
-                ready = true;
-                break;
-            }
-        }
-
-        if !ready {
-            let _ = child.kill();
-            panic!("Daemon did not emit ready signal");
-        }
-
-        // Keep draining stdout so the pipe never fills and the daemon never gets SIGPIPE.
-        std::thread::spawn(move || for _ in reader.lines() {});
-
-        // Connect TCP.
-        let addr = format!("127.0.0.1:{port}");
-        let stream = TcpStream::connect(&addr)
-            .unwrap_or_else(|e| panic!("Failed to connect to daemon at {addr}: {e}"));
-        stream
-            .set_read_timeout(Some(std::time::Duration::from_secs(30)))
-            .expect("set_read_timeout");
-
+        let (child, stream) =
+            spawn_godot_fixture("addons/director/daemon.gd", "DIRECTOR_DAEMON_PORT", port);
         DaemonFixture {
             child: Some(child),
             stream: Some(stream),
@@ -261,8 +280,9 @@ impl DaemonFixture {
             "params": params,
         });
         let stream = self.stream.as_mut().expect("stream is open");
-        daemon_write_message(stream, &request)?;
-        let response = daemon_read_message(stream)?;
+        codec::write_message(stream, &request).map_err(|e| anyhow::anyhow!("write error: {e}"))?;
+        let response: serde_json::Value =
+            codec::read_message(stream).map_err(|e| anyhow::anyhow!("read error: {e}"))?;
         serde_json::from_value(response).map_err(|e| anyhow::anyhow!("parse error: {e}"))
     }
 
@@ -270,7 +290,7 @@ impl DaemonFixture {
     pub fn quit(&mut self) -> anyhow::Result<()> {
         let request = serde_json::json!({"operation": "quit", "params": {}});
         let stream = self.stream.as_mut().expect("stream is open");
-        daemon_write_message(stream, &request)?;
+        codec::write_message(stream, &request).map_err(|e| anyhow::anyhow!("write error: {e}"))?;
         Ok(())
     }
 
@@ -288,7 +308,7 @@ impl Drop for DaemonFixture {
         // Best-effort quit then kill.
         if let Some(ref mut stream) = self.stream {
             let quit = serde_json::json!({"operation": "quit", "params": {}});
-            let _ = daemon_write_message(stream, &quit);
+            let _ = codec::write_message(stream, &quit);
         }
         if let Some(ref mut child) = self.child {
             let _ = child.kill();
@@ -321,57 +341,12 @@ impl EditorFixture {
     }
 
     pub fn start_with_port(port: u16) -> Self {
-        let godot_bin = std::env::var("GODOT_BIN").unwrap_or_else(|_| "godot".into());
         let project_dir = project_dir_path();
-
-        let mut child = Command::new(&godot_bin)
-            .args([
-                "--headless",
-                "--path",
-                &project_dir.to_string_lossy(),
-                "--script",
-                "addons/director/mock_editor_server.gd",
-            ])
-            .env("DIRECTOR_EDITOR_PORT", port.to_string())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::null())
-            .spawn()
-            .unwrap_or_else(|e| panic!("Failed to launch mock editor server ({godot_bin}): {e}"));
-
-        // Read stdout until ready signal, then drain in background.
-        let stdout = child.stdout.take().expect("stdout was piped");
-        let mut reader = std::io::BufReader::new(stdout);
-        let mut ready = false;
-
-        use std::io::BufRead;
-        for line in reader.by_ref().lines() {
-            let line = line.expect("reading mock editor stdout");
-            let trimmed = line.trim().to_string();
-            if let Ok(val) = serde_json::from_str::<serde_json::Value>(&trimmed)
-                && val.get("source").and_then(|v| v.as_str()) == Some("director")
-                && val.get("status").and_then(|v| v.as_str()) == Some("ready")
-            {
-                ready = true;
-                break;
-            }
-        }
-
-        if !ready {
-            let _ = child.kill();
-            panic!("Mock editor server did not emit ready signal");
-        }
-
-        // Keep draining stdout so the pipe stays open.
-        std::thread::spawn(move || for _ in reader.lines() {});
-
-        // Connect TCP.
-        let addr = format!("127.0.0.1:{port}");
-        let stream = TcpStream::connect(&addr)
-            .unwrap_or_else(|e| panic!("Failed to connect to mock editor at {addr}: {e}"));
-        stream
-            .set_read_timeout(Some(std::time::Duration::from_secs(30)))
-            .expect("set_read_timeout");
-
+        let (child, stream) = spawn_godot_fixture(
+            "addons/director/mock_editor_server.gd",
+            "DIRECTOR_EDITOR_PORT",
+            port,
+        );
         EditorFixture {
             child: Some(child),
             stream: Some(stream),
@@ -391,8 +366,9 @@ impl EditorFixture {
             "params": params,
         });
         let stream = self.stream.as_mut().expect("stream is open");
-        daemon_write_message(stream, &request)?;
-        let response = daemon_read_message(stream)?;
+        codec::write_message(stream, &request).map_err(|e| anyhow::anyhow!("write error: {e}"))?;
+        let response: serde_json::Value =
+            codec::read_message(stream).map_err(|e| anyhow::anyhow!("read error: {e}"))?;
         serde_json::from_value(response).map_err(|e| anyhow::anyhow!("parse error: {e}"))
     }
 
@@ -478,23 +454,3 @@ impl CliFixture {
     }
 }
 
-/// Write a length-prefixed JSON message to a synchronous TCP stream.
-fn daemon_write_message(stream: &mut TcpStream, value: &serde_json::Value) -> anyhow::Result<()> {
-    let json = serde_json::to_vec(value)?;
-    let len = (json.len() as u32).to_be_bytes();
-    stream.write_all(&len)?;
-    stream.write_all(&json)?;
-    stream.flush()?;
-    Ok(())
-}
-
-/// Read a length-prefixed JSON message from a synchronous TCP stream.
-fn daemon_read_message(stream: &mut TcpStream) -> anyhow::Result<serde_json::Value> {
-    let mut len_buf = [0u8; 4];
-    stream.read_exact(&mut len_buf)?;
-    let len = u32::from_be_bytes(len_buf) as usize;
-    let mut buf = vec![0u8; len];
-    stream.read_exact(&mut buf)?;
-    let raw = String::from_utf8_lossy(&buf).into_owned();
-    serde_json::from_slice(&buf).map_err(|e| anyhow::anyhow!("JSON parse error: {e}\nraw: {raw}"))
-}

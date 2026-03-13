@@ -1,6 +1,6 @@
 use serde_json::json;
 
-use crate::harness::DirectorFixture;
+use crate::harness::{DirectorFixture, OperationResultExt};
 
 #[test]
 #[ignore = "requires Godot binary"]

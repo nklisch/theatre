@@ -1,4 +1,8 @@
 use anyhow::Result;
+
+const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
+const QUERY_TIMEOUT: Duration = Duration::from_secs(5);
+const RECONNECT_DELAY: Duration = Duration::from_secs(2);
 use rmcp::model::ErrorData as McpError;
 use spectator_core::config::SessionConfig;
 use spectator_core::delta::DeltaEngine;
@@ -119,7 +123,7 @@ pub async fn tcp_client_loop(state: Arc<Mutex<SessionState>>, port: u16) {
             }
         }
 
-        sleep(Duration::from_secs(2)).await;
+        sleep(RECONNECT_DELAY).await;
     }
 }
 
@@ -128,7 +132,7 @@ async fn handle_connection(stream: TcpStream, state: Arc<Mutex<SessionState>>) -
 
     // Step 1: Read handshake from addon (timeout: Godot may have another client active)
     let msg: Message =
-        tokio::time::timeout(Duration::from_secs(10), async_io::read_message(&mut reader))
+        tokio::time::timeout(HANDSHAKE_TIMEOUT, async_io::read_message(&mut reader))
             .await
             .map_err(|_| {
                 anyhow::anyhow!(
@@ -285,7 +289,7 @@ pub async fn query_addon(
     }
     // Lock released — wait for response
 
-    let result = tokio::time::timeout(Duration::from_secs(5), rx)
+    let result = tokio::time::timeout(QUERY_TIMEOUT, rx)
         .await
         .map_err(|_| {
             McpError::internal_error(

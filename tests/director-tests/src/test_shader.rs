@@ -1,4 +1,4 @@
-use crate::harness::DirectorFixture;
+use crate::harness::{DirectorFixture, OperationResultExt};
 use serde_json::json;
 
 #[test]

@@ -1,6 +1,8 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use super::defaults::{default_root, default_true};
+
 /// Parameters for `scene_create`.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct SceneCreateParams {
@@ -30,10 +32,6 @@ pub struct SceneReadParams {
     /// Whether to include node properties in the output (default: true).
     #[serde(default = "default_true")]
     pub properties: bool,
-}
-
-fn default_true() -> bool {
-    true
 }
 
 /// Parameters for `scene_list`.
@@ -74,6 +72,3 @@ pub struct SceneAddInstanceParams {
     pub node_name: Option<String>,
 }
 
-fn default_root() -> String {
-    ".".to_string()
-}

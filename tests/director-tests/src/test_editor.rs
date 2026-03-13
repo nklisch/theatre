@@ -1,6 +1,6 @@
 use serde_json::json;
 
-use crate::harness::{DirectorFixture, EditorFixture};
+use crate::harness::{DirectorFixture, EditorFixture, OperationResultExt};
 
 // Each test uses a distinct port (16561–16565) to avoid conflicts with
 // daemon tests (16551–16552) and other parallel tests.

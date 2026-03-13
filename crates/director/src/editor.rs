@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::time::Duration;
 
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use spectator_protocol::codec::async_io;
 use tokio::net::TcpStream;
 
 use crate::oneshot::{OperationError, OperationResult};
@@ -78,8 +78,12 @@ impl EditorHandle {
         });
 
         tokio::time::timeout(OPERATION_TIMEOUT, async {
-            write_message(&mut self.stream, &request).await?;
-            let response = read_message(&mut self.stream).await?;
+            async_io::write_message(&mut self.stream, &request)
+                .await
+                .map_err(codec_error_to_editor)?;
+            let response: serde_json::Value = async_io::read_message(&mut self.stream)
+                .await
+                .map_err(codec_error_to_editor)?;
             serde_json::from_value(response).map_err(|source| EditorError::ParseFailed {
                 source,
                 raw: String::new(),
@@ -146,40 +150,24 @@ fn parse_editor_port_from_project(contents: &str) -> Option<u16> {
     None
 }
 
-// -- Wire format (identical to daemon.rs) -----------------------------------
-
-async fn write_message(
-    stream: &mut TcpStream,
-    value: &serde_json::Value,
-) -> Result<(), EditorError> {
-    let json = serde_json::to_vec(value).map_err(|source| EditorError::ParseFailed {
-        source,
-        raw: String::new(),
-    })?;
-    let len = (json.len() as u32).to_be_bytes();
-    stream.write_all(&len).await.map_err(EditorError::IoError)?;
-    stream
-        .write_all(&json)
-        .await
-        .map_err(EditorError::IoError)?;
-    stream.flush().await.map_err(EditorError::IoError)?;
-    Ok(())
-}
-
-async fn read_message(stream: &mut TcpStream) -> Result<serde_json::Value, EditorError> {
-    let mut len_buf = [0u8; 4];
-    stream
-        .read_exact(&mut len_buf)
-        .await
-        .map_err(EditorError::IoError)?;
-    let len = u32::from_be_bytes(len_buf) as usize;
-    let mut buf = vec![0u8; len];
-    stream
-        .read_exact(&mut buf)
-        .await
-        .map_err(EditorError::IoError)?;
-    let raw = String::from_utf8_lossy(&buf).into_owned();
-    serde_json::from_slice(&buf).map_err(|source| EditorError::ParseFailed { source, raw })
+/// Map a `CodecError` to `EditorError`.
+fn codec_error_to_editor(e: spectator_protocol::codec::CodecError) -> EditorError {
+    use spectator_protocol::codec::CodecError;
+    match e {
+        CodecError::Io(io) => EditorError::IoError(io),
+        CodecError::Serialize(src) => EditorError::ParseFailed {
+            source: src,
+            raw: String::new(),
+        },
+        CodecError::Deserialize(src) => EditorError::ParseFailed {
+            source: src,
+            raw: String::new(),
+        },
+        CodecError::MessageTooLarge(n) => EditorError::IoError(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("message too large: {n} bytes"),
+        )),
+    }
 }
 
 #[cfg(test)]

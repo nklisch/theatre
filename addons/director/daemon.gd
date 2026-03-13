@@ -3,6 +3,7 @@ extends SceneTree
 ## Director headless daemon — persistent TCP command server.
 ## Launched via: godot --headless --path <project> --script addons/director/daemon.gd
 
+const MessageCodec = preload("res://addons/director/message_codec.gd")
 const SceneOps = preload("res://addons/director/ops/scene_ops.gd")
 const NodeOps = preload("res://addons/director/ops/node_ops.gd")
 const ResourceOps = preload("res://addons/director/ops/resource_ops.gd")
@@ -88,14 +89,18 @@ func _poll_client() -> void:
 			_read_buf.append_array(res[1] as PackedByteArray)
 
 	# Try to decode and handle one message per frame.
-	var msg = _try_decode_message()
+	var decode_result = MessageCodec.try_decode(_read_buf)
+	var msg: Dictionary = decode_result[0]
+	var bytes_consumed: int = decode_result[1]
+	if bytes_consumed > 0:
+		_read_buf = _read_buf.slice(bytes_consumed)
 	if msg.is_empty():
 		return
 
 	var operation: String = msg.get("operation", "")
 
 	if operation == "quit":
-		_send_message({"success": true, "data": {"status": "shutdown"}, "operation": "quit"})
+		_client.put_data(MessageCodec.encode({"success": true, "data": {"status": "shutdown"}, "operation": "quit"}))
 		print(JSON.stringify({"source": "director", "status": "shutdown"}))
 		quit(0)
 		return
@@ -106,56 +111,7 @@ func _poll_client() -> void:
 
 	var params: Dictionary = msg.get("params", {})
 	var result = _dispatch(operation, params)
-	_send_message(result)
-
-
-func _try_decode_message() -> Dictionary:
-	# Need at least 4 bytes for the length prefix.
-	if _read_buf.size() < 4:
-		return {}
-
-	# Decode big-endian u32 from the first 4 bytes.
-	var msg_len: int = (_read_buf[0] << 24) | (_read_buf[1] << 16) | (_read_buf[2] << 8) | _read_buf[3]
-
-	if msg_len == 0:
-		# Consume the 4 zero bytes and return empty (malformed message).
-		_read_buf = _read_buf.slice(4)
-		return {}
-
-	# Wait until the full message body is buffered.
-	if _read_buf.size() < 4 + msg_len:
-		return {}
-
-	# Extract the JSON body and advance the buffer.
-	var msg_bytes: PackedByteArray = _read_buf.slice(4, 4 + msg_len)
-	_read_buf = _read_buf.slice(4 + msg_len)
-
-	var json_str = msg_bytes.get_string_from_utf8()
-	var json = JSON.new()
-	if json.parse(json_str) != OK:
-		return {}
-
-	var data = json.get_data()
-	if typeof(data) != TYPE_DICTIONARY:
-		return {}
-
-	return data
-
-
-func _send_message(data: Dictionary) -> void:
-	var json_str = JSON.stringify(data)
-	var json_bytes: PackedByteArray = json_str.to_utf8_buffer()
-	var msg_len = json_bytes.size()
-
-	var len_bytes = PackedByteArray([
-		(msg_len >> 24) & 0xFF,
-		(msg_len >> 16) & 0xFF,
-		(msg_len >> 8) & 0xFF,
-		msg_len & 0xFF,
-	])
-
-	_client.put_data(len_bytes)
-	_client.put_data(json_bytes)
+	_client.put_data(MessageCodec.encode(result))
 
 
 func _dispatch(operation: String, params: Dictionary) -> Dictionary:

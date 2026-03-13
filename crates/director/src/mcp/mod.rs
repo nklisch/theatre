@@ -1,4 +1,5 @@
 pub mod animation;
+pub mod defaults;
 pub mod gridmap;
 pub mod meta;
 pub mod node;

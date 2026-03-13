@@ -166,8 +166,10 @@ name = "director-tests"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "director",
  "serde",
  "serde_json",
+ "spectator-protocol",
 ]
 
 [[package]]

@@ -1,6 +1,8 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use super::defaults::default_root;
+
 /// Parameters for `node_add`.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct NodeAddParams {
@@ -78,10 +80,6 @@ pub struct NodeReparentParams {
     /// Rename the node during reparent. Useful to avoid name collisions.
     #[serde(default)]
     pub new_name: Option<String>,
-}
-
-fn default_root() -> String {
-    ".".to_string()
 }
 
 /// Parameters for `node_set_groups`.

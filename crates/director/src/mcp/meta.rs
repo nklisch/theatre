@@ -1,6 +1,8 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+use super::defaults::default_true;
+
 /// A single operation within a batch.
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct BatchOperation {
@@ -25,10 +27,6 @@ pub struct BatchParams {
     /// If false, continue with remaining operations.
     #[serde(default = "default_true")]
     pub stop_on_error: bool,
-}
-
-fn default_true() -> bool {
-    true
 }
 
 /// Parameters for `scene_diff`.

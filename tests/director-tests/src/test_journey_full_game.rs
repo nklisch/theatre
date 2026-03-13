@@ -1,4 +1,4 @@
-use crate::harness::{DirectorFixture, assert_approx, project_dir_path};
+use crate::harness::{DirectorFixture, assert_approx, project_dir_path, OperationResultExt};
 use serde_json::json;
 use std::io::Write as IoWrite;
 

@@ -1,7 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
+use spectator_protocol::codec::async_io;
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::process::{Child, ChildStdout, Command};
 
@@ -155,8 +156,12 @@ impl DaemonHandle {
         });
 
         tokio::time::timeout(OPERATION_TIMEOUT, async {
-            write_message(&mut self.stream, &request).await?;
-            let response = read_message(&mut self.stream).await?;
+            async_io::write_message(&mut self.stream, &request)
+                .await
+                .map_err(codec_error_to_daemon)?;
+            let response: serde_json::Value = async_io::read_message(&mut self.stream)
+                .await
+                .map_err(codec_error_to_daemon)?;
             serde_json::from_value(response).map_err(|source| DaemonError::ParseFailed {
                 source,
                 raw: String::new(),
@@ -175,7 +180,7 @@ impl DaemonHandle {
     pub async fn shutdown(mut self) -> Result<(), DaemonError> {
         let quit_msg = serde_json::json!({"operation": "quit", "params": {}});
         // Best-effort send — ignore errors if the daemon is already gone.
-        let _ = write_message(&mut self.stream, &quit_msg).await;
+        let _ = async_io::write_message::<serde_json::Value>(&mut self.stream, &quit_msg).await;
         self.child.wait().await.map_err(DaemonError::SpawnFailed)?;
         Ok(())
     }
@@ -211,40 +216,24 @@ pub fn resolve_daemon_port() -> u16 {
         .unwrap_or(DEFAULT_PORT)
 }
 
-/// Write a length-prefixed JSON message to a TCP stream.
-async fn write_message(
-    stream: &mut TcpStream,
-    value: &serde_json::Value,
-) -> Result<(), DaemonError> {
-    let json = serde_json::to_vec(value).map_err(|source| DaemonError::ParseFailed {
-        source,
-        raw: String::new(),
-    })?;
-    let len = (json.len() as u32).to_be_bytes();
-    stream.write_all(&len).await.map_err(DaemonError::IoError)?;
-    stream
-        .write_all(&json)
-        .await
-        .map_err(DaemonError::IoError)?;
-    stream.flush().await.map_err(DaemonError::IoError)?;
-    Ok(())
-}
-
-/// Read a length-prefixed JSON message from a TCP stream.
-async fn read_message(stream: &mut TcpStream) -> Result<serde_json::Value, DaemonError> {
-    let mut len_buf = [0u8; 4];
-    stream
-        .read_exact(&mut len_buf)
-        .await
-        .map_err(DaemonError::IoError)?;
-    let len = u32::from_be_bytes(len_buf) as usize;
-    let mut buf = vec![0u8; len];
-    stream
-        .read_exact(&mut buf)
-        .await
-        .map_err(DaemonError::IoError)?;
-    let raw = String::from_utf8_lossy(&buf).into_owned();
-    serde_json::from_slice(&buf).map_err(|source| DaemonError::ParseFailed { source, raw })
+/// Map a `CodecError` to `DaemonError`.
+fn codec_error_to_daemon(e: spectator_protocol::codec::CodecError) -> DaemonError {
+    use spectator_protocol::codec::CodecError;
+    match e {
+        CodecError::Io(io) => DaemonError::IoError(io),
+        CodecError::Serialize(src) => DaemonError::ParseFailed {
+            source: src,
+            raw: String::new(),
+        },
+        CodecError::Deserialize(src) => DaemonError::ParseFailed {
+            source: src,
+            raw: String::new(),
+        },
+        CodecError::MessageTooLarge(n) => DaemonError::IoError(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("message too large: {n} bytes"),
+        )),
+    }
 }
 
 // ---------------------------------------------------------------------------

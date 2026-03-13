@@ -1,4 +1,4 @@
-use crate::harness::DaemonFixture;
+use crate::harness::{DaemonFixture, OperationResultExt};
 use serde_json::json;
 
 #[test]
