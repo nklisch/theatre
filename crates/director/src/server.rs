@@ -9,15 +9,14 @@ use schemars::JsonSchema;
 use crate::backend::Backend;
 use crate::responses::{
     AnimationAddTrackResponse, AnimationCreateResponse, AnimationReadResponse,
-    AnimationRemoveTrackResponse, BatchResponse, ExportMeshLibraryResponse,
-    GridMapClearResponse, GridMapGetCellsResponse, GridMapSetCellsResponse,
-    NodeAddResponse, NodeFindResponse, NodeRemoveResponse, NodeReparentResponse,
-    NodeSetGroupsResponse, NodeSetMetaResponse, NodeSetPropertiesResponse,
-    NodeSetScriptResponse, PhysicsSetLayerNamesResponse, PhysicsSetLayersResponse,
-    ResourceCreateResponse, ResourceDuplicateResponse, ResourceReadResponse,
-    SceneAddInstanceResponse, SceneCreateResponse, SceneDiffResponse, SceneListResponse,
-    SceneReadResponse, ShapeCreateResponse, SignalConnectionResponse, SignalListResponse,
-    TileMapClearResponse, TileMapGetCellsResponse, TileMapSetCellsResponse,
+    AnimationRemoveTrackResponse, BatchResponse, ExportMeshLibraryResponse, GridMapClearResponse,
+    GridMapGetCellsResponse, GridMapSetCellsResponse, NodeAddResponse, NodeFindResponse,
+    NodeRemoveResponse, NodeReparentResponse, NodeSetGroupsResponse, NodeSetMetaResponse,
+    NodeSetPropertiesResponse, NodeSetScriptResponse, PhysicsSetLayerNamesResponse,
+    PhysicsSetLayersResponse, ResourceCreateResponse, ResourceDuplicateResponse,
+    ResourceReadResponse, SceneAddInstanceResponse, SceneCreateResponse, SceneDiffResponse,
+    SceneListResponse, SceneReadResponse, ShapeCreateResponse, SignalConnectionResponse,
+    SignalListResponse, TileMapClearResponse, TileMapGetCellsResponse, TileMapSetCellsResponse,
     UidGetResponse, UidUpdateProjectResponse, VisualShaderCreateResponse,
 };
 
@@ -27,7 +26,10 @@ pub struct DirectorServer {
     pub backend: Arc<Backend>,
 }
 
-fn attach_output_schema<T: JsonSchema + 'static>(router: &mut ToolRouter<DirectorServer>, tool_name: &str) {
+fn attach_output_schema<T: JsonSchema + 'static>(
+    router: &mut ToolRouter<DirectorServer>,
+    tool_name: &str,
+) {
     if let Some(route) = router.map.get_mut(tool_name) {
         route.attr = route.attr.clone().with_output_schema::<T>();
     }
@@ -66,7 +68,10 @@ impl DirectorServer {
         attach_output_schema::<AnimationReadResponse>(&mut router, "animation_read");
         attach_output_schema::<AnimationRemoveTrackResponse>(&mut router, "animation_remove_track");
         attach_output_schema::<PhysicsSetLayersResponse>(&mut router, "physics_set_layers");
-        attach_output_schema::<PhysicsSetLayerNamesResponse>(&mut router, "physics_set_layer_names");
+        attach_output_schema::<PhysicsSetLayerNamesResponse>(
+            &mut router,
+            "physics_set_layer_names",
+        );
         attach_output_schema::<VisualShaderCreateResponse>(&mut router, "visual_shader_create");
         attach_output_schema::<BatchResponse>(&mut router, "batch");
         attach_output_schema::<UidGetResponse>(&mut router, "uid_get");

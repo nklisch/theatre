@@ -44,15 +44,14 @@ use spectator_protocol::mcp_helpers::{deserialize_response, serialize_params, se
 
 use crate::responses::{
     AnimationAddTrackResponse, AnimationCreateResponse, AnimationReadResponse,
-    AnimationRemoveTrackResponse, BatchResponse, ExportMeshLibraryResponse,
-    GridMapClearResponse, GridMapGetCellsResponse, GridMapSetCellsResponse,
-    NodeAddResponse, NodeFindResponse, NodeRemoveResponse, NodeReparentResponse,
-    NodeSetGroupsResponse, NodeSetMetaResponse, NodeSetPropertiesResponse,
-    NodeSetScriptResponse, PhysicsSetLayerNamesResponse, PhysicsSetLayersResponse,
-    ResourceCreateResponse, ResourceDuplicateResponse, ResourceReadResponse, SceneAddInstanceResponse,
-    SceneCreateResponse, SceneDiffResponse, SceneListResponse, SceneReadResponse,
-    ShapeCreateResponse, SignalConnectionResponse, SignalListResponse,
-    TileMapClearResponse, TileMapGetCellsResponse, TileMapSetCellsResponse,
+    AnimationRemoveTrackResponse, BatchResponse, ExportMeshLibraryResponse, GridMapClearResponse,
+    GridMapGetCellsResponse, GridMapSetCellsResponse, NodeAddResponse, NodeFindResponse,
+    NodeRemoveResponse, NodeReparentResponse, NodeSetGroupsResponse, NodeSetMetaResponse,
+    NodeSetPropertiesResponse, NodeSetScriptResponse, PhysicsSetLayerNamesResponse,
+    PhysicsSetLayersResponse, ResourceCreateResponse, ResourceDuplicateResponse,
+    ResourceReadResponse, SceneAddInstanceResponse, SceneCreateResponse, SceneDiffResponse,
+    SceneListResponse, SceneReadResponse, ShapeCreateResponse, SignalConnectionResponse,
+    SignalListResponse, TileMapClearResponse, TileMapGetCellsResponse, TileMapSetCellsResponse,
     UidGetResponse, UidUpdateProjectResponse, VisualShaderCreateResponse,
 };
 
@@ -144,7 +143,12 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<NodeSetPropertiesParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "node_set_properties", NodeSetPropertiesResponse)
+        director_tool!(
+            self,
+            params,
+            "node_set_properties",
+            NodeSetPropertiesResponse
+        )
     }
 
     #[tool(
@@ -259,7 +263,12 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<ResourceDuplicateParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "resource_duplicate", ResourceDuplicateResponse)
+        director_tool!(
+            self,
+            params,
+            "resource_duplicate",
+            ResourceDuplicateResponse
+        )
     }
 
     #[tool(
@@ -361,7 +370,12 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<AnimationAddTrackParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "animation_add_track", AnimationAddTrackResponse)
+        director_tool!(
+            self,
+            params,
+            "animation_add_track",
+            AnimationAddTrackResponse
+        )
     }
 
     #[tool(
@@ -387,7 +401,12 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<AnimationRemoveTrackParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "animation_remove_track", AnimationRemoveTrackResponse)
+        director_tool!(
+            self,
+            params,
+            "animation_remove_track",
+            AnimationRemoveTrackResponse
+        )
     }
 
     #[tool(
@@ -415,7 +434,12 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<PhysicsSetLayerNamesParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "physics_set_layer_names", PhysicsSetLayerNamesResponse)
+        director_tool!(
+            self,
+            params,
+            "physics_set_layer_names",
+            PhysicsSetLayerNamesResponse
+        )
     }
 
     #[tool(
@@ -431,7 +455,12 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<VisualShaderCreateParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "visual_shader_create", VisualShaderCreateResponse)
+        director_tool!(
+            self,
+            params,
+            "visual_shader_create",
+            VisualShaderCreateResponse
+        )
     }
 
     #[tool(
@@ -498,7 +527,12 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<ExportMeshLibraryParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "export_mesh_library", ExportMeshLibraryResponse)
+        director_tool!(
+            self,
+            params,
+            "export_mesh_library",
+            ExportMeshLibraryResponse
+        )
     }
 
     #[tool(
