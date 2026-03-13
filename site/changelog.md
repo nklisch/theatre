@@ -116,5 +116,5 @@ Batch: `batch`
 - E2E journey tests in `tests/wire-tests/` and `tests/director-tests/`
 - E2E tests marked `#[ignore = "requires Godot binary"]`
 
-[Unreleased]: https://github.com/nathanielfernandes/theatre/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/nathanielfernandes/theatre/releases/tag/v0.1.0
+[Unreleased]: https://github.com/nklisch/theatre/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/nklisch/theatre/releases/tag/v0.1.0

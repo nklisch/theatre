@@ -14,7 +14,7 @@ How to build, test, and submit changes to Theatre.
 ### Clone and build
 
 ```bash
-git clone https://github.com/nathanielfernandes/theatre
+git clone https://github.com/nklisch/theatre
 cd theatre
 
 # Build everything (debug)

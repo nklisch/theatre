@@ -153,7 +153,7 @@ export default defineConfig({
     },
 
     socialLinks: [
-      { icon: 'github', link: 'https://github.com/nathanielfernandes/theatre' }
+      { icon: 'github', link: 'https://github.com/nklisch/theatre' }
     ],
 
     search: {
@@ -166,7 +166,7 @@ export default defineConfig({
     },
 
     editLink: {
-      pattern: 'https://github.com/nathanielfernandes/theatre/edit/main/site/:path',
+      pattern: 'https://github.com/nklisch/theatre/edit/main/site/:path',
       text: 'Edit this page on GitHub'
     }
   }

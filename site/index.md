@@ -97,7 +97,7 @@ screenshots, no narration, no guessing from code.
 
 ```bash
 # Clone and build
-git clone https://github.com/nathanielfernandes/theatre
+git clone https://github.com/nklisch/theatre
 cd theatre
 cargo build --workspace --release
 

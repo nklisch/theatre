@@ -40,7 +40,7 @@ Theatre exposes tools via [Model Context Protocol](https://modelcontextprotocol.
 
 ```bash
 # Clone the repository
-git clone https://github.com/nathanielfernandes/theatre
+git clone https://github.com/nklisch/theatre
 cd theatre
 
 # Build everything (debug)
