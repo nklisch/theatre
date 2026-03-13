@@ -4,6 +4,8 @@ A toolkit giving AI agents the ability to build and debug Godot games. Two MCP
 servers — **Director** (build) and **Spectator** (observe) — that work together
 or independently.
 
+**Documentation**: [godot-theatre.dev](https://godot-theatre.dev)
+
 ## Tools
 
 | Tool | Purpose | MCP Server | Godot Side |
