@@ -9,8 +9,8 @@ name = "spectator-server"
 path = "src/main.rs"
 
 [dependencies]
-spectator-protocol = { workspace = true, features = ["async", "mcp"] }
-spectator-core.workspace = true
+spectator-protocol = { workspace = true, features = ["async", "mcp", "schema"] }
+spectator-core = { workspace = true, features = ["schema"] }
 rmcp = { version = "0.16", features = ["server", "transport-io", "macros"] }
 tokio.workspace = true
 serde.workspace = true

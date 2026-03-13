@@ -6,6 +6,7 @@ pub mod defaults;
 pub mod delta;
 pub mod inspect;
 pub mod query;
+pub mod responses;
 pub mod scene_tree;
 pub mod snapshot;
 pub mod watch;
@@ -64,57 +65,6 @@ async fn query_and_deserialize<P: Serialize, R: for<'de> Deserialize<'de>>(
 ) -> Result<R, McpError> {
     let data = query_addon(state, method, serialize_params(params)?).await?;
     deserialize_response(data)
-}
-
-/// Parse a string into an enum variant, returning McpError::invalid_params on mismatch.
-fn parse_enum_param<T: Clone>(
-    value: &str,
-    field_name: &str,
-    variants: &[(&str, T)],
-) -> Result<T, McpError> {
-    for (name, variant) in variants {
-        if *name == value {
-            return Ok(variant.clone());
-        }
-    }
-    let valid: Vec<&str> = variants.iter().map(|(n, _)| *n).collect();
-    Err(McpError::invalid_params(
-        format!(
-            "Invalid {field_name} '{value}'. Valid: {}",
-            valid.join(", ")
-        ),
-        None,
-    ))
-}
-
-/// Parse a list of strings into enum variants.
-fn parse_enum_list<T: Clone>(
-    values: &[String],
-    field_name: &str,
-    variants: &[(&str, T)],
-) -> Result<Vec<T>, McpError> {
-    values
-        .iter()
-        .map(|s| parse_enum_param(s, field_name, variants))
-        .collect()
-}
-
-/// Trait for enums that can be parsed from MCP string parameters.
-///
-/// Implement this for each enum type used in MCP tool parameters. The default
-/// `parse` and `parse_list` methods delegate to `parse_enum_param` /
-/// `parse_enum_list` using the type's own `FIELD_NAME` and `variants`.
-pub(crate) trait ParseMcpEnum: Sized + Clone + 'static {
-    const FIELD_NAME: &'static str;
-    fn variants() -> &'static [(&'static str, Self)];
-
-    fn parse(s: &str) -> Result<Self, McpError> {
-        parse_enum_param(s, Self::FIELD_NAME, Self::variants())
-    }
-
-    fn parse_list(values: &[String]) -> Result<Vec<Self>, McpError> {
-        parse_enum_list(values, Self::FIELD_NAME, Self::variants())
-    }
 }
 
 /// Insert a key into a JSON map only if the slice is non-empty.
@@ -221,7 +171,6 @@ use snapshot::{
     SpatialSnapshotParams, build_expand_response, build_full_response, build_perspective,
     build_perspective_param, build_standard_response, build_summary_response,
 };
-use spectator_protocol::query::InspectCategory;
 use watch::SpatialWatchParams;
 
 #[tool_router(vis = "pub")]
@@ -240,8 +189,8 @@ impl SpectatorServer {
         // Build activity summary up front before params are borrowed further
         let activity_summary = crate::activity::snapshot_summary(&params);
 
-        // 1. Parse detail level
-        let detail = DetailLevel::parse(&params.detail)?;
+        // 1. Detail level already typed via enum deserialization
+        let detail = params.detail;
 
         // 2. Build perspective param for addon query
         let perspective_param = build_perspective_param(&params)?;
@@ -377,11 +326,9 @@ impl SpectatorServer {
         let activity_summary = crate::activity::inspect_summary(&params.node);
         let bctx = budget_context(&self.state).await;
 
-        let include = InspectCategory::parse_list(&params.include)?;
-
         let query_params = GetNodeInspectParams {
             path: params.node.clone(),
-            include: include.clone(),
+            include: params.include.clone(),
             expose_internals: bctx.expose_internals,
         };
 
@@ -544,7 +491,7 @@ impl SpectatorServer {
         &self,
         Parameters(params): Parameters<SpatialQueryParams>,
     ) -> Result<String, McpError> {
-        let summary = format!("Query: {}", params.query_type);
+        let summary = format!("Query: {:?}", params.query_type);
         let result = handle_spatial_query(params, &self.state).await;
         self.log_activity("query", &summary, "spatial_query").await;
         result

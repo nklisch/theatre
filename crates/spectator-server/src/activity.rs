@@ -2,12 +2,13 @@ use serde_json::json;
 use spectator_protocol::messages::Message;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::mcp::action::SpatialActionParams;
-use crate::mcp::clips::ClipsParams;
+use crate::mcp::action::{ActionType, SpatialActionParams};
+use crate::mcp::clips::{ClipAction, ClipsParams};
 use crate::mcp::config::SpatialConfigParams;
 use crate::mcp::scene_tree::SceneTreeToolParams;
 use crate::mcp::snapshot::SpatialSnapshotParams;
-use crate::mcp::watch::SpatialWatchParams;
+use crate::mcp::watch::{SpatialWatchParams, WatchAction};
+use spectator_protocol::query::SceneTreeAction;
 
 /// Build an activity_log Event message to push to the addon.
 ///
@@ -44,7 +45,7 @@ pub fn snapshot_summary(params: &SpatialSnapshotParams) -> String {
     if let Some(ref cluster) = params.expand {
         return format!("Expanding cluster: {cluster}");
     }
-    let detail = &params.detail;
+    let detail = format!("{:?}", params.detail).to_lowercase();
     let mut parts = vec![format!("Snapshot ({detail})")];
     if let Some(ref groups) = params.groups
         && !groups.is_empty()
@@ -58,17 +59,17 @@ pub fn snapshot_summary(params: &SpatialSnapshotParams) -> String {
 }
 
 pub fn action_summary(params: &SpatialActionParams) -> String {
-    match params.action.as_str() {
-        "pause" => {
+    match &params.action {
+        ActionType::Pause => {
             if params.paused.unwrap_or(true) {
                 "Paused game".into()
             } else {
                 "Resumed game".into()
             }
         }
-        "advance_frames" => format!("Advanced {} frames", params.frames.unwrap_or(1)),
-        "advance_time" => format!("Advanced {}s", params.seconds.unwrap_or(0.0)),
-        "teleport" => {
+        ActionType::AdvanceFrames => format!("Advanced {} frames", params.frames.unwrap_or(1)),
+        ActionType::AdvanceTime => format!("Advanced {}s", params.seconds.unwrap_or(0.0)),
+        ActionType::Teleport => {
             let node = params.node.as_deref().unwrap_or("?");
             let pos = params
                 .position
@@ -80,7 +81,7 @@ pub fn action_summary(params: &SpatialActionParams) -> String {
                 .unwrap_or_default();
             format!("Teleported {node} → {pos}")
         }
-        "set_property" => {
+        ActionType::SetProperty => {
             let node = params.node.as_deref().unwrap_or("?");
             let prop = params.property.as_deref().unwrap_or("?");
             let val = params
@@ -90,7 +91,7 @@ pub fn action_summary(params: &SpatialActionParams) -> String {
                 .unwrap_or_default();
             format!("Set {prop} = {val} on {node}")
         }
-        "call_method" => {
+        ActionType::CallMethod => {
             let node = params.node.as_deref().unwrap_or("?");
             let method = params.method.as_deref().unwrap_or("?");
             let args = params
@@ -106,12 +107,12 @@ pub fn action_summary(params: &SpatialActionParams) -> String {
                 .unwrap_or_default();
             format!("Called {method}({args}) on {node}")
         }
-        "emit_signal" => {
+        ActionType::EmitSignal => {
             let node = params.node.as_deref().unwrap_or("?");
             let signal = params.signal.as_deref().unwrap_or("?");
             format!("Emitted {signal} on {node}")
         }
-        "spawn_node" => {
+        ActionType::SpawnNode => {
             let scene = params
                 .scene_path
                 .as_deref()
@@ -122,11 +123,10 @@ pub fn action_summary(params: &SpatialActionParams) -> String {
             let name = params.name.as_deref().unwrap_or("?");
             format!("Spawned {scene} as {name}")
         }
-        "remove_node" => {
+        ActionType::RemoveNode => {
             let node = params.node.as_deref().unwrap_or("?");
             format!("Removed {node}")
         }
-        other => format!("Action: {other}"),
     }
 }
 
@@ -135,26 +135,29 @@ pub fn inspect_summary(node: &str) -> String {
 }
 
 pub fn scene_tree_summary(params: &SceneTreeToolParams) -> String {
-    match params.action.as_str() {
-        "find" => {
-            let by = params.find_by.as_deref().unwrap_or("?");
+    match params.action {
+        SceneTreeAction::Find => {
+            let by = params
+                .find_by
+                .as_ref()
+                .map(|f| format!("{f:?}").to_lowercase())
+                .unwrap_or_else(|| "?".into());
             let val = params.find_value.as_deref().unwrap_or("?");
             format!("Scene tree find: {by}={val}")
         }
-        "roots" => "Scene tree: roots".into(),
-        "children" => format!(
+        SceneTreeAction::Roots => "Scene tree: roots".into(),
+        SceneTreeAction::Children => format!(
             "Scene tree: children of {}",
             params.node.as_deref().unwrap_or("root")
         ),
-        "subtree" => format!(
+        SceneTreeAction::Subtree => format!(
             "Scene tree: subtree of {}",
             params.node.as_deref().unwrap_or("root")
         ),
-        "ancestors" => format!(
+        SceneTreeAction::Ancestors => format!(
             "Scene tree: ancestors of {}",
             params.node.as_deref().unwrap_or("?")
         ),
-        other => format!("Scene tree: {other}"),
     }
 }
 
@@ -163,8 +166,8 @@ pub fn delta_summary() -> String {
 }
 
 pub fn watch_summary(params: &SpatialWatchParams) -> String {
-    match params.action.as_str() {
-        "add" => {
+    match &params.action {
+        WatchAction::Add => {
             let node = params
                 .watch
                 .as_ref()
@@ -172,37 +175,36 @@ pub fn watch_summary(params: &SpatialWatchParams) -> String {
                 .unwrap_or("?");
             format!("Watching {node}")
         }
-        "remove" => format!(
+        WatchAction::Remove => format!(
             "Removed watch {}",
             params.watch_id.as_deref().unwrap_or("?")
         ),
-        "list" => "Listing watches".into(),
-        "clear" => "Cleared all watches".into(),
-        other => format!("Watch: {other}"),
+        WatchAction::List => "Listing watches".into(),
+        WatchAction::Clear => "Cleared all watches".into(),
     }
 }
 
 pub fn clips_summary(params: &ClipsParams) -> String {
-    match params.action.as_str() {
-        "add_marker" => {
+    match &params.action {
+        ClipAction::AddMarker => {
             let label = params.marker_label.as_deref().unwrap_or("(no label)");
             format!("Marker: {label}")
         }
-        "save" => {
+        ClipAction::Save => {
             let label = params.marker_label.as_deref().unwrap_or("agent save");
             format!("Saved clip: {label}")
         }
-        "status" => "Dashcam status".into(),
-        "list" => "Listing clips".into(),
-        "delete" => {
+        ClipAction::Status => "Dashcam status".into(),
+        ClipAction::List => "Listing clips".into(),
+        ClipAction::Delete => {
             let id = params.clip_id.as_deref().unwrap_or("?");
             format!("Deleted clip {id}")
         }
-        "markers" => {
+        ClipAction::Markers => {
             let id = params.clip_id.as_deref().unwrap_or("latest");
             format!("Markers for {id}")
         }
-        "snapshot_at" => {
+        ClipAction::SnapshotAt => {
             let frame_info = if let Some(f) = params.at_frame {
                 format!("frame {f}")
             } else if let Some(t) = params.at_time_ms {
@@ -213,7 +215,7 @@ pub fn clips_summary(params: &ClipsParams) -> String {
             let clip = params.clip_id.as_deref().unwrap_or("latest");
             format!("Snapshot at {frame_info} in {clip}")
         }
-        "query_range" => {
+        ClipAction::QueryRange => {
             let from = params
                 .from_frame
                 .map(|f| f.to_string())
@@ -222,12 +224,12 @@ pub fn clips_summary(params: &ClipsParams) -> String {
             let node = params.node.as_deref().unwrap_or("?");
             format!("Query range {from}-{to} for {node}")
         }
-        "diff_frames" => {
+        ClipAction::DiffFrames => {
             let a = params.frame_a.map(|f| f.to_string()).unwrap_or("?".into());
             let b = params.frame_b.map(|f| f.to_string()).unwrap_or("?".into());
             format!("Diff frames {a} vs {b}")
         }
-        "find_event" => {
+        ClipAction::FindEvent => {
             let evt = params.event_type.as_deref().unwrap_or("?");
             let filter = params.event_filter.as_deref().unwrap_or("");
             if filter.is_empty() {
@@ -236,7 +238,12 @@ pub fn clips_summary(params: &ClipsParams) -> String {
                 format!("Find events: {evt} filter={filter}")
             }
         }
-        other => format!("Clips: {other}"),
+        ClipAction::Trajectory => {
+            let node = params.node.as_deref().unwrap_or("?");
+            format!("Trajectory for {node}")
+        }
+        ClipAction::ScreenshotAt => "Screenshot at frame".into(),
+        ClipAction::Screenshots => "List screenshots".into(),
     }
 }
 

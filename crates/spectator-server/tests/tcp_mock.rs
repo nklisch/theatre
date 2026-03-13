@@ -1137,9 +1137,10 @@ async fn test_recording_unknown_action_returns_error() {
         .await
         .unwrap_err();
 
+    // With typed enums, serde rejects unknown variants at deserialization
     assert!(
-        err.message.contains("Unknown clips action"),
-        "expected 'Unknown clips action' error, got: {err:?}"
+        err.message.contains("nonexistent") || err.message.contains("unknown variant"),
+        "expected error about unknown clips action, got: {err:?}"
     );
 }
 
@@ -1225,12 +1226,15 @@ async fn test_not_connected_error() {
     use rmcp::handler::server::wrapper::Parameters;
     use spectator_server::mcp::snapshot::SpatialSnapshotParams;
 
+    use spectator_protocol::query::DetailLevel;
+    use spectator_server::mcp::snapshot::PerspectiveMode;
+
     let params = SpatialSnapshotParams {
-        perspective: "camera".into(),
+        perspective: PerspectiveMode::Camera,
         focal_node: None,
         focal_point: None,
         radius: 50.0,
-        detail: "standard".into(),
+        detail: DetailLevel::Standard,
         groups: None,
         class_filter: None,
         include_offscreen: false,

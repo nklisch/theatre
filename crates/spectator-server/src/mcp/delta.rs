@@ -8,8 +8,8 @@ use spectator_core::{
 };
 use spectator_protocol::query::{DetailLevel, GetSnapshotDataParams, PerspectiveParam};
 
-use super::defaults::{default_perspective, default_radius};
-use super::snapshot::to_entity_snapshot;
+use super::defaults::default_radius;
+use super::snapshot::{PerspectiveMode, to_entity_snapshot};
 use super::{
     budget_context, finalize_response, insert_if_nonempty, query_and_deserialize,
     update_spatial_state,
@@ -18,9 +18,9 @@ use super::{
 /// MCP parameters for the spatial_delta tool.
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct SpatialDeltaParams {
-    /// Perspective type: "camera" or "point". Default: "camera".
-    #[serde(default = "default_perspective")]
-    pub perspective: String,
+    /// Perspective to use for the snapshot. Default: camera.
+    #[serde(default)]
+    pub perspective: PerspectiveMode,
 
     /// Max distance from perspective. Default: 50.0.
     #[serde(default = "default_radius")]
@@ -73,15 +73,14 @@ pub async fn handle_spatial_delta(
     }
 
     // 2. Build perspective param for addon query
-    let perspective_param = match params.perspective.as_str() {
-        "camera" => PerspectiveParam::Camera,
-        "node" => {
+    let perspective_param = match params.perspective {
+        PerspectiveMode::Camera | PerspectiveMode::Point => PerspectiveParam::Camera,
+        PerspectiveMode::Node => {
             return Err(McpError::invalid_params(
                 "Node perspective on delta requires focal_node (not yet supported — use 'camera' or 'point')",
                 None,
             ));
         }
-        _ => PerspectiveParam::Camera,
     };
 
     // 3. Get config and query addon for current state
@@ -170,7 +169,7 @@ mod tests {
     fn delta_params_defaults() {
         let json = r#"{ }"#;
         let params: SpatialDeltaParams = serde_json::from_str(json).unwrap();
-        assert_eq!(params.perspective, "camera");
+        assert!(matches!(params.perspective, PerspectiveMode::Camera));
         assert_eq!(params.radius, 50.0);
     }
 

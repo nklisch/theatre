@@ -1,37 +1,11 @@
-use rmcp::model::ErrorData as McpError;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use spectator_core::budget::resolve_budget;
 use spectator_core::cluster::ClusterStrategy;
 use spectator_core::config::{BearingFormat, ConfigUpdate};
-
-use super::ParseMcpEnum;
 use std::collections::HashMap;
 
 use super::finalize_response;
-
-impl super::ParseMcpEnum for ClusterStrategy {
-    const FIELD_NAME: &'static str = "cluster_by";
-    fn variants() -> &'static [(&'static str, Self)] {
-        &[
-            ("group", ClusterStrategy::Group),
-            ("class", ClusterStrategy::Class),
-            ("proximity", ClusterStrategy::Proximity),
-            ("none", ClusterStrategy::None),
-        ]
-    }
-}
-
-impl super::ParseMcpEnum for BearingFormat {
-    const FIELD_NAME: &'static str = "bearing_format";
-    fn variants() -> &'static [(&'static str, Self)] {
-        &[
-            ("cardinal", BearingFormat::Cardinal),
-            ("degrees", BearingFormat::Degrees),
-            ("both", BearingFormat::Both),
-        ]
-    }
-}
 
 /// MCP parameters for the spatial_config tool.
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -44,11 +18,11 @@ pub struct SpatialConfigParams {
     /// Key "*" applies to all nodes. Example: { "enemies": ["health", "alert_level"] }
     pub state_properties: Option<HashMap<String, Vec<String>>>,
 
-    /// How to cluster nodes in summary views: "group", "class", "proximity", or "none".
-    pub cluster_by: Option<String>,
+    /// How to cluster nodes in summary views.
+    pub cluster_by: Option<ClusterStrategy>,
 
-    /// Bearing format: "cardinal" (e.g. "ahead_left"), "degrees" (e.g. 322), or "both" (default).
-    pub bearing_format: Option<String>,
+    /// Bearing format preference.
+    pub bearing_format: Option<BearingFormat>,
 
     /// Include non-exported (internal) variables in state output. Default: false.
     pub expose_internals: Option<bool>,
@@ -61,34 +35,26 @@ pub struct SpatialConfigParams {
 }
 
 impl SpatialConfigParams {
-    pub fn to_config_update(&self) -> Result<ConfigUpdate, McpError> {
-        Ok(ConfigUpdate {
+    pub fn to_config_update(&self) -> ConfigUpdate {
+        ConfigUpdate {
             static_patterns: self.static_patterns.clone(),
             state_properties: self.state_properties.clone(),
-            cluster_by: self
-                .cluster_by
-                .as_deref()
-                .map(ClusterStrategy::parse)
-                .transpose()?,
-            bearing_format: self
-                .bearing_format
-                .as_deref()
-                .map(BearingFormat::parse)
-                .transpose()?,
+            cluster_by: self.cluster_by,
+            bearing_format: self.bearing_format,
             expose_internals: self.expose_internals,
             poll_interval: self.poll_interval,
             token_hard_cap: self.token_hard_cap,
             // Dashcam config fields are not exposed via spatial_config (set via dashcam_config TCP method).
             ..Default::default()
-        })
+        }
     }
 }
 
 pub async fn handle_spatial_config(
     params: SpatialConfigParams,
     state: &std::sync::Arc<tokio::sync::Mutex<crate::tcp::SessionState>>,
-) -> Result<String, McpError> {
-    let update = params.to_config_update()?;
+) -> Result<String, rmcp::model::ErrorData> {
+    let update = params.to_config_update();
 
     let effective_config = {
         let mut s = state.lock().await;

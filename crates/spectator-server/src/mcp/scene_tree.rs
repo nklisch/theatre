@@ -3,13 +3,11 @@ use schemars::JsonSchema;
 use serde::Deserialize;
 use spectator_protocol::query::{FindBy, GetSceneTreeParams, SceneTreeAction, TreeInclude};
 
-use super::ParseMcpEnum;
-
 /// Parameters for the scene_tree MCP tool.
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct SceneTreeToolParams {
-    /// Action: "roots", "children", "subtree", "ancestors", "find"
-    pub action: String,
+    /// Scene tree action to perform.
+    pub action: SceneTreeAction,
 
     /// Node path — required for children, subtree, ancestors.
     pub node: Option<String>,
@@ -18,16 +16,15 @@ pub struct SceneTreeToolParams {
     #[serde(default = "default_depth")]
     pub depth: Option<u32>,
 
-    /// For find: search by "name", "class", "group", or "script".
-    pub find_by: Option<String>,
+    /// For find: criterion to search by.
+    pub find_by: Option<FindBy>,
 
     /// For find: search value.
     pub find_value: Option<String>,
 
-    /// What to include per node: "class", "groups", "script", "visible", "process_mode".
-    /// Default: ["class", "groups"].
+    /// What to include per node. Default: [class, groups].
     #[serde(default = "default_include")]
-    pub include: Option<Vec<String>>,
+    pub include: Option<Vec<TreeInclude>>,
 
     /// Soft token budget override.
     pub token_budget: Option<u32>,
@@ -37,65 +34,25 @@ fn default_depth() -> Option<u32> {
     Some(3)
 }
 
-fn default_include() -> Option<Vec<String>> {
-    Some(vec!["class".into(), "groups".into()])
-}
-
-impl super::ParseMcpEnum for SceneTreeAction {
-    const FIELD_NAME: &'static str = "action";
-    fn variants() -> &'static [(&'static str, Self)] {
-        &[
-            ("roots", SceneTreeAction::Roots),
-            ("children", SceneTreeAction::Children),
-            ("subtree", SceneTreeAction::Subtree),
-            ("ancestors", SceneTreeAction::Ancestors),
-            ("find", SceneTreeAction::Find),
-        ]
-    }
-}
-
-impl super::ParseMcpEnum for FindBy {
-    const FIELD_NAME: &'static str = "find_by";
-    fn variants() -> &'static [(&'static str, Self)] {
-        &[
-            ("name", FindBy::Name),
-            ("class", FindBy::Class),
-            ("group", FindBy::Group),
-            ("script", FindBy::Script),
-        ]
-    }
-}
-
-impl super::ParseMcpEnum for TreeInclude {
-    const FIELD_NAME: &'static str = "include";
-    fn variants() -> &'static [(&'static str, Self)] {
-        &[
-            ("class", TreeInclude::Class),
-            ("groups", TreeInclude::Groups),
-            ("script", TreeInclude::Script),
-            ("visible", TreeInclude::Visible),
-            ("process_mode", TreeInclude::ProcessMode),
-        ]
-    }
+fn default_include() -> Option<Vec<TreeInclude>> {
+    Some(vec![TreeInclude::Class, TreeInclude::Groups])
 }
 
 /// Build the GetSceneTreeParams from MCP tool params.
 pub fn build_scene_tree_params(
     params: &SceneTreeToolParams,
 ) -> Result<GetSceneTreeParams, McpError> {
-    let action = SceneTreeAction::parse(&params.action)?;
-
-    let default_inc = vec!["class".to_string(), "groups".to_string()];
-    let include_strs = params.include.as_deref().unwrap_or(&default_inc);
-    let include = TreeInclude::parse_list(include_strs)?;
-
-    let find_by = params.find_by.as_deref().map(FindBy::parse).transpose()?;
+    let include = params
+        .include
+        .as_deref()
+        .unwrap_or(&[TreeInclude::Class, TreeInclude::Groups])
+        .to_vec();
 
     Ok(GetSceneTreeParams {
-        action,
+        action: params.action,
         node: params.node.clone(),
         depth: params.depth.unwrap_or(3),
-        find_by,
+        find_by: params.find_by,
         find_value: params.find_value.clone(),
         include,
     })
@@ -106,38 +63,34 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_action_valid() {
-        assert_eq!(
-            SceneTreeAction::parse("roots").unwrap(),
-            SceneTreeAction::Roots
-        );
-        assert_eq!(
-            SceneTreeAction::parse("find").unwrap(),
-            SceneTreeAction::Find
-        );
+    fn action_deserialize_valid() {
+        let a: SceneTreeAction = serde_json::from_str(r#""roots""#).unwrap();
+        assert_eq!(a, SceneTreeAction::Roots);
+        let a: SceneTreeAction = serde_json::from_str(r#""find""#).unwrap();
+        assert_eq!(a, SceneTreeAction::Find);
     }
 
     #[test]
-    fn parse_action_invalid() {
-        assert!(SceneTreeAction::parse("invalid").is_err());
+    fn action_deserialize_invalid() {
+        assert!(serde_json::from_str::<SceneTreeAction>(r#""invalid""#).is_err());
     }
 
     #[test]
-    fn parse_find_by_valid() {
-        assert_eq!(FindBy::parse("class").unwrap(), FindBy::Class);
-        assert_eq!(FindBy::parse("group").unwrap(), FindBy::Group);
+    fn find_by_deserialize_valid() {
+        let f: FindBy = serde_json::from_str(r#""class""#).unwrap();
+        assert_eq!(f, FindBy::Class);
+        let f: FindBy = serde_json::from_str(r#""group""#).unwrap();
+        assert_eq!(f, FindBy::Group);
     }
 
     #[test]
-    fn parse_tree_include_valid() {
-        let inc = vec!["class".into(), "script".into()];
-        let result = TreeInclude::parse_list(&inc).unwrap();
-        assert_eq!(result.len(), 2);
+    fn tree_include_deserialize_valid() {
+        let i: TreeInclude = serde_json::from_str(r#""script""#).unwrap();
+        assert_eq!(i, TreeInclude::Script);
     }
 
     #[test]
-    fn parse_tree_include_invalid() {
-        let inc = vec!["invalid".into()];
-        assert!(TreeInclude::parse_list(&inc).is_err());
+    fn tree_include_deserialize_invalid() {
+        assert!(serde_json::from_str::<TreeInclude>(r#""invalid""#).is_err());
     }
 }

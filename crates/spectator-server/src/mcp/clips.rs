@@ -17,26 +17,42 @@ use super::{finalize_response, require_param};
 // MCP parameter types
 // ---------------------------------------------------------------------------
 
+/// Clip management and analysis action.
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ClipAction {
+    /// Mark the current moment, triggers clip capture.
+    AddMarker,
+    /// Force-save the dashcam buffer as a clip.
+    Save,
+    /// Dashcam buffer state and config.
+    Status,
+    /// List saved clips.
+    List,
+    /// Remove a clip by clip_id.
+    Delete,
+    /// List markers in a saved clip.
+    Markers,
+    /// Spatial state at a frame in a clip.
+    SnapshotAt,
+    /// Position/property timeseries across frame range.
+    Trajectory,
+    /// Search frames for spatial conditions.
+    QueryRange,
+    /// Compare two frames in a clip.
+    DiffFrames,
+    /// Search events in a clip.
+    FindEvent,
+    /// Get the viewport screenshot nearest to a frame or timestamp.
+    ScreenshotAt,
+    /// List screenshot metadata in a clip.
+    Screenshots,
+}
+
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct ClipsParams {
     /// Action to perform.
-    /// "add_marker" — mark the current moment, triggers clip capture.
-    /// "save" — force-save the dashcam buffer as a clip.
-    /// "status" — dashcam buffer state and config.
-    /// "list" — list saved clips.
-    /// "delete" — remove a clip by clip_id.
-    /// "markers" — list markers in a saved clip.
-    /// "snapshot_at" — spatial state at a frame in a clip.
-    /// "trajectory" — position/property timeseries across frame range.
-    /// "query_range" — search frames for spatial conditions.
-    /// "diff_frames" — compare two frames in a clip.
-    /// "find_event" — search events in a clip.
-    /// "screenshot_at" — get the viewport screenshot nearest to a frame or timestamp.
-    /// "screenshots" — list screenshot metadata in a clip.
-    #[schemars(
-        description = "Action: add_marker, save, status, list, delete, markers, snapshot_at, trajectory, query_range, diff_frames, find_event, screenshot_at, screenshots"
-    )]
-    pub action: String,
+    pub action: ClipAction,
 
     /// Clip to operate on. Uses most recent if omitted.
     #[schemars(
@@ -114,66 +130,58 @@ pub async fn handle_clips(
     let hard_cap = config.token_hard_cap;
     let budget_limit = resolve_budget(params.token_budget, 1500, hard_cap);
 
-    match params.action.as_str() {
-        "add_marker" => {
+    match params.action {
+        ClipAction::AddMarker => {
             let s = handle_add_marker(&params, state, budget_limit, hard_cap).await?;
             Ok(text_result(s))
         }
-        "save" => {
+        ClipAction::Save => {
             let s = handle_save(&params, state, budget_limit, hard_cap).await?;
             Ok(text_result(s))
         }
-        "status" => {
+        ClipAction::Status => {
             let s = query_and_finalize(state, "dashcam_status", json!({}), budget_limit, hard_cap)
                 .await?;
             Ok(text_result(s))
         }
-        "list" => {
+        ClipAction::List => {
             let s = query_and_finalize(state, "recording_list", json!({}), budget_limit, hard_cap)
                 .await?;
             Ok(text_result(s))
         }
-        "delete" => {
+        ClipAction::Delete => {
             let s = handle_delete(&params, state, budget_limit, hard_cap).await?;
             Ok(text_result(s))
         }
-        "markers" => {
+        ClipAction::Markers => {
             let s = handle_markers(&params, state, budget_limit, hard_cap).await?;
             Ok(text_result(s))
         }
-        "snapshot_at" => {
+        ClipAction::SnapshotAt => {
             let s = handle_snapshot_at(&params, state, budget_limit, hard_cap).await?;
             Ok(text_result(s))
         }
-        "trajectory" => {
+        ClipAction::Trajectory => {
             let s = handle_trajectory(&params, state, budget_limit, hard_cap).await?;
             Ok(text_result(s))
         }
-        "query_range" => {
+        ClipAction::QueryRange => {
             let s = handle_query_range(&params, state, budget_limit, hard_cap).await?;
             Ok(text_result(s))
         }
-        "diff_frames" => {
+        ClipAction::DiffFrames => {
             let s = handle_diff_frames(&params, state, budget_limit, hard_cap).await?;
             Ok(text_result(s))
         }
-        "find_event" => {
+        ClipAction::FindEvent => {
             let s = handle_find_event(&params, state, budget_limit, hard_cap).await?;
             Ok(text_result(s))
         }
-        "screenshot_at" => handle_screenshot_at(&params, state).await,
-        "screenshots" => {
+        ClipAction::ScreenshotAt => handle_screenshot_at(&params, state).await,
+        ClipAction::Screenshots => {
             let s = handle_screenshots(&params, state).await?;
             Ok(text_result(s))
         }
-        other => Err(McpError::invalid_params(
-            format!(
-                "Unknown clips action: '{other}'. Valid: add_marker, save, status, list, delete, \
-                 markers, snapshot_at, trajectory, query_range, diff_frames, find_event, \
-                 screenshot_at, screenshots"
-            ),
-            None,
-        )),
     }
 }
 
@@ -518,7 +526,7 @@ mod tests {
             "marker_label": "bug here",
         });
         let params: ClipsParams = serde_json::from_value(json).unwrap();
-        assert_eq!(params.action, "add_marker");
+        assert!(matches!(params.action, ClipAction::AddMarker));
         assert_eq!(params.marker_label.as_deref(), Some("bug here"));
     }
 
@@ -529,7 +537,7 @@ mod tests {
             "marker_label": "suspected physics glitch",
         });
         let params: ClipsParams = serde_json::from_value(json).unwrap();
-        assert_eq!(params.action, "save");
+        assert!(matches!(params.action, ClipAction::Save));
         assert_eq!(
             params.marker_label.as_deref(),
             Some("suspected physics glitch")
@@ -545,7 +553,7 @@ mod tests {
             "clip_id": "clip_001",
         });
         let params: ClipsParams = serde_json::from_value(json).unwrap();
-        assert_eq!(params.action, "snapshot_at");
+        assert!(matches!(params.action, ClipAction::SnapshotAt));
         assert_eq!(params.at_frame, Some(4575));
         assert_eq!(params.detail.as_deref(), Some("standard"));
         assert_eq!(params.clip_id.as_deref(), Some("clip_001"));
@@ -565,7 +573,7 @@ mod tests {
             },
         });
         let params: ClipsParams = serde_json::from_value(json).unwrap();
-        assert_eq!(params.action, "query_range");
+        assert!(matches!(params.action, ClipAction::QueryRange));
         assert!(params.condition.is_some());
         assert_eq!(params.from_frame, Some(4570));
         assert_eq!(params.to_frame, Some(4590));
@@ -579,6 +587,7 @@ mod tests {
             "frame_b": 3020u64,
         });
         let params: ClipsParams = serde_json::from_value(json).unwrap();
+        assert!(matches!(params.action, ClipAction::DiffFrames));
         assert_eq!(params.frame_a, Some(3010));
         assert_eq!(params.frame_b, Some(3020));
     }
@@ -592,6 +601,7 @@ mod tests {
             "clip_id": "clip_001",
         });
         let params: ClipsParams = serde_json::from_value(json).unwrap();
+        assert!(matches!(params.action, ClipAction::FindEvent));
         assert_eq!(params.event_type.as_deref(), Some("signal"));
         assert_eq!(params.event_filter.as_deref(), Some("health_changed"));
     }
@@ -600,6 +610,6 @@ mod tests {
     fn clips_params_status() {
         let json = serde_json::json!({ "action": "status" });
         let params: ClipsParams = serde_json::from_value(json).unwrap();
-        assert_eq!(params.action, "status");
+        assert!(matches!(params.action, ClipAction::Status));
     }
 }

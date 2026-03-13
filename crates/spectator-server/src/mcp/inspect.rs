@@ -12,40 +12,21 @@ pub struct SpatialInspectParams {
     /// Node path to inspect (relative to scene root).
     pub node: String,
 
-    /// Which data categories to include.
-    /// Options: "transform", "physics", "state", "children", "signals",
-    ///          "script", "spatial_context", "resources"
-    /// Default: all categories except "resources" (opt-in to save tokens).
+    /// Which data categories to include. Default: all except resources (opt-in to save tokens).
     #[serde(default = "default_include")]
-    pub include: Vec<String>,
+    pub include: Vec<InspectCategory>,
 }
 
-fn default_include() -> Vec<String> {
+fn default_include() -> Vec<InspectCategory> {
     vec![
-        "transform".into(),
-        "physics".into(),
-        "state".into(),
-        "children".into(),
-        "signals".into(),
-        "script".into(),
-        "spatial_context".into(),
+        InspectCategory::Transform,
+        InspectCategory::Physics,
+        InspectCategory::State,
+        InspectCategory::Children,
+        InspectCategory::Signals,
+        InspectCategory::Script,
+        InspectCategory::SpatialContext,
     ]
-}
-
-impl super::ParseMcpEnum for InspectCategory {
-    const FIELD_NAME: &'static str = "include category";
-    fn variants() -> &'static [(&'static str, Self)] {
-        &[
-            ("transform", InspectCategory::Transform),
-            ("physics", InspectCategory::Physics),
-            ("state", InspectCategory::State),
-            ("children", InspectCategory::Children),
-            ("signals", InspectCategory::Signals),
-            ("script", InspectCategory::Script),
-            ("spatial_context", InspectCategory::SpatialContext),
-            ("resources", InspectCategory::Resources),
-        ]
-    }
 }
 
 /// Build the spatial_context block from raw addon data.
@@ -91,35 +72,31 @@ pub fn build_spatial_context(raw: &SpatialContextRaw) -> serde_json::Value {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mcp::ParseMcpEnum;
     use spectator_protocol::query::NearbyEntityRaw;
 
     #[test]
     fn parse_include_valid() {
-        let include = vec!["transform".into(), "physics".into()];
-        let result = InspectCategory::parse_list(&include).unwrap();
-        assert_eq!(result.len(), 2);
-        assert_eq!(result[0], InspectCategory::Transform);
+        let inc: Vec<InspectCategory> = serde_json::from_str(r#"["transform","physics"]"#).unwrap();
+        assert_eq!(inc.len(), 2);
+        assert_eq!(inc[0], InspectCategory::Transform);
     }
 
     #[test]
     fn parse_include_invalid() {
-        let include = vec!["invalid".into()];
-        assert!(InspectCategory::parse_list(&include).is_err());
+        assert!(serde_json::from_str::<InspectCategory>(r#""invalid""#).is_err());
     }
 
     #[test]
     fn parse_include_resources() {
-        let include = vec!["resources".into()];
-        let result = InspectCategory::parse_list(&include).unwrap();
-        assert_eq!(result.len(), 1);
-        assert_eq!(result[0], InspectCategory::Resources);
+        let inc: Vec<InspectCategory> = serde_json::from_str(r#"["resources"]"#).unwrap();
+        assert_eq!(inc.len(), 1);
+        assert_eq!(inc[0], InspectCategory::Resources);
     }
 
     #[test]
     fn default_include_excludes_resources() {
         let defaults = default_include();
-        assert!(!defaults.contains(&"resources".to_string()));
+        assert!(!defaults.contains(&InspectCategory::Resources));
     }
 
     #[test]

@@ -2,10 +2,23 @@ use rmcp::handler::server::ServerHandler;
 use rmcp::handler::server::tool::ToolRouter;
 use rmcp::model::{Implementation, ServerCapabilities, ServerInfo};
 use rmcp::tool_handler;
+use schemars::JsonSchema;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
+use crate::mcp::responses::{
+    ConfigResponse, DeltaResponse, SnapshotSummaryResponse, WatchAddResponse,
+};
 use crate::tcp::SessionState;
+
+fn attach_output_schema<T: JsonSchema + 'static>(
+    router: &mut ToolRouter<SpectatorServer>,
+    tool_name: &str,
+) {
+    if let Some(route) = router.map.get_mut(tool_name) {
+        route.attr = route.attr.clone().with_output_schema::<T>();
+    }
+}
 
 #[derive(Clone)]
 pub struct SpectatorServer {
@@ -14,10 +27,21 @@ pub struct SpectatorServer {
 }
 
 impl SpectatorServer {
+    /// Build the tool router with output schemas attached.
+    /// Used by both `new()` and `docs_router()`.
+    pub fn router_with_schemas() -> ToolRouter<Self> {
+        let mut router = Self::tool_router();
+        attach_output_schema::<SnapshotSummaryResponse>(&mut router, "spatial_snapshot");
+        attach_output_schema::<DeltaResponse>(&mut router, "spatial_delta");
+        attach_output_schema::<WatchAddResponse>(&mut router, "spatial_watch");
+        attach_output_schema::<ConfigResponse>(&mut router, "spatial_config");
+        router
+    }
+
     pub fn new(state: Arc<Mutex<SessionState>>) -> Self {
         Self {
             state,
-            tool_router: Self::tool_router(),
+            tool_router: Self::router_with_schemas(),
         }
     }
 

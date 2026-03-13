@@ -1,3 +1,5 @@
+#[cfg(feature = "schema")]
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -5,6 +7,7 @@ use crate::cluster::ClusterStrategy;
 
 /// Bearing output format preference.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum BearingFormat {
     Cardinal,
@@ -18,6 +21,7 @@ pub enum BearingFormat {
 /// Three sources with precedence: spatial_config (session) > spectator.toml (project) > Project Settings (machine).
 /// This struct holds the merged effective config.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(JsonSchema))]
 pub struct SessionConfig {
     /// Glob patterns for static node classification.
     /// Nodes matching these patterns are treated as static regardless of class.

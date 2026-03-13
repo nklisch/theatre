@@ -1,6 +1,6 @@
 use rmcp::model::ErrorData as McpError;
 
-use super::defaults::{default_detail, default_perspective, default_radius};
+use super::defaults::default_radius;
 use super::require_param;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -14,15 +14,25 @@ use spectator_core::{
 use spectator_protocol::query::{DetailLevel, EntityData, PerspectiveParam, SnapshotResponse};
 use spectator_protocol::static_classes::{classify_static_category, is_static_class};
 
+/// Perspective mode for spatial snapshot and delta.
+#[derive(Debug, Clone, Default, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum PerspectiveMode {
+    /// Use the active camera perspective (default).
+    #[default]
+    Camera,
+    /// Use a specific node's perspective. Requires `focal_node`.
+    Node,
+    /// Use a fixed world position. Requires `focal_point`.
+    Point,
+}
+
 /// Parameters for the spatial_snapshot MCP tool.
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct SpatialSnapshotParams {
-    /// Perspective type: "camera", "node", or "point". Default: "camera".
-    #[serde(default = "default_perspective")]
-    #[schemars(
-        description = "Where to look from: \"camera\" (active camera, default), \"node\" (requires focal_node), \"point\" (requires focal_point)"
-    )]
-    pub perspective: String,
+    /// Where to look from: camera (active camera, default), node (requires focal_node), point (requires focal_point).
+    #[serde(default)]
+    pub perspective: PerspectiveMode,
 
     /// Node path, required when perspective is "node".
     pub focal_node: Option<String>,
@@ -34,12 +44,9 @@ pub struct SpatialSnapshotParams {
     #[serde(default = "default_radius")]
     pub radius: f64,
 
-    /// Detail tier: "summary", "standard", or "full". Default: "standard".
-    #[serde(default = "default_detail")]
-    #[schemars(
-        description = "Detail tier: \"summary\" (~200 tokens, clusters only), \"standard\" (~400-800 tokens, per-entity), \"full\" (~1000+ tokens, transforms/physics/children)"
-    )]
-    pub detail: String,
+    /// Detail tier: summary (~200 tokens, clusters only), standard (~400-800 tokens, per-entity), full (~1000+ tokens, transforms/physics/children). Default: standard.
+    #[serde(default)]
+    pub detail: DetailLevel,
 
     /// Filter by group membership.
     pub groups: Option<Vec<String>>,
@@ -59,7 +66,7 @@ pub struct SpatialSnapshotParams {
 }
 
 /// Processed entity for MCP output.
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, JsonSchema)]
 pub struct OutputEntity {
     pub path: String,
     pub class: String,
@@ -90,13 +97,13 @@ pub struct OutputEntity {
     pub all_exported_vars: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, JsonSchema)]
 pub struct SignalEntry {
     pub signal: String,
     pub frame: u64,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, JsonSchema)]
 pub struct PaginationBlock {
     pub truncated: bool,
     pub showing: usize,
@@ -107,30 +114,19 @@ pub struct PaginationBlock {
 
 pub use super::conversions::to_entity_snapshot;
 
-impl super::ParseMcpEnum for DetailLevel {
-    const FIELD_NAME: &'static str = "detail level";
-    fn variants() -> &'static [(&'static str, Self)] {
-        &[
-            ("summary", DetailLevel::Summary),
-            ("standard", DetailLevel::Standard),
-            ("full", DetailLevel::Full),
-        ]
-    }
-}
-
 pub fn build_perspective_param(
     params: &SpatialSnapshotParams,
 ) -> Result<PerspectiveParam, McpError> {
-    match params.perspective.as_str() {
-        "camera" => Ok(PerspectiveParam::Camera),
-        "node" => {
+    match &params.perspective {
+        PerspectiveMode::Camera => Ok(PerspectiveParam::Camera),
+        PerspectiveMode::Node => {
             let path = require_param!(
                 params.focal_node.as_ref(),
                 "focal_node is required when perspective is 'node'"
             );
             Ok(PerspectiveParam::Node { path: path.clone() })
         }
-        "point" => {
+        PerspectiveMode::Point => {
             let pos = require_param!(
                 params.focal_point.as_ref(),
                 "focal_point is required when perspective is 'point'"
@@ -139,10 +135,6 @@ pub fn build_perspective_param(
                 position: pos.clone(),
             })
         }
-        other => Err(McpError::invalid_params(
-            format!("Invalid perspective '{other}'. Must be 'camera', 'node', or 'point'."),
-            None,
-        )),
     }
 }
 

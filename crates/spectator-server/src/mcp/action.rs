@@ -6,15 +6,35 @@ use spectator_protocol::query::ActionRequest;
 
 use super::require_param;
 
+/// Spatial action type.
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum ActionType {
+    /// Pause or unpause the scene. Requires: paused (bool).
+    Pause,
+    /// Step N physics frames while paused. Requires: frames (int).
+    AdvanceFrames,
+    /// Step N seconds while paused. Requires: seconds (float).
+    AdvanceTime,
+    /// Move a node to a position. Requires: node, position. Optional: rotation_deg.
+    Teleport,
+    /// Change a node property. Requires: node, property, value.
+    SetProperty,
+    /// Call a method on a node. Requires: node, method. Optional: method_args.
+    CallMethod,
+    /// Emit a signal on a node. Requires: node, signal. Optional: args.
+    EmitSignal,
+    /// Instantiate a scene. Requires: scene_path, parent. Optional: name, position.
+    SpawnNode,
+    /// Delete a node. Requires: node.
+    RemoveNode,
+}
+
 /// MCP parameters for the spatial_action tool.
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct SpatialActionParams {
-    /// Action type: pause, advance_frames, advance_time, teleport, set_property,
-    /// call_method, emit_signal, spawn_node, remove_node.
-    #[schemars(
-        description = "Action type: pause, advance_frames, advance_time, teleport, set_property, call_method, emit_signal, spawn_node, remove_node"
-    )]
-    pub action: String,
+    /// Action to perform.
+    pub action: ActionType,
 
     /// Target node path (required for teleport, set_property, call_method,
     /// emit_signal, remove_node).
@@ -70,29 +90,29 @@ pub struct SpatialActionParams {
 /// Build the addon ActionRequest from MCP params.
 /// Validates required fields per action type.
 pub fn build_action_request(params: &SpatialActionParams) -> Result<ActionRequest, McpError> {
-    match params.action.as_str() {
-        "pause" => {
+    match &params.action {
+        ActionType::Pause => {
             let paused = require_param!(
                 params.paused,
                 "'paused' (bool) is required for pause action"
             );
             Ok(ActionRequest::Pause { paused })
         }
-        "advance_frames" => {
+        ActionType::AdvanceFrames => {
             let frames = require_param!(
                 params.frames,
                 "'frames' (int) is required for advance_frames action"
             );
             Ok(ActionRequest::AdvanceFrames { frames })
         }
-        "advance_time" => {
+        ActionType::AdvanceTime => {
             let seconds = require_param!(
                 params.seconds,
                 "'seconds' (float) is required for advance_time action"
             );
             Ok(ActionRequest::AdvanceTime { seconds })
         }
-        "teleport" => {
+        ActionType::Teleport => {
             let node = require_param!(
                 params.node.as_ref(),
                 "'node' is required for teleport action"
@@ -107,7 +127,7 @@ pub fn build_action_request(params: &SpatialActionParams) -> Result<ActionReques
                 rotation_deg: params.rotation_deg,
             })
         }
-        "set_property" => {
+        ActionType::SetProperty => {
             let node = require_param!(
                 params.node.as_ref(),
                 "'node' is required for set_property action"
@@ -126,7 +146,7 @@ pub fn build_action_request(params: &SpatialActionParams) -> Result<ActionReques
                 value: value.clone(),
             })
         }
-        "call_method" => {
+        ActionType::CallMethod => {
             let node = require_param!(
                 params.node.as_ref(),
                 "'node' is required for call_method action"
@@ -147,7 +167,7 @@ pub fn build_action_request(params: &SpatialActionParams) -> Result<ActionReques
                 args,
             })
         }
-        "emit_signal" => {
+        ActionType::EmitSignal => {
             let node = require_param!(
                 params.node.as_ref(),
                 "'node' is required for emit_signal action"
@@ -163,7 +183,7 @@ pub fn build_action_request(params: &SpatialActionParams) -> Result<ActionReques
                 args,
             })
         }
-        "spawn_node" => {
+        ActionType::SpawnNode => {
             let scene_path = require_param!(
                 params.scene_path.as_ref(),
                 "'scene_path' is required for spawn_node action"
@@ -179,21 +199,13 @@ pub fn build_action_request(params: &SpatialActionParams) -> Result<ActionReques
                 position: params.position.clone(),
             })
         }
-        "remove_node" => {
+        ActionType::RemoveNode => {
             let node = require_param!(
                 params.node.as_ref(),
                 "'node' is required for remove_node action"
             );
             Ok(ActionRequest::RemoveNode { path: node.clone() })
         }
-        other => Err(McpError::invalid_params(
-            format!(
-                "Unknown action type: '{other}'. Valid actions: \
-                 pause, advance_frames, advance_time, teleport, set_property, \
-                 call_method, emit_signal, spawn_node, remove_node"
-            ),
-            None,
-        )),
     }
 }
 
@@ -201,9 +213,9 @@ pub fn build_action_request(params: &SpatialActionParams) -> Result<ActionReques
 mod tests {
     use super::*;
 
-    fn base_params(action: &str) -> SpatialActionParams {
+    fn base_params(action: ActionType) -> SpatialActionParams {
         SpatialActionParams {
-            action: action.into(),
+            action,
             node: None,
             paused: None,
             frames: None,
@@ -225,7 +237,7 @@ mod tests {
 
     #[test]
     fn build_action_request_pause() {
-        let mut p = base_params("pause");
+        let mut p = base_params(ActionType::Pause);
         p.paused = Some(true);
         let req = build_action_request(&p).unwrap();
         assert!(matches!(req, ActionRequest::Pause { paused: true }));
@@ -233,7 +245,7 @@ mod tests {
 
     #[test]
     fn build_action_request_teleport() {
-        let mut p = base_params("teleport");
+        let mut p = base_params(ActionType::Teleport);
         p.node = Some("enemy".into());
         p.position = Some(vec![5.0, 0.0, -3.0]);
         p.rotation_deg = Some(90.0);
@@ -243,21 +255,20 @@ mod tests {
 
     #[test]
     fn build_action_request_missing_node() {
-        let mut p = base_params("teleport");
+        let mut p = base_params(ActionType::Teleport);
         p.position = Some(vec![5.0, 0.0, -3.0]);
         // node is None — should error
         assert!(build_action_request(&p).is_err());
     }
 
     #[test]
-    fn build_action_request_unknown_action() {
-        let p = base_params("fly");
-        assert!(build_action_request(&p).is_err());
+    fn action_deserialize_invalid() {
+        assert!(serde_json::from_str::<ActionType>(r#""fly""#).is_err());
     }
 
     #[test]
     fn build_action_request_call_method_uses_method_args() {
-        let mut p = base_params("call_method");
+        let mut p = base_params(ActionType::CallMethod);
         p.node = Some("player".into());
         p.method = Some("take_damage".into());
         p.method_args = Some(vec![serde_json::json!(50)]);

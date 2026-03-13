@@ -1,4 +1,6 @@
 use crate::types::{Cardinal, RawEntityData, RelativePosition};
+#[cfg(feature = "schema")]
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -27,6 +29,7 @@ pub struct ClusterNearest {
 
 /// Clustering strategy.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum ClusterStrategy {
     #[default]

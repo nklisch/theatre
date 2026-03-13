@@ -4,17 +4,28 @@ use serde::Deserialize;
 
 use spectator_core::watch::{ConditionOperator, TrackCategory, WatchCondition};
 
-use super::ParseMcpEnum;
-
 use super::budget_context;
 use super::finalize_response;
+
+/// Watch action to perform.
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum WatchAction {
+    /// Subscribe to changes on a node or group.
+    Add,
+    /// Unsubscribe a watch by ID.
+    Remove,
+    /// List all active watches.
+    List,
+    /// Remove all watches.
+    Clear,
+}
 
 /// MCP parameters for the spatial_watch tool.
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct SpatialWatchParams {
-    /// Action: "add", "remove", "list", "clear".
-    #[schemars(description = "Action: add, remove, list, clear")]
-    pub action: String,
+    /// Watch action: add, remove, list, or clear.
+    pub action: WatchAction,
 
     /// For "add": watch specification.
     pub watch: Option<WatchSpec>,
@@ -33,49 +44,21 @@ pub struct WatchSpec {
     #[serde(default)]
     pub conditions: Vec<WatchConditionInput>,
 
-    /// What to track: position, state, signals, physics, all.
+    /// What to track.
     #[serde(default = "default_track")]
-    pub track: Vec<String>,
+    pub track: Vec<TrackCategory>,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct WatchConditionInput {
     pub property: String,
-    /// Comparison operator.
-    #[schemars(
-        description = "Comparison operator: lt (less than), gt (greater than), eq (equals), changed (any change)"
-    )]
-    pub operator: String,
+    /// Comparison operator: lt (less than), gt (greater than), eq (equals), changed (any change).
+    pub operator: ConditionOperator,
     pub value: Option<serde_json::Value>,
 }
 
-fn default_track() -> Vec<String> {
-    vec!["all".to_string()]
-}
-
-impl super::ParseMcpEnum for ConditionOperator {
-    const FIELD_NAME: &'static str = "operator";
-    fn variants() -> &'static [(&'static str, Self)] {
-        &[
-            ("lt", ConditionOperator::Lt),
-            ("gt", ConditionOperator::Gt),
-            ("eq", ConditionOperator::Eq),
-            ("changed", ConditionOperator::Changed),
-        ]
-    }
-}
-
-impl super::ParseMcpEnum for TrackCategory {
-    const FIELD_NAME: &'static str = "track category";
-    fn variants() -> &'static [(&'static str, Self)] {
-        &[
-            ("position", TrackCategory::Position),
-            ("state", TrackCategory::State),
-            ("signals", TrackCategory::Signals),
-            ("physics", TrackCategory::Physics),
-            ("all", TrackCategory::All),
-        ]
-    }
+fn default_track() -> Vec<TrackCategory> {
+    vec![TrackCategory::All]
 }
 
 fn format_conditions(conditions: &[WatchCondition]) -> String {
@@ -100,29 +83,23 @@ pub async fn handle_spatial_watch(
     let bctx = budget_context(state).await;
     let hard_cap = bctx.hard_cap;
 
-    match params.action.as_str() {
-        "add" => {
+    match params.action {
+        WatchAction::Add => {
             let spec = params.watch.ok_or_else(|| {
                 McpError::invalid_params("'watch' specification is required for add action", None)
             })?;
 
             let conditions: Vec<WatchCondition> = spec
                 .conditions
-                .iter()
-                .map(|c| {
-                    Ok(WatchCondition {
-                        property: c.property.clone(),
-                        operator: ConditionOperator::parse(&c.operator)?,
-                        value: c.value.clone(),
-                    })
+                .into_iter()
+                .map(|c| WatchCondition {
+                    property: c.property,
+                    operator: c.operator,
+                    value: c.value,
                 })
-                .collect::<Result<Vec<_>, McpError>>()?;
+                .collect();
 
-            let track: Vec<TrackCategory> = spec
-                .track
-                .iter()
-                .map(|t| TrackCategory::parse(t))
-                .collect::<Result<Vec<_>, McpError>>()?;
+            let track = spec.track;
 
             let watch = {
                 let mut s = state.lock().await;
@@ -138,7 +115,7 @@ pub async fn handle_spatial_watch(
 
             finalize_response(&mut response, 200, hard_cap)
         }
-        "remove" => {
+        WatchAction::Remove => {
             let watch_id = params.watch_id.ok_or_else(|| {
                 McpError::invalid_params("'watch_id' is required for remove action", None)
             })?;
@@ -155,7 +132,7 @@ pub async fn handle_spatial_watch(
 
             finalize_response(&mut response, 200, hard_cap)
         }
-        "list" => {
+        WatchAction::List => {
             let watches = {
                 let s = state.lock().await;
                 s.watch_engine
@@ -178,7 +155,7 @@ pub async fn handle_spatial_watch(
 
             finalize_response(&mut response, 200, hard_cap)
         }
-        "clear" => {
+        WatchAction::Clear => {
             let removed = {
                 let mut s = state.lock().await;
                 s.watch_engine.clear()
@@ -191,10 +168,6 @@ pub async fn handle_spatial_watch(
 
             finalize_response(&mut response, 200, hard_cap)
         }
-        other => Err(McpError::invalid_params(
-            format!("Unknown action '{other}'. Valid: add, remove, list, clear"),
-            None,
-        )),
     }
 }
 
@@ -203,45 +176,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_operator_valid() {
-        assert!(matches!(
-            ConditionOperator::parse("lt"),
-            Ok(ConditionOperator::Lt)
-        ));
-        assert!(matches!(
-            ConditionOperator::parse("gt"),
-            Ok(ConditionOperator::Gt)
-        ));
-        assert!(matches!(
-            ConditionOperator::parse("eq"),
-            Ok(ConditionOperator::Eq)
-        ));
-        assert!(matches!(
-            ConditionOperator::parse("changed"),
-            Ok(ConditionOperator::Changed)
-        ));
+    fn operator_deserialize_valid() {
+        let op: ConditionOperator = serde_json::from_str(r#""lt""#).unwrap();
+        assert!(matches!(op, ConditionOperator::Lt));
+        let op: ConditionOperator = serde_json::from_str(r#""changed""#).unwrap();
+        assert!(matches!(op, ConditionOperator::Changed));
     }
 
     #[test]
-    fn parse_operator_invalid() {
-        assert!(ConditionOperator::parse("invalid").is_err());
+    fn operator_deserialize_invalid() {
+        assert!(serde_json::from_str::<ConditionOperator>(r#""invalid""#).is_err());
     }
 
     #[test]
-    fn parse_track_valid() {
-        assert!(matches!(
-            TrackCategory::parse("all"),
-            Ok(TrackCategory::All)
-        ));
-        assert!(matches!(
-            TrackCategory::parse("position"),
-            Ok(TrackCategory::Position)
-        ));
+    fn track_deserialize_valid() {
+        let t: TrackCategory = serde_json::from_str(r#""all""#).unwrap();
+        assert!(matches!(t, TrackCategory::All));
+        let t: TrackCategory = serde_json::from_str(r#""position""#).unwrap();
+        assert!(matches!(t, TrackCategory::Position));
     }
 
     #[test]
-    fn parse_track_invalid() {
-        assert!(TrackCategory::parse("everything").is_err());
+    fn track_deserialize_invalid() {
+        assert!(serde_json::from_str::<TrackCategory>(r#""everything""#).is_err());
     }
 
     #[test]

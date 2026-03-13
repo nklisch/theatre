@@ -18,7 +18,7 @@ struct ToolDoc {
 }
 
 fn main() {
-    let spectator_router = spectator_server::server::SpectatorServer::tool_router();
+    let spectator_router = spectator_server::server::SpectatorServer::router_with_schemas();
     let director_router = director::server::DirectorServer::new().tool_router;
 
     let mut tools: Vec<ToolDoc> = Vec::new();

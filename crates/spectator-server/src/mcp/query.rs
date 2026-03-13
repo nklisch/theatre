@@ -21,14 +21,29 @@ use super::{
     serialize_params,
 };
 
+/// Spatial query type.
+#[derive(Debug, Clone, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum QueryType {
+    /// K nearest nodes from a position. Needs prior spatial_snapshot.
+    Nearest,
+    /// Nodes within a radius. Needs prior spatial_snapshot.
+    Radius,
+    /// Alias for radius.
+    Area,
+    /// Physics raycast line-of-sight check.
+    Raycast,
+    /// Navigation mesh path distance.
+    PathDistance,
+    /// Mutual spatial relationship between two nodes.
+    Relationship,
+}
+
 /// MCP parameters for the spatial_query tool.
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct SpatialQueryParams {
-    /// Query type: nearest, radius, raycast, area, path_distance, relationship.
-    #[schemars(
-        description = "Query type: nearest, radius, raycast, area, path_distance, relationship"
-    )]
-    pub query_type: String,
+    /// Query type: nearest, radius, area, raycast, path_distance, relationship.
+    pub query_type: QueryType,
 
     /// Origin — node path (string) or world position [x, y, z].
     #[schemars(description = "Origin: node path (string) or position array [x,y,z]")]
@@ -261,8 +276,8 @@ pub async fn handle_spatial_query(
     let class_filter = params.class_filter.as_deref().unwrap_or(&[]);
     let budget_limit = bctx.resolve(params.token_budget, 500);
 
-    let mut response = match params.query_type.as_str() {
-        "nearest" => {
+    let mut response = match params.query_type {
+        QueryType::Nearest => {
             let (from_pos, from_fwd) = resolve_origin(&from_origin, state).await?;
             let results = {
                 let s = state.lock().await;
@@ -271,7 +286,7 @@ pub async fn handle_spatial_query(
             };
             build_nearest_response(&results, from_pos, from_fwd)
         }
-        "radius" | "area" => {
+        QueryType::Radius | QueryType::Area => {
             let (from_pos, from_fwd) = resolve_origin(&from_origin, state).await?;
             let results = {
                 let s = state.lock().await;
@@ -280,7 +295,7 @@ pub async fn handle_spatial_query(
             };
             build_radius_response(&results, from_pos, from_fwd, params.radius)
         }
-        "raycast" => {
+        QueryType::Raycast => {
             let to_val = require_param!(params.to.as_ref(), "'to' is required for raycast query");
             let to_origin = parse_origin(to_val)?;
             let req = SpatialQueryRequest::Raycast {
@@ -297,7 +312,7 @@ pub async fn handle_spatial_query(
                 "result": raycast,
             })
         }
-        "path_distance" => {
+        QueryType::PathDistance => {
             let to_val = require_param!(
                 params.to.as_ref(),
                 "'to' is required for path_distance query"
@@ -315,7 +330,7 @@ pub async fn handle_spatial_query(
                 "result": nav,
             })
         }
-        "relationship" => {
+        QueryType::Relationship => {
             let to_val = require_param!(
                 params.to.as_ref(),
                 "'to' is required for relationship query"
@@ -333,15 +348,6 @@ pub async fn handle_spatial_query(
                 state,
             )
             .await?
-        }
-        other => {
-            return Err(McpError::invalid_params(
-                format!(
-                    "Unknown query_type: '{other}'. Valid types: \
-                     nearest, radius, raycast, path_distance, relationship, area"
-                ),
-                None,
-            ));
         }
     };
 
