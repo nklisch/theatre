@@ -26,7 +26,7 @@ When you ask "where is the player?", the agent does not guess from source code. 
     "name": "spatial_snapshot",
     "arguments": {
       "detail": "summary",
-      "focus_node": "Player"
+      "focal_node": "Player"
     }
   }
 }

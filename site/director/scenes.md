@@ -110,13 +110,13 @@ List all `.tscn` files in the project (or a subdirectory).
 }
 ```
 
-### `scene_instance`
+### `scene_add_instance`
 
 Add an instance of another scene as a child node.
 
 ```json
 {
-  "op": "scene_instance",
+  "op": "scene_add_instance",
   "project_path": "/home/user/my-game",
   "scene": "scenes/level_01.tscn",
   "parent": "Level/Enemies",
@@ -137,7 +137,7 @@ Add an instance of another scene as a child node.
 **Response:**
 ```json
 {
-  "op": "scene_instance",
+  "op": "scene_add_instance",
   "name": "Enemy_4",
   "source_scene": "scenes/enemies/basic_enemy.tscn",
   "result": "ok"
@@ -178,6 +178,51 @@ Compare two scenes and return a list of differences.
 }
 ```
 
+### `uid_get`
+
+Look up the UID for a resource path.
+
+```json
+{
+  "op": "uid_get",
+  "project_path": "/home/user/my-game",
+  "path": "scenes/enemies/basic_enemy.tscn"
+}
+```
+
+**Response:**
+```json
+{
+  "op": "uid_get",
+  "path": "scenes/enemies/basic_enemy.tscn",
+  "uid": "uid://abc123xyz"
+}
+```
+
+### `uid_update_project`
+
+Rescan all resources and rebuild the project UID cache. Run after adding or moving resource files outside of the editor.
+
+```json
+{
+  "op": "uid_update_project",
+  "project_path": "/home/user/my-game"
+}
+```
+
+### `export_mesh_library`
+
+Export meshes from a scene into a MeshLibrary resource for use with GridMap.
+
+```json
+{
+  "op": "export_mesh_library",
+  "project_path": "/home/user/my-game",
+  "scene": "scenes/dungeon_tiles.tscn",
+  "save_path": "assets/dungeon_tiles.meshlib"
+}
+```
+
 ## Example conversation
 
 <AgentConversation :messages="messages0" />
@@ -188,6 +233,6 @@ Compare two scenes and return a list of differences.
 
 **Use `scene_list` to find existing scenes.** Before creating a new enemy scene, check if one already exists. `scene_list` with a directory filter is fast.
 
-**`scene_instance` vs `node_add`.** Use `scene_instance` when you want to place a pre-built scene (like an enemy prefab) into a level. Use `node_add` when building node hierarchy from scratch.
+**`scene_add_instance` vs `node_add`.** Use `scene_add_instance` when you want to place a pre-built scene (like an enemy prefab) into a level. Use `node_add` when building node hierarchy from scratch.
 
 **`scene_diff` for auditing AI changes.** After a batch of Director operations, diff the modified scene against its last git version to see exactly what changed.

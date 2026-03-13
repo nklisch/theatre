@@ -8,12 +8,11 @@ Get an instant snapshot of all tracked nodes.
 
 ```typescript
 {
-  detail?: "summary" | "full" | "custom"  // default: "summary"
-  budget_tokens?: number                   // default: 2000
-  focus_node?: string                      // node name or path
-  include_types?: string[]                 // Godot class names to include
-  exclude_types?: string[]                 // Godot class names to exclude
-  include_properties?: string[]            // for detail="custom"
+  detail?: "summary" | "standard" | "full"  // default: "summary"
+  token_budget?: number                      // default: 2000
+  focal_node?: string                        // node name or path
+  class_filter?: string[]                    // Godot class names to include
+  include_properties?: string[]              // for detail="full"
 }
 ```
 
@@ -53,7 +52,7 @@ Get only what changed since a specific frame.
 ```typescript
 {
   since_frame: number                      // required
-  budget_tokens?: number                   // default: 1000
+  token_budget?: number                    // default: 1000
   include_types?: string[]
   exclude_types?: string[]
   min_distance_change?: number             // default: 0.01 (meters)
@@ -91,38 +90,38 @@ Run geometric queries against the scene.
 
 ```typescript
 {
-  type: "nearest" | "radius" | "area" | "raycast" | "path_distance" | "relationship"
+  query_type: "nearest" | "radius" | "area" | "raycast" | "path_distance" | "relationship"
 
-  // For type="nearest":
-  origin: string | [number, number, number]
-  limit?: number                           // default: 10
+  // For query_type="nearest":
+  from: string | [number, number, number]
+  k?: number                               // max results, default: 10
   include_types?: string[]
   exclude_types?: string[]
 
-  // For type="radius":
-  origin: string | [number, number, number]
+  // For query_type="radius":
+  from: string | [number, number, number]
   radius: number
-  limit?: number
+  k?: number
   include_types?: string[]
   exclude_types?: string[]
 
-  // For type="area":
+  // For query_type="area":
   min: [number, number, number]
   max: [number, number, number]
   include_types?: string[]
   exclude_types?: string[]
 
-  // For type="raycast":
-  origin: string | [number, number, number]
+  // For query_type="raycast":
+  from: string | [number, number, number]
   direction: [number, number, number]      // normalized
   max_distance?: number                    // default: 100.0
   collision_mask?: number                  // default: 0xFFFFFFFF
 
-  // For type="path_distance":
+  // For query_type="path_distance":
   from: string | [number, number, number]
   to: string | [number, number, number]
 
-  // For type="relationship":
+  // For query_type="relationship":
   from: string
   to: string
 }
@@ -326,8 +325,8 @@ Configure collection behavior.
   tracked_types?: string[] | null          // null = restore defaults
   extra_tracked_types?: string[]
   buffer_depth_frames?: number             // default: 600
-  default_budget_tokens?: number           // default: 2000
-  default_detail?: "summary" | "full"
+  default_token_budget?: number            // default: 2000
+  default_detail?: "summary" | "standard" | "full"
   record_path?: string                     // directory for clip files
 }
 ```
@@ -340,7 +339,7 @@ Configure collection behavior.
   capture_center: string | null
   buffer_depth_frames: number
   buffer_depth_seconds: number
-  default_budget_tokens: number
+  default_token_budget: number
   default_detail: string
   record_path: string
   tracked_types: string[]
@@ -424,7 +423,7 @@ Get scene tree structure.
 
 ---
 
-## `recording`
+## `clips`
 
 Record and query spatial gameplay clips.
 

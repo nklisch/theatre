@@ -14,17 +14,17 @@ Modify tile-based layouts for 2D and 3D worlds.
 
 `TileMap` is Godot's 2D tile system. Director can set, get, and fill tiles using tile coordinates (column, row).
 
-### `tilemap_set`
+### `tilemap_set_cells`
 
 Set one or more specific tiles.
 
 ```json
 {
-  "op": "tilemap_set",
+  "op": "tilemap_set_cells",
   "project_path": "/home/user/my-game",
   "scene": "scenes/level_01.tscn",
   "node": "World/TileMap",
-  "tiles": [
+  "cells": [
     { "position": [0, 0], "source_id": 0, "atlas_coords": [0, 0], "layer": 0 },
     { "position": [1, 0], "source_id": 0, "atlas_coords": [0, 0], "layer": 0 },
     { "position": [2, 0], "source_id": 0, "atlas_coords": [0, 0], "layer": 0 },
@@ -36,33 +36,47 @@ Set one or more specific tiles.
 | Parameter | Type | Description |
 |---|---|---|
 | `node` | `string` | Path to the TileMap node |
-| `tiles` | `array` | List of tile placements |
-| `tiles[].position` | `[col, row]` | Tile grid coordinates |
-| `tiles[].source_id` | `integer` | TileSet source ID (which tileset to use) |
-| `tiles[].atlas_coords` | `[x, y]` | Which tile in the atlas (0-based) |
-| `tiles[].layer` | `integer` | TileMap layer index (default: 0) |
+| `cells` | `array` | List of tile placements |
+| `cells[].position` | `[col, row]` | Tile grid coordinates |
+| `cells[].source_id` | `integer` | TileSet source ID (which tileset to use) |
+| `cells[].atlas_coords` | `[x, y]` | Which tile in the atlas (0-based) |
+| `cells[].layer` | `integer` | TileMap layer index (default: 0) |
 
 To erase a tile, set `atlas_coords` to `[-1, -1]`:
 ```json
 { "position": [5, 3], "source_id": 0, "atlas_coords": [-1, -1], "layer": 0 }
 ```
 
+To fill a large uniform region (e.g. a floor), pass all cell positions in the `cells` array. For 20 tiles at row 0:
+```json
+{
+  "op": "tilemap_set_cells",
+  "node": "World/TileMap",
+  "cells": [
+    { "position": [0, 0], "source_id": 0, "atlas_coords": [0, 0] },
+    { "position": [1, 0], "source_id": 0, "atlas_coords": [0, 0] },
+    ...
+    { "position": [19, 0], "source_id": 0, "atlas_coords": [0, 0] }
+  ]
+}
+```
+
 **Response:**
 ```json
 {
-  "op": "tilemap_set",
-  "tiles_set": 4,
+  "op": "tilemap_set_cells",
+  "cells_set": 4,
   "result": "ok"
 }
 ```
 
-### `tilemap_get`
+### `tilemap_get_cells`
 
 Read tile data from a region.
 
 ```json
 {
-  "op": "tilemap_get",
+  "op": "tilemap_get_cells",
   "project_path": "/home/user/my-game",
   "scene": "scenes/level_01.tscn",
   "node": "World/TileMap",
@@ -74,9 +88,9 @@ Read tile data from a region.
 **Response:**
 ```json
 {
-  "op": "tilemap_get",
+  "op": "tilemap_get_cells",
   "region": { "min": [0, -5], "max": [20, 5] },
-  "tiles": [
+  "cells": [
     { "position": [0, 0], "source_id": 0, "atlas_coords": [0, 0] },
     { "position": [1, 0], "source_id": 0, "atlas_coords": [0, 0] },
     { "position": [3, -1], "source_id": 0, "atlas_coords": [2, 1] }
@@ -85,44 +99,6 @@ Read tile data from a region.
 ```
 
 Only non-empty tiles are returned.
-
-### `tilemap_fill`
-
-Fill a rectangular region with one tile type. Efficient for placing large floor/wall sections.
-
-```json
-{
-  "op": "tilemap_fill",
-  "project_path": "/home/user/my-game",
-  "scene": "scenes/level_01.tscn",
-  "node": "World/TileMap",
-  "region": { "min": [0, 0], "max": [20, 1] },
-  "source_id": 0,
-  "atlas_coords": [0, 0],
-  "layer": 0
-}
-```
-
-This fills 20 tiles at row 0 (a floor spanning columns 0-19).
-
-**Response:**
-```json
-{
-  "op": "tilemap_fill",
-  "tiles_set": 20,
-  "result": "ok"
-}
-```
-
-To erase a region:
-```json
-{
-  "op": "tilemap_fill",
-  "region": { "min": [5, -3], "max": [10, -1] },
-  "source_id": 0,
-  "atlas_coords": [-1, -1]
-}
-```
 
 ### `tilemap_clear`
 
@@ -179,13 +155,13 @@ Set one or more cells in a GridMap.
 }
 ```
 
-### `gridmap_get`
+### `gridmap_get_cells`
 
 Read cells in a region.
 
 ```json
 {
-  "op": "gridmap_get",
+  "op": "gridmap_get_cells",
   "project_path": "/home/user/my-game",
   "scene": "scenes/dungeon.tscn",
   "node": "World/GridMap",
@@ -196,7 +172,7 @@ Read cells in a region.
 **Response:**
 ```json
 {
-  "op": "gridmap_get",
+  "op": "gridmap_get_cells",
   "cells": [
     { "position": [0, 0, 0], "item": 0, "orientation": 0 },
     { "position": [1, 0, 0], "item": 0, "orientation": 0 }
@@ -204,23 +180,18 @@ Read cells in a region.
 }
 ```
 
-### `gridmap_fill`
+### `gridmap_clear`
 
-Fill a 3D region with one item.
+Remove all cells from the GridMap.
 
 ```json
 {
-  "op": "gridmap_fill",
+  "op": "gridmap_clear",
   "project_path": "/home/user/my-game",
   "scene": "scenes/dungeon.tscn",
-  "node": "World/GridMap",
-  "region": { "min": [0, 0, 0], "max": [10, 1, 10] },
-  "item": 0,
-  "orientation": 0
+  "node": "World/GridMap"
 }
 ```
-
-This fills a 10×1×10 floor at y=0.
 
 ## Example conversation: Building a platformer level
 
@@ -230,8 +201,8 @@ This fills a 10×1×10 floor at y=0.
 
 **Know your atlas coordinates first.** Open the TileSet resource in the Godot editor to find the `source_id` and `atlas_coords` for each tile type before calling Director.
 
-**Use `tilemap_fill` for large regions.** It is a single operation regardless of how many tiles are filled. 100 tiles with `tilemap_fill` is one round-trip; 100 tiles with `tilemap_set` is also one round-trip (batched), but `tilemap_fill` is simpler for uniform regions.
+**Use `tilemap_set_cells` with all cells in one call.** Batching all tile placements into a single `tilemap_set_cells` call is one round-trip regardless of how many tiles are set.
 
-**Use `tilemap_get` to audit existing levels.** Before modifying a level, read the existing tile layout to understand what is there.
+**Use `tilemap_get_cells` to audit existing levels.** Before modifying a level, read the existing tile layout to understand what is there.
 
 **GridMap orientations**: When building 3D levels with GridMap, use `spatial_snapshot` after applying changes to verify that walls and floors are facing the right direction.

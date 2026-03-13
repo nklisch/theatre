@@ -66,7 +66,7 @@ Your AI agent can then:
   link="/spectator/scene-tree"
 />
 <ToolCard
-  title="recording"
+  title="clips"
   icon="🎬"
   description="Record gameplay clips, query frame ranges, mark bug moments. The foundation of the dashcam workflow."
   link="/spectator/recording"
@@ -115,7 +115,7 @@ Returns hierarchy without spatial data. Compact and fast — good for understand
 
 ### "I recorded a bug moment"
 
-→ **`recording`** with `action: query_range`
+→ **`clips`** with `action: query_range`
 
 The main dashcam tool. Query the spatial timeline around the marked frame. Combine with `nodes` filter to stay focused.
 

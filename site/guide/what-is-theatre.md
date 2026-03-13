@@ -83,6 +83,6 @@ Theatre does not require any specific AI agent. It uses MCP (Model Context Proto
 
 **Thin addon, smart server.** The GDExtension addon does as little as possible — it collects raw data and sends it over TCP. All spatial reasoning, diffing, budgeting, and indexing happens in the Rust server. This keeps the addon stable across Godot versions and keeps game performance impact minimal.
 
-**Token budgets first.** Spatial snapshots can be enormous. Every tool that returns scene data accepts a `budget_tokens` parameter and a `detail` level. Theatre will never blow up your context window with a 500-node scene dump when you only needed the player's position.
+**Token budgets first.** Spatial snapshots can be enormous. Every tool that returns scene data accepts a `token_budget` parameter and a `detail` level. Theatre will never blow up your context window with a 500-node scene dump when you only needed the player's position.
 
-**No screenshots required.** The workflow is: record with F8, mark bugs with F9, stop with F10, then ask your agent to analyze the clip. The agent scrubs the spatial timeline, finds the exact frame, diagnoses the cause, and suggests a fix — all from structured data.
+**No screenshots required.** The workflow is: click **Record** in the dock, mark bugs with **F9**, then click **Stop** and ask your agent to analyze the clip. The agent scrubs the spatial timeline, finds the exact frame, diagnoses the cause, and suggests a fix — all from structured data.

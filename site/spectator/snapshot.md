@@ -27,12 +27,11 @@ Do **not** use `spatial_snapshot` repeatedly to detect changes — use `spatial_
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `detail` | `"summary" \| "full" \| "custom"` | `"summary"` | How much data to include per node |
-| `budget_tokens` | `integer` | `2000` | Approximate token budget for the response |
-| `focus_node` | `string` | `null` | Scene path of a node to prioritize in the response |
-| `include_types` | `string[]` | `null` | Only include nodes of these Godot classes |
-| `exclude_types` | `string[]` | `null` | Exclude nodes of these Godot classes |
-| `include_properties` | `string[]` | `null` | When `detail: "custom"`, which properties to include |
+| `detail` | `"summary" \| "standard" \| "full"` | `"summary"` | How much data to include per node |
+| `token_budget` | `integer` | `2000` | Approximate token budget for the response |
+| `focal_node` | `string` | `null` | Scene path of a node to prioritize in the response |
+| `class_filter` | `string[]` | `null` | Only include nodes of these Godot classes |
+| `include_properties` | `string[]` | `null` | Additional properties to include alongside standard fields |
 
 ### `detail` values
 
@@ -61,17 +60,17 @@ Do **not** use `spatial_snapshot` repeatedly to detect changes — use `spatial_
 }
 ```
 
-**`"custom"`** — Only the properties listed in `include_properties`.
+**`"standard"`** — Position, velocity, rotation, scale, and common flags (approximately 150-250 tokens per node).
 
-### `focus_node`
+### `focal_node`
 
-When set, the focus node is always included in the response (even if it would be cut by the budget), and nearby nodes are prioritized over distant nodes. Useful when debugging a specific character or object in a large scene.
+When set, the focal node is always included in the response (even if it would be cut by the budget), and nearby nodes are prioritized over distant nodes. Useful when debugging a specific character or object in a large scene.
 
 ```json
 {
   "detail": "summary",
-  "focus_node": "World/Player",
-  "budget_tokens": 1000
+  "focal_node": "World/Player",
+  "token_budget": 1000
 }
 ```
 
@@ -80,21 +79,12 @@ When set, the focus node is always included in the response (even if it would be
 ```json
 {
   "detail": "full",
-  "include_types": ["CharacterBody3D", "RigidBody3D"],
-  "budget_tokens": 3000
+  "class_filter": ["CharacterBody3D", "RigidBody3D"],
+  "token_budget": 3000
 }
 ```
 
 This returns only physics bodies, ignoring cameras, lights, UI nodes, etc.
-
-```json
-{
-  "detail": "summary",
-  "exclude_types": ["CanvasLayer", "Control", "Label"]
-}
-```
-
-This excludes UI nodes — useful when your scene has a large HUD.
 
 ## Response format
 
@@ -158,10 +148,10 @@ This excludes UI nodes — useful when your scene has a large HUD.
 
 ## Tips
 
-**Use `focus_node` in large scenes.** Without it, the budget may be exhausted by nodes you do not care about (terrain, lights, UI containers). Setting `focus_node: "Player"` ensures the player and nearby objects are always in the response.
+**Use `focal_node` in large scenes.** Without it, the budget may be exhausted by nodes you do not care about (terrain, lights, UI containers). Setting `focal_node: "Player"` ensures the player and nearby objects are always in the response.
 
-**Combine with `include_types` for targeted investigations.** If you are debugging pathfinding, include only `NavigationAgent3D` and `CharacterBody3D`. If you are debugging physics, include only physics body types.
+**Combine with `class_filter` for targeted investigations.** If you are debugging pathfinding, filter to `NavigationAgent3D` and `CharacterBody3D`. If you are debugging physics, filter to physics body types.
 
 **One snapshot per investigation start.** Do not call snapshot in a loop. Call it once, orient the agent, then use `spatial_delta`, `spatial_inspect`, or `spatial_query` for subsequent questions.
 
-**Check `truncated`.** If `truncated: true`, the budget was hit. Either increase `budget_tokens`, add type filters to reduce scope, or use `spatial_query` to search a smaller area.
+**Check `truncated`.** If `truncated: true`, the budget was hit. Either increase `token_budget`, add a `class_filter` to reduce scope, or use `spatial_query` to search a smaller area.

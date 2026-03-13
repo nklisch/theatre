@@ -81,4 +81,4 @@ For Area3D to detect another Area3D:
 - **`scene_tree` with `show_properties` is the fastest audit tool.** One call showed all four nodes' layer/mask configuration simultaneously — no need for four separate inspects.
 - **Layer 4 / mask 4 self-loop is a common mistake.** Setting both to the same value means the object only detects itself — useless and hard to spot without seeing the actual bitmask.
 - **Set layer names early.** Named layers prevent future misconfiguration. "PlayerBullets" is unmistakable; "4" is not.
-- **`batch_execute` for multi-node layer fixes.** All six property changes applied in one round-trip.
+- **`batch` for multi-node layer fixes.** All six property changes applied in one round-trip.

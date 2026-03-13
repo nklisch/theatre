@@ -36,7 +36,7 @@ It's like debugging a web app without being able to open the browser.
   title="Director"
   icon="🎬"
   description="Build and modify scenes, resources, tilemaps, and animations through Godot's own API. No hand-editing .tscn files."
-  tool="25+ operations"
+  tool="38+ operations"
   tokens="—"
   link="/director/"
 />
@@ -58,7 +58,7 @@ The killer workflow: **human plays, AI analyzes**.
 
 <AgentConversation :messages="messages0" />
 
-You press **F8** to record, **F9** to mark the bug moment, and the agent
+You press **F9** to mark the bug moment (use the dock's **Record** button to start), and the agent
 scrubs through the spatial timeline to find exactly what went wrong — no
 screenshots, no narration, no guessing from code.
 

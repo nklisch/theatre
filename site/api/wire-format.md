@@ -60,9 +60,9 @@ If either read returns fewer bytes than requested (socket closed), the connectio
 All requests from the server to the addon are JSON objects with a `"type"` field:
 
 ```json
-{"type": "snapshot", "detail": "summary", "budget_tokens": 2000}
-{"type": "delta", "since_frame": 400, "budget_tokens": 1000}
-{"type": "query", "query_type": "radius", "origin": [0,0,0], "radius": 5.0}
+{"type": "snapshot", "detail": "summary", "token_budget": 2000}
+{"type": "delta", "since_frame": 400, "token_budget": 1000}
+{"type": "query", "query_type": "radius", "from": [0,0,0], "radius": 5.0}
 {"type": "inspect", "node": "Player", "include": ["properties"]}
 {"type": "config", "tick_rate": 30}
 {"type": "action", "node": "Player", "action": "set_property", "property": "health", "value": 100}

@@ -45,7 +45,7 @@ The Spectator GDExtension (`libspectator_godot.so`) is a compiled Rust library l
 
 These classes are instantiated by `addons/spectator/plugin.gd` (the GDScript `EditorPlugin`), which also manages the editor dock.
 
-The collector runs at Godot's physics tick rate (default 60 Hz). It captures data in a ring buffer — old frames are dropped to keep memory bounded. The buffer depth determines how far back a `recording` query can look without an explicit clip file.
+The collector runs at Godot's physics tick rate (default 60 Hz). It captures data in a ring buffer — old frames are dropped to keep memory bounded. The buffer depth determines how far back a `clips` query can look without an explicit clip file.
 
 ### The GDScript layer
 
@@ -130,9 +130,9 @@ This is the most compatible MCP transport — it works with every MCP-capable ag
 
 Spatial snapshots can be large. A 200-node scene fully described would easily exceed 50,000 tokens. Theatre addresses this in two ways:
 
-**`detail` levels**: `"summary"` returns only class and global_position per node. `"full"` returns all tracked properties. `"custom"` lets you specify which properties to include.
+**`detail` levels**: `"summary"` returns only class and global_position per node. `"standard"` returns position, velocity, rotation, and common flags. `"full"` returns all tracked properties.
 
-**`budget_tokens`**: The server measures the response as it builds it and stops adding nodes once the budget is reached. It always includes the most spatially relevant nodes first (nodes closest to a `focus_node`, or nodes of `include_types`).
+**`token_budget`**: The server measures the response as it builds it and stops adding nodes once the budget is reached. It always includes the most spatially relevant nodes first (nodes closest to a `focal_node`, or nodes matching `class_filter`).
 
 The agent can always request more detail by narrowing scope — use `spatial_inspect` for one node, `spatial_query` for a region, or `scene_tree` for structure without spatial data.
 

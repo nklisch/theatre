@@ -74,26 +74,27 @@ Remove a node and all its children.
 }
 ```
 
-### `node_set_property`
+### `node_set_properties`
 
 Set one or more properties on a node.
 
 ```json
 {
-  "op": "node_set_property",
+  "op": "node_set_properties",
   "project_path": "/home/user/my-game",
   "scene": "scenes/level_01.tscn",
   "node": "Level/Enemy_0",
-  "property": "collision_layer",
-  "value": 2
+  "properties": {
+    "collision_layer": 2
+  }
 }
 ```
 
-To set multiple properties at once, use `properties` (object):
+To set multiple properties at once, pass more keys in `properties`:
 
 ```json
 {
-  "op": "node_set_property",
+  "op": "node_set_properties",
   "project_path": "/home/user/my-game",
   "scene": "scenes/enemy.tscn",
   "node": "Enemy",
@@ -110,19 +111,20 @@ Setting `Vector3` values:
 
 ```json
 {
-  "op": "node_set_property",
+  "op": "node_set_properties",
   "project_path": "/home/user/my-game",
   "scene": "scenes/level_01.tscn",
   "node": "Level/Spawn",
-  "property": "position",
-  "value": [5.0, 1.0, -3.0]
+  "properties": {
+    "position": [5.0, 1.0, -3.0]
+  }
 }
 ```
 
 **Response:**
 ```json
 {
-  "op": "node_set_property",
+  "op": "node_set_properties",
   "node": "Level/Enemy_0",
   "properties_set": ["collision_layer"],
   "result": "ok"
@@ -204,6 +206,79 @@ Rename a node (changes its name in the scene tree, not its parent).
 }
 ```
 
+### `node_find`
+
+Search nodes by class, group, name pattern, or property value.
+
+```json
+{
+  "op": "node_find",
+  "project_path": "/home/user/my-game",
+  "scene": "scenes/level_01.tscn",
+  "class": "CharacterBody3D",
+  "group": "enemies",
+  "name_pattern": "Enemy_*"
+}
+```
+
+**Response:**
+```json
+{
+  "op": "node_find",
+  "nodes": [
+    { "name": "Enemy_0", "class": "CharacterBody3D", "path": "Level/Enemies/Enemy_0" },
+    { "name": "Enemy_1", "class": "CharacterBody3D", "path": "Level/Enemies/Enemy_1" }
+  ],
+  "result": "ok"
+}
+```
+
+### `node_set_groups`
+
+Add or remove a node from groups.
+
+```json
+{
+  "op": "node_set_groups",
+  "project_path": "/home/user/my-game",
+  "scene": "scenes/level_01.tscn",
+  "node": "Level/Enemy_0",
+  "add": ["enemies", "patrol_units"],
+  "remove": ["idle"]
+}
+```
+
+### `node_set_script`
+
+Attach a GDScript to a node.
+
+```json
+{
+  "op": "node_set_script",
+  "project_path": "/home/user/my-game",
+  "scene": "scenes/level_01.tscn",
+  "node": "Level/Enemy_0",
+  "script": "scripts/enemy_ai.gd"
+}
+```
+
+### `node_set_meta`
+
+Set metadata on a node.
+
+```json
+{
+  "op": "node_set_meta",
+  "project_path": "/home/user/my-game",
+  "scene": "scenes/level_01.tscn",
+  "node": "Level/Enemy_0",
+  "meta": {
+    "spawn_group": "wave_1",
+    "difficulty": 2
+  }
+}
+```
+
 ## Property types
 
 Director maps JSON types to Godot property types automatically:
@@ -235,10 +310,10 @@ For ambiguous cases (e.g., a 4-element array that could be a `Quaternion` or `Co
 
 ## Tips
 
-**Use `properties` (plural) for batch property setting.** Setting 5 properties with one call is faster than 5 separate `node_set_property` calls — see [Batch Operations](/director/batch).
+**Use `node_set_properties` for all property setting.** Setting 5 properties with one call is faster than 5 separate calls — see [Batch Operations](/director/batch).
 
 **Node paths are relative to the scene root.** The root node itself is `"."`. A child named `Player` is `"Player"`. A grandchild is `"Player/Camera3D"`. Use `scene_read` to confirm paths.
 
 **`node_remove` is permanent.** There is no undo within Director. If you are making destructive changes, use `scene_diff` or git to review before removing.
 
-**Position is a shortcut.** The `position` parameter in `node_add` sets `Node3D.position` (local position). For global position, use `node_set_property` with `"property": "position"` after adding.
+**Position is a shortcut.** The `position` parameter in `node_add` sets `Node3D.position` (local position). For global position, use `node_set_properties` with `"properties": {"position": [...]}` after adding.

@@ -128,7 +128,7 @@ Set the value of an `@export` variable on a node's script.
 }
 ```
 
-This is functionally identical to `node_set_property` — both set properties via Godot's property system. The distinction is conceptual: `export_set` is for script-defined `@export` variables, while `node_set_property` is for built-in Godot node properties.
+This is functionally identical to `node_set_properties` — both set properties via Godot's property system. The distinction is conceptual: `export_set` is for script-defined `@export` variables, while `node_set_properties` is for built-in Godot node properties.
 
 **Response:**
 ```json

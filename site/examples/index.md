@@ -58,8 +58,8 @@ Real debugging and development scenarios using Theatre. Each example is a comple
 
 Each example is written as a real session transcript — you can see exactly what tool calls the AI agent makes, in what order, and why. The pattern across all examples is the same:
 
-1. **Observe** — spatial_snapshot, scene_tree, or recording to understand current state
-2. **Narrow** — spatial_inspect, spatial_query, or recording query_range to focus on the problem
+1. **Observe** — spatial_snapshot, scene_tree, or clips to understand current state
+2. **Narrow** — spatial_inspect, spatial_query, or clips query_range to focus on the problem
 3. **Diagnose** — read property values, compare nodes, analyze the spatial timeline
 4. **Fix** — Director operation or source code edit
 5. **Verify** — spatial_inspect or snapshot to confirm the fix

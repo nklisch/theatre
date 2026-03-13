@@ -12,7 +12,7 @@ When you call `spatial_snapshot`, the server has to decide how much data to incl
 
 Less data means the agent might miss relevant nodes.
 
-Theatre solves this with a **budget-first design**: every data-returning tool accepts a `budget_tokens` parameter and a `detail` level. The server measures the response as it builds it and stops adding data once the budget is reached. The most relevant data is always included first.
+Theatre solves this with a **budget-first design**: every data-returning tool accepts a `token_budget` parameter and a `detail` level. The server measures the response as it builds it and stops adding data once the budget is reached. The most relevant data is always included first.
 
 ## Detail levels
 
@@ -57,31 +57,22 @@ Returns all tracked properties:
 
 This is roughly 300-500 tokens per node. Good when you need the complete picture for a specific set of nodes.
 
-### `custom`
+### `standard`
 
-Include only the properties you specify:
+Returns position, velocity, rotation, scale, and common flags. More information than `summary` but less than `full` — a good middle ground when you need orientation plus basic properties.
 
-```json
-{
-  "detail": "custom",
-  "include_properties": ["global_position", "velocity", "collision_layer"]
-}
-```
+## The `token_budget` parameter
 
-Use `custom` when you know exactly what you need and want to minimize tokens.
-
-## The `budget_tokens` parameter
-
-Every snapshot-style tool accepts `budget_tokens` (integer, default 2000):
+Every snapshot-style tool accepts `token_budget` (integer, default 2000):
 
 ```json
 {
   "detail": "summary",
-  "budget_tokens": 500
+  "token_budget": 500
 }
 ```
 
-The server builds the response node by node, measuring token usage as it goes. When adding the next node would exceed `budget_tokens`, it stops and includes a `truncated: true` flag in the response:
+The server builds the response node by node, measuring token usage as it goes. When adding the next node would exceed `token_budget`, it stops and includes a `truncated: true` flag in the response:
 
 ```json
 {
@@ -99,24 +90,24 @@ The `node_count` tells the agent how many nodes exist; `included_nodes` tells it
 
 When the budget forces truncation, which nodes are included first?
 
-**If `focus_node` is set**: The focus node is always included first, then nodes are included in ascending order of distance from the focus node.
+**If `focal_node` is set**: The focal node is always included first, then nodes are included in ascending order of distance from the focal node.
 
-**If `include_types` is set**: Nodes matching those types are included first, then others.
+**If `class_filter` is set**: Nodes matching those types are included first, then others.
 
 **Otherwise**: Nodes are included in scene tree order (breadth-first from root).
 
-This means `budget_tokens: 500` with `focus_node: "Player"` gives you the player plus the nearest nodes, not the first 5 nodes in the tree (which are often UI elements or root containers).
+This means `token_budget: 500` with `focal_node: "Player"` gives you the player plus the nearest nodes, not the first 5 nodes in the tree (which are often UI elements or root containers).
 
 ## Practical budget guidelines
 
 | Scenario | Recommended settings |
 |---|---|
-| "Where is everything?" overview | `detail: summary`, `budget_tokens: 2000` |
-| Focus on one area of the scene | `detail: summary`, `focus_node: "Player"`, `budget_tokens: 1000` |
+| "Where is everything?" overview | `detail: summary`, `token_budget: 2000` |
+| Focus on one area of the scene | `detail: summary`, `focal_node: "Player"`, `token_budget: 1000` |
 | Debug a specific node | Use `spatial_inspect` instead of `snapshot` |
 | Monitor changes over time | Use `spatial_delta` — only changed nodes included |
 | Check scene structure (no spatial data) | Use `scene_tree` — very compact |
-| Small scene (< 20 nodes) | `detail: full`, `budget_tokens: 5000` |
+| Small scene (< 20 nodes) | `detail: full`, `token_budget: 5000` |
 
 ## `spatial_delta` as the budget-friendly choice
 
@@ -151,7 +142,7 @@ This returns every tracked property of the node plus its spatial context (nearby
 
 ## Recording budget behavior
 
-The `recording` tool's `query_range` action has its own budget parameter (`max_frames`). When querying a large frame range, use:
+The `clips` tool's `query_range` action has its own budget parameter (`max_frames`). When querying a large frame range, use:
 
 ```json
 {
@@ -168,11 +159,11 @@ Specifying `nodes` limits data to only those nodes across all frames. `detail: s
 
 ## Adjusting the default budget
 
-If you consistently want a different default budget, set `budget_tokens` in `spatial_config`:
+If you consistently want a different default budget, set `token_budget` in `spatial_config`:
 
 ```json
 {
-  "default_budget_tokens": 3000,
+  "default_token_budget": 3000,
   "default_detail": "summary"
 }
 ```

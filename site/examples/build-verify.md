@@ -100,7 +100,7 @@ Press F5 to run the game.
 | Verify | Check navmesh connectivity | Spectator `path_distance` |
 | Verify | Check corridor width | Spectator `spatial_query radius` |
 | Verify | Check patrol routes | Spectator `path_distance` |
-| Fix | Adjust wall position | Director `node_set_property` |
+| Fix | Adjust wall position | Director `node_set_properties` |
 | Verify | Confirm fix | Spectator `spatial_inspect` |
 
 This loop — build, run, verify, adjust — is what Theatre is designed for. Neither tool alone is sufficient: Director can build the geometry but cannot verify navigability; Spectator can verify navigability but cannot build geometry. Together, they close the loop.

@@ -62,4 +62,4 @@ Press F8, perform 5-6 attacks against an enemy, including some that visually con
 - **Property condition filtering** (`property_equals: current_animation: attack`) isolated exactly the frames of interest across a 2,400-frame recording in one call.
 - **Frame-by-frame animation position tracking** revealed the hitbox was activating 330ms late — impossible to see from code, easy to see from spatial data.
 - **Animation bugs often come from speed_scale testing.** If you test at half speed and set keyframes by feel, then reset speed_scale, all your keyframe times are effectively doubled.
-- **Use `recording` + `spatial_inspect` together.** Recording found the timing anomaly; the scene read confirmed the actual keyframe values. Both were needed.
+- **Use `clips` + `spatial_inspect` together.** The clips query found the timing anomaly; the scene read confirmed the actual keyframe values. Both were needed.

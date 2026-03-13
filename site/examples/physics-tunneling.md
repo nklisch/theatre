@@ -36,7 +36,7 @@ Godot's `move_and_slide` does not use continuous collision detection by default.
 
 ## Step 1: Reproduce with recording
 
-Press F8, fire several bullets at the wall at different angles and distances, press F10 when you have captured a few tunneling events.
+Click **Record** in the Spectator dock, fire several bullets at the wall at different angles and distances, then click **Stop** when you have captured a few tunneling events.
 
 ## Step 2: Query the recording
 
@@ -77,6 +77,6 @@ if result:
 ## Key takeaways
 
 - **Tunneling is a per-tick displacement problem**, not a code bug. The physics code is correct; the geometry is too thin for the speed.
-- **The recording made this diagnosable.** Without frame-by-frame position data, you would only know "sometimes it goes through" — not the exact displacement that causes it.
+- **The clip recording made this diagnosable.** Without frame-by-frame position data, you would only know "sometimes it goes through" — not the exact displacement that causes it.
 - **`velocity_above` conditions are powerful for physics bugs.** They filter thousands of frames down to the ones where speed is high enough to cause tunneling.
 - **Three valid fixes** exist; the right choice depends on your game type. Manual raycasts are the most flexible for custom bullet behavior.

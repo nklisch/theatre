@@ -91,7 +91,7 @@ The key insight — that the `collision_mask` was wrong — came from the agent 
 
 **Mark bug moments with F9.** Precise markers let the agent narrow its analysis to a small frame window instead of searching hundreds of frames.
 
-**Use `spatial_inspect` after `recording`** to get property values at a specific moment. The recording captures position and velocity; inspect gives you the full property set.
+**Use `spatial_inspect` after `clips`** to get property values at a specific moment. The clip recording captures position and velocity; inspect gives you the full property set.
 
 **Let the agent compare two nodes.** Most spatial bugs are relational — wrong distance, wrong layer, wrong parent. Give the agent both nodes and ask it to compare.
 

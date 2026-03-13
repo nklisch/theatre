@@ -15,18 +15,18 @@ An AI agent that edits `.tscn` files directly will produce scenes that load with
 
 ## Operations by domain
 
-Director supports operations across 8 domains:
+Director supports 38+ operations across 8 domains:
 
 | Domain | Operations |
 |---|---|
-| **Scenes** | Create, read, list, instance another scene, diff two scenes |
-| **Nodes** | Add, remove, set property, get property, move, rename |
-| **Resources** | Create, set properties, get properties, list |
-| **TileMap / GridMap** | Set tiles, get tiles, fill region, set GridMap cells |
-| **Animation** | Create animation, add track, set keyframe, play |
-| **Shaders** | Set shader code, get/set shader parameters |
+| **Scenes** | Create, read, list, instance scene, diff two scenes |
+| **Nodes** | Add, remove, set properties, get property, move, rename, find, set groups, set script, set meta |
+| **Resources** | Read, create material/shape/style_box, duplicate |
+| **TileMap / GridMap** | Set cells, get cells, clear; GridMap set/get cells, clear |
+| **Animation** | Create animation, add track with keyframes |
+| **Shaders** | Create visual shader, set shader code, get/set shader parameters |
 | **Physics layers** | Set layer/mask names, set layer/mask bits |
-| **Wiring** | Connect signals, disconnect signals, set export values |
+| **Wiring** | Connect signals, disconnect signals, list signals, set export values |
 
 All operations accept `project_path` as the first parameter — the absolute path to your Godot project directory.
 

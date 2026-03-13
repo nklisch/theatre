@@ -14,87 +14,13 @@ Resources in Godot are data objects separate from the scene tree: `PhysicsMateri
 
 ## Operations
 
-### `resource_create`
-
-Create a new resource and optionally save it to disk.
-
-```json
-{
-  "op": "resource_create",
-  "project_path": "/home/user/my-game",
-  "type": "StandardMaterial3D",
-  "properties": {
-    "albedo_color": [0.8, 0.2, 0.2, 1.0],
-    "roughness": 0.7,
-    "metallic": 0.0
-  },
-  "save_path": "assets/materials/enemy_red.tres"
-}
-```
-
-| Parameter | Type | Description |
-|---|---|---|
-| `type` | `string` | Godot resource class name |
-| `properties` | `object` | Initial property values |
-| `save_path` | `string` | Where to save the resource (optional — omit to create an embedded resource) |
-
-**Response:**
-```json
-{
-  "op": "resource_create",
-  "type": "StandardMaterial3D",
-  "resource_id": "@resource_id_789",
-  "save_path": "assets/materials/enemy_red.tres",
-  "result": "ok"
-}
-```
-
-The `resource_id` is a temporary identifier used within Director operations to reference the resource before it has a saved path. You can use it in subsequent `node_set_property` calls:
-
-```json
-{
-  "op": "node_set_property",
-  "scene": "scenes/enemy.tscn",
-  "node": "Enemy/MeshInstance3D",
-  "property": "material_override",
-  "value": "@resource_id_789"
-}
-```
-
-### `resource_set`
-
-Modify properties of an existing saved resource.
-
-```json
-{
-  "op": "resource_set",
-  "project_path": "/home/user/my-game",
-  "path": "assets/materials/enemy_red.tres",
-  "properties": {
-    "albedo_color": [1.0, 0.0, 0.0, 1.0],
-    "emission_enabled": true,
-    "emission": [0.5, 0.0, 0.0, 1.0]
-  }
-}
-```
-
-**Response:**
-```json
-{
-  "op": "resource_set",
-  "path": "assets/materials/enemy_red.tres",
-  "properties_set": ["albedo_color", "emission_enabled", "emission"],
-  "result": "ok"
-}
-```
-
-### `resource_get`
+### `resource_read`
 
 Read properties from an existing saved resource.
 
 ```json
 {
-  "op": "resource_get",
+  "op": "resource_read",
   "project_path": "/home/user/my-game",
   "path": "assets/materials/enemy_red.tres",
   "properties": ["albedo_color", "roughness", "metallic"]
@@ -104,7 +30,7 @@ Read properties from an existing saved resource.
 **Response:**
 ```json
 {
-  "op": "resource_get",
+  "op": "resource_read",
   "path": "assets/materials/enemy_red.tres",
   "properties": {
     "albedo_color": [1.0, 0.0, 0.0, 1.0],
@@ -114,27 +40,87 @@ Read properties from an existing saved resource.
 }
 ```
 
-### `resource_list`
+### `material_create`
 
-List resource files in the project.
+Create a new material resource and save it to disk.
 
 ```json
 {
-  "op": "resource_list",
+  "op": "material_create",
   "project_path": "/home/user/my-game",
-  "directory": "assets/materials",
-  "type_filter": "StandardMaterial3D"
+  "material_type": "StandardMaterial3D",
+  "properties": {
+    "albedo_color": [0.8, 0.2, 0.2, 1.0],
+    "roughness": 0.7,
+    "metallic": 0.0
+  },
+  "save_path": "assets/materials/enemy_red.tres"
 }
 ```
 
 **Response:**
 ```json
 {
-  "resources": [
-    { "path": "assets/materials/enemy_red.tres", "type": "StandardMaterial3D" },
-    { "path": "assets/materials/player_blue.tres", "type": "StandardMaterial3D" },
-    { "path": "assets/materials/ground.tres", "type": "StandardMaterial3D" }
-  ]
+  "op": "material_create",
+  "save_path": "assets/materials/enemy_red.tres",
+  "result": "ok"
+}
+```
+
+### `shape_create`
+
+Create a collision shape resource.
+
+```json
+{
+  "op": "shape_create",
+  "project_path": "/home/user/my-game",
+  "shape_type": "BoxShape3D",
+  "properties": {
+    "size": [2.0, 1.0, 2.0]
+  },
+  "save_path": "assets/shapes/platform_box.tres"
+}
+```
+
+### `style_box_create`
+
+Create a StyleBox resource (used by UI controls).
+
+```json
+{
+  "op": "style_box_create",
+  "project_path": "/home/user/my-game",
+  "style_type": "StyleBoxFlat",
+  "properties": {
+    "bg_color": [0.1, 0.1, 0.2, 1.0],
+    "border_width_top": 2,
+    "border_color": [0.5, 0.5, 1.0, 1.0]
+  },
+  "save_path": "assets/ui/panel_style.tres"
+}
+```
+
+### `resource_duplicate`
+
+Duplicate an existing resource file.
+
+```json
+{
+  "op": "resource_duplicate",
+  "project_path": "/home/user/my-game",
+  "source_path": "assets/materials/enemy_red.tres",
+  "dest_path": "assets/materials/enemy_blue.tres"
+}
+```
+
+**Response:**
+```json
+{
+  "op": "resource_duplicate",
+  "source_path": "assets/materials/enemy_red.tres",
+  "dest_path": "assets/materials/enemy_blue.tres",
+  "result": "ok"
 }
 ```
 
@@ -196,8 +182,8 @@ Used by `MeshInstance3D.material_override` or surface materials:
 
 ## Tips
 
-**Save resources when they will be reused.** An embedded resource (no `save_path`) exists only within the scene that uses it. A saved `.tres` file can be referenced by multiple scenes — better for shared materials, shapes, etc.
+**Save resources when they will be reused.** A saved `.tres` file can be referenced by multiple scenes — better for shared materials, shapes, etc.
 
-**Use `resource_list` before creating.** Check if the material/shape you need already exists. Reuse it rather than creating a duplicate.
+**Read before modifying.** Use `resource_read` to check current property values before creating or duplicating resources.
 
-**`resource_id` is only valid within the current operation session.** The `@resource_id_xxx` identifier returned by `resource_create` can be used in subsequent operations in the same session. After the session ends, use the `save_path` to reference the resource.
+**Use `resource_duplicate` to create variants.** Duplicate an existing material, then use `node_set_properties` to update specific properties — faster than creating from scratch.

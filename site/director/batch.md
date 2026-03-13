@@ -2,7 +2,7 @@
 const messages0 = [
   { role: 'human', text: `Build the intro platform section: floor, three step platforms at increasing heights, and a point light.` },
   { role: 'agent', text: `Building in one batch to minimize round-trips. Sending 4 operations at once.` },
-  { role: 'tool', text: `director batch_execute — 4 ops: tilemap_fill (floor 20 tiles), tilemap_set (6 platform tiles), node_add (OmniLight3D), node_set_property (light_energy, light_color, omni_range)` },
+  { role: 'tool', text: `director batch — 4 ops: tilemap_set_cells (floor 20 tiles), tilemap_set_cells (6 platform tiles), node_add (OmniLight3D), node_set_properties (light_energy, light_color, omni_range)` },
   { role: 'agent', text: `4 operations completed in 1 round-trip: floor (20 tiles), 3 platforms (6 tiles), OmniLight3D added and configured. Total: 26 tiles placed.` },
 ]
 </script>
@@ -23,49 +23,59 @@ Building a level with 21 individual `tilemap_set` calls takes 21 round-trips. Wi
 
 `batch_execute` collapses all of that into one round-trip.
 
-## `batch_execute`
+## `batch`
 
 Run a list of operations atomically in sequence.
 
 ```json
 {
-  "op": "batch_execute",
+  "op": "batch",
   "project_path": "/home/user/my-game",
   "operations": [
     {
-      "op": "scene_create",
-      "path": "scenes/room_b.tscn",
-      "root_class": "Node3D",
-      "root_name": "RoomB"
+      "operation": "scene_create",
+      "params": {
+        "path": "scenes/room_b.tscn",
+        "root_class": "Node3D",
+        "root_name": "RoomB"
+      }
     },
     {
-      "op": "node_add",
-      "scene": "scenes/room_b.tscn",
-      "parent": "RoomB",
-      "name": "Floor",
-      "class": "StaticBody3D"
+      "operation": "node_add",
+      "params": {
+        "scene": "scenes/room_b.tscn",
+        "parent": "RoomB",
+        "name": "Floor",
+        "class": "StaticBody3D"
+      }
     },
     {
-      "op": "node_add",
-      "scene": "scenes/room_b.tscn",
-      "parent": "RoomB/Floor",
-      "name": "CollisionShape3D",
-      "class": "CollisionShape3D"
+      "operation": "node_add",
+      "params": {
+        "scene": "scenes/room_b.tscn",
+        "parent": "RoomB/Floor",
+        "name": "CollisionShape3D",
+        "class": "CollisionShape3D"
+      }
     },
     {
-      "op": "node_add",
-      "scene": "scenes/room_b.tscn",
-      "parent": "RoomB/Floor",
-      "name": "MeshInstance3D",
-      "class": "MeshInstance3D"
+      "operation": "node_add",
+      "params": {
+        "scene": "scenes/room_b.tscn",
+        "parent": "RoomB/Floor",
+        "name": "MeshInstance3D",
+        "class": "MeshInstance3D"
+      }
     },
     {
-      "op": "node_set_property",
-      "scene": "scenes/room_b.tscn",
-      "node": "RoomB/Floor",
-      "properties": {
-        "collision_layer": 4,
-        "collision_mask": 0
+      "operation": "node_set_properties",
+      "params": {
+        "scene": "scenes/room_b.tscn",
+        "node": "RoomB/Floor",
+        "properties": {
+          "collision_layer": 4,
+          "collision_mask": 0
+        }
       }
     }
   ]
@@ -86,16 +96,16 @@ Note: Each operation in the `operations` array does **not** need `project_path` 
 
 ```json
 {
-  "op": "batch_execute",
+  "op": "batch",
   "total": 5,
   "succeeded": 5,
   "failed": 0,
   "results": [
-    { "op": "scene_create", "path": "scenes/room_b.tscn", "result": "ok" },
-    { "op": "node_add", "name": "Floor", "result": "ok" },
-    { "op": "node_add", "name": "CollisionShape3D", "result": "ok" },
-    { "op": "node_add", "name": "MeshInstance3D", "result": "ok" },
-    { "op": "node_set_property", "node": "RoomB/Floor", "result": "ok" }
+    { "operation": "scene_create", "path": "scenes/room_b.tscn", "result": "ok" },
+    { "operation": "node_add", "name": "Floor", "result": "ok" },
+    { "operation": "node_add", "name": "CollisionShape3D", "result": "ok" },
+    { "operation": "node_add", "name": "MeshInstance3D", "result": "ok" },
+    { "operation": "node_set_properties", "node": "RoomB/Floor", "result": "ok" }
   ]
 }
 ```
@@ -104,15 +114,15 @@ If an error occurs with `stop_on_error: true` (default), the batch stops at the 
 
 ```json
 {
-  "op": "batch_execute",
+  "op": "batch",
   "total": 5,
   "succeeded": 2,
   "failed": 1,
   "error_at": 2,
   "results": [
-    { "op": "scene_create", "result": "ok" },
-    { "op": "node_add", "name": "Floor", "result": "ok" },
-    { "op": "node_add", "name": "CollisionShape3D", "result": "error", "error": "Parent node 'RoomB/Floor' not found" }
+    { "operation": "scene_create", "result": "ok" },
+    { "operation": "node_add", "name": "Floor", "result": "ok" },
+    { "operation": "node_add", "name": "CollisionShape3D", "result": "error", "error": "Parent node 'RoomB/Floor' not found" }
   ]
 }
 ```
@@ -131,7 +141,7 @@ This example builds a platform section with a floor, three raised platforms, col
 - Configuring multiple enemies (same properties on N nodes)
 - Making related changes across multiple scenes
 
-...use `batch_execute`. It is faster by a factor equal to the number of operations, and it presents the AI agent with a single success/failure response to reason about.
+...use `batch`. It is faster by a factor equal to the number of operations, and it presents the AI agent with a single success/failure response to reason about.
 
 **For single operations, batching is not necessary.** The overhead of wrapping one operation in a batch is negligible but adds syntactic noise.
 
@@ -141,7 +151,7 @@ With `stop_on_error: false`, the batch continues even if individual operations f
 
 ```json
 {
-  "op": "batch_execute",
+  "op": "batch",
   "project_path": "/home/user/my-game",
   "stop_on_error": false,
   "operations": [...]

@@ -30,7 +30,7 @@ For most use cases, the defaults work well. You only need `spatial_config` when 
 | `capture_radius` | `float` | `200.0` | Maximum distance from scene origin to track nodes (meters) |
 | `tracked_types` | `string[]` | see below | Godot class names to track |
 | `buffer_depth_frames` | `integer` | `600` | Ring buffer size in frames (~10s at 60Hz) |
-| `default_budget_tokens` | `integer` | `2000` | Default token budget for snapshot-style responses |
+| `default_token_budget` | `integer` | `2000` | Default token budget for snapshot-style responses |
 | `default_detail` | `string` | `"summary"` | Default detail level for snapshot responses |
 | `record_path` | `string` | temp dir | Where to write clip files |
 
@@ -117,7 +117,7 @@ To add a type without removing the defaults, use `extra_tracked_types`:
   "capture_center": null,
   "buffer_depth_frames": 600,
   "buffer_depth_seconds": 10.0,
-  "default_budget_tokens": 2000,
+  "default_token_budget": 2000,
   "default_detail": "summary",
   "record_path": "/tmp/theatre-clips",
   "tracked_types": [

@@ -1,8 +1,7 @@
 <script setup>
 const messages0 = [
   { role: 'human', text: `Create a bounce animation on the coin: it should move up 2 meters and back over 0.6 seconds, looping.` },
-  { role: 'agent', text: `Animation created (0.6s, ping_pong loop). Adding the position track.` },
-  { role: 'agent', text: `Track added at index 0. Setting keyframes.` },
+  { role: 'agent', text: `Animation created (0.6s, ping_pong loop). Adding the position track with keyframes.` },
   { role: 'agent', text: `Done. The coin now has a float animation: position goes from [0,0,0] to [0,2,0] over 0.6 seconds with ease_in_out easing, ping_pong looping. Enable autoplay on the AnimationPlayer if you want it to start immediately.` },
 ]
 </script>
@@ -51,7 +50,7 @@ Create a new animation in an AnimationPlayer.
 
 ### `animation_add_track`
 
-Add a property track to an animation. A track targets a specific node property.
+Add a property track to an animation, with all keyframes specified up front. A track targets a specific node property.
 
 ```json
 {
@@ -61,7 +60,11 @@ Add a property track to an animation. A track targets a specific node property.
   "node": "Player/AnimationPlayer",
   "animation_name": "bounce",
   "track_path": ".:position",
-  "track_type": "property"
+  "track_type": "property",
+  "keyframes": [
+    { "time": 0.0, "value": [0.0, 0.0, 0.0], "easing": "ease_in_out" },
+    { "time": 0.6, "value": [0.0, 2.0, 0.0], "easing": "ease_in_out" }
+  ]
 }
 ```
 
@@ -70,11 +73,14 @@ Add a property track to an animation. A track targets a specific node property.
 | `animation_name` | `string` | Which animation to add the track to |
 | `track_path` | `string` | Node path + property in Godot track format |
 | `track_type` | `string` | `"property"`, `"method"`, `"audio"`, `"animation"` |
+| `keyframes` | `array` | Array of keyframe objects (each with `time`, `value`, and optional `easing`) |
 
 **Track path format**: `"NodePath:property_name"` where the NodePath is relative to the AnimationPlayer's root. `"."` means the animated node itself. Examples:
 - `".:position"` — position of the AnimationPlayer's root
 - `"MeshInstance3D:scale"` — scale of a sibling node
 - `"../Player:velocity"` — velocity of the parent's Player child
+
+**Keyframe `easing` values**: `"linear"`, `"ease_in"`, `"ease_out"`, `"ease_in_out"`
 
 **Response:**
 ```json
@@ -83,55 +89,14 @@ Add a property track to an animation. A track targets a specific node property.
   "animation_name": "bounce",
   "track_path": ".:position",
   "track_index": 0,
+  "keyframes_set": 2,
   "result": "ok"
-}
-```
-
-The `track_index` is needed for `animation_set_key`.
-
-### `animation_set_key`
-
-Set a keyframe value on a track at a specific time.
-
-```json
-{
-  "op": "animation_set_key",
-  "project_path": "/home/user/my-game",
-  "scene": "scenes/player.tscn",
-  "node": "Player/AnimationPlayer",
-  "animation_name": "bounce",
-  "track_index": 0,
-  "time": 0.0,
-  "value": [0.0, 0.0, 0.0],
-  "easing": "ease_in_out"
-}
-```
-
-| Parameter | Type | Description |
-|---|---|---|
-| `animation_name` | `string` | Target animation |
-| `track_index` | `integer` | Which track (from `animation_add_track` response) |
-| `time` | `float` | Time in seconds within the animation |
-| `value` | any | Keyframe value (type matches the property) |
-| `easing` | `string` | `"linear"`, `"ease_in"`, `"ease_out"`, `"ease_in_out"` (optional) |
-
-### `animation_play`
-
-Trigger an animation to play on the running game (for testing). This calls AnimationPlayer.play() via the running GDExtension — it does not save anything to the scene.
-
-```json
-{
-  "op": "animation_play",
-  "project_path": "/home/user/my-game",
-  "node": "Player/AnimationPlayer",
-  "animation_name": "bounce",
-  "speed_scale": 1.0
 }
 ```
 
 ## Complete example: Creating a bounce animation
 
-This creates an animation that moves a node from y=0 to y=2 and back, with easing.
+This creates an animation that moves a node from y=0 to y=2 and back, with easing. All keyframes are passed directly in `animation_add_track`.
 
 <AgentConversation :messages="messages0" />
 
@@ -141,21 +106,22 @@ To set an animation as the autoplay animation:
 
 ```json
 {
-  "op": "node_set_property",
+  "op": "node_set_properties",
   "project_path": "/home/user/my-game",
   "scene": "scenes/pickups.tscn",
   "node": "Coin/AnimationPlayer",
-  "property": "autoplay",
-  "value": "float"
+  "properties": {
+    "autoplay": "float"
+  }
 }
 ```
 
 ## Tips
 
-**Plan keyframes before calling Director.** For a smooth animation, sketch out the keyframe values and times first, then pass them in sequence. It is easier to think through the animation before starting the API calls.
+**Pass all keyframes in `animation_add_track`.** The `keyframes` array contains every keyframe for the track. There is no separate "set key" call — all timing and values are specified up front.
 
-**Use `ping_pong` for symmetric loops.** A bounce from 0→2 with `ping_pong` automatically returns 2→0. With `loop`, you need to manually set the return keyframe.
+**Use `ping_pong` for symmetric loops.** A bounce from 0→2 with `ping_pong` automatically returns 2→0. With `loop`, you need to manually include the return keyframe in the `keyframes` array.
 
 **Track paths are relative to the AnimationPlayer root.** The AnimationPlayer's root node (usually the scene root or the node the player is attached to) is `"."`. Siblings are `"SiblingName"`, children are `"ChildName"`.
 
-**Test with `animation_play` before saving.** Play the animation via the running game first to check timing and feel. Only save to the scene file once satisfied.
+**Use `spatial_action` to preview animations at runtime.** Call `AnimationPlayer.play("bounce")` via `spatial_action` to preview the animation in the running game without saving to the scene file.

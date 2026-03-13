@@ -35,13 +35,12 @@ You do not need to narrate the bug to the agent. You do not need screenshots. Yo
 
 | Key | Action |
 |---|---|
-| **F8** | Start recording (or start a new recording if one is active) |
 | **F9** | Mark the current frame as a bug moment |
-| **F10** | Stop recording |
+| **F11** | Pause / unpause recording |
 
 These shortcuts are active while the game is running. They are handled by the Spectator editor dock — they work whether you are focused on the game window or the Godot editor.
 
-You can also trigger these via the Spectator dock UI: **Start**, **Mark**, **Stop** buttons.
+Use the editor dock's **Record** button to start and stop recording. You can also trigger marking via the dock UI's **Mark Bug** button. From the agent side, use the `clips` tool's `"start"` and `"stop"` actions.
 
 ## A complete debugging session
 
@@ -53,13 +52,13 @@ You have a stealth game. Enemies have a detection cone — an `Area3D` shaped ro
 
 ### Step 1: Enable continuous recording
 
-Start the game, then press **F8** immediately. The dock shows "Recording: clip_stealth_01". Now every physics frame is captured.
+Start the game, then click **Record** in the Spectator dock immediately. The dock shows "Recording: clip_stealth_01". Now every physics frame is captured.
 
 Play normally. Move around. Do some stealth sections. Wait for the bug to occur.
 
-After about 45 seconds of play, you see it: you walk directly in front of an enemy at close range, the enemy's eyes do not move, no alert. You immediately press **F9**. The dock shows "Marker: frame 2712 — enemy_missed_player".
+After about 45 seconds of play, you see it: you walk directly in front of an enemy at close range, the enemy's eyes do not move, no alert. You immediately press **F9** to add a marker. The dock shows "Marker: frame 2712 — enemy_missed_player".
 
-Continue playing for a few more seconds, then press **F10** to stop.
+Continue playing for a few more seconds, then click **Stop** in the dock (or call `clips { "action": "stop" }`).
 
 ### Step 2: Start the investigation
 
@@ -96,9 +95,9 @@ The agent opens `enemy_patrol.gd`, removes the `monitoring = false` line, and sa
 
 If the bug is obvious and repeatable, you do not need a marker:
 
-1. F8 to start
+1. Click **Record** in the dock (or call `clips { "action": "start" }`)
 2. Trigger the bug
-3. F10 to stop
+3. Click **Stop** in the dock
 4. Ask the agent: "The bug happens around the end of the recording. Find the anomaly."
 
 ### Continuous background recording
@@ -112,14 +111,14 @@ Enable continuous recording in the Spectator config so recording always starts w
 }
 ```
 
-Now every session is automatically captured. You only need F9 to mark bug moments.
+Now every session is automatically captured. You only need **F9** to mark bug moments.
 
 ### Post-playtest analysis
 
 After a playtest session where you were not at the keyboard:
 
-1. Have the tester start recording when they start playing
-2. Have them press F9 whenever something seems wrong
+1. Have the tester click **Record** in the dock when they start playing
+2. Have them press **F9** whenever something seems wrong
 3. Collect the clip files afterward
 4. Ask the agent to analyze all markers in the clip
 

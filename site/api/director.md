@@ -34,10 +34,10 @@ Complete parameter schemas for all Director operations. All operations require `
 }
 ```
 
-### `scene_instance`
+### `scene_add_instance`
 ```typescript
 {
-  op: "scene_instance"
+  op: "scene_add_instance"
   project_path: string
   scene: string                  // target scene to add instance to
   parent: string                 // node path within scene
@@ -85,16 +85,62 @@ Complete parameter schemas for all Director operations. All operations require `
 }
 ```
 
-### `node_set_property`
+### `node_set_properties`
 ```typescript
 {
-  op: "node_set_property"
+  op: "node_set_properties"
   project_path: string
   scene: string
   node: string
-  property?: string              // single property
-  value?: any                    // single value
-  properties?: { [key: string]: any }  // multiple at once
+  properties: { [key: string]: any }
+}
+```
+
+### `node_find`
+```typescript
+{
+  op: "node_find"
+  project_path: string
+  scene: string
+  class?: string                 // filter by Godot class
+  group?: string                 // filter by group membership
+  name_pattern?: string          // glob pattern, e.g. "Enemy_*"
+  property?: string              // filter by property name
+  property_value?: any           // filter by property value
+}
+```
+
+### `node_set_groups`
+```typescript
+{
+  op: "node_set_groups"
+  project_path: string
+  scene: string
+  node: string
+  add?: string[]                 // groups to add
+  remove?: string[]              // groups to remove
+}
+```
+
+### `node_set_script`
+```typescript
+{
+  op: "node_set_script"
+  project_path: string
+  scene: string
+  node: string
+  script: string                 // path to .gd file (relative to project)
+}
+```
+
+### `node_set_meta`
+```typescript
+{
+  op: "node_set_meta"
+  project_path: string
+  scene: string
+  node: string
+  meta: { [key: string]: any }
 }
 ```
 
@@ -144,54 +190,65 @@ Complete parameter schemas for all Director operations. All operations require `
 
 ## Resource Operations
 
-### `resource_create`
+### `resource_read`
 ```typescript
 {
-  op: "resource_create"
+  op: "resource_read"
   project_path: string
-  type: string                   // Godot resource class
-  properties?: { [key: string]: any }
-  save_path?: string             // if omitted, creates embedded resource
+  path: string                   // .tres file path
+  properties?: string[]          // specific properties to read (all if omitted)
 }
 ```
 
 **Response:**
 ```typescript
 {
-  op: "resource_create"
-  resource_id: string            // "@resource_id_xxx" for use in same session
-  save_path?: string
-  result: "ok"
-}
-```
-
-### `resource_set`
-```typescript
-{
-  op: "resource_set"
-  project_path: string
-  path: string                   // .tres file path
+  op: "resource_read"
+  path: string
   properties: { [key: string]: any }
 }
 ```
 
-### `resource_get`
+### `material_create`
 ```typescript
 {
-  op: "resource_get"
+  op: "material_create"
   project_path: string
-  path: string
-  properties: string[]
+  material_type: string          // e.g. "StandardMaterial3D", "ShaderMaterial"
+  properties?: { [key: string]: any }
+  save_path: string              // where to save the .tres
 }
 ```
 
-### `resource_list`
+### `shape_create`
 ```typescript
 {
-  op: "resource_list"
+  op: "shape_create"
   project_path: string
-  directory?: string
-  type_filter?: string           // Godot class name filter
+  shape_type: string             // e.g. "BoxShape3D", "CapsuleShape3D", "SphereShape3D"
+  properties?: { [key: string]: any }
+  save_path: string
+}
+```
+
+### `style_box_create`
+```typescript
+{
+  op: "style_box_create"
+  project_path: string
+  style_type: string             // e.g. "StyleBoxFlat", "StyleBoxTexture"
+  properties?: { [key: string]: any }
+  save_path: string
+}
+```
+
+### `resource_duplicate`
+```typescript
+{
+  op: "resource_duplicate"
+  project_path: string
+  source_path: string
+  dest_path: string
 }
 ```
 
@@ -199,15 +256,15 @@ Complete parameter schemas for all Director operations. All operations require `
 
 ## TileMap Operations
 
-### `tilemap_set`
+### `tilemap_set_cells`
 ```typescript
 {
-  op: "tilemap_set"
+  op: "tilemap_set_cells"
   project_path: string
   scene: string
   node: string
   layer?: number                 // default: 0
-  tiles: Array<{
+  cells: Array<{
     position: [number, number]   // [col, row]
     source_id: number
     atlas_coords: [number, number]  // [-1,-1] to erase
@@ -215,28 +272,14 @@ Complete parameter schemas for all Director operations. All operations require `
 }
 ```
 
-### `tilemap_get`
+### `tilemap_get_cells`
 ```typescript
 {
-  op: "tilemap_get"
+  op: "tilemap_get_cells"
   project_path: string
   scene: string
   node: string
   region: { min: [number, number], max: [number, number] }
-  layer?: number                 // default: 0
-}
-```
-
-### `tilemap_fill`
-```typescript
-{
-  op: "tilemap_fill"
-  project_path: string
-  scene: string
-  node: string
-  region: { min: [number, number], max: [number, number] }
-  source_id: number
-  atlas_coords: [number, number]
   layer?: number                 // default: 0
 }
 ```
@@ -271,10 +314,10 @@ Complete parameter schemas for all Director operations. All operations require `
 }
 ```
 
-### `gridmap_get`
+### `gridmap_get_cells`
 ```typescript
 {
-  op: "gridmap_get"
+  op: "gridmap_get_cells"
   project_path: string
   scene: string
   node: string
@@ -282,16 +325,13 @@ Complete parameter schemas for all Director operations. All operations require `
 }
 ```
 
-### `gridmap_fill`
+### `gridmap_clear`
 ```typescript
 {
-  op: "gridmap_fill"
+  op: "gridmap_clear"
   project_path: string
   scene: string
   node: string
-  region: { min: [number, number, number], max: [number, number, number] }
-  item: number
-  orientation?: number           // default: 0
 }
 ```
 
@@ -322,40 +362,41 @@ Complete parameter schemas for all Director operations. All operations require `
   animation_name: string
   track_path: string             // "NodePath:property"
   track_type?: "property" | "method" | "audio" | "animation"  // default: "property"
+  keyframes: Array<{
+    time: number                 // seconds within animation
+    value: any                   // keyframe value
+    easing?: "linear" | "ease_in" | "ease_out" | "ease_in_out"
+  }>
 }
 ```
 
-**Response includes `track_index` needed for `animation_set_key`.**
+**Keyframes are included in `animation_add_track`. There is no separate set-key call.**
 
-### `animation_set_key`
+**Response:**
 ```typescript
 {
-  op: "animation_set_key"
-  project_path: string
-  scene: string
-  node: string                   // AnimationPlayer path
+  op: "animation_add_track"
   animation_name: string
-  track_index: number            // from animation_add_track response
-  time: number                   // seconds within animation
-  value: any                     // keyframe value
-  easing?: "linear" | "ease_in" | "ease_out" | "ease_in_out"
-}
-```
-
-### `animation_play`
-```typescript
-{
-  op: "animation_play"
-  project_path: string
-  node: string                   // AnimationPlayer path (running game)
-  animation_name: string
-  speed_scale?: number           // default: 1.0
+  track_path: string
+  track_index: number
+  keyframes_set: number
+  result: "ok"
 }
 ```
 
 ---
 
 ## Shader Operations
+
+### `visual_shader_create`
+```typescript
+{
+  op: "visual_shader_create"
+  project_path: string
+  save_path: string              // where to save the .tres VisualShader
+  shader_mode?: "spatial" | "canvas_item" | "particles"  // default: "spatial"
+}
+```
 
 ### `shader_set`
 ```typescript
@@ -486,15 +527,15 @@ Complete parameter schemas for all Director operations. All operations require `
 
 ## Batch Operations
 
-### `batch_execute`
+### `batch`
 ```typescript
 {
-  op: "batch_execute"
+  op: "batch"
   project_path: string           // inherited by all operations
   stop_on_error?: boolean        // default: true
   operations: Array<{
-    op: string                   // any director op (no project_path needed)
-    // ...other params for the operation
+    operation: string            // any director op name (no project_path needed)
+    params: { [key: string]: any }  // parameters for the operation
   }>
 }
 ```
@@ -502,19 +543,67 @@ Complete parameter schemas for all Director operations. All operations require `
 **Response:**
 ```typescript
 {
-  op: "batch_execute"
+  op: "batch"
   total: number
   succeeded: number
   failed: number
   error_at?: number              // index of failed operation
   results: Array<{
-    op: string
+    operation: string
     result: "ok" | "error"
     error?: string
     // ...other response fields
   }>
 }
 ```
+
+---
+
+## UID Operations
+
+### `uid_get`
+```typescript
+{
+  op: "uid_get"
+  project_path: string
+  path: string                   // resource path to look up UID for
+}
+```
+
+**Response:**
+```typescript
+{
+  op: "uid_get"
+  path: string
+  uid: string                    // "uid://..." format
+}
+```
+
+### `uid_update_project`
+```typescript
+{
+  op: "uid_update_project"
+  project_path: string
+}
+```
+
+Rescans all resources and updates the project's UID cache. Run after adding or moving resources.
+
+---
+
+## Export Operations
+
+### `export_mesh_library`
+```typescript
+{
+  op: "export_mesh_library"
+  project_path: string
+  scene: string                  // scene containing the MeshLibrary items
+  save_path: string              // output .meshlib path
+}
+```
+
+Exports the meshes from a scene into a MeshLibrary resource, which can then be used by GridMap nodes.
 
 ---
 

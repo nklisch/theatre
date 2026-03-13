@@ -31,11 +31,11 @@ Shows whether the Spectator GDExtension is loaded and the MCP server is connecte
 
 The recording section has three buttons:
 
-**[ ⏺ Record ]** — Start a new recording. Equivalent to pressing F8. The button label changes to "Recording..." while active, and shows the elapsed time.
+**[ ⏺ Record ]** — Start a new recording. The button label changes to "Recording..." while active, and shows the elapsed time.
 
-**[ 🔖 Mark Bug ]** — Mark the current frame. Equivalent to pressing F9. Opens a small dialog to optionally label the mark. Labels appear in the clip timeline.
+**[ 🔖 Mark Bug ]** — Mark the current frame. Equivalent to pressing **F9**. Opens a small dialog to optionally label the mark. Labels appear in the clip timeline.
 
-**[ ⏹ Stop ]** — Stop the current recording. Equivalent to pressing F10. After stopping, the clip appears in the clip list below.
+**[ ⏹ Stop ]** — Stop the current recording. After stopping, the clip appears in the clip list below.
 
 ### Clip list
 
@@ -72,7 +72,7 @@ The activity feed shows recent MCP tool calls made by the AI agent:
 14:32:01  spatial_snapshot     detail=summary
 14:32:05  spatial_inspect      node=EnemyDetectionZone
 14:32:08  spatial_action       set collision_mask=1
-14:32:12  recording            query_range frames 2700-2730
+14:32:12  clips                query_range frames 2700-2730
 ```
 
 This is useful for understanding what the agent is doing and verifying that tool calls are reaching the game.
@@ -87,20 +87,18 @@ Each entry shows:
 
 | Shortcut | Action |
 |---|---|
-| **F8** | Start / restart recording |
 | **F9** | Mark current frame as bug |
-| **F10** | Stop recording |
+| **F11** | Pause / unpause recording |
 
-These shortcuts work while the game is running, whether focus is on the game window or the editor. They do not work in the editor without the game running.
+Use the dock's **Record** and **Stop** buttons to start and stop recordings. F9 and F11 work while the game is running, whether focus is on the game window or the editor.
 
 ### Configuring shortcuts
 
 Shortcuts can be changed in **Editor → Editor Settings → Shortcuts → Spectator**:
-- `spectator_record_start`
 - `spectator_record_mark`
-- `spectator_record_stop`
+- `spectator_record_pause`
 
-If F8-F10 conflict with your game's input, reassign them here.
+If these conflict with your game's input, reassign them here.
 
 ## Reading the activity feed
 
@@ -111,7 +109,7 @@ spatial_snapshot  summary, 12 nodes, 847 tokens
 spatial_query     radius 5m from Player → 3 results
 spatial_inspect   EnemyDetectionZone, properties+signals
 spatial_action    Enemy_0.collision_mask = 1  ✓
-recording         list → 3 clips
+clips             list → 3 clips
 ```
 
 If you see a tool call succeed but get unexpected results, click the entry to expand it — you can see the full parameters sent and the full response returned.

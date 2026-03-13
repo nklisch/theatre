@@ -87,7 +87,7 @@ Alternatively, use one-shot mode in CI (simpler, no background process managemen
 - name: Generate level
   run: |
     # director will use one-shot automatically since no daemon is running
-    echo '{"op": "batch_execute", ...}' | ./target/release/director run-stdin
+    echo '{"op": "batch", ...}' | ./target/release/director run-stdin
 ```
 
 ## Port configuration

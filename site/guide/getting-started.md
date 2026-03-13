@@ -109,4 +109,4 @@ You now have a working Theatre setup. Here are the natural next steps:
 
 **Snapshot returns 0 nodes** — The Spectator addon is not collecting any nodes. Check that your nodes are in the scene tree (not orphaned), and that the Spectator plugin is enabled.
 
-**Response is very large** — Add `"detail": "summary"` or `"budget_tokens": 500` to limit response size. See [Token Budgets](/guide/token-budgets).
+**Response is very large** — Add `"detail": "summary"` or `"token_budget": 500` to limit response size. See [Token Budgets](/guide/token-budgets).

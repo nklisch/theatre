@@ -28,7 +28,7 @@ Do **not** use `spatial_delta` as your first call in a session — use `spatial_
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `since_frame` | `integer` | required | The reference frame. Returns changes since this frame. |
-| `budget_tokens` | `integer` | `1000` | Token budget for the response |
+| `token_budget` | `integer` | `1000` | Token budget for the response |
 | `include_types` | `string[]` | `null` | Only include changes to nodes of these types |
 | `exclude_types` | `string[]` | `null` | Exclude changes to nodes of these types |
 | `min_distance_change` | `float` | `0.01` | Minimum position change (meters) to count as a change |
@@ -36,9 +36,9 @@ Do **not** use `spatial_delta` as your first call in a session — use `spatial_
 
 ### `since_frame`
 
-The frame number from a previous `spatial_snapshot`, `spatial_delta`, or `recording` response. Everything that changed after this frame is included.
+The frame number from a previous `spatial_snapshot`, `spatial_delta`, or `clips` response. Everything that changed after this frame is included.
 
-If `since_frame` is older than the ring buffer depth (default: 600 frames = 10 seconds), the server returns an error. Use a recent frame or start a recording if you need longer history.
+If `since_frame` is older than the ring buffer depth (default: 600 frames = 10 seconds), the server returns an error. Use a recent frame or start a clip recording if you need longer history.
 
 ### `min_distance_change`
 
@@ -116,7 +116,7 @@ Each delta response is small because it only includes actual changes.
 
 **Start with `spatial_snapshot`, then use deltas.** You need a frame number to compute a delta. The snapshot gives you one.
 
-**Keep `since_frame` recent.** The ring buffer holds ~10 seconds of frames by default. If your `since_frame` is older, you'll get an error. If you need longer history, use the `recording` tool.
+**Keep `since_frame` recent.** The ring buffer holds ~10 seconds of frames by default. If your `since_frame` is older, you'll get an error. If you need longer history, use the `clips` tool to record to disk.
 
 **Use `min_distance_change` to filter noise.** Physics simulation produces tiny floating-point perturbations even on "stationary" objects. The default 0.01m threshold handles most cases, but increase it if you're seeing a lot of stationary-looking objects in your delta.
 

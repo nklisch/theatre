@@ -29,14 +29,14 @@ Find the closest nodes to a point or node.
 
 ```json
 {
-  "type": "nearest",
-  "origin": "Player",
-  "limit": 5,
+  "query_type": "nearest",
+  "from": "Player",
+  "k": 5,
   "include_types": ["CharacterBody3D", "Area3D"]
 }
 ```
 
-`origin` can be a node name/path or a `[x, y, z]` coordinate.
+`from` can be a node name/path or a `[x, y, z]` coordinate.
 
 **Response:**
 ```json
@@ -60,8 +60,8 @@ Find all nodes within a distance of a point.
 
 ```json
 {
-  "type": "radius",
-  "origin": "Player",
+  "query_type": "radius",
+  "from": "Player",
   "radius": 10.0,
   "include_types": ["CollectibleItem", "Enemy"]
 }
@@ -87,7 +87,7 @@ Find nodes inside an axis-aligned bounding box.
 
 ```json
 {
-  "type": "area",
+  "query_type": "area",
   "min": [-5.0, -1.0, -5.0],
   "max": [5.0, 3.0, 5.0]
 }
@@ -110,12 +110,12 @@ Note: `area` results do not include `distance` — there is no single reference 
 
 ### `raycast`
 
-Cast a ray from `origin` in `direction` and report what it hits.
+Cast a ray from `from` in `direction` and report what it hits.
 
 ```json
 {
-  "type": "raycast",
-  "origin": "Player",
+  "query_type": "raycast",
+  "from": "Player",
   "direction": [0.0, 0.0, -1.0],
   "max_distance": 20.0,
   "collision_mask": 3
@@ -146,7 +146,7 @@ Calculate the navigation mesh path distance between two points or nodes.
 
 ```json
 {
-  "type": "path_distance",
+  "query_type": "path_distance",
   "from": "Player",
   "to": "Enemy_0"
 }
@@ -177,7 +177,7 @@ Describe the spatial relationship between two specific nodes.
 
 ```json
 {
-  "type": "relationship",
+  "query_type": "relationship",
   "from": "Player",
   "to": "Enemy_0"
 }
@@ -210,15 +210,14 @@ Describe the spatial relationship between two specific nodes.
 
 | Parameter | Type | Applies to | Description |
 |---|---|---|---|
-| `type` | `string` | all | Query type: `nearest`, `radius`, `area`, `raycast`, `path_distance`, `relationship` |
-| `origin` | `string \| [x,y,z]` | `nearest`, `radius`, `raycast` | Reference point or node |
-| `from` | `string \| [x,y,z]` | `path_distance`, `relationship` | Start node or point |
+| `query_type` | `string` | all | Query type: `nearest`, `radius`, `area`, `raycast`, `path_distance`, `relationship` |
+| `from` | `string \| [x,y,z]` | all except `area` | Reference point, node, or start node |
 | `to` | `string \| [x,y,z]` | `path_distance`, `relationship` | End node or point |
 | `direction` | `[x,y,z]` | `raycast` | Normalized ray direction |
 | `radius` | `float` | `radius` | Search radius in world units |
 | `min` | `[x,y,z]` | `area` | Bounding box minimum corner |
 | `max` | `[x,y,z]` | `area` | Bounding box maximum corner |
-| `limit` | `integer` | `nearest`, `radius` | Max results to return (default: 10) |
+| `k` | `integer` | `nearest`, `radius` | Max results to return (default: 10) |
 | `max_distance` | `float` | `raycast` | Max ray length (default: 100.0) |
 | `collision_mask` | `integer` | `raycast` | Layer bitmask for ray collision |
 | `include_types` | `string[]` | `nearest`, `radius`, `area` | Filter by Godot class |
@@ -234,6 +233,6 @@ Describe the spatial relationship between two specific nodes.
 
 **Use `relationship` for line-of-sight bugs.** The `occluded` field tells you whether geometry blocks the path between two nodes — useful for AI perception debugging.
 
-**`nearest` with `limit: 1` is the fastest way to find "the closest thing."** Use it instead of sorting a radius result yourself.
+**`nearest` with `k: 1` is the fastest way to find "the closest thing."** Use it instead of sorting a radius result yourself.
 
 **`area` is useful for zone-based queries.** "What nodes are in room B?" Define room B's bounding box and query the area.

@@ -15,6 +15,35 @@ Director can assign shader code to a `ShaderMaterial` and get/set the uniform pa
 
 ## Operations
 
+### `visual_shader_create`
+
+Create a new VisualShader resource (node-graph based shader).
+
+```json
+{
+  "op": "visual_shader_create",
+  "project_path": "/home/user/my-game",
+  "save_path": "assets/shaders/lava_effect.tres",
+  "shader_mode": "spatial"
+}
+```
+
+| Parameter | Type | Description |
+|---|---|---|
+| `save_path` | `string` | Path to save the VisualShader resource |
+| `shader_mode` | `string` | `"spatial"`, `"canvas_item"`, or `"particles"` (default: `"spatial"`) |
+
+**Response:**
+```json
+{
+  "op": "visual_shader_create",
+  "save_path": "assets/shaders/lava_effect.tres",
+  "result": "ok"
+}
+```
+
+After creation, assign the VisualShader to a ShaderMaterial and use `shader_set_param` to configure uniform values.
+
 ### `shader_set`
 
 Assign GLSL shader code to a material. Creates or replaces the `Shader` resource on a `ShaderMaterial`.

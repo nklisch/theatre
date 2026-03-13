@@ -6,11 +6,11 @@ const messages0 = [
 ]
 </script>
 
-# recording
+# clips
 
 Record gameplay clips and query them frame by frame.
 
-The `recording` tool is the backbone of the dashcam workflow. It writes every physics frame of spatial data to disk, so you can scrub through a timeline of exactly what happened — positions, velocities, and properties — at any frame in the recording.
+The `clips` tool is the backbone of the dashcam workflow. It writes every physics frame of spatial data to disk, so you can scrub through a timeline of exactly what happened — positions, velocities, and properties — at any frame in the recording.
 
 ## When to use it
 
@@ -266,4 +266,4 @@ Delete a clip file from disk.
 
 **Use conditions to filter.** The `proximity` condition is especially powerful — it finds frames where two nodes are closer than a threshold, which is exactly when collision bugs occur.
 
-**Markers are set automatically with F9.** In the editor dock, pressing F9 calls `recording { "action": "mark" }` with a default label. You can also add more labels by calling the tool directly during a session.
+**Markers are set automatically with F9.** In the editor dock, pressing F9 calls `clips { "action": "mark" }` with a default label. You can also add more labels by calling the tool directly during a session.
