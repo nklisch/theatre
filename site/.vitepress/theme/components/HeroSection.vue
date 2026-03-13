@@ -3,6 +3,7 @@
  * Custom hero for the landing page, replacing VitePress default hero.
  * Shows the tagline with a typed-out agent conversation demo below.
  */
+import { withBase } from 'vitepress'
 </script>
 
 <template>
@@ -19,8 +20,8 @@
         the Model Context Protocol.
       </p>
       <div class="hero-actions">
-        <a href="/guide/getting-started" class="hero-btn primary">Get Started</a>
-        <a href="/guide/what-is-theatre" class="hero-btn secondary">Learn More</a>
+        <a :href="withBase('/guide/getting-started')" class="hero-btn primary">Get Started</a>
+        <a :href="withBase('/guide/what-is-theatre')" class="hero-btn secondary">Learn More</a>
       </div>
     </div>
   </div>

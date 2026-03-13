@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { withBase } from 'vitepress'
 defineProps<{
   title: string
   problem: string    // 1-line problem statement
@@ -8,7 +9,7 @@ defineProps<{
 </script>
 
 <template>
-  <a :href="link" class="scenario-card">
+  <a :href="withBase(link)" class="scenario-card">
     <div class="scenario-icon">{{ icon }}</div>
     <h3 class="scenario-title">{{ title }}</h3>
     <p class="scenario-problem">{{ problem }}</p>

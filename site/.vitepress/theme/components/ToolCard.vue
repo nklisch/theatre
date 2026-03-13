@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { withBase } from 'vitepress'
 defineProps<{
   title: string
   icon: string        // emoji or SVG
@@ -10,7 +11,7 @@ defineProps<{
 </script>
 
 <template>
-  <a :href="link" class="tool-card">
+  <a :href="withBase(link)" class="tool-card">
     <div class="tool-card-icon">{{ icon }}</div>
     <h3 class="tool-card-title">{{ title }}</h3>
     <p class="tool-card-desc">{{ description }}</p>
