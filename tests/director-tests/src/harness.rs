@@ -107,6 +107,47 @@ impl DirectorFixture {
     pub fn project_dir_path() -> PathBuf {
         project_dir_path()
     }
+
+    /// Temp scene path for journey tests (distinct prefix from unit tests).
+    pub fn journey_scene_path(name: &str) -> String {
+        format!("tmp/j_{name}.tscn")
+    }
+
+    /// Temp resource path for journey tests.
+    pub fn temp_resource_path(name: &str) -> String {
+        format!("tmp/j_{name}.tres")
+    }
+
+    /// Read a scene and find a node by path, returning its JSON object.
+    ///
+    /// `node_path` is slash-separated (e.g. `"Player/Sprite"`).
+    /// Pass `"."` to return the root node.
+    /// Panics with a clear message if the node is not found.
+    pub fn read_node(&self, scene_path: &str, node_path: &str) -> serde_json::Value {
+        let data = self
+            .run("scene_read", serde_json::json!({"scene_path": scene_path}))
+            .unwrap_or_else(|e| panic!("scene_read failed for '{scene_path}': {e}"))
+            .unwrap_data();
+        let root = data["root"].clone();
+        if node_path == "." {
+            return root;
+        }
+        let mut current = root;
+        for part in node_path.split('/') {
+            let empty = vec![];
+            let children = current["children"].as_array().unwrap_or(&empty);
+            current = children
+                .iter()
+                .find(|c| c["name"].as_str() == Some(part))
+                .unwrap_or_else(|| {
+                    panic!(
+                        "Node '{part}' not found while navigating '{node_path}' in '{scene_path}'"
+                    )
+                })
+                .clone();
+        }
+        current
+    }
 }
 
 /// Returns the absolute path to the Godot test project directory.

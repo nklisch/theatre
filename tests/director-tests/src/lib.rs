@@ -19,6 +19,38 @@ mod test_instance;
 #[cfg(test)]
 mod test_journey;
 #[cfg(test)]
+mod test_journey_3d_scene;
+#[cfg(test)]
+mod test_journey_animation;
+#[cfg(test)]
+mod test_journey_batch;
+#[cfg(test)]
+mod test_journey_composition;
+#[cfg(test)]
+mod test_journey_daemon;
+#[cfg(test)]
+mod test_journey_diff;
+#[cfg(test)]
+mod test_journey_full_game;
+#[cfg(test)]
+mod test_journey_gridmap;
+#[cfg(test)]
+mod test_journey_physics;
+#[cfg(test)]
+mod test_journey_platformer;
+#[cfg(test)]
+mod test_journey_project;
+#[cfg(test)]
+mod test_journey_resources;
+#[cfg(test)]
+mod test_journey_search;
+#[cfg(test)]
+mod test_journey_shader;
+#[cfg(test)]
+mod test_journey_tilemap;
+#[cfg(test)]
+mod test_journey_ui;
+#[cfg(test)]
 mod test_node;
 #[cfg(test)]
 mod test_physics;
