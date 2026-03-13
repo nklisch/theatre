@@ -60,9 +60,10 @@ static func op_signal_connect(params: Dictionary) -> Dictionary:
 			signal_exists = true
 			break
 	if not signal_exists:
+		var source_class: String = source.get_class()
 		root.free()
 		return OpsUtil._error(
-			"Signal '" + signal_name + "' not found on " + source.get_class(),
+			"Signal '" + signal_name + "' not found on " + source_class,
 			"signal_connect",
 			{"source_path": source_path, "signal_name": signal_name}
 		)

@@ -47,7 +47,8 @@ fn batch_creates_scene_and_adds_nodes() {
 fn batch_stop_on_error_true() {
     let f = DirectorFixture::new();
 
-    let data = f
+    // Batch returns success=false when any sub-op fails, but data is still populated
+    let result = f
         .run(
             "batch",
             json!({
@@ -63,8 +64,8 @@ fn batch_stop_on_error_true() {
                 "stop_on_error": true
             }),
         )
-        .unwrap()
-        .unwrap_data();
+        .unwrap();
+    let data = &result.data;
 
     assert_eq!(data["completed"], 0);
     assert_eq!(data["failed"], 1);
@@ -78,7 +79,8 @@ fn batch_stop_on_error_false_continues() {
     let f = DirectorFixture::new();
     let scene = DirectorFixture::temp_scene_path("batch_continue");
 
-    let data = f
+    // Batch returns success=false when any sub-op fails, but data is still populated
+    let result = f
         .run(
             "batch",
             json!({
@@ -93,8 +95,8 @@ fn batch_stop_on_error_false_continues() {
                 "stop_on_error": false
             }),
         )
-        .unwrap()
-        .unwrap_data();
+        .unwrap();
+    let data = &result.data;
 
     assert_eq!(data["completed"], 1);
     assert_eq!(data["failed"], 1);
@@ -106,7 +108,8 @@ fn batch_stop_on_error_false_continues() {
 fn batch_rejects_nested_batch() {
     let f = DirectorFixture::new();
 
-    let data = f
+    // Batch returns success=false when any sub-op fails, but data is still populated
+    let result = f
         .run(
             "batch",
             json!({
@@ -115,8 +118,8 @@ fn batch_rejects_nested_batch() {
                 ]
             }),
         )
-        .unwrap()
-        .unwrap_data();
+        .unwrap();
+    let data = &result.data;
 
     assert_eq!(data["failed"], 1);
     let err = &data["results"][0];

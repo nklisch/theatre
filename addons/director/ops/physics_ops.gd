@@ -42,6 +42,7 @@ static func op_physics_set_layers(params: Dictionary) -> Dictionary:
 	# Verify the node has collision properties
 	var has_layer := false
 	var has_mask := false
+	var target_class: String = target.get_class()
 	for prop_info in target.get_property_list():
 		if prop_info["name"] == "collision_layer":
 			has_layer = true
@@ -50,10 +51,10 @@ static func op_physics_set_layers(params: Dictionary) -> Dictionary:
 	if not has_layer and not has_mask:
 		root.free()
 		return OpsUtil._error(
-			"Node " + node_path + " (" + target.get_class() +
+			"Node " + node_path + " (" + target_class +
 			") has no collision_layer/collision_mask properties",
 			"physics_set_layers",
-			{"node_path": node_path, "class": target.get_class()})
+			{"node_path": node_path, "class": target_class})
 
 	# Apply values
 	if collision_layer != null:
@@ -62,7 +63,7 @@ static func op_physics_set_layers(params: Dictionary) -> Dictionary:
 			return OpsUtil._error(
 				"Node does not have collision_layer property",
 				"physics_set_layers",
-				{"node_path": node_path, "class": target.get_class()})
+				{"node_path": node_path, "class": target_class})
 		target.collision_layer = int(collision_layer)
 
 	if collision_mask != null:
@@ -71,7 +72,7 @@ static func op_physics_set_layers(params: Dictionary) -> Dictionary:
 			return OpsUtil._error(
 				"Node does not have collision_mask property",
 				"physics_set_layers",
-				{"node_path": node_path, "class": target.get_class()})
+				{"node_path": node_path, "class": target_class})
 		target.collision_mask = int(collision_mask)
 
 	# Read final values before freeing

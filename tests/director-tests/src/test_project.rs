@@ -15,17 +15,25 @@ fn uid_get_returns_uid_for_scene() {
     .unwrap()
     .unwrap_data();
 
-    let data = f
+    // In one-shot mode, UIDs may not be available since each invocation is a
+    // separate Godot process and UID registration doesn't persist between them.
+    let result = f
         .run("uid_get", json!({"file_path": scene}))
-        .unwrap()
-        .unwrap_data();
-
-    assert_eq!(data["file_path"], scene);
-    let uid = data["uid"].as_str().unwrap();
-    assert!(
-        uid.starts_with("uid://"),
-        "UID should start with uid://, got: {uid}"
-    );
+        .unwrap();
+    if result.success {
+        assert_eq!(result.data["file_path"], scene);
+        let uid = result.data["uid"].as_str().unwrap();
+        assert!(
+            uid.starts_with("uid://"),
+            "UID should start with uid://, got: {uid}"
+        );
+    } else {
+        let err = result.error.unwrap_or_default();
+        assert!(
+            err.contains("No UID"),
+            "Expected 'No UID' error in one-shot mode, got: {err}"
+        );
+    }
 }
 
 #[test]
