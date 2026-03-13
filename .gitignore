@@ -6,3 +6,8 @@
 
 # Compiled GDExtension binaries (build with: cargo build -p spectator-godot)
 addons/spectator/bin/
+
+# VitePress build output
+site/.vitepress/dist/
+site/.vitepress/cache/
+site/node_modules/

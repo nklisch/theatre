@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <!-- Godot-blue circle background -->
+  <circle cx="32" cy="32" r="30" fill="#478CBF"/>
+  <!-- Spotlight / stage curtain motif -->
+  <path d="M32 14 L14 50 L32 42 L50 50 Z" fill="#D4A05A" opacity="0.9"/>
+  <circle cx="32" cy="20" r="6" fill="#F5E6CC"/>
+</svg>
