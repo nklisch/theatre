@@ -40,17 +40,32 @@ use shader::VisualShaderCreateParams;
 use signal::{SignalConnectParams, SignalDisconnectParams, SignalListParams};
 use tilemap::{TileMapClearParams, TileMapGetCellsParams, TileMapSetCellsParams};
 
-use spectator_protocol::mcp_helpers::{serialize_params, serialize_response};
+use spectator_protocol::mcp_helpers::{deserialize_response, serialize_params, serialize_response};
+
+use crate::responses::{
+    AnimationAddTrackResponse, AnimationCreateResponse, AnimationReadResponse,
+    AnimationRemoveTrackResponse, BatchResponse, ExportMeshLibraryResponse,
+    GridMapClearResponse, GridMapGetCellsResponse, GridMapSetCellsResponse,
+    NodeAddResponse, NodeFindResponse, NodeRemoveResponse, NodeReparentResponse,
+    NodeSetGroupsResponse, NodeSetMetaResponse, NodeSetPropertiesResponse,
+    NodeSetScriptResponse, PhysicsSetLayerNamesResponse, PhysicsSetLayersResponse,
+    ResourceCreateResponse, ResourceDuplicateResponse, ResourceReadResponse, SceneAddInstanceResponse,
+    SceneCreateResponse, SceneDiffResponse, SceneListResponse, SceneReadResponse,
+    ShapeCreateResponse, SignalConnectionResponse, SignalListResponse,
+    TileMapClearResponse, TileMapGetCellsResponse, TileMapSetCellsResponse,
+    UidGetResponse, UidUpdateProjectResponse, VisualShaderCreateResponse,
+};
 
 // ---------------------------------------------------------------------------
 // Shared MCP helpers
 // ---------------------------------------------------------------------------
 
 macro_rules! director_tool {
-    ($self:expr, $params:expr, $op:expr) => {{
+    ($self:expr, $params:expr, $op:expr, $resp:ty) => {{
         let op_params = serialize_params(&$params)?;
         let data = run_operation(&$self.backend, &$params.project_path, $op, &op_params).await?;
-        serialize_response(&data)
+        let typed: $resp = deserialize_response(data)?;
+        serialize_response(&typed)
     }};
 }
 
@@ -90,7 +105,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<SceneCreateParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "scene_create")
+        director_tool!(self, params, "scene_create", SceneCreateResponse)
     }
 
     #[tool(
@@ -103,7 +118,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<SceneReadParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "scene_read")
+        director_tool!(self, params, "scene_read", SceneReadResponse)
     }
 
     #[tool(
@@ -116,7 +131,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<NodeAddParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "node_add")
+        director_tool!(self, params, "node_add", NodeAddResponse)
     }
 
     #[tool(
@@ -129,7 +144,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<NodeSetPropertiesParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "node_set_properties")
+        director_tool!(self, params, "node_set_properties", NodeSetPropertiesResponse)
     }
 
     #[tool(
@@ -141,7 +156,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<NodeRemoveParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "node_remove")
+        director_tool!(self, params, "node_remove", NodeRemoveResponse)
     }
 
     #[tool(
@@ -153,7 +168,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<SceneListParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "scene_list")
+        director_tool!(self, params, "scene_list", SceneListResponse)
     }
 
     #[tool(
@@ -166,7 +181,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<SceneAddInstanceParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "scene_add_instance")
+        director_tool!(self, params, "scene_add_instance", SceneAddInstanceResponse)
     }
 
     #[tool(
@@ -179,7 +194,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<NodeReparentParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "node_reparent")
+        director_tool!(self, params, "node_reparent", NodeReparentResponse)
     }
 
     #[tool(
@@ -192,7 +207,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<ResourceReadParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "resource_read")
+        director_tool!(self, params, "resource_read", ResourceReadResponse)
     }
 
     #[tool(
@@ -205,7 +220,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<MaterialCreateParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "material_create")
+        director_tool!(self, params, "material_create", ResourceCreateResponse)
     }
 
     #[tool(
@@ -219,7 +234,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<ShapeCreateParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "shape_create")
+        director_tool!(self, params, "shape_create", ShapeCreateResponse)
     }
 
     #[tool(
@@ -232,7 +247,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<StyleBoxCreateParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "style_box_create")
+        director_tool!(self, params, "style_box_create", ResourceCreateResponse)
     }
 
     #[tool(
@@ -244,7 +259,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<ResourceDuplicateParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "resource_duplicate")
+        director_tool!(self, params, "resource_duplicate", ResourceDuplicateResponse)
     }
 
     #[tool(
@@ -257,7 +272,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<TileMapSetCellsParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "tilemap_set_cells")
+        director_tool!(self, params, "tilemap_set_cells", TileMapSetCellsResponse)
     }
 
     #[tool(
@@ -270,7 +285,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<TileMapGetCellsParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "tilemap_get_cells")
+        director_tool!(self, params, "tilemap_get_cells", TileMapGetCellsResponse)
     }
 
     #[tool(
@@ -282,7 +297,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<TileMapClearParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "tilemap_clear")
+        director_tool!(self, params, "tilemap_clear", TileMapClearResponse)
     }
 
     #[tool(
@@ -295,7 +310,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<GridMapSetCellsParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "gridmap_set_cells")
+        director_tool!(self, params, "gridmap_set_cells", GridMapSetCellsResponse)
     }
 
     #[tool(
@@ -307,7 +322,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<GridMapGetCellsParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "gridmap_get_cells")
+        director_tool!(self, params, "gridmap_get_cells", GridMapGetCellsResponse)
     }
 
     #[tool(
@@ -319,7 +334,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<GridMapClearParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "gridmap_clear")
+        director_tool!(self, params, "gridmap_clear", GridMapClearResponse)
     }
 
     #[tool(
@@ -332,7 +347,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<AnimationCreateParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "animation_create")
+        director_tool!(self, params, "animation_create", AnimationCreateResponse)
     }
 
     #[tool(
@@ -346,7 +361,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<AnimationAddTrackParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "animation_add_track")
+        director_tool!(self, params, "animation_add_track", AnimationAddTrackResponse)
     }
 
     #[tool(
@@ -359,7 +374,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<AnimationReadParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "animation_read")
+        director_tool!(self, params, "animation_read", AnimationReadResponse)
     }
 
     #[tool(
@@ -372,7 +387,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<AnimationRemoveTrackParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "animation_remove_track")
+        director_tool!(self, params, "animation_remove_track", AnimationRemoveTrackResponse)
     }
 
     #[tool(
@@ -386,7 +401,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<PhysicsSetLayersParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "physics_set_layers")
+        director_tool!(self, params, "physics_set_layers", PhysicsSetLayersResponse)
     }
 
     #[tool(
@@ -400,7 +415,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<PhysicsSetLayerNamesParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "physics_set_layer_names")
+        director_tool!(self, params, "physics_set_layer_names", PhysicsSetLayerNamesResponse)
     }
 
     #[tool(
@@ -416,7 +431,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<VisualShaderCreateParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "visual_shader_create")
+        director_tool!(self, params, "visual_shader_create", VisualShaderCreateResponse)
     }
 
     #[tool(
@@ -430,7 +445,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<BatchParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "batch")
+        director_tool!(self, params, "batch", BatchResponse)
     }
 
     #[tool(
@@ -443,7 +458,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<SceneDiffParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "scene_diff")
+        director_tool!(self, params, "scene_diff", SceneDiffResponse)
     }
 
     #[tool(
@@ -456,7 +471,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<UidGetParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "uid_get")
+        director_tool!(self, params, "uid_get", UidGetResponse)
     }
 
     #[tool(
@@ -469,7 +484,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<UidUpdateProjectParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "uid_update_project")
+        director_tool!(self, params, "uid_update_project", UidUpdateProjectResponse)
     }
 
     #[tool(
@@ -483,7 +498,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<ExportMeshLibraryParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "export_mesh_library")
+        director_tool!(self, params, "export_mesh_library", ExportMeshLibraryResponse)
     }
 
     #[tool(
@@ -497,7 +512,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<SignalConnectParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "signal_connect")
+        director_tool!(self, params, "signal_connect", SignalConnectionResponse)
     }
 
     #[tool(
@@ -509,7 +524,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<SignalDisconnectParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "signal_disconnect")
+        director_tool!(self, params, "signal_disconnect", SignalConnectionResponse)
     }
 
     #[tool(
@@ -522,7 +537,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<SignalListParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "signal_list")
+        director_tool!(self, params, "signal_list", SignalListResponse)
     }
 
     #[tool(
@@ -536,7 +551,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<NodeSetGroupsParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "node_set_groups")
+        director_tool!(self, params, "node_set_groups", NodeSetGroupsResponse)
     }
 
     #[tool(
@@ -550,7 +565,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<NodeSetScriptParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "node_set_script")
+        director_tool!(self, params, "node_set_script", NodeSetScriptResponse)
     }
 
     #[tool(
@@ -564,7 +579,7 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<NodeSetMetaParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "node_set_meta")
+        director_tool!(self, params, "node_set_meta", NodeSetMetaResponse)
     }
 
     #[tool(
@@ -577,6 +592,6 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<NodeFindParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "node_find")
+        director_tool!(self, params, "node_find", NodeFindResponse)
     }
 }

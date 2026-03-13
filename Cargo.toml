@@ -6,6 +6,7 @@ members = [
     "crates/spectator-protocol",
     "crates/spectator-core",
     "crates/director",
+    "crates/theatre-docs-gen",
     "tests/wire-tests",
     "tests/director-tests",
 ]
