@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitepress'
 
 export default defineConfig({
-  base: '/theatre/',
+  base: '/',
   title: 'Theatre',
   description: 'AI agent toolkit for building and debugging Godot games',
   head: [
