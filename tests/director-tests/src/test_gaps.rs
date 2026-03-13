@@ -271,7 +271,7 @@ fn node_find_by_property_exists() {
 
     let results = data["results"].as_array().unwrap();
     // Only Sprite2D should match (it has the "texture" property)
-    assert!(results.len() >= 1);
+    assert!(!results.is_empty());
     assert!(results.iter().all(|r| r["type"] == "Sprite2D"));
 }
 
