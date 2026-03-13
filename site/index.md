@@ -29,7 +29,7 @@ It's like debugging a web app without being able to open the browser.
   icon="🔭"
   description="Observe the running game. Spatial snapshots, real-time deltas, watches, recordings. Your AI sees what the player sees — as structured data."
   tool="9 MCP tools"
-  tokens="200-1500"
+  tokens="200–3000"
   link="/spectator/"
 />
 <ToolCard
@@ -37,7 +37,7 @@ It's like debugging a web app without being able to open the browser.
   icon="🎬"
   description="Build and modify scenes, resources, tilemaps, and animations through Godot's own API. No hand-editing .tscn files."
   tool="38+ operations"
-  tokens="—"
+  tokens="50–500"
   link="/director/"
 />
 </div>
