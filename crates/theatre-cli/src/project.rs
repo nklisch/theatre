@@ -83,11 +83,7 @@ fn find_in_section(content: &str, section_name: &str, key: &str) -> Option<Strin
 ///
 /// `plugin_cfg_path` is the res:// path, e.g.
 /// `"res://addons/spectator/plugin.cfg"`.
-pub fn set_plugin_enabled(
-    project: &Path,
-    plugin_cfg_path: &str,
-    enabled: bool,
-) -> Result<()> {
+pub fn set_plugin_enabled(project: &Path, plugin_cfg_path: &str, enabled: bool) -> Result<()> {
     let content = read_project_godot(project)?;
     let new_content = modify_plugin_enabled(&content, plugin_cfg_path, enabled);
     write_project_godot(project, &new_content)
@@ -321,8 +317,7 @@ pub fn write_mcp_json(
     if path.exists() && !overwrite {
         return Ok(false);
     }
-    let json = serde_json::to_string_pretty(content)
-        .context("Failed to serialize .mcp.json")?;
+    let json = serde_json::to_string_pretty(content).context("Failed to serialize .mcp.json")?;
     std::fs::write(&path, json + "\n")
         .with_context(|| format!("Failed to write .mcp.json at: {}", path.display()))?;
     Ok(true)
@@ -384,12 +379,7 @@ mod tests {
     #[test]
     fn test_set_plugin_enabled_add_to_empty() {
         let dir = make_project("[editor_plugins]\nenabled=PackedStringArray()\n");
-        set_plugin_enabled(
-            dir.path(),
-            "res://addons/spectator/plugin.cfg",
-            true,
-        )
-        .unwrap();
+        set_plugin_enabled(dir.path(), "res://addons/spectator/plugin.cfg", true).unwrap();
         let content = read_project_godot(dir.path()).unwrap();
         assert!(content.contains("res://addons/spectator/plugin.cfg"));
     }
@@ -399,12 +389,7 @@ mod tests {
         let dir = make_project(
             "[editor_plugins]\nenabled=PackedStringArray(\"res://addons/spectator/plugin.cfg\")\n",
         );
-        set_plugin_enabled(
-            dir.path(),
-            "res://addons/director/plugin.cfg",
-            true,
-        )
-        .unwrap();
+        set_plugin_enabled(dir.path(), "res://addons/director/plugin.cfg", true).unwrap();
         let content = read_project_godot(dir.path()).unwrap();
         assert!(content.contains("res://addons/spectator/plugin.cfg"));
         assert!(content.contains("res://addons/director/plugin.cfg"));
@@ -415,12 +400,7 @@ mod tests {
         let dir = make_project(
             "[editor_plugins]\nenabled=PackedStringArray(\"res://addons/spectator/plugin.cfg\", \"res://addons/director/plugin.cfg\")\n",
         );
-        set_plugin_enabled(
-            dir.path(),
-            "res://addons/spectator/plugin.cfg",
-            false,
-        )
-        .unwrap();
+        set_plugin_enabled(dir.path(), "res://addons/spectator/plugin.cfg", false).unwrap();
         let content = read_project_godot(dir.path()).unwrap();
         assert!(!content.contains("res://addons/spectator/plugin.cfg"));
         assert!(content.contains("res://addons/director/plugin.cfg"));
@@ -429,34 +409,17 @@ mod tests {
     #[test]
     fn test_set_plugin_enabled_idempotent() {
         let dir = make_project("[editor_plugins]\nenabled=PackedStringArray()\n");
-        set_plugin_enabled(
-            dir.path(),
-            "res://addons/spectator/plugin.cfg",
-            true,
-        )
-        .unwrap();
-        set_plugin_enabled(
-            dir.path(),
-            "res://addons/spectator/plugin.cfg",
-            true,
-        )
-        .unwrap();
+        set_plugin_enabled(dir.path(), "res://addons/spectator/plugin.cfg", true).unwrap();
+        set_plugin_enabled(dir.path(), "res://addons/spectator/plugin.cfg", true).unwrap();
         let content = read_project_godot(dir.path()).unwrap();
-        let count = content
-            .matches("res://addons/spectator/plugin.cfg")
-            .count();
+        let count = content.matches("res://addons/spectator/plugin.cfg").count();
         assert_eq!(count, 1);
     }
 
     #[test]
     fn test_set_plugin_enabled_creates_section() {
         let dir = make_project("[application]\nconfig/name=\"MyGame\"\n");
-        set_plugin_enabled(
-            dir.path(),
-            "res://addons/spectator/plugin.cfg",
-            true,
-        )
-        .unwrap();
+        set_plugin_enabled(dir.path(), "res://addons/spectator/plugin.cfg", true).unwrap();
         let content = read_project_godot(dir.path()).unwrap();
         assert!(content.contains("[editor_plugins]"));
         assert!(content.contains("res://addons/spectator/plugin.cfg"));
@@ -512,9 +475,8 @@ mod tests {
 
     #[test]
     fn test_remove_autoload() {
-        let dir = make_project(
-            "[autoload]\nSpectatorRuntime=\"*res://addons/spectator/runtime.gd\"\n",
-        );
+        let dir =
+            make_project("[autoload]\nSpectatorRuntime=\"*res://addons/spectator/runtime.gd\"\n");
         remove_autoload(dir.path(), "SpectatorRuntime").unwrap();
         let content = read_project_godot(dir.path()).unwrap();
         assert!(!content.contains("SpectatorRuntime"));
