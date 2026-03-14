@@ -74,21 +74,13 @@ pub fn run(args: InstallArgs) -> Result<()> {
     eprintln!();
 
     // Step 6: Copy binaries to bin_dir
-    eprintln!(
-        "  Installing to {}/:",
-        bin_dir.display()
-    );
+    eprintln!("  Installing to {}/:", bin_dir.display());
 
     for bin_name in &["spectator-server", "director", "theatre"] {
         let src = source.built_binary(bin_name, true);
         let dst = bin_dir.join(bin_name);
-        std::fs::copy(&src, &dst).with_context(|| {
-            format!(
-                "Failed to copy {} to {}",
-                src.display(),
-                dst.display()
-            )
-        })?;
+        std::fs::copy(&src, &dst)
+            .with_context(|| format!("Failed to copy {} to {}", src.display(), dst.display()))?;
         eprintln!("  {} {bin_name}", style("✓").green());
     }
     eprintln!();
@@ -169,9 +161,7 @@ pub fn run(args: InstallArgs) -> Result<()> {
     }
 
     // Step 10: Summary
-    eprintln!(
-        "Install complete. Run `theatre init <project>` to set up a Godot project."
-    );
+    eprintln!("Install complete. Run `theatre init <project>` to set up a Godot project.");
 
     Ok(())
 }

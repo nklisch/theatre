@@ -220,11 +220,7 @@ fn home_dir() -> Result<PathBuf> {
 /// Recursively copy a directory tree, skipping entries matched by `skip`.
 /// Used by install (repo addons → share dir) and init (share dir → project).
 /// Returns the number of files copied.
-pub fn copy_dir_recursive(
-    src: &Path,
-    dst: &Path,
-    skip: &dyn Fn(&Path) -> bool,
-) -> Result<u64> {
+pub fn copy_dir_recursive(src: &Path, dst: &Path, skip: &dyn Fn(&Path) -> bool) -> Result<u64> {
     if skip(src) {
         return Ok(0);
     }
@@ -331,11 +327,7 @@ mod tests {
     fn test_source_discover_from_env() {
         let tmp = TempDir::new().unwrap();
         // Create a fake workspace Cargo.toml
-        std::fs::write(
-            tmp.path().join("Cargo.toml"),
-            "[workspace]\nmembers = []\n",
-        )
-        .unwrap();
+        std::fs::write(tmp.path().join("Cargo.toml"), "[workspace]\nmembers = []\n").unwrap();
 
         unsafe { std::env::set_var("THEATRE_ROOT", tmp.path().to_str().unwrap()) };
         let source = SourcePaths::discover().unwrap();
@@ -374,9 +366,7 @@ mod tests {
         std::fs::write(src.path().join("bin").join("lib.so"), "binary").unwrap();
 
         let count = copy_dir_recursive(src.path(), dst.path(), &|p| {
-            p.file_name()
-                .map(|n| n == "bin")
-                .unwrap_or(false)
+            p.file_name().map(|n| n == "bin").unwrap_or(false)
         })
         .unwrap();
 

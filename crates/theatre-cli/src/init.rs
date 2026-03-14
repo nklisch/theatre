@@ -34,30 +34,23 @@ pub fn run(args: InitArgs) -> Result<()> {
     // Step 1: Resolve and validate TheatrePaths
     let theatre = TheatrePaths::resolve()?;
     theatre.validate_installed().map_err(|e| {
-        anyhow::anyhow!(
-            "Theatre is not installed. Run `theatre install` first.\n\nDetails: {e}"
-        )
+        anyhow::anyhow!("Theatre is not installed. Run `theatre install` first.\n\nDetails: {e}")
     })?;
 
     // Step 2: Validate project path
     validate_project(&args.project)?;
 
     // Step 3: Check current state
-    let spectator_exists = args
-        .project
-        .join("addons")
-        .join("spectator")
-        .exists();
+    let spectator_exists = args.project.join("addons").join("spectator").exists();
     let director_exists = args.project.join("addons").join("director").exists();
     let mcp_json_exists = args.project.join(".mcp.json").exists();
 
     // Step 4 & 5: Determine selections
-    let (do_spectator, do_director, do_mcp, port, enable_spectator, enable_director) =
-        if args.yes {
-            (true, true, true, 9077u16, true, true)
-        } else {
-            gather_interactive_selections(spectator_exists, director_exists, mcp_json_exists)?
-        };
+    let (do_spectator, do_director, do_mcp, port, enable_spectator, enable_director) = if args.yes {
+        (true, true, true, 9077u16, true, true)
+    } else {
+        gather_interactive_selections(spectator_exists, director_exists, mcp_json_exists)?
+    };
 
     // Check if nothing was selected
     if !do_spectator && !do_director && !do_mcp && !enable_spectator && !enable_director {
@@ -78,8 +71,7 @@ pub fn run(args: InitArgs) -> Result<()> {
 
         std::fs::create_dir_all(args.project.join("addons"))
             .context("Failed to create addons directory")?;
-        copy_dir_recursive(&src, &dst, &|_| false)
-            .context("Failed to copy spectator addon")?;
+        copy_dir_recursive(&src, &dst, &|_| false).context("Failed to copy spectator addon")?;
 
         // Also copy GDExtension binary
         let gdext_src = theatre.gdext_binary();
@@ -87,12 +79,7 @@ pub fn run(args: InitArgs) -> Result<()> {
         std::fs::create_dir_all(&gdext_dst_dir)
             .context("Failed to create GDExtension bin dir in project")?;
         std::fs::copy(&gdext_src, gdext_dst_dir.join(gdext_filename()))
-            .with_context(|| {
-                format!(
-                    "Failed to copy GDExtension from {}",
-                    gdext_src.display()
-                )
-            })?;
+            .with_context(|| format!("Failed to copy GDExtension from {}", gdext_src.display()))?;
 
         eprintln!(
             "  {} Copied addons/spectator/ (with GDExtension)",
@@ -106,8 +93,7 @@ pub fn run(args: InitArgs) -> Result<()> {
 
         std::fs::create_dir_all(args.project.join("addons"))
             .context("Failed to create addons directory")?;
-        copy_dir_recursive(&src, &dst, &|_| false)
-            .context("Failed to copy director addon")?;
+        copy_dir_recursive(&src, &dst, &|_| false).context("Failed to copy director addon")?;
 
         eprintln!("  {} Copied addons/director/", style("✓").green());
     }
@@ -164,10 +150,7 @@ pub fn run(args: InitArgs) -> Result<()> {
             SPECTATOR_RUNTIME_NAME,
             SPECTATOR_RUNTIME_SCRIPT,
         )?;
-        eprintln!(
-            "  {} SpectatorRuntime autoload added",
-            style("✓").green()
-        );
+        eprintln!("  {} SpectatorRuntime autoload added", style("✓").green());
     } else {
         // If not enabling, ensure it's disabled
         remove_autoload(&args.project, SPECTATOR_RUNTIME_NAME)?;
@@ -175,16 +158,11 @@ pub fn run(args: InitArgs) -> Result<()> {
 
     if enable_director {
         set_plugin_enabled(&args.project, DIRECTOR_PLUGIN_CFG, true)?;
-        eprintln!(
-            "  {} Enabled Director in project.godot",
-            style("✓").green()
-        );
+        eprintln!("  {} Enabled Director in project.godot", style("✓").green());
     }
 
     eprintln!();
-    eprintln!(
-        "Done. Open your project in Godot — plugins are active."
-    );
+    eprintln!("Done. Open your project in Godot — plugins are active.");
 
     Ok(())
 }
@@ -268,9 +246,7 @@ fn gather_interactive_selections(
             .parse()
             .map_err(|_| anyhow::anyhow!("Invalid port number: {port_str}"))?;
         if port < 1024 {
-            anyhow::bail!(
-                "Port {port} is a privileged port (< 1024). Choose a port >= 1024."
-            );
+            anyhow::bail!("Port {port} is a privileged port (< 1024). Choose a port >= 1024.");
         }
         port
     } else {
@@ -320,7 +296,14 @@ fn gather_interactive_selections(
         std::process::exit(0);
     }
 
-    Ok((do_spectator, do_director, do_mcp, port, enable_spectator, enable_director))
+    Ok((
+        do_spectator,
+        do_director,
+        do_mcp,
+        port,
+        enable_spectator,
+        enable_director,
+    ))
 }
 
 fn gather_interactive_selections_no_mcp(
@@ -358,5 +341,12 @@ fn gather_interactive_selections_no_mcp(
         (false, false)
     };
 
-    Ok((do_spectator, do_director, false, 9077, enable_spectator, enable_director))
+    Ok((
+        do_spectator,
+        do_director,
+        false,
+        9077,
+        enable_spectator,
+        enable_director,
+    ))
 }

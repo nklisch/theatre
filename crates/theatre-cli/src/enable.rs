@@ -45,7 +45,11 @@ pub fn run(args: EnableArgs) -> Result<()> {
     // Step 3: Act on each plugin
     if do_spectator {
         // Check if addon files exist
-        let plugin_cfg = args.project.join("addons").join("spectator").join("plugin.cfg");
+        let plugin_cfg = args
+            .project
+            .join("addons")
+            .join("spectator")
+            .join("plugin.cfg");
         if enabling && !plugin_cfg.exists() {
             eprintln!(
                 "  {} addons/spectator/plugin.cfg not found — plugin enabled in project.godot \
@@ -65,25 +69,23 @@ pub fn run(args: EnableArgs) -> Result<()> {
                 SPECTATOR_RUNTIME_NAME,
                 SPECTATOR_RUNTIME_SCRIPT,
             )?;
-            eprintln!(
-                "  {} SpectatorRuntime autoload added",
-                style("✓").green()
-            );
+            eprintln!("  {} SpectatorRuntime autoload added", style("✓").green());
         } else {
             eprintln!(
                 "  {} Spectator disabled in project.godot",
                 style("✓").green()
             );
             remove_autoload(&args.project, SPECTATOR_RUNTIME_NAME)?;
-            eprintln!(
-                "  {} SpectatorRuntime autoload removed",
-                style("✓").green()
-            );
+            eprintln!("  {} SpectatorRuntime autoload removed", style("✓").green());
         }
     }
 
     if do_director {
-        let plugin_cfg = args.project.join("addons").join("director").join("plugin.cfg");
+        let plugin_cfg = args
+            .project
+            .join("addons")
+            .join("director")
+            .join("plugin.cfg");
         if enabling && !plugin_cfg.exists() {
             eprintln!(
                 "  {} addons/director/plugin.cfg not found — plugin enabled in project.godot \
@@ -94,10 +96,7 @@ pub fn run(args: EnableArgs) -> Result<()> {
 
         set_plugin_enabled(&args.project, DIRECTOR_PLUGIN_CFG, enabling)?;
         if enabling {
-            eprintln!(
-                "  {} Director enabled in project.godot",
-                style("✓").green()
-            );
+            eprintln!("  {} Director enabled in project.godot", style("✓").green());
         } else {
             eprintln!(
                 "  {} Director disabled in project.godot",

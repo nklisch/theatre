@@ -4,9 +4,7 @@ use anyhow::{Context, Result};
 use clap::Args;
 use console::style;
 
-use crate::paths::{
-    SourcePaths, TheatrePaths, copy_dir_recursive, gdext_filename, platform_dir,
-};
+use crate::paths::{SourcePaths, TheatrePaths, copy_dir_recursive, gdext_filename, platform_dir};
 use crate::project::validate_project;
 
 #[derive(Args)]
@@ -32,9 +30,8 @@ pub fn run(args: DeployArgs) -> Result<()> {
 
     // Step 3: Validate all project paths before building
     for project in &args.projects {
-        validate_project(project).with_context(|| {
-            format!("Invalid project path: {}", project.display())
-        })?;
+        validate_project(project)
+            .with_context(|| format!("Invalid project path: {}", project.display()))?;
     }
 
     // Step 4: Build
@@ -96,10 +93,7 @@ pub fn run(args: DeployArgs) -> Result<()> {
             gdext_dst.display()
         )
     })?;
-    eprintln!(
-        "  {} Updated GDExtension in share dir",
-        style("✓").green()
-    );
+    eprintln!("  {} Updated GDExtension in share dir", style("✓").green());
 
     // 5b: Sync addon GDScript from repo to share dir
     let spectator_src = source.addon_source().join("spectator");
@@ -114,10 +108,7 @@ pub fn run(args: DeployArgs) -> Result<()> {
     copy_dir_recursive(&director_src, &director_share_dst, &|_| false)
         .context("Failed to sync director addon to share dir")?;
 
-    eprintln!(
-        "  {} Synced addon scripts to share dir",
-        style("✓").green()
-    );
+    eprintln!("  {} Synced addon scripts to share dir", style("✓").green());
 
     // 5c: Copy fresh server binaries to bin_dir
     for bin_name in &["spectator-server", "director"] {
@@ -125,11 +116,7 @@ pub fn run(args: DeployArgs) -> Result<()> {
         let dst = theatre.bin_dir.join(bin_name);
         if theatre.bin_dir.exists() {
             std::fs::copy(&src, &dst).with_context(|| {
-                format!(
-                    "Failed to copy {} to {}",
-                    src.display(),
-                    dst.display()
-                )
+                format!("Failed to copy {} to {}", src.display(), dst.display())
             })?;
             eprintln!("  {} Updated {bin_name} in bin dir", style("✓").green());
         }
@@ -166,9 +153,7 @@ pub fn run(args: DeployArgs) -> Result<()> {
             })?;
 
             // Also copy the GDExtension binary
-            let gdext_proj_dir = spectator_project_dst
-                .join("bin")
-                .join(platform_dir());
+            let gdext_proj_dir = spectator_project_dst.join("bin").join(platform_dir());
             std::fs::create_dir_all(&gdext_proj_dir).with_context(|| {
                 format!(
                     "Failed to create GDExtension dir in project: {}",
