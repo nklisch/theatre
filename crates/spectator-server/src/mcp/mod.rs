@@ -371,7 +371,8 @@ pub async fn handle_action(
                 expose_internals: bctx.expose_internals,
             };
 
-            if let Ok(snap_data) = query_addon(state, "get_snapshot_data", serialize_params(&query_params)?).await
+            if let Ok(snap_data) =
+                query_addon(state, "get_snapshot_data", serialize_params(&query_params)?).await
                 && let Ok(raw_data) =
                     serde_json::from_value::<spectator_protocol::query::SnapshotResponse>(snap_data)
             {

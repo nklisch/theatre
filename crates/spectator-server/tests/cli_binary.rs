@@ -38,8 +38,7 @@ fn version_prints_json_to_stdout() {
 fn version_short_flag_prints_json() {
     let (code, stdout, _) = run(&["-V"]);
     assert_eq!(code, 0);
-    let v: serde_json::Value =
-        serde_json::from_str(&stdout).expect("-V output must be valid JSON");
+    let v: serde_json::Value = serde_json::from_str(&stdout).expect("-V output must be valid JSON");
     assert!(v.get("version").is_some());
 }
 

@@ -148,9 +148,7 @@ pub async fn run(tool: &str, json_arg: Option<&str>) -> Result<()> {
 }
 
 /// Deserialize params from a JSON Value into the typed struct.
-fn deserialize_params<T: for<'de> serde::Deserialize<'de>>(
-    value: Value,
-) -> Result<T, McpError> {
+fn deserialize_params<T: for<'de> serde::Deserialize<'de>>(value: Value) -> Result<T, McpError> {
     serde_json::from_value(value)
         .map_err(|e| McpError::invalid_params(format!("Invalid parameters: {e}"), None))
 }

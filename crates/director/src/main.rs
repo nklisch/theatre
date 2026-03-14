@@ -194,7 +194,10 @@ async fn cli(operation: &str, json_arg: Option<&str>) -> Result<()> {
     }
 
     let backend = Backend::new();
-    let result = match backend.run_operation(&godot, project, operation, &params).await {
+    let result = match backend
+        .run_operation(&godot, project, operation, &params)
+        .await
+    {
         Ok(r) => r,
         Err(e) => {
             let error = serde_json::json!({
