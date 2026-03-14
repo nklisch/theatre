@@ -67,7 +67,7 @@ pub fn run(args: InstallArgs) -> Result<()> {
         anyhow::bail!("cargo build failed with exit code: {:?}", status.code());
     }
 
-    eprintln!("  {} spectator-server", style("✓").green());
+    eprintln!("  {} spectator", style("✓").green());
     eprintln!("  {} director", style("✓").green());
     eprintln!("  {} spectator-godot", style("✓").green());
     eprintln!("  {} theatre", style("✓").green());
@@ -76,7 +76,7 @@ pub fn run(args: InstallArgs) -> Result<()> {
     // Step 6: Copy binaries to bin_dir
     eprintln!("  Installing to {}/:", bin_dir.display());
 
-    for bin_name in &["spectator-server", "director", "theatre"] {
+    for bin_name in &["spectator", "director", "theatre"] {
         let src = source.built_binary(bin_name, true);
         let dst = bin_dir.join(bin_name);
         std::fs::copy(&src, &dst)

@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "spectator-server"
+name = "spectator"
 path = "src/main.rs"
 
 [dependencies]
@@ -39,3 +39,7 @@ path = "tests/scenarios.rs"
 [[test]]
 name = "e2e_journeys"
 path = "tests/e2e_journeys.rs"
+
+[[test]]
+name = "cli_binary"
+path = "tests/cli_binary.rs"

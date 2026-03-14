@@ -35,8 +35,8 @@ After `theatre install`, the filesystem looks like:
 ```
 ~/.local/bin/
   theatre                        # CLI binary
-  spectator-server               # Spectator MCP server
-  director                       # Director MCP server
+  spectator                      # Spectator MCP server + CLI (serve / <tool>)
+  director                       # Director MCP server + CLI (serve / <tool>)
 
 ~/.local/share/theatre/
   addons/
@@ -418,7 +418,8 @@ The `.mcp.json` structure:
   "mcpServers": {
     "spectator": {
       "type": "stdio",
-      "command": "/home/user/.local/bin/spectator-server"
+      "command": "/home/user/.local/bin/spectator",
+      "args": ["serve"]
     },
     "director": {
       "type": "stdio",
@@ -485,7 +486,7 @@ pub fn run(args: InstallArgs) -> Result<()> { .. }
    from `repo_root` using `std::process::Command`. Stream output to
    stderr (inherit stderr). Fail if cargo returns non-zero.
 6. Copy three binaries from `target/release/` to `bin_dir`:
-   - `spectator-server`
+   - `spectator`
    - `director`
    - `theatre`
 7. Copy addon templates from `repo_root/addons/` to `share_dir/addons/`:
@@ -504,13 +505,13 @@ pub fn run(args: InstallArgs) -> Result<()> { .. }
 Theatre Install
 
   Building release binaries...
-  ✓ spectator-server
+  ✓ spectator
   ✓ director
   ✓ spectator-godot
   ✓ theatre
 
   Installing to ~/.local/bin/:
-  ✓ spectator-server
+  ✓ spectator
   ✓ director
   ✓ theatre
 
@@ -577,7 +578,7 @@ pub fn run(args: DeployArgs) -> Result<()> { .. }
 1. Resolve `SourcePaths::discover()` (deploy rebuilds from source).
 2. Resolve `TheatrePaths::resolve()` (to update the share dir too).
 3. Validate all project paths (each must contain `project.godot`).
-4. Run `cargo build -p spectator-godot -p spectator-server -p director [--release]`.
+4. Run `cargo build -p spectator-godot -p spectator-server -p director [--release]` (binary output: `spectator`).
 5. Update the share dir:
    a. Copy fresh GDExtension binary to `share_dir/addons/spectator/bin/<platform>/`.
    b. Sync addon GDScript files from repo to share dir.
@@ -744,7 +745,7 @@ Proceed with setup? [Y/n]
       - If addon dir already exists in project, prompt to overwrite (or
         overwrite silently with `--yes`).
    b. Generate and write `.mcp.json` if selected.
-      - Binary paths resolve to `bin_dir / "spectator-server"` and
+      - Binary paths resolve to `bin_dir / "spectator"` and
         `bin_dir / "director"`.
       - Verify binaries exist at those paths. If not, warn but still
         generate (user may install later).
@@ -947,7 +948,7 @@ cargo test -p theatre-cli
 # Full install (manual verification)
 ./target/debug/theatre install
 theatre --version
-ls ~/.local/bin/{theatre,spectator-server,director}
+ls ~/.local/bin/{theatre,spectator,director}
 ls ~/.local/share/theatre/addons/spectator/plugin.cfg
 ls ~/.local/share/theatre/addons/spectator/bin/linux/libspectator_godot.so
 ls ~/.local/share/theatre/addons/director/plugin.cfg

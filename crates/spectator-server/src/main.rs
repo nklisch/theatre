@@ -1,3 +1,5 @@
+mod cli;
+
 use anyhow::Result;
 use rmcp::{ServiceExt, transport::stdio};
 use spectator_server::{config, server::SpectatorServer, tcp};
@@ -9,6 +11,40 @@ const DEFAULT_PORT: u16 = 9077;
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let args: Vec<String> = std::env::args().collect();
+
+    // `spectator serve` — MCP server on stdio
+    if args.len() >= 2 && args[1] == "serve" {
+        return serve().await;
+    }
+
+    // `spectator --version` / `-V` — print version JSON to stdout
+    if args.len() >= 2 && (args[1] == "--version" || args[1] == "-V") {
+        println!("{{\"version\": \"{}\"}}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+
+    // `spectator <tool> ['<json>']` — CLI one-shot mode
+    if args.len() >= 2 && !args[1].starts_with('-') {
+        let tool = &args[1];
+        let json_arg = args.get(2).map(|s| s.as_str());
+        return cli::run(tool, json_arg).await;
+    }
+
+    // No recognized command — print usage to stderr
+    eprintln!("Usage:");
+    eprintln!("  spectator serve                      — MCP server (stdio)");
+    eprintln!("  spectator <tool> '<json>'             — one-shot CLI invocation");
+    eprintln!("  spectator --version                  — print version JSON");
+    eprintln!();
+    eprintln!("Tools:");
+    for tool in cli::TOOLS {
+        eprintln!("  {tool}");
+    }
+    std::process::exit(1);
+}
+
+async fn serve() -> Result<()> {
     // Initialize tracing to stderr (stdout is MCP protocol only)
     tracing_subscriber::fmt()
         .with_writer(std::io::stderr)
@@ -18,7 +54,7 @@ async fn main() -> Result<()> {
         )
         .init();
 
-    tracing::info!("spectator-server v{}", env!("CARGO_PKG_VERSION"));
+    tracing::info!("spectator v{}", env!("CARGO_PKG_VERSION"));
 
     // Parse port from env or use default (THEATRE_PORT preferred, SPECTATOR_PORT for backward compat)
     let env_port: u16 = match std::env::var("THEATRE_PORT") {

@@ -127,7 +127,47 @@ pub async fn tcp_client_loop(state: Arc<Mutex<SessionState>>, port: u16) {
     }
 }
 
-async fn handle_connection(stream: TcpStream, state: Arc<Mutex<SessionState>>) -> Result<()> {
+/// Connect to the Godot addon once (no reconnection loop).
+/// Used by CLI one-shot mode.
+pub async fn connect_once(state: &Arc<Mutex<SessionState>>, port: u16) -> Result<()> {
+    let addr = format!("127.0.0.1:{port}");
+    let timeout = tokio::time::Duration::from_secs(5);
+
+    let stream = tokio::time::timeout(timeout, tokio::net::TcpStream::connect(&addr))
+        .await
+        .map_err(|_| anyhow::anyhow!("Connection timed out after 5s"))?
+        .map_err(|e| anyhow::anyhow!("TCP connection failed: {e}"))?;
+
+    let state_clone = state.clone();
+    tokio::spawn(async move {
+        if let Err(e) = handle_connection(stream, state_clone).await {
+            tracing::warn!("Connection ended: {e}");
+        }
+    });
+
+    // Wait for handshake to complete
+    let handshake_timeout = tokio::time::Duration::from_secs(3);
+    let start = tokio::time::Instant::now();
+    loop {
+        {
+            let s = state.lock().await;
+            if s.connected {
+                return Ok(());
+            }
+        }
+        if start.elapsed() > handshake_timeout {
+            return Err(anyhow::anyhow!(
+                "Handshake timed out — addon did not respond within 3s"
+            ));
+        }
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+    }
+}
+
+pub(crate) async fn handle_connection(
+    stream: TcpStream,
+    state: Arc<Mutex<SessionState>>,
+) -> Result<()> {
     let (mut reader, writer) = tokio::io::split(stream);
 
     // Step 1: Read handshake from addon (timeout: Godot may have another client active)

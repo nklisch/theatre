@@ -981,13 +981,13 @@ Update the install layout to show `spectator` instead of `spectator-server`.
 6. **Unit 3: CLI executor** — Depends on Units 4 + 5
 7. **Unit 2: CLI dispatch in main.rs** — Depends on Unit 3
 8. **Unit 6: Director CLI improvements** — Independent
-9. **Unit 7: Theatre CLI wrapper** — Depends on Units 2 + 6
+9. ~~**Unit 7: Theatre CLI wrapper**~~ — **Dropped**: agents call `spectator`
+   and `director` directly; no value in a theatre proxy wrapper.
 10. **Unit 8: Error contract** — Applied throughout Units 2-7
 
 Parallelizable groups:
 - **Group A** (Spectator): Units 1 → 5 → 4 → 3 → 2
 - **Group B** (Director): Unit 6 (independent)
-- **Group C** (Theatre wrapper): Unit 7 (after Groups A + B)
 - **Group D** (Docs): Units 9 + 10 (after Unit 1)
 
 ## Testing

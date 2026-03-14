@@ -100,12 +100,12 @@ pub fn run(args: InitArgs) -> Result<()> {
 
     // Step 6b: Generate and write .mcp.json
     if do_mcp {
-        let spectator_bin = theatre.bin_dir.join("spectator-server");
+        let spectator_bin = theatre.bin_dir.join("spectator");
         let director_bin = theatre.bin_dir.join("director");
 
         if !spectator_bin.exists() {
             eprintln!(
-                "  {} spectator-server not found at {} — generating .mcp.json anyway",
+                "  {} spectator not found at {} — generating .mcp.json anyway",
                 style("⚠").yellow(),
                 spectator_bin.display()
             );

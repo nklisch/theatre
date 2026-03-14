@@ -71,7 +71,7 @@ jobs:
           if [[ "${{ matrix.platform }}" == "windows" ]]; then
             BIN_EXT=".exe"
           fi
-          cp "target/${{ matrix.target }}/release/spectator-server${BIN_EXT}" "${ARCHIVE_NAME}/bin/"
+          cp "target/${{ matrix.target }}/release/spectator${BIN_EXT}" "${ARCHIVE_NAME}/bin/"
           cp "target/${{ matrix.target }}/release/director${BIN_EXT}" "${ARCHIVE_NAME}/bin/"
           cp "target/${{ matrix.target }}/release/theatre${BIN_EXT}" "${ARCHIVE_NAME}/bin/"
 

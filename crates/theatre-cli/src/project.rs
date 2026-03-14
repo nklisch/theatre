@@ -280,7 +280,8 @@ pub fn generate_mcp_json(
     if include_spectator {
         let mut spectator = serde_json::json!({
             "type": "stdio",
-            "command": spectator_bin.to_string_lossy()
+            "command": spectator_bin.to_string_lossy(),
+            "args": ["serve"]
         });
         if let Some(p) = port
             && p != 9077
@@ -493,34 +494,38 @@ mod tests {
 
     #[test]
     fn test_generate_mcp_json_default_port() {
-        let spec_bin = Path::new("/home/user/.local/bin/spectator-server");
+        let spec_bin = Path::new("/home/user/.local/bin/spectator");
         let dir_bin = Path::new("/home/user/.local/bin/director");
         let json = generate_mcp_json(spec_bin, dir_bin, true, true, Some(9077));
         let servers = json["mcpServers"].as_object().unwrap();
         assert!(servers.contains_key("spectator"));
         assert!(servers.contains_key("director"));
+        // spectator uses "serve" arg since bare spectator defaults to CLI mode
+        assert_eq!(servers["spectator"]["args"][0], "serve");
         // No env for default port
         assert!(servers["spectator"].get("env").is_none());
     }
 
     #[test]
     fn test_generate_mcp_json_custom_port() {
-        let spec_bin = Path::new("/home/user/.local/bin/spectator-server");
+        let spec_bin = Path::new("/home/user/.local/bin/spectator");
         let dir_bin = Path::new("/home/user/.local/bin/director");
         let json = generate_mcp_json(spec_bin, dir_bin, true, true, Some(9999));
         let spectator = &json["mcpServers"]["spectator"];
+        assert_eq!(spectator["args"][0], "serve");
         assert!(spectator.get("env").is_some());
         assert_eq!(spectator["env"]["THEATRE_PORT"], "9999");
     }
 
     #[test]
     fn test_generate_mcp_json_spectator_only() {
-        let spec_bin = Path::new("/home/user/.local/bin/spectator-server");
+        let spec_bin = Path::new("/home/user/.local/bin/spectator");
         let dir_bin = Path::new("/home/user/.local/bin/director");
         let json = generate_mcp_json(spec_bin, dir_bin, true, false, None);
         let servers = json["mcpServers"].as_object().unwrap();
         assert!(servers.contains_key("spectator"));
         assert!(!servers.contains_key("director"));
+        assert_eq!(servers["spectator"]["args"][0], "serve");
     }
 
     #[test]

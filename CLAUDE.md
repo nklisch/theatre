@@ -118,8 +118,9 @@ prevents GDScript parse errors when the extension fails to load. The
 
 ## Key Constraints
 
-- **stdout is sacred**: spectator-server uses stdout for MCP protocol. ALL
-  logging goes to stderr via `tracing` / `eprintln!`. Never use `println!`.
+- **stdout is sacred**: `spectator serve` uses stdout for MCP protocol. In CLI
+  mode (`spectator <tool>`), stdout carries JSON results. ALL logging goes to
+  stderr via `tracing` / `eprintln!`. Never use `println!` for log messages.
 - **Main thread only**: spectator-godot runs on Godot's main thread. No
   `Gd<T>` across thread boundaries. All scene tree access in _physics_process.
 - **GDExtension ≠ EditorPlugin**: GDExtension classes can't be EditorPlugin

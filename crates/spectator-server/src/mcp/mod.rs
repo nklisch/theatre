@@ -173,6 +173,298 @@ use snapshot::{
 };
 use watch::SpatialWatchParams;
 
+// ---------------------------------------------------------------------------
+// Extracted handler free functions — callable from both MCP and CLI
+// ---------------------------------------------------------------------------
+
+pub async fn handle_snapshot(
+    params: SpatialSnapshotParams,
+    state: &std::sync::Arc<tokio::sync::Mutex<SessionState>>,
+) -> Result<String, McpError> {
+    // 1. Detail level already typed via enum deserialization
+    let detail = params.detail;
+
+    // 2. Build perspective param for addon query
+    let perspective_param = build_perspective_param(&params)?;
+
+    // 2b. Get current session config
+    let bctx = budget_context(state).await;
+
+    // 3. Query addon for raw data
+    let query_params = GetSnapshotDataParams {
+        perspective: perspective_param,
+        radius: params.radius,
+        include_offscreen: params.include_offscreen,
+        groups: params.groups.clone().unwrap_or_default(),
+        class_filter: params.class_filter.clone().unwrap_or_default(),
+        detail,
+        expose_internals: bctx.expose_internals,
+    };
+
+    let raw_data: SnapshotResponse =
+        query_and_deserialize(state, "get_snapshot_data", &query_params).await?;
+
+    // 4. Build perspective for spatial calculations
+    let persp = build_perspective(&raw_data.perspective);
+
+    // 5. Compute relative positions and filter by radius/visibility
+    let mut entities_with_rel: Vec<_> = raw_data
+        .entities
+        .iter()
+        .filter_map(|e| {
+            let rel = if e.position.len() == 2 {
+                bearing::relative_position_2d(
+                    [persp.position[0], persp.position[1]],
+                    [persp.forward[0], persp.forward[1]],
+                    vec_to_array2(&e.position),
+                    !e.visible,
+                )
+            } else {
+                bearing::relative_position(&persp, vec_to_array3(&e.position), !e.visible)
+            };
+            if rel.distance > params.radius {
+                return None;
+            }
+            if !params.include_offscreen && !e.visible {
+                return None;
+            }
+            Some((e.clone(), rel))
+        })
+        .collect();
+
+    // 6. Sort by distance (nearest first)
+    entities_with_rel.sort_by(|a, b| {
+        a.1.distance
+            .partial_cmp(&b.1.distance)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    // 6b. Rebuild spatial index and store delta baseline
+    {
+        let mut s = state.lock().await;
+        update_spatial_state(&mut s, &raw_data);
+    }
+
+    // 7. Resolve budget
+    let tier_default = match detail {
+        DetailLevel::Summary => SnapshotBudgetDefaults::SUMMARY,
+        DetailLevel::Standard => SnapshotBudgetDefaults::STANDARD,
+        DetailLevel::Full => SnapshotBudgetDefaults::FULL,
+    };
+    let budget_limit = bctx.resolve(params.token_budget, tier_default);
+
+    // 8. Handle expand (drill into a cluster from summary)
+    if let Some(ref cluster_label) = params.expand {
+        let mut response = build_expand_response(
+            &entities_with_rel,
+            cluster_label,
+            &raw_data,
+            budget_limit,
+            bctx.hard_cap,
+            &bctx.config,
+        )?;
+        return finalize_response(&mut response, budget_limit, bctx.hard_cap);
+    }
+
+    // 9. Build response based on detail level
+    let mut response = match detail {
+        DetailLevel::Summary => build_summary_response(
+            &raw_data,
+            &entities_with_rel,
+            &persp,
+            budget_limit,
+            bctx.hard_cap,
+            &bctx.config,
+        ),
+        DetailLevel::Standard => build_standard_response(
+            &raw_data,
+            &entities_with_rel,
+            &persp,
+            budget_limit,
+            bctx.hard_cap,
+            &bctx.config,
+        ),
+        DetailLevel::Full => build_full_response(
+            &raw_data,
+            &entities_with_rel,
+            &persp,
+            budget_limit,
+            bctx.hard_cap,
+            &bctx.config,
+        ),
+    };
+
+    finalize_response(&mut response, budget_limit, bctx.hard_cap)
+}
+
+pub async fn handle_inspect(
+    params: SpatialInspectParams,
+    state: &std::sync::Arc<tokio::sync::Mutex<SessionState>>,
+) -> Result<String, McpError> {
+    let bctx = budget_context(state).await;
+
+    let query_params = GetNodeInspectParams {
+        path: params.node.clone(),
+        include: params.include.clone(),
+        expose_internals: bctx.expose_internals,
+    };
+
+    let raw_data: NodeInspectResponse =
+        query_and_deserialize(state, "get_node_inspect", &query_params).await?;
+
+    let mut response = serde_json::to_value(&raw_data)
+        .map_err(|e| McpError::internal_error(format!("Serialization error: {e}"), None))?;
+
+    if let Some(raw_ctx) = &raw_data.spatial_context_raw {
+        let spatial_context = build_spatial_context(raw_ctx);
+        if let serde_json::Value::Object(ref mut map) = response {
+            map.remove("spatial_context_raw");
+            map.insert("spatial_context".to_string(), spatial_context);
+        }
+    }
+
+    let budget_limit = bctx.resolve(None, 1500);
+    finalize_response(&mut response, budget_limit, bctx.hard_cap)
+}
+
+pub async fn handle_scene_tree(
+    params: SceneTreeToolParams,
+    state: &std::sync::Arc<tokio::sync::Mutex<SessionState>>,
+) -> Result<String, McpError> {
+    let query_params = build_scene_tree_params(&params)?;
+
+    let data = query_addon(state, "get_scene_tree", serialize_params(&query_params)?).await?;
+
+    let bctx = budget_context(state).await;
+
+    let budget_limit = bctx.resolve(params.token_budget, 1500);
+    let mut response = data;
+    finalize_response(&mut response, budget_limit, bctx.hard_cap)
+}
+
+pub async fn handle_action(
+    params: SpatialActionParams,
+    state: &std::sync::Arc<tokio::sync::Mutex<SessionState>>,
+) -> Result<String, McpError> {
+    let bctx = budget_context(state).await;
+
+    let action_request = build_action_request(&params)?;
+    let data = query_addon(state, "execute_action", serialize_params(&action_request)?).await?;
+
+    let mut response: serde_json::Value = data;
+    let action_budget = bctx.resolve(None, 500);
+
+    if params.return_delta {
+        let has_baseline = {
+            let s = state.lock().await;
+            s.delta_engine.has_baseline()
+        };
+
+        if has_baseline {
+            let query_params = spectator_protocol::query::GetSnapshotDataParams {
+                perspective: spectator_protocol::query::PerspectiveParam::Camera,
+                radius: 50.0,
+                include_offscreen: true,
+                groups: vec![],
+                class_filter: vec![],
+                detail: spectator_protocol::query::DetailLevel::Standard,
+                expose_internals: bctx.expose_internals,
+            };
+
+            if let Ok(snap_data) = query_addon(state, "get_snapshot_data", serialize_params(&query_params)?).await
+                && let Ok(raw_data) =
+                    serde_json::from_value::<spectator_protocol::query::SnapshotResponse>(snap_data)
+            {
+                let current_snapshots: Vec<spectator_core::delta::EntitySnapshot> = raw_data
+                    .entities
+                    .iter()
+                    .map(snapshot::to_entity_snapshot)
+                    .collect();
+
+                let mut s = state.lock().await;
+                let delta_result = s
+                    .delta_engine
+                    .compute_delta(&current_snapshots, raw_data.frame);
+                let triggers = s.watch_engine.evaluate(
+                    s.delta_engine.last_snapshot_map(),
+                    &current_snapshots,
+                    raw_data.frame,
+                );
+
+                // Update baseline
+                s.delta_engine
+                    .store_snapshot(raw_data.frame, current_snapshots);
+
+                if let Ok(delta_json) = delta::build_delta_json(&delta_result, &triggers)
+                    && let serde_json::Value::Object(ref mut map) = response
+                {
+                    map.insert("delta".into(), delta_json);
+                }
+            }
+        } else {
+            // No baseline — can't compute delta
+            if let serde_json::Value::Object(ref mut map) = response {
+                map.insert("delta".into(), serde_json::json!(null));
+                map.insert(
+                    "delta_note".into(),
+                    serde_json::json!(
+                        "No baseline snapshot. Call spatial_snapshot first, \
+                         then use return_delta on actions."
+                    ),
+                );
+            }
+        }
+    }
+
+    finalize_response(&mut response, action_budget, bctx.hard_cap)
+}
+
+/// CLI wrapper for the clips handler: extracts text from CallToolResult.
+/// For ScreenshotAt (returns metadata text + image), merges into a single JSON object.
+/// All other actions return a single text block.
+pub async fn handle_clips_cli(
+    params: clips::ClipsParams,
+    state: &std::sync::Arc<tokio::sync::Mutex<SessionState>>,
+) -> Result<String, McpError> {
+    use rmcp::model::RawContent;
+    let result = clips::handle_clips(params, state).await?;
+
+    let mut text_content: Option<String> = None;
+    let mut image_content: Option<serde_json::Value> = None;
+
+    for content in result.content {
+        match content.raw {
+            RawContent::Text(t) => {
+                text_content = Some(t.text);
+            }
+            RawContent::Image(img) => {
+                image_content = Some(serde_json::json!({
+                    "image_base64": img.data,
+                    "mime_type": img.mime_type
+                }));
+            }
+            _ => {}
+        }
+    }
+
+    match (text_content, image_content) {
+        (Some(text), Some(img)) => {
+            // screenshot_at: merge metadata and image into one object
+            let mut obj = serde_json::from_str::<serde_json::Value>(&text)
+                .unwrap_or(serde_json::json!({"metadata": text}));
+            if let serde_json::Value::Object(ref mut map) = obj
+                && let serde_json::Value::Object(img_map) = img
+            {
+                map.extend(img_map);
+            }
+            Ok(obj.to_string())
+        }
+        (Some(text), None) => Ok(text),
+        (None, Some(img)) => Ok(img.to_string()),
+        (None, None) => Ok(serde_json::json!({}).to_string()),
+    }
+}
+
 #[tool_router(vis = "pub")]
 impl SpectatorServer {
     /// Get a spatial snapshot of the current scene from a perspective.
@@ -186,128 +478,8 @@ impl SpectatorServer {
         &self,
         Parameters(params): Parameters<SpatialSnapshotParams>,
     ) -> Result<String, McpError> {
-        // Build activity summary up front before params are borrowed further
         let activity_summary = crate::activity::snapshot_summary(&params);
-
-        // 1. Detail level already typed via enum deserialization
-        let detail = params.detail;
-
-        // 2. Build perspective param for addon query
-        let perspective_param = build_perspective_param(&params)?;
-
-        // 2b. Get current session config
-        let bctx = budget_context(&self.state).await;
-
-        // 3. Query addon for raw data
-        let query_params = GetSnapshotDataParams {
-            perspective: perspective_param,
-            radius: params.radius,
-            include_offscreen: params.include_offscreen,
-            groups: params.groups.clone().unwrap_or_default(),
-            class_filter: params.class_filter.clone().unwrap_or_default(),
-            detail,
-            expose_internals: bctx.expose_internals,
-        };
-
-        let raw_data: SnapshotResponse =
-            query_and_deserialize(&self.state, "get_snapshot_data", &query_params).await?;
-
-        // 4. Build perspective for spatial calculations
-        let persp = build_perspective(&raw_data.perspective);
-
-        // 5. Compute relative positions and filter by radius/visibility
-        let mut entities_with_rel: Vec<_> = raw_data
-            .entities
-            .iter()
-            .filter_map(|e| {
-                let rel = if e.position.len() == 2 {
-                    // 2D entity: use 2D bearing
-                    bearing::relative_position_2d(
-                        [persp.position[0], persp.position[1]],
-                        [persp.forward[0], persp.forward[1]],
-                        vec_to_array2(&e.position),
-                        !e.visible,
-                    )
-                } else {
-                    // 3D entity: use 3D bearing
-                    bearing::relative_position(&persp, vec_to_array3(&e.position), !e.visible)
-                };
-                if rel.distance > params.radius {
-                    return None;
-                }
-                if !params.include_offscreen && !e.visible {
-                    return None;
-                }
-                Some((e.clone(), rel))
-            })
-            .collect();
-
-        // 6. Sort by distance (nearest first)
-        entities_with_rel.sort_by(|a, b| {
-            a.1.distance
-                .partial_cmp(&b.1.distance)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-
-        // 6b. Rebuild spatial index and store delta baseline
-        {
-            let mut state = self.state.lock().await;
-            update_spatial_state(&mut state, &raw_data);
-        }
-
-        // 7. Resolve budget
-        let tier_default = match detail {
-            DetailLevel::Summary => SnapshotBudgetDefaults::SUMMARY,
-            DetailLevel::Standard => SnapshotBudgetDefaults::STANDARD,
-            DetailLevel::Full => SnapshotBudgetDefaults::FULL,
-        };
-        let budget_limit = bctx.resolve(params.token_budget, tier_default);
-
-        // 8. Handle expand (drill into a cluster from summary)
-        if let Some(ref cluster_label) = params.expand {
-            let mut response = build_expand_response(
-                &entities_with_rel,
-                cluster_label,
-                &raw_data,
-                budget_limit,
-                bctx.hard_cap,
-                &bctx.config,
-            )?;
-            let result = finalize_response(&mut response, budget_limit, bctx.hard_cap);
-            self.log_activity("query", &activity_summary, "spatial_snapshot")
-                .await;
-            return result;
-        }
-
-        // 9. Build response based on detail level
-        let mut response = match detail {
-            DetailLevel::Summary => build_summary_response(
-                &raw_data,
-                &entities_with_rel,
-                &persp,
-                budget_limit,
-                bctx.hard_cap,
-                &bctx.config,
-            ),
-            DetailLevel::Standard => build_standard_response(
-                &raw_data,
-                &entities_with_rel,
-                &persp,
-                budget_limit,
-                bctx.hard_cap,
-                &bctx.config,
-            ),
-            DetailLevel::Full => build_full_response(
-                &raw_data,
-                &entities_with_rel,
-                &persp,
-                budget_limit,
-                bctx.hard_cap,
-                &bctx.config,
-            ),
-        };
-
-        let result = finalize_response(&mut response, budget_limit, bctx.hard_cap);
+        let result = handle_snapshot(params, &self.state).await;
         self.log_activity("query", &activity_summary, "spatial_snapshot")
             .await;
         result
@@ -324,30 +496,7 @@ impl SpectatorServer {
         Parameters(params): Parameters<SpatialInspectParams>,
     ) -> Result<String, McpError> {
         let activity_summary = crate::activity::inspect_summary(&params.node);
-        let bctx = budget_context(&self.state).await;
-
-        let query_params = GetNodeInspectParams {
-            path: params.node.clone(),
-            include: params.include.clone(),
-            expose_internals: bctx.expose_internals,
-        };
-
-        let raw_data: NodeInspectResponse =
-            query_and_deserialize(&self.state, "get_node_inspect", &query_params).await?;
-
-        let mut response = serde_json::to_value(&raw_data)
-            .map_err(|e| McpError::internal_error(format!("Serialization error: {e}"), None))?;
-
-        if let Some(raw_ctx) = &raw_data.spatial_context_raw {
-            let spatial_context = build_spatial_context(raw_ctx);
-            if let serde_json::Value::Object(ref mut map) = response {
-                map.remove("spatial_context_raw");
-                map.insert("spatial_context".to_string(), spatial_context);
-            }
-        }
-
-        let budget_limit = bctx.resolve(None, 1500);
-        let result = finalize_response(&mut response, budget_limit, bctx.hard_cap);
+        let result = handle_inspect(params, &self.state).await;
         self.log_activity("query", &activity_summary, "spatial_inspect")
             .await;
         result
@@ -363,20 +512,7 @@ impl SpectatorServer {
         Parameters(params): Parameters<SceneTreeToolParams>,
     ) -> Result<String, McpError> {
         let activity_summary = crate::activity::scene_tree_summary(&params);
-        let query_params = build_scene_tree_params(&params)?;
-
-        let data = query_addon(
-            &self.state,
-            "get_scene_tree",
-            serialize_params(&query_params)?,
-        )
-        .await?;
-
-        let bctx = budget_context(&self.state).await;
-
-        let budget_limit = bctx.resolve(params.token_budget, 1500);
-        let mut response = data;
-        let result = finalize_response(&mut response, budget_limit, bctx.hard_cap);
+        let result = handle_scene_tree(params, &self.state).await;
         self.log_activity("query", &activity_summary, "scene_tree")
             .await;
         result
@@ -395,88 +531,7 @@ impl SpectatorServer {
         Parameters(params): Parameters<SpatialActionParams>,
     ) -> Result<String, McpError> {
         let activity_summary = crate::activity::action_summary(&params);
-        let bctx = budget_context(&self.state).await;
-
-        let action_request = build_action_request(&params)?;
-        let data = query_addon(
-            &self.state,
-            "execute_action",
-            serialize_params(&action_request)?,
-        )
-        .await?;
-
-        let mut response: serde_json::Value = data;
-        let action_budget = bctx.resolve(None, 500);
-
-        if params.return_delta {
-            let has_baseline = {
-                let s = self.state.lock().await;
-                s.delta_engine.has_baseline()
-            };
-
-            if has_baseline {
-                let query_params = spectator_protocol::query::GetSnapshotDataParams {
-                    perspective: spectator_protocol::query::PerspectiveParam::Camera,
-                    radius: 50.0,
-                    include_offscreen: true,
-                    groups: vec![],
-                    class_filter: vec![],
-                    detail: spectator_protocol::query::DetailLevel::Standard,
-                    expose_internals: bctx.expose_internals,
-                };
-
-                if let Ok(snap_data) = query_addon(
-                    &self.state,
-                    "get_snapshot_data",
-                    serialize_params(&query_params)?,
-                )
-                .await
-                    && let Ok(raw_data) = serde_json::from_value::<
-                        spectator_protocol::query::SnapshotResponse,
-                    >(snap_data)
-                {
-                    let current_snapshots: Vec<spectator_core::delta::EntitySnapshot> = raw_data
-                        .entities
-                        .iter()
-                        .map(snapshot::to_entity_snapshot)
-                        .collect();
-
-                    let mut s = self.state.lock().await;
-                    let delta_result = s
-                        .delta_engine
-                        .compute_delta(&current_snapshots, raw_data.frame);
-                    let triggers = s.watch_engine.evaluate(
-                        s.delta_engine.last_snapshot_map(),
-                        &current_snapshots,
-                        raw_data.frame,
-                    );
-
-                    // Update baseline
-                    s.delta_engine
-                        .store_snapshot(raw_data.frame, current_snapshots);
-
-                    if let Ok(delta_json) = delta::build_delta_json(&delta_result, &triggers)
-                        && let serde_json::Value::Object(ref mut map) = response
-                    {
-                        map.insert("delta".into(), delta_json);
-                    }
-                }
-            } else {
-                // No baseline — can't compute delta
-                if let serde_json::Value::Object(ref mut map) = response {
-                    map.insert("delta".into(), serde_json::json!(null));
-                    map.insert(
-                        "delta_note".into(),
-                        serde_json::json!(
-                            "No baseline snapshot. Call spatial_snapshot first, \
-                             then use return_delta on actions."
-                        ),
-                    );
-                }
-            }
-        }
-
-        let result = finalize_response(&mut response, action_budget, bctx.hard_cap);
+        let result = handle_action(params, &self.state).await;
         self.log_activity("action", &activity_summary, "spatial_action")
             .await;
         result

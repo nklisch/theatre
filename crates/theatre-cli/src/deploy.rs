@@ -65,7 +65,7 @@ pub fn run(args: DeployArgs) -> Result<()> {
     }
 
     eprintln!("  {} spectator-godot", style("✓").green());
-    eprintln!("  {} spectator-server", style("✓").green());
+    eprintln!("  {} spectator", style("✓").green());
     eprintln!("  {} director", style("✓").green());
     eprintln!();
 
@@ -111,7 +111,7 @@ pub fn run(args: DeployArgs) -> Result<()> {
     eprintln!("  {} Synced addon scripts to share dir", style("✓").green());
 
     // 5c: Copy fresh server binaries to bin_dir
-    for bin_name in &["spectator-server", "director"] {
+    for bin_name in &["spectator", "director"] {
         let src = source.built_binary(bin_name, args.release);
         let dst = theatre.bin_dir.join(bin_name);
         if theatre.bin_dir.exists() {
