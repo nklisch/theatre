@@ -36,36 +36,11 @@ You do not need to narrate the bug to the agent. You do not need screenshots. Yo
 | Key | Action |
 |---|---|
 | **F9** | Mark the current frame as a bug moment |
-| **F11** | Pause / unpause recording |
+| **F11** | Pause / unpause the game |
 
-These shortcuts are active while the game is running. They are handled by the Stage editor dock — they work whether you are focused on the game window or the Godot editor.
+These shortcuts are active while the game is running. They are handled by the StageRuntime autoload.
 
-Use the editor dock's **Record** button to start and stop recording. You can also trigger marking via the dock UI's **Mark Bug** button. From the agent side, use the `clips` tool's `"start"` and `"stop"` actions.
-
-### Code Markers
-
-Place markers directly in your GDScript to trigger dashcam clips when specific code paths execute:
-
-```gdscript
-# Basic usage — system tier (rate-limited, safe in loops)
-StageRuntime.marker("player_hit")
-
-# Rare, important events — always triggers a clip
-StageRuntime.marker("boss_defeated", "deliberate")
-
-# Silent — annotates the next clip without triggering one
-StageRuntime.marker("entered_zone_b", "silent")
-```
-
-**Tiers:**
-
-| Tier | Triggers clip? | Rate-limited? | Best for |
-|------|---------------|---------------|----------|
-| `"system"` (default) | Yes | Yes (2 s) | General instrumentation |
-| `"deliberate"` | Yes | No | Rare, high-value events |
-| `"silent"` | No | — | Annotations for other clips |
-
-Code markers appear in clip data with `source: "code"`.
+You can also click the **⚑** flag button in the top-left corner of the game viewport. From the agent side, use the `clips` tool's `"add_marker"` action to trigger a clip save, or `"save"` to force-flush the current buffer.
 
 ## A complete debugging session
 
@@ -75,15 +50,13 @@ Here is a real debugging story, from start to finish.
 
 You have a stealth game. Enemies have a detection cone — an `Area3D` shaped roughly like a forward-facing triangle. When the player enters the cone, the enemy alerts. But sometimes, enemies that should clearly see the player do not alert. You cannot reproduce it reliably.
 
-### Step 1: Enable continuous recording
+### Step 1: Play the game
 
-Start the game, then click **Record** in the Stage dock immediately. The dock shows "Recording: clip_stealth_01". Now every physics frame is captured.
+Start the game. The dashcam begins buffering automatically — you will see a small "● Dashcam: buffering" label in the top-left corner of the game viewport. Every physics frame of spatial data is captured into a 60-second rolling buffer.
 
 Play normally. Move around. Do some stealth sections. Wait for the bug to occur.
 
-After about 45 seconds of play, you see it: you walk directly in front of an enemy at close range, the enemy's eyes do not move, no alert. You immediately press **F9** to add a marker. The dock shows "Marker: frame 2712 — enemy_missed_player".
-
-Continue playing for a few more seconds, then click **Stop** in the dock (or call `clips { "action": "stop" }`).
+After about 45 seconds of play, you see it: you walk directly in front of an enemy at close range, the enemy's eyes do not move, no alert. You immediately press **F9** (or click the **⚑** flag button). The dashcam saves the last 60 seconds plus the next ~30 seconds as a clip. A toast confirms: "Dashcam clip saved".
 
 ### Step 2: Start the investigation
 
@@ -109,7 +82,7 @@ The agent opens `enemy_patrol.gd`, removes the `monitoring = false` line, and sa
 
 ## What made this work
 
-1. **Always-on recording**: because you started recording before the bug, you have data from the moment it began, not just after you noticed it
+1. **Always-on dashcam**: because the buffer was running before the bug, you have data from the moment it began
 2. **Frame marker**: pressing F9 gave the agent a precise frame to anchor the search
 3. **Condition filtering**: querying only frames where `monitoring == false` found the transition in one call instead of scanning 2,800 frames manually
 4. **Temporal reasoning**: the agent found that the flag changed 0.9 seconds *before* the visible failure — the root cause was upstream of the symptom
@@ -118,34 +91,27 @@ The agent opens `enemy_patrol.gd`, removes the `monitoring = false` line, and sa
 
 ### Quick investigation (no marker)
 
-If the bug is obvious and repeatable, you do not need a marker:
+If the bug is obvious and repeatable:
 
-1. Click **Record** in the dock (or call `clips { "action": "start" }`)
-2. Trigger the bug
-3. Click **Stop** in the dock
-4. Ask the agent: "The bug happens around the end of the recording. Find the anomaly."
+1. Trigger the bug in the running game
+2. Press **F9** to save the clip
+3. Ask the agent: "Something went wrong in the last few seconds. Analyze the latest clip."
 
-### Continuous background recording
+### Longer buffer windows
 
-Enable continuous recording in the Stage config so recording always starts with the game:
+The default dashcam buffer holds 60 seconds of pre-trigger history. To extend it, configure the dashcam via the `clips` tool's `status` action or project settings:
 
-```json
-{
-  "auto_record": true,
-  "max_clip_duration_s": 120
-}
-```
-
-Now every session is automatically captured. You only need **F9** to mark bug moments.
+- `pre_window_deliberate_sec`: seconds of history before a human/agent marker (default: 60)
+- `byte_cap_mb`: memory limit for the ring buffer (default: 1024 MB)
 
 ### Post-playtest analysis
 
-After a playtest session where you were not at the keyboard:
+After a playtest session:
 
-1. Have the tester click **Record** in the dock when they start playing
+1. Have the tester play normally (the dashcam is always running)
 2. Have them press **F9** whenever something seems wrong
 3. Collect the clip files afterward
-4. Ask the agent to analyze all markers in the clip
+4. Ask the agent to analyze all markers across clips
 
 ### Regression testing
 

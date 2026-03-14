@@ -35,7 +35,7 @@ const messages4 = [
 
 ## Step 1: Record an attack sequence
 
-Click Start Recording in the Stage dock, perform 5-6 attacks against an enemy, including some that visually connect, then click Stop Recording.
+Perform 5-6 attacks against an enemy, including some that visually connect. When you see a hit that should register but does not, press **F9** to save the clip.
 
 ## Step 2: Find frames where the attack should land
 

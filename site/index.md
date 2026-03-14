@@ -25,12 +25,12 @@ It's like debugging a web app without being able to open the browser.
 
 <div class="tool-cards">
 <ToolCard
-  title="Stage"
+  title="Spectator"
   icon="🔭"
   description="Observe the running game. Spatial snapshots, real-time deltas, watches, recordings. Your AI sees what the player sees — as structured data."
   tool="9 MCP tools"
   tokens="200–3000"
-  link="/stage/"
+  link="/spectator/"
 />
 <ToolCard
   title="Director"
@@ -47,7 +47,7 @@ It's like debugging a web app without being able to open the browser.
 <ArchDiagram highlight="both" />
 
 Theatre connects your AI agent to your Godot game through the
-**Model Context Protocol (MCP)**. Stage observes the running game via a
+**Model Context Protocol (MCP)**. Spectator observes the running game via a
 GDExtension addon. Director modifies scenes through the editor or headless Godot.
 Both communicate over TCP, exposing structured tools your agent already knows
 how to use.
@@ -58,7 +58,7 @@ The killer workflow: **human plays, AI analyzes**.
 
 <AgentConversation :messages="messages0" />
 
-You press **F9** to mark the bug moment (use the dock's **Record** button to start), and the agent
+You press **F9** to mark the bug moment — the dashcam saves the last 60 seconds of spatial data — and the agent
 scrubs through the spatial timeline to find exactly what went wrong — no
 screenshots, no narration, no guessing from code.
 
@@ -117,7 +117,7 @@ skilltap install nklisch/theatre
 
 Install skilltap from [skilltap.dev](https://skilltap.dev).
 
-Teaches your agent how to use Stage and Director effectively — tool selection, workflows, and pitfalls.
+Teaches your agent how to use Spectator and Director effectively — tool selection, workflows, and pitfalls.
 
 ### 4. Run your game and ask
 
@@ -125,4 +125,4 @@ Teaches your agent how to use Stage and Director effectively — tool selection,
 "Take a spatial snapshot of my scene"
 ```
 
-Your AI agent now sees your game world — via MCP tools or CLI (`stage spatial_snapshot '{"detail":"summary"}'`).
+Your AI agent now sees your game world — via MCP tools or CLI (`spectator spatial_snapshot '{"detail":"summary"}'`).

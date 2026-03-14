@@ -1,68 +1,37 @@
 # Stage Editor Dock
 
-The Stage editor dock is a panel in the Godot editor that gives you direct control over recording and monitoring without leaving the editor.
+The Stage editor dock shows connection status and agent activity. It appears
+on the right side of the Godot editor when the Stage plugin is enabled.
 
 ## Opening the dock
 
-The dock appears automatically on the right side of the Godot editor when the Stage plugin is enabled (**Project → Project Settings → Plugins → Stage → Enable**).
+The dock appears automatically when the Stage plugin is enabled
+(**Project → Project Settings → Plugins → Stage → Enable**).
 
-If the dock is not visible, go to **Editor → Editor Layout** and check that "Stage" is enabled, or drag it from the dock panel list.
+If the dock is not visible, go to **Editor → Editor Layout** and check that
+"Stage" is enabled.
 
 ## Dock sections
 
-### Status bar
+### Connection status
 
 At the top of the dock:
 
-```
-● Stage: Connected (frame 1247)
-```
-
-Shows whether the Stage GDExtension is loaded and the MCP server is connected.
-
 | Status | Meaning |
 |---|---|
-| `Ready` | Extension loaded, game not running |
-| `Connected (frame N)` | Game running, data flowing |
-| `Extension not found` | GDExtension binary missing |
-| `MCP disconnected` | Server not running or not connected |
+| Green dot + "Connected" | Game running, data flowing |
+| Yellow dot + "Waiting..." | Extension loaded, waiting for connection |
+| Red dot + "Stopped" | Game not running |
 
-### Recording controls
+Also shows: port number, tracked node count, group count, frame counter, and FPS.
 
-The recording section has three buttons:
+### Session info
 
-**[ ⏺ Record ]** — Start a new recording. The button label changes to "Recording..." while active, and shows the elapsed time.
+Below the connection status:
 
-**[ 🔖 Mark Bug ]** — Mark the current frame. Equivalent to pressing **F9**. Opens a small dialog to optionally label the mark. Labels appear in the clip timeline.
-
-**[ ⏹ Stop ]** — Stop the current recording. After stopping, the clip appears in the clip list below.
-
-### Clip list
-
-Below the recording controls, the clip list shows all saved clips:
-
-```
-clip_stealth_01        48s  ● 2 markers
-clip_patrol_test       30s
-clip_1741987200        12s  ● 1 marker
-```
-
-Clicking a clip shows its details: creation time, frame count, duration, file size, and marker list with frame numbers and labels.
-
-**Delete** button (trash icon): removes the clip file from disk.
-
-**Inspect** button (magnifying glass): opens the clip in the timeline view (if available).
-
-### Active watches
-
-The watches section shows all currently active `spatial_watch` registrations:
-
-```
-w_a1b2c3  Player           position, health
-w_d4e5f6  Enemy_0          position, velocity
-```
-
-Clicking a watch entry shows its details (tracked properties, created at frame). The **×** button deletes the watch.
+- **Tracking**: number of nodes and groups being tracked
+- **Watches**: count of active `spatial_watch` registrations
+- **Frame**: current physics frame number and FPS
 
 ### Activity feed
 
@@ -75,61 +44,39 @@ The activity feed shows recent MCP tool calls made by the AI agent:
 14:32:12  clips                query_range frames 2700-2730
 ```
 
-This is useful for understanding what the agent is doing and verifying that tool calls are reaching the game.
+Each entry shows timestamp, tool name, and a brief summary. Entries are
+color-coded: yellow for actions, cyan for watches, gray for queries.
 
-Each entry shows:
-- Timestamp
-- Tool name
-- Brief summary of parameters
-- Result (green checkmark = success, red × = error)
+The feed holds up to 20 entries and can be collapsed with the **▼** button.
 
 ## Keyboard shortcuts
 
 | Shortcut | Action |
 |---|---|
-| **F9** | Mark current frame as bug |
-| **F11** | Pause / unpause recording |
+| **F9** | Save dashcam clip (mark bug moment) |
+| **F11** | Pause / unpause the game |
 
-Use the dock's **Record** and **Stop** buttons to start and stop recordings. F9 and F11 work while the game is running, whether focus is on the game window or the editor.
+These work while the game is running, whether focus is on the game window
+or the editor. They are handled by the StageRuntime autoload, not the dock.
 
 ### Configuring shortcuts
 
-Shortcuts can be changed in **Editor → Editor Settings → Shortcuts → Stage**:
-- `stage_record_mark`
-- `stage_record_pause`
+Shortcuts are configured in **Project → Project Settings**:
 
-If these conflict with your game's input, reassign them here.
+| Setting | Default | Description |
+|---|---|---|
+| `theatre/stage/shortcuts/marker_key` | `F9` | Key to save dashcam clip |
+| `theatre/stage/shortcuts/pause_key` | `F11` | Key to pause/unpause game |
 
-## Reading the activity feed
-
-The activity feed is your window into what the AI agent is doing. Each tool call is logged with a summary:
-
-```
-spatial_snapshot  summary, 12 nodes, 847 tokens
-spatial_query     radius 5m from Player → 3 results
-spatial_inspect   EnemyDetectionZone, properties+signals
-spatial_action    Enemy_0.collision_mask = 1  ✓
-clips             list → 3 clips
-```
-
-If you see a tool call succeed but get unexpected results, click the entry to expand it — you can see the full parameters sent and the full response returned.
-
-### Error entries
-
-Errors appear in red:
-
-```
-spatial_inspect   Player/NonexistentNode  ✗  Node not found
-```
-
-Errors are usually miscommunication between the agent and the scene structure. Check that the node path is correct (use `scene_tree` to verify).
+Values are key names: `F1` through `F12`.
 
 ## Tips
 
-**Leave the dock visible during debugging sessions.** Watching the activity feed in real time tells you what the agent is doing and helps you give better guidance.
+**Leave the dock visible during debugging sessions.** The activity feed shows
+what the agent is doing in real time.
 
-**Use the clip list as your recording archive.** After each debugging session, rename your clips to something descriptive (right-click → Rename in the clip list). This makes them findable later.
+**The frame counter is your reference.** When telling the agent "look at what's
+happening now," read the frame number from the dock.
 
-**The frame counter in the status bar is your reference.** When you want to tell the agent "start analyzing from where I am now," read the current frame from the dock status bar.
-
-**Monitor the activity feed for token spikes.** If you see a tool call returning very high token counts (e.g., `spatial_snapshot: 8,400 tokens`), the response may be too large. Ask the agent to use tighter budgets or filter by type.
+**Watch for large responses.** If the activity feed shows high token counts,
+ask the agent to use tighter budgets or filter by node type.

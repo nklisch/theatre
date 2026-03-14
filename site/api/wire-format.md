@@ -4,7 +4,7 @@ The TCP protocol used between Theatre's MCP servers and the Godot addons.
 
 ## Overview
 
-Both Stage and Director communicate with their Godot-side components over TCP using **length-prefixed JSON**:
+Both Spectator and Director communicate with their Godot-side components over TCP using **length-prefixed JSON**:
 
 ```
 [4 bytes: big-endian u32 length][JSON payload of exactly `length` bytes]
@@ -16,13 +16,13 @@ This framing ensures that both sides can read exactly one complete message per c
 
 | Component | Port | Direction |
 |---|---|---|
-| Stage | `9077` | Addon listens; server connects |
+| Spectator | `9077` | Addon listens; server connects |
 | Director (editor plugin) | `6550` | Plugin listens; director binary connects |
 | Director (headless daemon) | `6551` | Daemon listens; director binary connects |
 
 All ports bind to `127.0.0.1` only. No remote access.
 
-The **addon listens, server connects** pattern for Stage means the MCP server can be started and stopped without affecting the running game — the game always has a socket open. The server connects when it needs data and can reconnect automatically after a game restart.
+The **addon listens, server connects** pattern for Spectator means the MCP server can be started and stopped without affecting the running game — the game always has a socket open. The server connects when it needs data and can reconnect automatically after a game restart.
 
 ## Message framing
 
@@ -53,7 +53,7 @@ To receive a message:
 
 If either read returns fewer bytes than requested (socket closed), the connection has terminated.
 
-## Stage protocol
+## Spectator protocol
 
 ### Request types
 
@@ -70,14 +70,17 @@ All requests from the server to the addon are JSON objects with a `"type"` field
 {"type": "watch_create", "node": "Player", "track": ["position", "velocity"]}
 {"type": "watch_delete", "watch_id": "w_a1b2c3"}
 {"type": "watch_list"}
-{"type": "record_start", "clip_id": "clip_01"}
-{"type": "record_stop"}
-{"type": "record_mark", "label": "bug_moment"}
-{"type": "record_query_frame", "clip_id": "clip_01", "frame": 337}
-{"type": "record_query_range", "clip_id": "clip_01", "start_frame": 300, "end_frame": 350}
-{"type": "record_list"}
-{"type": "record_delete", "clip_id": "clip_01"}
+{"type": "recording_marker", "source": "agent", "label": "bug_moment"}
+{"type": "recording_markers", "clip_id": "clip_01"}
+{"type": "recording_list"}
+{"type": "recording_delete", "clip_id": "clip_01"}
+{"type": "recording_resolve_path"}
+{"type": "dashcam_status"}
+{"type": "dashcam_flush"}
+{"type": "dashcam_config"}
 ```
+
+Clip analysis actions (`snapshot_at`, `trajectory`, `query_range`, `diff_frames`, `find_event`) are handled server-side by reading clip SQLite files directly — they do not use the TCP wire protocol.
 
 ### Response types
 
@@ -127,7 +130,7 @@ Responses:
 
 ## Connection lifecycle
 
-### Stage
+### Spectator
 
 ```
 [Game starts] → addon starts TCP listener on 0.0.0.0:9077 (only accepts 127.0.0.1)
@@ -161,7 +164,7 @@ Director uses a per-request connection model — each operation is a new TCP con
 
 If the TCP connection fails or is reset:
 
-- **Stage server**: returns an MCP error to the agent with the message "Game not running or not reachable. Start the game and try again."
+- **Spectator server**: returns an MCP error to the agent with the message "Game not running or not reachable. Start the game and try again."
 - **Director binary**: tries the next backend (6551, then one-shot).
 
 ### Message errors
@@ -172,7 +175,7 @@ If a request refers to a non-existent node or resource, the response includes `"
 
 ## Implementation notes
 
-The codec is implemented in `crates/stage-protocol/src/codec.rs` (shared between server and GDExtension):
+The codec is implemented in `crates/spectator-protocol/src/codec.rs` (shared between server and GDExtension):
 
 ```rust
 // Synchronous write

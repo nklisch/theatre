@@ -31,21 +31,21 @@ The agent does not see a screenshot. It sees **structured data** — the same da
 
 ## Two Tools, One Stage
 
-### Stage
+### Spectator
 
-Stage is a read-only observation tool for running Godot games. It consists of:
+Spectator is a read-only observation tool for running Godot games. It consists of:
 
-- **A Rust GDExtension addon** (`addons/stage/`) that runs inside your game and collects spatial data from the scene tree on every physics tick. It listens for incoming TCP connections on port 9077.
-- **A Rust MCP server + CLI** (`stage`) that connects to the addon and exposes 9 tools to your AI agent — via MCP (`stage serve`) or CLI (`stage <tool> '<json>'`).
+- **A Rust GDExtension addon** (`addons/spectator/`) that runs inside your game and collects spatial data from the scene tree on every physics tick. It listens for incoming TCP connections on port 9077.
+- **A Rust MCP server + CLI** (`spectator`) that connects to the addon and exposes 9 tools to your AI agent — via MCP (`spectator serve`) or CLI (`spectator <tool> '<json>'`).
 
-Stage answers questions like:
+Spectator answers questions like:
 
 - "Where is the player right now?"
 - "How fast is the projectile moving when it hits that wall?"
 - "Which nodes are within 5 meters of the enemy?"
 - "What changed between frame 300 and frame 340 during the bug recording?"
 
-Stage never modifies the game state. It is purely observational.
+Spectator never modifies the game state. It is purely observational.
 
 ### Director
 
@@ -85,4 +85,4 @@ Theatre does not require any specific AI agent. It uses MCP (Model Context Proto
 
 **Token budgets first.** Spatial snapshots can be enormous. Every tool that returns scene data accepts a `token_budget` parameter and a `detail` level. Theatre will never blow up your context window with a 500-node scene dump when you only needed the player's position.
 
-**No screenshots required.** The workflow is: click **Record** in the dock, mark bugs with **F9**, then click **Stop** and ask your agent to analyze the clip. The agent scrubs the spatial timeline, finds the exact frame, diagnoses the cause, and suggests a fix — all from structured data.
+**No screenshots required.** The workflow is: play your game, press **F9** to mark the bug moment, and ask your agent to analyze the clip. The agent scrubs the spatial timeline, finds the exact frame, diagnoses the cause, and suggests a fix — all from structured data.

@@ -9,11 +9,10 @@ Theatre uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Stage
+### Spectator
 - `spatial_query` type `relationship` now returns `in_fov` field for Camera3D `from` nodes
 - `clips` query conditions: added `velocity_above` and `property_equals` filter types
 - `spatial_config`: added `auto_record` and `max_clip_duration_s` for continuous background recording
-- Editor dock: clip list now shows duration and marker count inline
 - `spatial_snapshot`: `include_properties` now supports dot-notation for nested properties
 
 ### Director
@@ -34,7 +33,7 @@ Theatre uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Initial release of Theatre — an AI agent toolkit for Godot game engine.
 
-### Stage
+### Spectator
 
 **9 MCP tools for observing running Godot games:**
 
@@ -56,7 +55,7 @@ Initial release of Theatre — an AI agent toolkit for Godot game engine.
 
 - `clips` — Record gameplay to clip files, mark bug moments (F9), and query the spatial timeline. Supports condition filtering (`proximity`, `velocity_above`, `property_equals`) over frame ranges.
 
-**GDExtension (stage-godot):**
+**GDExtension (spectator-godot):**
 - Targets Godot 4.5+ with `compatibility_minimum = "4.5"`
 - Uses `lazy-function-tables` for forward compatibility with 4.6+
 - TCP listener on port 9077 (127.0.0.1 only)
@@ -65,11 +64,14 @@ Initial release of Theatre — an AI agent toolkit for Godot game engine.
 - Graceful degradation: GDScript addon loads without crash if `.so` is missing
 
 **Editor dock:**
-- Recording controls (Start / Mark Bug / Stop)
-- Keyboard shortcuts: F9 (marker), F11 (pause)
-- Clip list with duration, frame count, and marker display
-- Active watches display with delete controls
+- Connection status, tracked nodes, active watches count
+- Keyboard shortcuts: F9 (save dashcam clip), F11 (pause game)
 - Activity feed showing recent agent tool calls
+
+**In-game overlay:**
+- Dashcam status label (top-left)
+- Marker flag button (top-left)
+- Toast notifications for markers and clip saves (top-right)
 
 ### Director
 

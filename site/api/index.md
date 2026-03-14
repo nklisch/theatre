@@ -1,6 +1,6 @@
-# Stage API Reference
+# Spectator API Reference
 
-Complete parameter schemas for all 9 Stage MCP tools.
+Complete parameter schemas for all 9 Spectator MCP tools.
 
 ## `spatial_snapshot`
 
@@ -421,68 +421,107 @@ Get scene tree structure.
 
 ## `clips`
 
-Record and query spatial gameplay clips.
+Manage dashcam clips and analyze recorded gameplay.
 
 ```typescript
-// Start recording
+// Mark current moment + trigger clip capture
 {
-  action: "start"
-  clip_id?: string                         // auto-generated if omitted
+  action: "add_marker"
+  marker_label?: string
+  marker_frame?: number                    // defaults to current frame
 }
 
-// Stop recording
+// Force-save dashcam buffer as clip
 {
-  action: "stop"
+  action: "save"
 }
 
-// Mark a frame
+// Dashcam buffer state and config
 {
-  action: "mark"
-  label?: string
+  action: "status"
 }
 
-// List clips
+// List saved clips
 {
   action: "list"
 }
 
-// Query single frame
-{
-  action: "query_frame"
-  clip_id: string
-  frame: number
-  nodes?: string[]
-  detail?: "summary" | "full"
-}
-
-// Query frame range
-{
-  action: "query_range"
-  clip_id: string
-  start_frame: number
-  end_frame: number
-  nodes?: string[]
-  detail?: "summary" | "full"
-  stride?: number                          // default: 1
-  condition?: {
-    type: "proximity" | "velocity_above" | "property_equals"
-    // proximity:
-    nodes?: [string, string]
-    max_distance?: number
-    // velocity_above:
-    node?: string
-    threshold?: number
-    // property_equals:
-    node?: string
-    property?: string
-    value?: any
-  }
-}
-
-// Delete clip
+// Remove a clip
 {
   action: "delete"
   clip_id: string
+}
+
+// List markers in a clip
+{
+  action: "markers"
+  clip_id: string
+}
+
+// Spatial state at a frame
+{
+  action: "snapshot_at"
+  clip_id?: string                         // defaults to most recent
+  at_frame?: number
+  at_time_ms?: number                      // alternative: find nearest frame
+  detail?: "summary" | "standard" | "full"
+}
+
+// Position/property timeseries
+{
+  action: "trajectory"
+  clip_id?: string
+  node: string
+  from_frame?: number
+  to_frame?: number
+  properties?: string[]                    // default: ["position"]
+  sample_interval?: number                 // default: 1
+}
+
+// Search frames for spatial conditions
+{
+  action: "query_range"
+  clip_id?: string
+  from_frame?: number
+  to_frame?: number
+  node?: string
+  condition?: {
+    type: "moved" | "proximity" | "velocity_spike" | "property_change"
+        | "state_transition" | "signal_emitted" | "entered_area" | "collision"
+    // + type-specific fields (target, threshold, property, signal)
+  }
+}
+
+// Compare two frames
+{
+  action: "diff_frames"
+  clip_id?: string
+  frame_a: number
+  frame_b: number
+}
+
+// Search events
+{
+  action: "find_event"
+  clip_id?: string
+  event_type?: string
+  event_filter?: string
+  from_frame?: number
+  to_frame?: number
+}
+
+// Viewport screenshot at a frame
+{
+  action: "screenshot_at"
+  clip_id?: string
+  at_frame?: number
+  at_time_ms?: number
+}
+
+// List screenshot metadata
+{
+  action: "screenshots"
+  clip_id?: string
 }
 ```
 

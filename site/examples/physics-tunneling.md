@@ -13,9 +13,9 @@ const messages2 = [
   { role: 'agent', text: `Three options: (1) Enable motion_mode="float" and increase wall thickness to at least 1.5m — most robust. (2) Use continuous collision detection by switching Bullet from CharacterBody3D to a RigidBody3D with continuous_cd=true — better for physics-based bullets. (3) Implement a manual raycast in the bullet script: each tick, cast a ray from the previous position to the current position and check for hits — most flexible.` },
 ]
 const messages3 = [
-  { role: 'human', text: `I applied the raycast fix. Record another test and verify no tunneling.` },
-  { role: 'agent', text: `Starting a new recording. Fire bullets at the wall and I will analyze.` },
-  { role: 'human', text: `Done. Bullets all hit the wall correctly now. Stop recording.` },
+  { role: 'human', text: `I applied the raycast fix. Fire more bullets and verify no tunneling.` },
+  { role: 'agent', text: `Ready. Fire bullets at the wall and press F9 when done — I will analyze the clip.` },
+  { role: 'human', text: `Done. Bullets all hit the wall correctly now.` },
   { role: 'agent', text: `No frames where the bullet was at high velocity and past the wall. All bullets appear to have stopped at the wall face or within 0.1m of it. The fix is working.` },
 ]
 </script>
@@ -36,7 +36,7 @@ Godot's `move_and_slide` does not use continuous collision detection by default.
 
 ## Step 1: Reproduce with recording
 
-Click **Record** in the Stage dock, fire several bullets at the wall at different angles and distances, then click **Stop** when you have captured a few tunneling events.
+Fire several bullets at the wall at different angles and distances. When you see a tunneling event, press **F9** to save the clip. The dashcam captures the last 60 seconds plus ~30 seconds of post-capture, so you do not need to press it immediately.
 
 ## Step 2: Query the recording
 

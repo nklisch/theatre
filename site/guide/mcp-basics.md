@@ -58,7 +58,7 @@ You can see Theatre's tool list by running the server manually:
 
 ```bash
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | \
-  ./target/release/stage serve
+  ./target/release/spectator serve
 ```
 
 ## Parallel tool calls
@@ -81,13 +81,13 @@ spatial_snapshot (broad overview)
 
 Used when there is a reported problem and the agent wants to understand the current state before suggesting anything.
 
-### Pattern 2: Record → Query → Diagnose → Fix
+### Pattern 2: Mark → Query → Diagnose → Fix
 
 ```
-[human clicks Start Recording in the Stage dock, plays, F9 to mark, clicks Stop Recording]
+[human plays the game, presses F9 when a bug occurs — dashcam clip is saved]
 clips { "action": "list" }
-  → clips { "action": "query_range", ... }
-    → spatial_inspect (on a specific node at a specific frame)
+  → clips { "action": "snapshot_at", "clip_id": "...", "at_frame": 337 }
+    → clips { "action": "trajectory", "clip_id": "...", "node": "Player" }
       → director operation (fix the problem)
 ```
 
@@ -115,7 +115,7 @@ director { "op": "scene_create", ... }
         → spatial_query { "type": "radius", ... } (verify reachability)
 ```
 
-Used for AI-driven level construction with Stage verifying the result.
+Used for AI-driven level construction with Spectator verifying the result.
 
 ## Tool result caching
 

@@ -25,7 +25,7 @@ const messages4 = [
 
 # Your First Debugging Session
 
-This is a worked example of a complete Theatre debugging session. We will find and fix a real bug — an enemy that sometimes fails to detect the player — using Stage's spatial tools with Claude Code.
+This is a worked example of a complete Theatre debugging session. We will find and fix a real bug — an enemy that sometimes fails to detect the player — using Spectator's spatial tools with Claude Code.
 
 ## The setup
 
@@ -36,13 +36,13 @@ You have a 3D game with:
 
 You have already tried reading the detection script and the collision layer settings. The code looks correct. You need to see what is actually happening at runtime.
 
-## Step 1: Start a recording session
+## Step 1: Reproduce the bug and save a clip
 
-Click the **Start Recording** button in the Stage dock to begin recording.
+Stage's dashcam is always running — it automatically buffers the last 60 seconds of spatial data in memory. There is nothing to start.
 
 Walk the player in front of the enemy a few times. On the third or fourth pass, the enemy fails to detect you — you see the player enters the zone visually but the alert animation does not play.
 
-Press **F9** to mark this as a bug moment (the dock shows "Bug marker set at frame 312"). Click the **Stop Recording** button in the Stage dock.
+Press **F9** (or click the **⚑** flag button in the top-left corner of the game viewport) to save a clip of the bug moment. A toast notification confirms "Dashcam clip saved" in the top-right corner. The clip contains approximately 60 seconds of data before the trigger plus ~30 seconds of post-capture.
 
 ## Step 2: Ask the agent to analyze the clip
 
@@ -80,7 +80,7 @@ Without Theatre, this bug would have required:
 
 With Theatre:
 
-1. Record the bug happening
+1. Mark the bug moment with F9 — the dashcam saves the clip automatically
 2. Agent queries the spatial recording around the marked frame
 3. Agent compares positions and inspects properties — finds the mismatch in < 60 seconds
 4. Agent fixes it via Director without hand-editing the scene file
@@ -89,7 +89,7 @@ The key insight — that the `collision_mask` was wrong — came from the agent 
 
 ## Patterns to take away
 
-**Mark bug moments with F9.** Precise markers let the agent narrow its analysis to a small frame window instead of searching hundreds of frames.
+**Mark bug moments with F9.** Pressing F9 (or clicking the in-game ⚑ flag button) saves a dashcam clip — not just a frame marker, but the full buffer including ~60 seconds of history before the trigger. This gives the agent data from before the bug began, not just the moment you noticed it.
 
 **Use `spatial_inspect` after `clips`** to get property values at a specific moment. The clip recording captures position and velocity; inspect gives you the full property set.
 
