@@ -19,7 +19,6 @@ pub enum Message {
     /// Server → Addon: query request
     #[serde(rename = "query")]
     Query {
-        #[serde(alias = "id")]
         request_id: String,
         method: String,
         #[serde(default)]
@@ -29,7 +28,6 @@ pub enum Message {
     /// Addon → Server: query response
     #[serde(rename = "response")]
     Response {
-        #[serde(alias = "id")]
         request_id: String,
         data: serde_json::Value,
     },
@@ -37,7 +35,6 @@ pub enum Message {
     /// Addon → Server: query error
     #[serde(rename = "error")]
     Error {
-        #[serde(alias = "id")]
         request_id: String,
         code: String,
         message: String,

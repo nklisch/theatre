@@ -83,10 +83,7 @@ pub async fn dispatch_tool_raw(
     }
 }
 
-#[allow(dead_code)]
 /// Dispatch a tool call and return the full CallToolResult.
-/// For clips (which returns native CallToolResult), calls directly.
-/// For all other tools, wraps the string result in a single-text-block result.
 pub async fn dispatch_tool_result(
     server: &stage_server::server::StageServer,
     name: &str,
@@ -106,46 +103,6 @@ pub async fn dispatch_tool_result(
         return server.clips(Parameters(p)).await;
     }
 
-    // For all other tools, call them directly and wrap in CallToolResult
-    let s = match name {
-        "spatial_snapshot" => {
-            let p = from_value(params)?;
-            server.spatial_snapshot(Parameters(p)).await?
-        }
-        "spatial_inspect" => {
-            let p = from_value(params)?;
-            server.spatial_inspect(Parameters(p)).await?
-        }
-        "scene_tree" => {
-            let p = from_value(params)?;
-            server.scene_tree(Parameters(p)).await?
-        }
-        "spatial_action" => {
-            let p = from_value(params)?;
-            server.spatial_action(Parameters(p)).await?
-        }
-        "spatial_query" => {
-            let p = from_value(params)?;
-            server.spatial_query(Parameters(p)).await?
-        }
-        "spatial_delta" => {
-            let p = from_value(params)?;
-            server.spatial_delta(Parameters(p)).await?
-        }
-        "spatial_watch" => {
-            let p = from_value(params)?;
-            server.spatial_watch(Parameters(p)).await?
-        }
-        "spatial_config" => {
-            let p = from_value(params)?;
-            server.spatial_config(Parameters(p)).await?
-        }
-        _ => {
-            return Err(McpError::invalid_params(
-                format!("Unknown tool: {name}"),
-                None,
-            ));
-        }
-    };
+    let s = dispatch_tool_raw(server, name, params).await?;
     Ok(CallToolResult::success(vec![Content::text(s)]))
 }

@@ -94,11 +94,7 @@ pub fn action_summary(params: &SpatialActionParams) -> String {
         ActionType::CallMethod => {
             let node = params.node.as_deref().unwrap_or("?");
             let method = params.method.as_deref().unwrap_or("?");
-            let args = params
-                .args
-                .as_ref()
-                .or(params.method_args.as_ref())
-                .map(|a| {
+            let args = params.args.as_ref().map(|a| {
                     a.iter()
                         .map(|v| v.to_string())
                         .collect::<Vec<_>>()

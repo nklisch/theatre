@@ -33,49 +33,6 @@ fn write_project_godot(project: &Path, content: &str) -> Result<()> {
         .with_context(|| format!("Failed to write project.godot at: {}", path.display()))
 }
 
-/// Check which Theatre plugins are currently enabled in project.godot.
-/// Returns (stage_enabled, director_enabled).
-#[allow(dead_code)]
-pub fn check_plugins_enabled(project: &Path) -> Result<(bool, bool)> {
-    let content = read_project_godot(project)?;
-    let array = find_enabled_array(&content);
-    let stage = array.contains("addons/stage/plugin.cfg");
-    let director = array.contains("addons/director/plugin.cfg");
-    Ok((stage, director))
-}
-
-/// Extract the PackedStringArray content from [editor_plugins] section.
-#[allow(dead_code)]
-fn find_enabled_array(content: &str) -> String {
-    let in_section = find_in_section(content, "editor_plugins", "enabled");
-    in_section.unwrap_or_default()
-}
-
-/// Find the value of `key` inside `[section_name]` block.
-fn find_in_section(content: &str, section_name: &str, key: &str) -> Option<String> {
-    let section_header = format!("[{section_name}]");
-    let mut in_section = false;
-
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if trimmed == section_header {
-            in_section = true;
-            continue;
-        }
-        if in_section {
-            if trimmed.starts_with('[') {
-                // Entered a new section
-                break;
-            }
-            let prefix = format!("{key}=");
-            if trimmed.starts_with(&prefix) {
-                return Some(trimmed[prefix.len()..].to_string());
-            }
-        }
-    }
-    None
-}
-
 /// Enable or disable a plugin in project.godot.
 ///
 /// Parses the `[editor_plugins]` section and modifies the
@@ -347,34 +304,6 @@ mod tests {
         let dir = TempDir::new().unwrap();
         let err = validate_project(dir.path()).unwrap_err();
         assert!(err.to_string().contains("project.godot"));
-    }
-
-    #[test]
-    fn test_check_plugins_empty() {
-        let dir = make_project("[editor_plugins]\nenabled=PackedStringArray()\n");
-        let (s, d) = check_plugins_enabled(dir.path()).unwrap();
-        assert!(!s);
-        assert!(!d);
-    }
-
-    #[test]
-    fn test_check_plugins_one_enabled() {
-        let dir = make_project(
-            "[editor_plugins]\nenabled=PackedStringArray(\"res://addons/stage/plugin.cfg\")\n",
-        );
-        let (s, d) = check_plugins_enabled(dir.path()).unwrap();
-        assert!(s);
-        assert!(!d);
-    }
-
-    #[test]
-    fn test_check_plugins_both_enabled() {
-        let dir = make_project(
-            "[editor_plugins]\nenabled=PackedStringArray(\"res://addons/stage/plugin.cfg\", \"res://addons/director/plugin.cfg\")\n",
-        );
-        let (s, d) = check_plugins_enabled(dir.path()).unwrap();
-        assert!(s);
-        assert!(d);
     }
 
     #[test]

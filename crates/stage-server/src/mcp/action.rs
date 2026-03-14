@@ -20,7 +20,7 @@ pub enum ActionType {
     Teleport,
     /// Change a node property. Requires: node, property, value.
     SetProperty,
-    /// Call a method on a node. Requires: node, method. Optional: method_args.
+    /// Call a method on a node. Requires: node, method. Optional: args.
     CallMethod,
     /// Emit a signal on a node. Requires: node, signal. Optional: args.
     EmitSignal,
@@ -77,9 +77,6 @@ pub struct SpatialActionParams {
 
     /// For call_method: method name.
     pub method: Option<String>,
-
-    /// For call_method: method arguments (alias for args).
-    pub method_args: Option<Vec<serde_json::Value>>,
 
     /// For spawn_node: scene resource path.
     pub scene_path: Option<String>,
@@ -183,12 +180,7 @@ pub fn build_action_request(params: &SpatialActionParams) -> Result<ActionReques
                 params.method.as_ref(),
                 "'method' is required for call_method action"
             );
-            let args = params
-                .method_args
-                .as_ref()
-                .or(params.args.as_ref())
-                .cloned()
-                .unwrap_or_default();
+            let args = params.args.as_ref().cloned().unwrap_or_default();
             Ok(ActionRequest::CallMethod {
                 path: node.clone(),
                 method: method.clone(),
@@ -304,7 +296,6 @@ mod tests {
             signal: None,
             args: None,
             method: None,
-            method_args: None,
             scene_path: None,
             parent: None,
             name: None,
@@ -350,11 +341,11 @@ mod tests {
     }
 
     #[test]
-    fn build_action_request_call_method_uses_method_args() {
+    fn build_action_request_call_method_with_args() {
         let mut p = base_params(ActionType::CallMethod);
         p.node = Some("player".into());
         p.method = Some("take_damage".into());
-        p.method_args = Some(vec![serde_json::json!(50)]);
+        p.args = Some(vec![serde_json::json!(50)]);
         let req = build_action_request(&p).unwrap();
         assert!(matches!(req, ActionRequest::CallMethod { args, .. } if args.len() == 1));
     }
