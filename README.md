@@ -54,10 +54,10 @@ The agent should return a JSON summary of the entities in your scene.
 ### 4. Install agent skills (optional)
 
 ```bash
-npx skilltap install nklisch/theatre
+skilltap install nklisch/theatre
 ```
 
-Teaches your agent how to use Spectator and Director effectively — tool selection, workflows, parameter patterns, and debugging strategies.
+Teaches your agent how to use Spectator and Director effectively — tool selection, workflows, parameter patterns, and debugging strategies. Install skilltap from [skilltap.dev](https://skilltap.dev).
 
 ---
 

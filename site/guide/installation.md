@@ -185,27 +185,21 @@ Use `THEATRE_PORT=9078` in an `env` block if you need a non-default port.
 
 Theatre ships agent skills that teach AI agents how to use Spectator and Director effectively — tool selection, parameter patterns, debugging workflows, and common pitfalls.
 
-### Via npx (recommended)
+### Via skilltap (recommended)
+
+Install [skilltap](https://skilltap.dev) first, then:
 
 ```bash
 # Install both skills to the current project
-npx skilltap install nklisch/theatre
+skilltap install nklisch/theatre
 
 # Or install globally (available to all projects)
-npx skilltap install nklisch/theatre --global
+skilltap install nklisch/theatre --global
 ```
 
 This installs two skills:
 - **spectator** — 9 spatial observation tools, debugging workflows, clip analysis
 - **theatre** — 31 Director scene/resource authoring tools with full parameter reference
-
-### Via skilltap CLI
-
-If you have [skilltap](https://skilltap.dev) installed:
-
-```bash
-skilltap install nklisch/theatre
-```
 
 ### Manual installation
 

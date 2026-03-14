@@ -112,8 +112,10 @@ This copies addons, generates `.mcp.json`, and enables plugins — all interacti
 ### 3. Install agent skills (optional)
 
 ```bash
-npx skilltap install nklisch/theatre
+skilltap install nklisch/theatre
 ```
+
+Install skilltap from [skilltap.dev](https://skilltap.dev).
 
 Teaches your agent how to use Spectator and Director effectively — tool selection, workflows, and pitfalls.
 
