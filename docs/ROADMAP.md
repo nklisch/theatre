@@ -270,7 +270,7 @@ Human enables addon, sees "Waiting..." in dock. Agent connects, dock shows "Conn
 
 ## Milestone 7: Recording — Capture (partial)
 
-**Goal:** Human can record spatial timelines. Agent can start/stop recordings. Frame data is captured and stored in SQLite. Markers work from all three sources (human, agent, system).
+**Goal:** Human can record spatial timelines. Agent can start/stop recordings. Frame data is captured and stored in SQLite. Markers work from all four sources (human, agent, code, system).
 
 **Depends on:** M1, M6 (for dock recording controls)
 

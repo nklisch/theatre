@@ -266,7 +266,8 @@ SpectatorTCPServer : Node
 
 SpectatorRecorder : Node
   - fn flush_dashcam_clip(label: String) -> String   // returns clip_id or ""
-  - fn add_marker(label: String, frame: i32)
+  - fn add_marker(source: String, label: String)     // TCP/human markers
+  - fn add_code_marker(label: String, tier: String)  // game script markers (tier: "system"|"deliberate"|"silent")
   - fn get_frame(index: i32) -> Dictionary
   // signals: dashcam_clip_saved(clip_id, tier, frames), dashcam_clip_started(frame, tier), marker_added(frame, source, label)
 ```
@@ -285,7 +286,7 @@ This is single-threaded and frame-locked. For 60fps physics, each frame has ~16m
 
 For dashcam capture at 60fps:
 1. `SpectatorRecorder` captures frames every `_physics_process` into a ring buffer
-2. On trigger (marker, F9, agent `save`), the ring buffer window is written to SQLite
+2. On trigger (marker, F9, agent `save`, or `SpectatorRuntime.marker()` from game code), the ring buffer window is written to SQLite
 3. Clip is identified by a `clip_id` (e.g. `clip_001a2b3c`)
 
 ## MCP Server Architecture

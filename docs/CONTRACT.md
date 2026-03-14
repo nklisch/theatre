@@ -1326,6 +1326,7 @@ Same shape as `spatial_snapshot` response (the recording is a queryable timeline
 Marker sources:
 - **human**: From the editor dock or F9 keyboard shortcut
 - **agent**: Via `recording(action: "add_marker")`
+- **code**: Via `SpectatorRuntime.marker("label")` from game scripts (system tier by default, rate-limited; supports `"deliberate"` and `"silent"` tiers)
 - **system**: Auto-detected anomalies (velocity spikes, collision events, property threshold crossings)
 
 ### Response — `list`

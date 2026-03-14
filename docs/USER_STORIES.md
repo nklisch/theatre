@@ -511,7 +511,7 @@ Human-drives, agent-analyzes workflow.
 - Dock button allows marker with text note
 - Agent can add markers via `recording(action: "add_marker", marker_label: "...", marker_frame: N)`
 - System auto-generates markers for anomalies (velocity spikes, collision events)
-- `recording(action: "markers")` lists all markers with frame, time, source (human/agent/system), label
+- `recording(action: "markers")` lists all markers with frame, time, source (human/agent/code/system), label
 
 ### S8.3: Snapshot at Frame
 **Priority:** P1
