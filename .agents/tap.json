@@ -1,0 +1,24 @@
+{
+  "name": "theatre",
+  "description": "Agent skills for the Theatre Godot AI agent toolkit",
+  "skills": [
+    {
+      "name": "spectator",
+      "description": "Use Spectator to spatially debug a running Godot game via MCP tools or CLI. Invoke when the user asks about game state, node positions, spatial bugs, physics, pathfinding, signals, or anything requiring understanding what's happening in the running game world.",
+      "path": ".agents/skills/spectator",
+      "tags": ["godot", "mcp", "cli", "spatial", "debugging", "game-development"]
+    },
+    {
+      "name": "theatre",
+      "description": "Use Director to create and modify Godot scenes, nodes, resources, tilemaps, animations, and signals via MCP tools or CLI. Invoke when the user asks to build scenes, add nodes, set properties, create materials, or perform any Godot project authoring task.",
+      "path": ".agents/skills/theatre",
+      "tags": ["godot", "mcp", "cli", "scenes", "resources", "game-development"]
+    },
+    {
+      "name": "godot-gdscript-patterns",
+      "description": "Master Godot 4 GDScript patterns including signals, scenes, state machines, and optimization. Use when building Godot games, implementing game systems, or learning GDScript best practices.",
+      "path": ".agents/skills/godot-gdscript-patterns",
+      "tags": ["godot", "gdscript", "patterns", "game-development"]
+    }
+  ]
+}
