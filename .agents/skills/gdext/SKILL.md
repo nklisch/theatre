@@ -14,8 +14,8 @@ This skill covers the `godot-rust/gdext` crate used in `crates/spectator-godot`.
 crate-type = ["cdylib"]   # Required — produces .so/.dll/.dylib
 
 [dependencies]
-godot = { version = "0.4", features = ["api-4-2"] }
-# api-4-2 = minimum Godot version we target
+godot = { version = "0.4", features = ["api-4-5"] }
+# api-4-5 = minimum Godot version we target (requires Godot 4.5+)
 ```
 
 ## Entry Point
@@ -294,8 +294,8 @@ collector.bind_mut().poll();                      // calls &mut self method
 ```ini
 [configuration]
 entry_symbol = "gdext_rust_init"
-compatibility_minimum = "4.2"
-reloading = true           # enables hot-reload in Godot 4.2+
+compatibility_minimum = "4.5"
+reloading = true           # enables hot-reload in Godot 4.5+
 
 [libraries]
 linux.debug.x86_64 = "bin/linux/libspectator_godot.debug.so"

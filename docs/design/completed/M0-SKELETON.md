@@ -1149,7 +1149,7 @@ async fn main() -> Result<()> {
 ```ini
 [configuration]
 entry_symbol = "gdext_rust_init"
-compatibility_minimum = "4.2"
+compatibility_minimum = "4.5"
 reloadable = true
 
 [libraries]
@@ -1159,13 +1159,13 @@ linux.release.x86_64 = "res://addons/spectator/bin/linux/libspectator_godot.so"
 
 **Implementation Notes:**
 - `entry_symbol = "gdext_rust_init"` must match what gdext's `#[gdextension]` macro exports
-- `compatibility_minimum = "4.2"` ensures the addon won't load in older Godot versions
+- `compatibility_minimum = "4.5"` ensures the addon won't load in older Godot versions
 - `reloadable = true` enables hot-reload when recompiling during development
 - Only Linux debug target for M0. macOS and Windows targets added in M11 (Distribution)
 - Both debug and release point to the same `.so` for M0 simplicity. CI can produce separate debug/release builds later.
 
 **Acceptance Criteria:**
-- [ ] Godot 4.2+ recognizes the `.gdextension` file when present in the project
+- [ ] Godot 4.5+ recognizes the `.gdextension` file when present in the project
 - [ ] GDExtension loads without errors when the `.so` binary is present
 - [ ] `SpectatorTCPServer` class is available in GDScript after loading
 - [ ] Error logged (not crash) if binary is missing for the current platform
@@ -1637,7 +1637,7 @@ No automated Godot integration tests in M0 (requires a running Godot instance). 
 
 1. Build: `cargo build --workspace`
 2. Copy GDExtension: `./scripts/copy-gdext.sh debug`
-3. Open a Godot 4.2+ project with `addons/spectator/` copied in
+3. Open a Godot 4.5+ project with `addons/spectator/` copied in
 4. Enable plugin in Project Settings → Plugins
 5. Press Play — check Output panel for `[Spectator] TCP server listening on 127.0.0.1:9077`
 6. Run: `cargo run -p spectator-server` in a terminal

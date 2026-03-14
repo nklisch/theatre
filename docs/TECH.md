@@ -16,7 +16,7 @@
 | Editor Plugin | GDScript (`@tool`) | Required — GDExtension classes can't be EditorPlugin bases |
 | Runtime Autoload | GDScript | Bridges GDExtension classes with scene tree lifecycle |
 | Editor Dock UI | Godot scenes (`.tscn`) | Native Godot UI, built in editor, used by GDScript plugin |
-| Godot Minimum | 4.2 | gdext 0.4+ requirement, GDExtension hot-reload support |
+| Godot Minimum | 4.5 | api-4-5 feature flag requires Godot 4.5+ at runtime |
 | License | MIT | Matches Godot's license, maximally permissive |
 
 ## Repository Layout
@@ -454,14 +454,14 @@ Required Rust targets:
 
 Spectator uses **workspace versioning** — all crates share the same version number. This simplifies compatibility: `spectator-server` v0.3.0 works with `spectator-godot` v0.3.0. Mismatched versions are detected during the TCP handshake.
 
-The `.gdextension` manifest sets `compatibility_minimum = "4.2"` to ensure forward compatibility with Godot 4.3, 4.4, and future 4.x releases.
+The `.gdextension` manifest sets `compatibility_minimum = "4.5"` to match the `api-4-5` feature flag. The `lazy-function-tables` feature provides forward compatibility with 4.6+ releases.
 
 ### Version Compatibility Matrix
 
 | spectator-server | spectator-godot | TCP Protocol | Godot |
 |---|---|---|---|
-| 0.x | 0.x (matching) | v1 | 4.2+ |
-| 1.x | 1.x (matching) | v1 or v2 | 4.2+ |
+| 0.x | 0.x (matching) | v1 | 4.5+ |
+| 1.x | 1.x (matching) | v1 or v2 | 4.5+ |
 
 Protocol version is exchanged in the TCP handshake. The server and addon negotiate the highest mutually supported version.
 

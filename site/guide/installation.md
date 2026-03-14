@@ -17,9 +17,9 @@ rustc --version   # should print 1.80.0 or later
 cargo --version
 ```
 
-### Godot 4.2 or later
+### Godot 4.5 or later
 
-Theatre's Spectator GDExtension targets Godot 4.2+ with `compatibility_minimum = "4.2"`. It has been tested on 4.2, 4.3, and 4.4. Director works on any Godot version that supports GDScript plugins.
+Theatre's Spectator GDExtension targets Godot 4.5+ with `compatibility_minimum = "4.5"`. The `api-4-5` feature flag in godot-rust requires Godot 4.5 as the minimum runtime version. Director works on any Godot version that supports GDScript plugins.
 
 Make sure the `godot` binary is on your PATH if you want to run headless verification commands:
 

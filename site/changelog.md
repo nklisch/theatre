@@ -57,8 +57,8 @@ Initial release of Theatre — an AI agent toolkit for Godot game engine.
 - `clips` — Record gameplay to clip files, mark bug moments (F9), and query the spatial timeline. Supports condition filtering (`proximity`, `velocity_above`, `property_equals`) over frame ranges.
 
 **GDExtension (spectator-godot):**
-- Targets Godot 4.2+ with `compatibility_minimum = "4.2"`
-- Uses `lazy-function-tables` for compatibility across 4.2–4.6+
+- Targets Godot 4.5+ with `compatibility_minimum = "4.5"`
+- Uses `lazy-function-tables` for forward compatibility with 4.6+
 - TCP listener on port 9077 (127.0.0.1 only)
 - Ring buffer: 600 frames (~10s at 60Hz)
 - Collection: O(n) over tracked nodes in `_physics_process`

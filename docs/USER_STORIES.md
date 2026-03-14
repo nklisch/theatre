@@ -21,7 +21,7 @@ The foundational infrastructure — getting Spectator running and connected.
 **So that** the Spectator addon initializes without errors.
 
 **Acceptance Criteria:**
-- plugin.cfg is valid and recognized by Godot 4.2+
+- plugin.cfg is valid and recognized by Godot 4.5+
 - Enabling the plugin in Project Settings shows no errors in the Output panel
 - The EditorPlugin registers the SpectatorRuntime autoload
 - The GDExtension binary loads and SpectatorCollector, SpectatorTCPServer, SpectatorRecorder classes are available

@@ -61,7 +61,7 @@ The no-`spectator-core` rule keeps the GDExtension lean. The addon collects raw 
 
 ### GDExtension version targeting
 
-The crate targets `api-4-5` with `lazy-function-tables` enabled. The `lazy-function-tables` feature defers method hash validation to first call rather than on load, allowing the extension to load on Godot 4.2–4.6+ without panicking when method hashes change between Godot versions in classes the extension never uses.
+The crate targets `api-4-5` with `lazy-function-tables` enabled. The `api-4-5` flag requires Godot 4.5+ at runtime (API version ≤ runtime version). The `lazy-function-tables` feature defers method hash validation to first call rather than on load, providing forward compatibility with Godot 4.6+ without panicking when method hashes change between Godot versions in classes the extension never uses.
 
 To target a newer API, bump `api-4-5` to `api-4-6` in `Cargo.toml` once godot-rust adds that feature flag.
 

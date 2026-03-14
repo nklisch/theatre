@@ -7,7 +7,7 @@ How to build, test, and submit changes to Theatre.
 ### Prerequisites
 
 - Rust 1.80+ (`rustup update stable`)
-- Godot 4.2+ on your PATH (for E2E tests)
+- Godot 4.5+ on your PATH (for E2E tests)
 - `cargo` (comes with Rust)
 - Linux, macOS, or Windows (Linux is the primary development platform)
 

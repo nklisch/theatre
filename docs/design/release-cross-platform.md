@@ -44,7 +44,7 @@ Both paths produce the same directory layout — the tarball IS the
 ```ini
 [configuration]
 entry_symbol = "gdext_rust_init"
-compatibility_minimum = "4.2"
+compatibility_minimum = "4.5"
 reloadable = true
 
 [libraries]

@@ -16,7 +16,7 @@ or independently.
 ## Prerequisites
 
 - Rust (stable, 1.80+) — `rustup update stable`
-- Godot 4.2–4.6+ (GDExtension built with `api-4-5` + `lazy-function-tables` — runs on any 4.x without recompiling)
+- Godot 4.5+ (GDExtension built with `api-4-5` + `lazy-function-tables` for forward compatibility with 4.6+)
 - An MCP client — Claude Code, Claude Desktop, or any MCP-compatible agent
 
 ---
@@ -140,7 +140,7 @@ theatre deploy ~/your-project
 ```
 Then verify with `godot --headless --quit --path /your/project 2>&1` — expect `TCP server listening` with no `SCRIPT ERROR` or `[panic]` lines.
 
-**GDExtension panics at init (`failed to load class method ... hash`)** — the `.so` was compiled against a different Godot API version. The current build uses `api-4-5` with `lazy-function-tables`, which handles 4.2–4.6+. If you're on an older or newer Godot, rebuild from source after updating `api-4-5` in `crates/spectator-godot/Cargo.toml` to match your version.
+**GDExtension panics at init (`failed to load class method ... hash`)** — the `.so` was compiled against a different Godot API version. The current build uses `api-4-5` with `lazy-function-tables` for forward compatibility with 4.6+. The minimum supported version is Godot 4.5. If you need an older version, rebuild from source after changing `api-4-5` in `crates/spectator-godot/Cargo.toml` to match (e.g. `api-4-3`), but note some features may not work.
 
 **MCP server times out** — the game isn't running, or the addon didn't start (check Godot output for errors). The server retries the TCP connection every 2 seconds.
 

@@ -100,10 +100,11 @@ and stops cleanly.
 ## GDExtension Compatibility
 
 - `spectator-godot` targets `api-4-5` with `lazy-function-tables` enabled.
-- `lazy-function-tables` defers method hash validation to first call, allowing
-  the extension to load on Godot 4.2–4.6+ without panicking on method hash
+- `lazy-function-tables` defers method hash validation to first call, providing
+  forward compatibility with Godot 4.6+ without panicking on method hash
   changes in classes spectator never uses.
-- `compatibility_minimum = "4.2"` in `spectator.gdextension` remains accurate.
+- `compatibility_minimum = "4.5"` in `spectator.gdextension`. The `api-4-5`
+  feature flag requires Godot 4.5+ at runtime (API version ≤ runtime version).
 - To target a newer API, bump `api-4-5` to `api-4-6` (etc.) in
   `crates/spectator-godot/Cargo.toml` once godot-rust adds that feature flag.
 

@@ -16,7 +16,7 @@ The design docs describe the **complete system**. This roadmap describes **the o
 
 - [x] Cargo workspace with 4 crates (`spectator-server`, `spectator-godot`, `spectator-protocol`, `spectator-core`)
 - [x] `spectator-server` compiles as a binary, starts tokio runtime, prints "waiting for connection"
-- [x] `spectator-godot` compiles as cdylib, loads in Godot 4.2+ without errors
+- [x] `spectator-godot` compiles as cdylib, loads in Godot 4.5+ without errors
 - [x] GDExtension manifest (`.gdextension`) with at least Linux debug target
 - [x] GDScript `plugin.gd` (EditorPlugin) — enables/disables cleanly, registers autoload
 - [x] GDScript `runtime.gd` (autoload) — instantiates GDExtension `SpectatorTCPServer` node
@@ -36,7 +36,7 @@ Run Godot with the addon enabled → hit Play → `spectator-server` connects �
 
 ### Notes
 
-- GDExtension built with `api-4-5` + `lazy-function-tables` (godot-rust). Runs on Godot 4.2–4.6+ without recompiling. `lazy-function-tables` defers method hash validation to first call, so hash changes in unused Godot APIs don't panic at init.
+- GDExtension built with `api-4-5` + `lazy-function-tables` (godot-rust). Requires Godot 4.5+; `lazy-function-tables` provides forward compatibility with 4.6+. `lazy-function-tables` defers method hash validation to first call, so hash changes in unused Godot APIs don't panic at init.
 - `runtime.gd` uses `ClassDB.instantiate(&"ClassName")` instead of `ClassName.new()` and untyped vars for GDExtension types. Prevents GDScript parse errors if the extension fails to load.
 - `theatre-deploy` script (`~/.local/bin/theatre-deploy`) handles build + copy to installed Godot projects in one command.
 
