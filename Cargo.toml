@@ -7,6 +7,7 @@ members = [
     "crates/spectator-core",
     "crates/director",
     "crates/theatre-docs-gen",
+    "crates/theatre-cli",
     "tests/wire-tests",
     "tests/director-tests",
 ]
@@ -18,6 +19,7 @@ default-members = [
     "crates/spectator-protocol",
     "crates/spectator-core",
     "crates/director",
+    "crates/theatre-cli",
 ]
 
 [workspace.package]
