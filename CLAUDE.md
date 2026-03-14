@@ -173,7 +173,11 @@ When you complete a meaningful unit of work, post an update using the
 for normal progress, "blocked" if you hit an obstacle, or "error" for
 failures. Include relevant tags for categorization.
 
-When you complete a meaningful unit of work, post an update using the
-`post_update` MCP tool with the project ID above. Use status "in-progress"
-for normal progress, "blocked" if you hit an obstacle, or "error" for
-failures. Include relevant tags for categorization.
+## Releasing a New Version
+
+1. Update `version` in root `Cargo.toml` `[workspace.package]`
+2. Commit: `release: v0.X.Y`
+3. Tag: `git tag v0.X.Y`
+4. Push: `git push origin main v0.X.Y`
+5. CI builds all platforms → GitHub Release created automatically
+6. Verify release at https://github.com/nklisch/theatre/releases

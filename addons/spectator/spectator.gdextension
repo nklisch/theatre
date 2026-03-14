@@ -6,3 +6,9 @@ reloadable = true
 [libraries]
 linux.debug.x86_64 = "res://addons/spectator/bin/linux/libspectator_godot.so"
 linux.release.x86_64 = "res://addons/spectator/bin/linux/libspectator_godot.so"
+macos.debug.x86_64 = "res://addons/spectator/bin/macos/libspectator_godot.dylib"
+macos.release.x86_64 = "res://addons/spectator/bin/macos/libspectator_godot.dylib"
+macos.debug.arm64 = "res://addons/spectator/bin/macos/libspectator_godot.dylib"
+macos.release.arm64 = "res://addons/spectator/bin/macos/libspectator_godot.dylib"
+windows.debug.x86_64 = "res://addons/spectator/bin/windows/spectator_godot.dll"
+windows.release.x86_64 = "res://addons/spectator/bin/windows/spectator_godot.dll"
