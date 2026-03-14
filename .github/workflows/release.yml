@@ -23,11 +23,6 @@ jobs:
             platform: linux
             gdext: libspectator_godot.so
             archive: tar.gz
-          - target: x86_64-apple-darwin
-            runner: macos-latest
-            platform: macos
-            gdext: libspectator_godot.dylib
-            archive: tar.gz
           - target: aarch64-apple-darwin
             runner: macos-latest
             platform: macos
@@ -112,59 +107,10 @@ jobs:
           name: ${{ env.ARCHIVE_NAME }}
           path: ${{ env.ARCHIVE_NAME }}.${{ matrix.archive }}
 
-  # Merge macOS builds into a single universal tarball
-  macos-universal:
-    name: macOS Universal Binary
-    runs-on: macos-latest
-    needs: build
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Download macOS artifacts
-        uses: actions/download-artifact@v4
-        with:
-          pattern: theatre-*-*-apple-darwin
-          path: artifacts
-
-      - name: Create universal tarball
-        shell: bash
-        run: |
-          TAG="${GITHUB_REF#refs/tags/}"
-          UNIVERSAL="theatre-${TAG}-universal-apple-darwin"
-          mkdir -p "${UNIVERSAL}"
-
-          # Extract aarch64 as base (has all files)
-          AARCH64_TAR=$(ls artifacts/theatre-*-aarch64-apple-darwin/*.tar.gz)
-          tar xzf "${AARCH64_TAR}" --strip-components=1 -C "${UNIVERSAL}"
-
-          # Extract x86_64 dylib
-          X86_TAR=$(ls artifacts/theatre-*-x86_64-apple-darwin/*.tar.gz)
-          X86_DIR=$(mktemp -d)
-          tar xzf "${X86_TAR}" --strip-components=1 -C "${X86_DIR}"
-
-          # Create universal dylib with lipo
-          lipo -create \
-            "${UNIVERSAL}/share/theatre/addons/spectator/bin/macos/libspectator_godot.dylib" \
-            "${X86_DIR}/share/theatre/addons/spectator/bin/macos/libspectator_godot.dylib" \
-            -output "${UNIVERSAL}/share/theatre/addons/spectator/bin/macos/libspectator_godot_universal.dylib"
-          mv "${UNIVERSAL}/share/theatre/addons/spectator/bin/macos/libspectator_godot_universal.dylib" \
-            "${UNIVERSAL}/share/theatre/addons/spectator/bin/macos/libspectator_godot.dylib"
-
-          # Use aarch64 CLI binaries (native on Apple Silicon, Rosetta on Intel)
-
-          tar czf "${UNIVERSAL}.tar.gz" "${UNIVERSAL}"
-          echo "UNIVERSAL_ARCHIVE=${UNIVERSAL}.tar.gz" >> $GITHUB_ENV
-
-      - name: Upload universal artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.UNIVERSAL_ARCHIVE }}
-          path: ${{ env.UNIVERSAL_ARCHIVE }}
-
   release:
     name: Create Release
     runs-on: ubuntu-latest
-    needs: [build, macos-universal]
+    needs: build
     steps:
       - uses: actions/checkout@v5
 
@@ -174,15 +120,11 @@ jobs:
           path: artifacts
           merge-multiple: false
 
-      - name: Collect release assets (exclude per-arch macOS — only universal)
+      - name: Collect release assets
         shell: bash
         run: |
           mkdir release-assets
           find artifacts -name '*.tar.gz' -o -name '*.zip' | while read f; do
-            # Skip per-arch macOS tarballs (only ship universal)
-            if echo "$f" | grep -q 'apple-darwin' && ! echo "$f" | grep -q 'universal'; then
-              continue
-            fi
             cp "$f" release-assets/
           done
           ls -la release-assets/
