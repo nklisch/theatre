@@ -96,42 +96,20 @@ screenshots, no narration, no guessing from code.
 ### 1. Install Theatre
 
 ```bash
-# Clone and build
 git clone https://github.com/nklisch/theatre
 cd theatre
-cargo build --workspace --release
-
-# Deploy Spectator to your Godot project
-theatre-deploy --release ~/your-godot-project
+cargo run -p theatre-cli -- install
 ```
 
-### 2. Enable the addons
+### 2. Set up your Godot project
 
-In Godot: **Project → Project Settings → Plugins → Spectator → Enable**
-
-For Director, copy `addons/director/` into your project and enable similarly.
-
-### 3. Configure your AI agent
-
-Add to your project's `.mcp.json`:
-
-```json
-{
-  "mcpServers": {
-    "spectator": {
-      "type": "stdio",
-      "command": "/path/to/theatre/target/release/spectator-server"
-    },
-    "director": {
-      "type": "stdio",
-      "command": "/path/to/theatre/target/release/director",
-      "args": ["serve"]
-    }
-  }
-}
+```bash
+theatre init ~/your-godot-project
 ```
 
-### 4. Run your game and ask
+This copies addons, generates `.mcp.json`, and enables plugins — all interactively.
+
+### 3. Run your game and ask
 
 ```
 "Take a spatial snapshot of my scene"

@@ -21,101 +21,53 @@ or independently.
 
 ---
 
-## Quick Start — Spectator (Runtime Observation)
+## Quick Start
 
-Spectator gives AI agents spatial awareness of a running Godot game. A Rust
-MCP server connects to a GDExtension addon inside Godot via TCP, exposing the
-scene tree as MCP tools.
-
-```
-AI Agent (Claude, etc.)
-    ↕ MCP over stdio
-spectator-server  (Rust binary)
-    ↕ TCP :9077
-Godot Engine  (GDExtension addon)
-```
-
-### 1. Build the GDExtension
+### 1. Install Theatre
 
 ```bash
-cargo build -p spectator-godot
-./scripts/copy-gdext.sh          # copies .so into addons/spectator/bin/linux/
+git clone https://github.com/nklisch/theatre
+cd theatre
+cargo run -p theatre-cli -- install
 ```
 
-For a release build:
+This builds all binaries in release mode and installs them to `~/.local/bin/`
+and `~/.local/share/theatre/`. Make sure `~/.local/bin` is in your PATH.
+
+### 2. Set up a Godot project
 
 ```bash
-cargo build -p spectator-godot --release
-./scripts/copy-gdext.sh release
+theatre init ~/path/to/your-godot-project
 ```
 
-**If you have `theatre-deploy` installed** (see [Development](#development) below), you can build and deploy to a Godot project in one step:
+The interactive setup copies addons, generates `.mcp.json` for your AI agent,
+and enables plugins in `project.godot`. Use `--yes` to accept all defaults.
+
+### 3. Test it
+
+1. Open your Godot project in the editor
+2. Run the game (F5)
+3. In your AI agent, ask: `"Take a spatial snapshot"`
+
+The agent should return a JSON summary of the entities in your scene.
+
+---
+
+## CLI Commands
+
+| Command | Description |
+|---|---|
+| `theatre install` | Build and install to `~/.local/{bin,share}` |
+| `theatre init <project>` | Interactive project setup (addons, `.mcp.json`, plugins) |
+| `theatre deploy <project...>` | Rebuild and redeploy to project(s) |
+| `theatre enable <project>` | Enable/disable plugins in `project.godot` |
+
+### Rebuild after code changes
 
 ```bash
-theatre-deploy                        # debug → ~/godot/test-harness (default)
-theatre-deploy --release ~/my-game    # release → specific project
+theatre deploy ~/path/to/your-godot-project           # debug build
+theatre deploy --release ~/godot/game1 ~/godot/game2   # release, multiple projects
 ```
-
-### 2. Install the Spectator addon in your Godot project
-
-Copy the `addons/spectator/` directory into your Godot project's `addons/` folder:
-
-```bash
-cp -r addons/spectator /path/to/your-godot-project/addons/
-```
-
-Then in Godot: **Project → Project Settings → Plugins → Spectator → Enable**
-
-When the plugin is enabled it registers a `SpectatorRuntime` autoload that starts the TCP listener on port 9077. No scene changes are required.
-
-### 3. Build the Spectator MCP server
-
-```bash
-cargo build -p spectator-server --release
-```
-
-The binary is at `target/release/spectator-server`.
-
-### 4. Configure your MCP client for Spectator
-
-**Claude Code** — add to `.mcp.json` in your project root (or `~/.claude/mcp.json` for global):
-
-```json
-{
-  "mcpServers": {
-    "spectator": {
-      "type": "stdio",
-      "command": "/path/to/theatre/target/release/spectator-server"
-    }
-  }
-}
-```
-
-**Claude Desktop** — add to `claude_desktop_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "spectator": {
-      "command": "/path/to/theatre/target/release/spectator-server",
-      "args": []
-    }
-  }
-}
-```
-
-Use `THEATRE_PORT=9078` in the env block if you need a non-default port (and set the same in Godot's Project Settings under `theatre/spectator/connection/port`).
-
-### Testing Spectator
-
-1. Open your Godot project and run the scene (Play button or F5)
-2. You should see in Godot's output: `[SpectatorTCPServer] Listening on 127.0.0.1:9077`
-3. Start a Claude Code session in your project directory
-4. Ask: `call spatial_snapshot with detail summary`
-
-Expected response: a JSON summary of the entities currently in the scene.
-
-If the game isn't running, the tool returns: `Not connected to Godot addon. Is the game running?`
 
 ---
 
@@ -127,11 +79,64 @@ See [`docs/director-spec.md`](docs/director-spec.md) for full documentation.
 
 ---
 
+## Manual Setup (without CLI)
+
+If you prefer not to use the `theatre` CLI:
+
+### Build
+
+```bash
+cargo build --workspace --release
+```
+
+### Deploy Spectator
+
+```bash
+# Copy addon files
+cp -r addons/spectator ~/your-project/addons/
+
+# Copy GDExtension binary
+mkdir -p ~/your-project/addons/spectator/bin/linux/
+cp target/release/libspectator_godot.so ~/your-project/addons/spectator/bin/linux/
+```
+
+### Deploy Director
+
+```bash
+cp -r addons/director ~/your-project/addons/
+```
+
+Then enable both plugins in Godot: **Project → Project Settings → Plugins**.
+
+### Configure MCP
+
+Create `.mcp.json` in your project root:
+
+```json
+{
+  "mcpServers": {
+    "spectator": {
+      "type": "stdio",
+      "command": "/absolute/path/to/spectator-server"
+    },
+    "director": {
+      "type": "stdio",
+      "command": "/absolute/path/to/director",
+      "args": ["serve"]
+    }
+  }
+}
+```
+
+Use absolute paths — `~` and relative paths are not expanded by most MCP launchers.
+
+---
+
 ## Troubleshooting
 
 **`[Spectator] GDExtension not loaded — SpectatorTCPServer class not found`** — the `.so` wasn't copied, is for the wrong platform, or was built against an incompatible Godot version. Rebuild and redeploy:
 ```bash
-cargo build -p spectator-godot && ./scripts/copy-gdext.sh
+theatre deploy ~/your-project
 ```
 Then verify with `godot --headless --quit --path /your/project 2>&1` — expect `TCP server listening` with no `SCRIPT ERROR` or `[panic]` lines.
 
@@ -152,13 +157,10 @@ cargo clippy --workspace      # lint
 ./scripts/copy-gdext.sh       # copy .so into addons/ within this repo
 ```
 
-### theatre-deploy (recommended for active development)
-
-`theatre-deploy` is a shell script that builds and copies the `.so` to one or more installed Godot projects in one command. Install it by symlinking `~/.local/bin/theatre-deploy` → `scripts/theatre-deploy`.
+### Releasing
 
 ```bash
-theatre-deploy                              # debug → default test project
-theatre-deploy --release                   # release build
-theatre-deploy ~/godot/a ~/godot/b         # deploy to multiple projects
-theatre-deploy --release ~/godot/my-game   # release → specific project
+./scripts/release.sh patch    # bumps version, commits, tags, pushes
 ```
+
+The GitHub Actions workflow builds cross-platform binaries (Linux, macOS, Windows) and creates a release at [github.com/nklisch/theatre/releases](https://github.com/nklisch/theatre/releases).

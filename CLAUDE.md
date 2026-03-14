@@ -17,11 +17,13 @@ crates/
   spectator-protocol/   — Shared TCP wire format types
   spectator-core/       — Shared spatial logic (no Godot, no MCP)
   director/             — Director MCP binary
+  theatre-cli/          — CLI binary: install, init, deploy, enable (clap + dialoguer)
 addons/spectator/       — Spectator Godot addon (GDScript + GDExtension manifest)
 addons/director/        — Director Godot addon (GDScript)
 docs/                   — Design documents & audit report
 docs/design/            — Active (in-progress) designs
 docs/design/completed/  — Archived completed designs (see warning below)
+scripts/                — Release and install helper scripts
 tests/
   wire-tests/           — Spectator E2E tests
   director-tests/       — Director E2E tests
@@ -37,11 +39,12 @@ cargo build --workspace
 cargo build -p spectator-server
 cargo build -p spectator-godot
 cargo build -p director
+cargo build -p theatre-cli
 
 # Run ALL tests — unit + integration + scenarios + E2E journeys
 # No feature flags — all tests run unconditionally
 # E2E tests require deploying GDExtension first:
-theatre-deploy ~/dev/spectator/tests/godot-project
+theatre deploy ~/dev/spectator/tests/godot-project
 cargo test --workspace
 # IMPORTANT: All test layers must pass. Never skip E2E journey tests.
 
@@ -54,28 +57,36 @@ cargo fmt --check
 ./scripts/copy-gdext.sh release  # release
 ```
 
-## Deploying to a Godot Project
+## Theatre CLI
 
-Use the `theatre-deploy` shell script (`scripts/theatre-deploy`, symlink to `~/.local/bin/theatre-deploy`) to
-build and copy the `.so` into one or more Godot projects in one step:
+The `theatre` CLI (`crates/theatre-cli`) unifies installation, project setup,
+and deployment. Binary name is `theatre`; crate name is `theatre-cli`.
 
 ```bash
-# Debug build → default target (~/godot/test-harness)
-theatre-deploy
-
-# Release build → default target
-theatre-deploy --release
-
-# Debug build → specific project
-theatre-deploy ~/godot/my-game
-
-# Release build → multiple projects
-theatre-deploy --release ~/godot/test-harness ~/godot/my-game
+theatre install                  # build release + copy to ~/.local/{bin,share}
+theatre init ~/godot/my-game     # interactive project setup (addons, .mcp.json, plugins)
+theatre deploy ~/godot/my-game   # rebuild + redeploy to project(s)
+theatre enable ~/godot/my-game   # non-interactive plugin enable/disable
 ```
 
-The script runs `cargo build -p spectator-godot` then copies
-`target/<mode>/libspectator_godot.so` to
-`<project>/addons/spectator/bin/linux/libspectator_godot.so`.
+- `install` builds from source and populates `~/.local/bin/` (binaries) and
+  `~/.local/share/theatre/` (addon templates + GDExtension).
+- `init` reads from the installed share dir (not the repo). Copies addons,
+  generates `.mcp.json`, enables plugins. Interactive by default, `--yes` for
+  non-interactive.
+- `deploy` rebuilds from source, updates the share dir, then copies to
+  target project(s). Accepts `--release`.
+- `enable` toggles plugins in `project.godot` without copying files.
+
+Dependencies: `clap` + `dialoguer` + `console` + `serde_json` + `anyhow`.
+No tokio, no rmcp, no Godot deps.
+
+See `docs/design/theatre-cli.md` for the full design.
+
+### Legacy: theatre-deploy shell script
+
+The old `theatre-deploy` shell script (`scripts/theatre-deploy`) still works
+but is superseded by `theatre deploy`. Use `theatre deploy` for new workflows.
 
 ### Verifying the deployed build
 
@@ -175,6 +186,21 @@ failures. Include relevant tags for categorization.
 
 ## Releasing a New Version
 
+Use the release script to automate version bumping, tagging, and pushing:
+
+```bash
+./scripts/release.sh patch    # 0.1.0 → 0.1.1
+./scripts/release.sh minor    # 0.1.0 → 0.2.0
+./scripts/release.sh major    # 0.1.0 → 1.0.0
+./scripts/release.sh 2.0.0    # explicit version
+```
+
+The script updates `version` in root `Cargo.toml`, commits, tags, and pushes.
+The `release.yml` GitHub Actions workflow then builds cross-platform binaries
+(Linux x86_64, macOS arm64, Windows x86_64) and creates a GitHub Release with
+tarballs containing binaries + addons + install script.
+
+Manual steps (equivalent to what the script does):
 1. Update `version` in root `Cargo.toml` `[workspace.package]`
 2. Commit: `release: v0.X.Y`
 3. Tag: `git tag v0.X.Y`

@@ -105,6 +105,24 @@ The director crate implements the Director MCP tools. It communicates with the G
 
 Each backend implements the same `Backend` trait, so tool handlers are backend-agnostic.
 
+## `theatre-cli`
+
+**Type**: Binary (`bin`, produces `theatre` executable)
+**Purpose**: Unified CLI for installation, project setup, and deployment
+
+The CLI replaces manual build-copy-configure workflows with four commands: `install`, `init`, `deploy`, `enable`. It has no runtime dependencies on Godot or MCP — just filesystem operations and cargo invocations.
+
+**Key commands**:
+- `theatre install` — builds all crates in release mode, copies binaries to `~/.local/bin/` and addon templates to `~/.local/share/theatre/`
+- `theatre init <project>` — interactive project setup: copies addons, generates `.mcp.json`, enables plugins
+- `theatre deploy <project...>` — rebuilds from source and updates target projects
+- `theatre enable <project>` — toggles plugins in `project.godot`
+
+**Dependency rules**:
+- Depends on: `clap`, `dialoguer`, `console`, `serde_json`, `anyhow`
+- No dependency on any spectator, director, rmcp, tokio, or gdext crate
+- All operations are synchronous (`std::process::Command` for cargo builds)
+
 ## Workspace layout
 
 ```toml
@@ -116,6 +134,7 @@ members = [
     "crates/spectator-godot",
     "crates/spectator-server",
     "crates/director",
+    "crates/theatre-cli",
 ]
 
 [workspace.dependencies]
@@ -138,6 +157,8 @@ spectator-protocol ──────────────── spectator-se
 spectator-core   ──────────────────────────┘
 
 director ─── (no spectator deps)
+
+theatre-cli ─── (no spectator/director/MCP deps, only clap + filesystem)
 ```
 
 The diamond dependency (both `spectator-godot` and `spectator-server` depend on `spectator-protocol`) is intentional — they both need the same wire format types.

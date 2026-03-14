@@ -6,7 +6,7 @@ How to build, test, and submit changes to Theatre.
 
 ### Prerequisites
 
-- Rust 1.75+ (`rustup update stable`)
+- Rust 1.80+ (`rustup update stable`)
 - Godot 4.2+ on your PATH (for E2E tests)
 - `cargo` (comes with Rust)
 - Linux, macOS, or Windows (Linux is the primary development platform)
@@ -29,13 +29,7 @@ cargo build --workspace --release
 The E2E tests require a Godot project with the Spectator GDExtension deployed. Deploy to the test project:
 
 ```bash
-theatre-deploy ~/dev/theatre/tests/godot-project
-```
-
-Or using the script directly:
-
-```bash
-./scripts/theatre-deploy ~/dev/theatre/tests/godot-project
+theatre deploy ~/dev/theatre/tests/godot-project
 ```
 
 This builds `spectator-godot` and copies the `.so` to the test project's addon directory.
@@ -173,7 +167,7 @@ test: add E2E scenario for navmesh disconnection
 After changing `spectator-godot`:
 
 ```bash
-theatre-deploy ~/dev/theatre/tests/godot-project
+theatre deploy ~/dev/theatre/tests/godot-project
 # Then verify it loads:
 godot --headless --quit --path ~/dev/theatre/tests/godot-project 2>&1
 ```

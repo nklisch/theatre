@@ -6,14 +6,14 @@ This guide covers everything you need to install Theatre and connect it to your 
 
 ### Rust toolchain
 
-Theatre is built in Rust. You need a recent stable toolchain (1.75 or later).
+Theatre is built in Rust. You need a recent stable toolchain (1.80 or later).
 
 ```bash
 # Install rustup if you don't have it
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 # Verify
-rustc --version   # should print 1.75.0 or later
+rustc --version   # should print 1.80.0 or later
 cargo --version
 ```
 
@@ -36,51 +36,56 @@ Theatre exposes tools via [Model Context Protocol](https://modelcontextprotocol.
 - **Windsurf** — MCP support via settings
 - Any agent that supports stdio MCP servers
 
-## Build from source
+## Install from source (recommended)
+
+The `theatre` CLI handles the entire build and install process:
 
 ```bash
 # Clone the repository
 git clone https://github.com/nklisch/theatre
 cd theatre
 
-# Build everything (debug)
-cargo build --workspace
-
-# Build release binaries (recommended for normal use)
-cargo build --workspace --release
+# Build and install everything
+cargo run -p theatre-cli -- install
 ```
 
-Build output:
-- `target/release/spectator-server` — Spectator MCP server binary
-- `target/release/director` — Director MCP server binary
-- `target/release/libspectator_godot.so` — Spectator GDExtension (Linux)
-- `target/release/libspectator_godot.dylib` — Spectator GDExtension (macOS)
-- `target/release/spectator_godot.dll` — Spectator GDExtension (Windows)
+This builds all crates in release mode and installs to:
+- `~/.local/bin/` — `theatre`, `spectator-server`, `director` binaries
+- `~/.local/share/theatre/` — addon templates and GDExtension binary
+
+Override install locations with `--bin-dir` and `--share-dir` flags.
+
+If `~/.local/bin` is not in your PATH, the installer will print a warning with the export command to add.
 
 ### Platform notes
 
 On **Linux**, the build works out of the box. On **macOS**, you may need the Xcode command-line tools (`xcode-select --install`). On **Windows**, use the MSVC toolchain (`rustup default stable-x86_64-pc-windows-msvc`).
 
-## Deploy Spectator to your Godot project
+## Set up a Godot project
 
-The `theatre-deploy` script builds and copies the GDExtension binary into your project in one step:
+After installing, use `theatre init` to set up a Godot project interactively:
 
 ```bash
-# Make the script executable and add to PATH
-chmod +x scripts/theatre-deploy
-ln -s "$(pwd)/scripts/theatre-deploy" ~/.local/bin/theatre-deploy
-
-# Deploy to your project (release build)
-theatre-deploy --release ~/path/to/your-godot-project
-
-# Deploy to multiple projects at once
-theatre-deploy --release ~/godot/game1 ~/godot/game2
+theatre init ~/path/to/your-godot-project
 ```
 
-The script:
-1. Runs `cargo build -p spectator-godot --release`
-2. Copies `libspectator_godot.so` (or `.dylib`/`.dll`) to `<project>/addons/spectator/bin/<platform>/`
-3. Prints a success confirmation
+This walks you through:
+1. **Addon selection** — choose Spectator, Director, or both
+2. **MCP configuration** — generates `.mcp.json` with correct binary paths
+3. **Plugin enabling** — updates `project.godot` to enable plugins and autoloads
+
+For non-interactive setup (CI, scripting), use `--yes` to accept all defaults:
+
+```bash
+theatre init ~/path/to/your-godot-project --yes
+```
+
+### What `theatre init` does
+
+- Copies addon files from `~/.local/share/theatre/addons/` to your project's `addons/` directory
+- Copies the GDExtension binary (`.so`/`.dylib`/`.dll`) for Spectator
+- Generates `.mcp.json` with absolute paths to installed MCP server binaries
+- Enables plugins in `project.godot` and adds the SpectatorRuntime autoload
 
 ### Verify the deployment
 
@@ -92,88 +97,88 @@ godot --headless --quit --path ~/path/to/your-godot-project 2>&1
 
 Expected output should **not** contain `SCRIPT ERROR`, `[panic]`, or `ERROR`. You should see the Spectator TCP server start and stop cleanly.
 
-## Install the addons
+## Rebuild and redeploy
 
-### Spectator addon
+After making code changes, use `theatre deploy` to rebuild and update projects:
 
-The Spectator GDScript addon (in `addons/spectator/`) needs to be copied to your project:
+```bash
+# Debug build → single project
+theatre deploy ~/path/to/your-godot-project
+
+# Release build → multiple projects
+theatre deploy --release ~/godot/game1 ~/godot/game2
+```
+
+Deploy rebuilds the GDExtension and MCP servers, updates the share dir, and copies fresh files to all target projects.
+
+## Enable/disable plugins
+
+Toggle plugins without recopying addon files:
+
+```bash
+theatre enable ~/path/to/your-godot-project              # enable both
+theatre enable ~/path/to/your-godot-project --spectator   # spectator only
+theatre enable ~/path/to/your-godot-project --disable     # disable both
+```
+
+## Manual setup (alternative)
+
+If you prefer not to use the CLI, you can set things up manually.
+
+### Build from source
+
+```bash
+git clone https://github.com/nklisch/theatre
+cd theatre
+cargo build --workspace --release
+```
+
+Build output:
+- `target/release/spectator-server` — Spectator MCP server binary
+- `target/release/director` — Director MCP server binary
+- `target/release/libspectator_godot.so` — Spectator GDExtension (Linux)
+- `target/release/libspectator_godot.dylib` — Spectator GDExtension (macOS)
+- `target/release/spectator_godot.dll` — Spectator GDExtension (Windows)
+
+### Copy addons
 
 ```bash
 cp -r addons/spectator ~/path/to/your-godot-project/addons/
-```
-
-Then in Godot:
-1. Open **Project → Project Settings**
-2. Go to the **Plugins** tab
-3. Find **Spectator** and click **Enable**
-
-The editor dock will appear on the right side. If the GDExtension loaded successfully, you'll see "Spectator: Ready" in the dock. If the extension failed to load, you'll see "Spectator: Extension not found" — go back and verify the `.so` was copied correctly.
-
-### Director addon
-
-```bash
 cp -r addons/director ~/path/to/your-godot-project/addons/
 ```
 
-Then in Godot:
-1. Open **Project → Project Settings → Plugins**
-2. Find **Director** and click **Enable**
+Copy the GDExtension binary to the correct platform subdirectory:
 
-Director does not require a GDExtension — it is pure GDScript. It starts a TCP listener on ports 6550 (editor plugin mode) and 6551 (daemon mode) when enabled.
+```bash
+mkdir -p ~/path/to/your-godot-project/addons/spectator/bin/linux/
+cp target/release/libspectator_godot.so ~/path/to/your-godot-project/addons/spectator/bin/linux/
+```
 
-## Configure your AI agent
+Then in Godot: **Project → Project Settings → Plugins** → enable Spectator and Director.
 
-Add Theatre to your project's MCP configuration. Most agents use `.mcp.json` or `mcp.json` in the project root or home directory.
+### Configure MCP
 
-### Claude Code
-
-Create or edit `.mcp.json` in your project root:
+Create `.mcp.json` in your project root:
 
 ```json
 {
   "mcpServers": {
     "spectator": {
       "type": "stdio",
-      "command": "/path/to/theatre/target/release/spectator-server"
+      "command": "/home/yourname/.local/bin/spectator-server"
     },
     "director": {
       "type": "stdio",
-      "command": "/path/to/theatre/target/release/director",
+      "command": "/home/yourname/.local/bin/director",
       "args": ["serve"]
     }
   }
 }
 ```
 
-### Cursor
+The `command` field must be an absolute path. Do not use `~` or relative paths — they are not expanded by most MCP launchers.
 
-Add to your Cursor settings (`~/.cursor/mcp.json` or via the UI):
-
-```json
-{
-  "mcpServers": {
-    "spectator": {
-      "command": "/path/to/theatre/target/release/spectator-server",
-      "transport": "stdio"
-    },
-    "director": {
-      "command": "/path/to/theatre/target/release/director",
-      "args": ["serve"],
-      "transport": "stdio"
-    }
-  }
-}
-```
-
-### Using absolute paths
-
-The `command` field must be an absolute path. If you build Theatre in `~/dev/theatre`, use:
-
-```
-/home/yourname/dev/theatre/target/release/spectator-server
-```
-
-Do not use `~` or relative paths — they are not expanded by most MCP launchers.
+Use `THEATRE_PORT=9078` in an `env` block if you need a non-default port.
 
 ## Verify the full setup
 
@@ -191,7 +196,7 @@ The agent should call `spatial_snapshot` and return a JSON summary of your scene
 
 ### "Extension not found" in the dock
 
-The GDExtension binary wasn't found or is for the wrong platform. Re-run `theatre-deploy` and check the `addons/spectator/bin/` directory contains the `.so`/`.dylib`/`.dll`.
+The GDExtension binary wasn't found or is for the wrong platform. Re-run `theatre deploy` and check the `addons/spectator/bin/` directory contains the `.so`/`.dylib`/`.dll`.
 
 ### Connection refused / timeout
 

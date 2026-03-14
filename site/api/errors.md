@@ -29,7 +29,7 @@ The text content is a JSON object with at minimum an `"error"` field, and often 
 | `Game not running` | Port 9077 is not reachable | Start the game (F5) and ensure the Spectator addon is enabled |
 | `Connection refused` | Nothing listening on 9077 | Game is not running, or addon failed to load |
 | `Connection timed out` | Game is running but not responding | Check for script errors in the Godot output panel |
-| `Handshake version mismatch` | Addon and server version mismatch | Rebuild and redeploy with `theatre-deploy` |
+| `Handshake version mismatch` | Addon and server version mismatch | Rebuild and redeploy with `theatre deploy` |
 
 ### Node errors
 
