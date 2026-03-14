@@ -373,7 +373,7 @@ fn toml_to_session_config(toml: &StageToml) -> SessionConfig {
 **Dependencies:** Add `toml = "0.8"` to `crates/stage-server/Cargo.toml`.
 
 **Implementation Notes:**
-- The server finds the project directory via `SPECTATOR_PROJECT_DIR` env var (set by the MCP client in the `.mcp.json` config), or falls back to the current working directory.
+- The server finds the project directory via `THEATRE_PROJECT_DIR` env var (set by the MCP client in the `.mcp.json` config), or falls back to the current working directory.
 - Port from `stage.toml` is loaded separately and used to override the default/env port before connecting.
 - Recording and display configs are parsed but not consumed by the server — they're forwarded to the addon if connected. For M5 scope, we only use `tracking` fields.
 
@@ -417,7 +417,7 @@ Load TOML config on startup and seed SessionState:
 
 ```rust
 // In main(), after parsing port:
-let project_dir = std::env::var("SPECTATOR_PROJECT_DIR")
+let project_dir = std::env::var("THEATRE_PROJECT_DIR")
     .map(std::path::PathBuf::from)
     .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
 

@@ -90,16 +90,13 @@ pub async fn run(tool: &str, json_arg: Option<&str>) -> Result<()> {
         .try_init();
 
     // 4. Resolve port from env or default
-    let port: u16 = match std::env::var("THEATRE_PORT") {
-        Ok(v) => v.parse().unwrap_or(DEFAULT_PORT),
-        Err(_) => match std::env::var("SPECTATOR_PORT") {
-            Ok(v) => v.parse().unwrap_or(DEFAULT_PORT),
-            Err(_) => DEFAULT_PORT,
-        },
-    };
+    let port: u16 = std::env::var("THEATRE_PORT")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(DEFAULT_PORT);
 
     // 5. Load TOML config if available
-    let project_dir = std::env::var("SPECTATOR_PROJECT_DIR")
+    let project_dir = std::env::var("THEATRE_PROJECT_DIR")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
 

@@ -7,9 +7,7 @@ project to the Theatre umbrella release.
 
 ### Environment Variable
 
-- `SPECTATOR_PORT` → `THEATRE_PORT`
-- The old variable still works but logs a deprecation warning:
-  `SPECTATOR_PORT is deprecated, use THEATRE_PORT instead`
+- `SPECTATOR_PORT` has been removed. Use `THEATRE_PORT` instead.
 
 Update your `.mcp.json`:
 ```json
@@ -44,8 +42,7 @@ Or delete the old keys and re-enable the plugin — defaults apply automatically
 
 ### MCP Configuration
 
-The `stage` MCP server name is **unchanged**. Only the env var changes:
-- `SPECTATOR_PORT` → `THEATRE_PORT`
+The `stage` MCP server name is **unchanged**. Use `THEATRE_PORT` for the port env var.
 
 ### Deploy Script
 

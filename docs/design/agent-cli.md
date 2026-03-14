@@ -240,7 +240,7 @@ pub async fn run(tool: &str, json_arg: Option<&str>) -> Result<()> {
     let port = resolve_port();
 
     // Initialize minimal state
-    let project_dir = std::env::var("SPECTATOR_PROJECT_DIR")
+    let project_dir = std::env::var("THEATRE_PROJECT_DIR")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| std::env::current_dir().unwrap_or_default());
     let base_config = config::load_toml_config(&project_dir);
@@ -309,7 +309,7 @@ fn parse_params(json_arg: Option<&str>) -> Result<Value> {
 /// Resolve TCP port from environment.
 fn resolve_port() -> u16 {
     std::env::var("THEATRE_PORT")
-        .or_else(|_| std::env::var("SPECTATOR_PORT"))
+        .or_else(|_| std::env::var("THEATRE_PORT"))
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(9077)
@@ -1029,7 +1029,7 @@ mod tests {
     fn test_resolve_port_default() {
         // Clear env vars
         std::env::remove_var("THEATRE_PORT");
-        std::env::remove_var("SPECTATOR_PORT");
+        std::env::remove_var("THEATRE_PORT");
         assert_eq!(resolve_port(), 9077);
     }
 

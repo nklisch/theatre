@@ -53,10 +53,6 @@ func _ready() -> void:
 
 	var port: int = 0
 	var env_port := OS.get_environment("THEATRE_PORT")
-	if env_port.is_empty():
-		env_port = OS.get_environment("SPECTATOR_PORT")
-		if not env_port.is_empty():
-			push_warning("[Stage] SPECTATOR_PORT is deprecated, use THEATRE_PORT instead")
 	if not env_port.is_empty():
 		port = env_port.to_int()
 	if port == 0:
