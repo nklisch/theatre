@@ -4,7 +4,7 @@ const params = data.params['spatial_config'] ?? []
 
 const messages0 = [
   { role: 'human', text: `The scene has 300 nodes and snapshots are huge. I only care about physics bodies and enemies.` },
-  { role: 'agent', text: `Configuration updated. Spectator will now only track CharacterBody3D, RigidBody3D, Area3D, and Enemy nodes. Your snapshots should be much smaller now. Take a new snapshot to confirm.` },
+  { role: 'agent', text: `Configuration updated. Stage will now only track CharacterBody3D, RigidBody3D, Area3D, and Enemy nodes. Your snapshots should be much smaller now. Take a new snapshot to confirm.` },
   { role: 'human', text: `This is a slow turn-based game. I do not need 60Hz collection.` },
   { role: 'agent', text: `Collection rate reduced to 10 ticks per second. Memory usage and CPU overhead are reduced. Note: the ring buffer now covers 60 seconds of history at this rate (same 600-frame buffer).` },
 ]
@@ -12,9 +12,9 @@ const messages0 = [
 
 # spatial_config
 
-Configure Spectator's collection behavior.
+Configure Stage's collection behavior.
 
-`spatial_config` adjusts what Spectator tracks and how it tracks it. Changes take effect immediately and persist for the duration of the server session. They are not saved between sessions.
+`spatial_config` adjusts what Stage tracks and how it tracks it. Changes take effect immediately and persist for the duration of the server session. They are not saved between sessions.
 
 ## When to use it
 
@@ -31,7 +31,7 @@ For most use cases, the defaults work well. You only need `spatial_config` when 
 
 ### Default tracked types
 
-By default, Spectator tracks these Godot classes and all their subclasses:
+By default, Stage tracks these Godot classes and all their subclasses:
 
 - `CharacterBody3D`
 - `RigidBody3D`
@@ -49,7 +49,7 @@ UI nodes (`Control`, `CanvasLayer`, `Label`, etc.) are excluded by default. To t
 
 ### `tick_rate`
 
-The tick rate determines how many frames per second Spectator collects. The default of 60 matches Godot's default physics rate. Reducing the tick rate reduces CPU overhead and memory usage:
+The tick rate determines how many frames per second Stage collects. The default of 60 matches Godot's default physics rate. Reducing the tick rate reduces CPU overhead and memory usage:
 
 - `60` (default): Full fidelity, best for fast physics (projectiles, vehicles)
 - `30`: Half fidelity, good for slower games (RPG, strategy)

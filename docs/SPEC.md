@@ -1,12 +1,12 @@
-# Spectator — Technical Specification
+# Stage — Technical Specification
 
 ## System Overview
 
-Spectator is a two-component system: a **Rust MCP server** (spectator-server) and a **Rust GDExtension + GDScript addon** (spectator-godot) running inside Godot. They communicate over TCP using a length-prefixed JSON protocol. The MCP server exposes 9 tools to AI agents via the Model Context Protocol. The addon observes the running game's scene tree and responds to queries.
+Stage is a two-component system: a **Rust MCP server** (stage-server) and a **Rust GDExtension + GDScript addon** (stage-godot) running inside Godot. They communicate over TCP using a length-prefixed JSON protocol. The MCP server exposes 9 tools to AI agents via the Model Context Protocol. The addon observes the running game's scene tree and responds to queries.
 
 ```
 ┌──────────────┐   stdio (MCP)   ┌──────────────────┐   TCP (:9077)   ┌──────────────────┐
-│  AI Agent    │ ◄─────────────► │ spectator-server  │ ──────────────► │  Godot Engine    │
+│  AI Agent    │ ◄─────────────► │ stage-server  │ ──────────────► │  Godot Engine    │
 │  (any MCP    │                 │                    │                 │                  │
 │   client)    │                 │  Semantic Layer:   │                 │  GDExtension:    │
 │              │                 │  - Spatial Index   │                 │  - Collector     │
@@ -32,16 +32,16 @@ Spectator is a two-component system: a **Rust MCP server** (spectator-server) an
 | Input handling (F8/F9/F10) | GDScript autoload | _shortcut_input, thin glue |
 | Editor dock UI | GDScript + .tscn | Required — GDExtension can't be EditorPlugin base |
 | Autoload registration | GDScript EditorPlugin | _enable_plugin / _disable_plugin lifecycle |
-| Spatial indexing (R-tree/grid) | spectator-server | Computational, no Godot API needed |
-| Bearing calculation | spectator-server | Pure math on coordinates |
-| Delta computation | spectator-server | Diffing snapshots, tracking state |
-| Clustering (summary view) | spectator-server | Algorithmic grouping of nodes |
-| Token budget enforcement | spectator-server | Response shaping before MCP output |
-| Pagination / cursor management | spectator-server | Stateful, tied to MCP session |
-| Watch condition evaluation | spectator-server | Pattern matching on incoming data |
-| Recording analysis (query_range, diff) | spectator-server | Temporal queries over SQLite |
-| MCP tool routing | spectator-server | MCP SDK integration |
-| Configuration management | spectator-server + addon | Server owns session config, addon owns defaults |
+| Spatial indexing (R-tree/grid) | stage-server | Computational, no Godot API needed |
+| Bearing calculation | stage-server | Pure math on coordinates |
+| Delta computation | stage-server | Diffing snapshots, tracking state |
+| Clustering (summary view) | stage-server | Algorithmic grouping of nodes |
+| Token budget enforcement | stage-server | Response shaping before MCP output |
+| Pagination / cursor management | stage-server | Stateful, tied to MCP session |
+| Watch condition evaluation | stage-server | Pattern matching on incoming data |
+| Recording analysis (query_range, diff) | stage-server | Temporal queries over SQLite |
+| MCP tool routing | stage-server | MCP SDK integration |
+| Configuration management | stage-server + addon | Server owns session config, addon owns defaults |
 
 **Design principle:** The addon is deliberately **thin and dumb**. It answers "what does the engine say right now?" The server is **thick and smart** — it computes spatial relationships, manages state, shapes responses, and handles all MCP concerns. This keeps the GDExtension simple and pushes complexity into pure Rust where it's easier to test.
 
@@ -72,7 +72,7 @@ Immediately after TCP connection, the addon sends a handshake message (unsolicit
 ```jsonc
 {
   "type": "handshake",
-  "spectator_version": "0.1.0",
+  "stage_version": "0.1.0",
   "protocol_version": 1,
   "godot_version": "4.3",
   "scene_dimensions": 3,           // 2, 3, or "mixed"
@@ -86,7 +86,7 @@ The server responds with an ACK:
 ```jsonc
 {
   "type": "handshake_ack",
-  "spectator_version": "0.1.0",
+  "stage_version": "0.1.0",
   "protocol_version": 1,
   "session_id": "sess_a1b2c3"
 }
@@ -201,10 +201,10 @@ The server queries the addon using a flat method namespace. The addon is respons
 
 ```
 1. Godot game starts → addon autoload initializes
-   → GDExtension SpectatorTCPServer.start(port) called
+   → GDExtension StageTCPServer.start(port) called
    → TCP server listens on 127.0.0.1:9077
 
-2. AI client spawns spectator-server → MCP server starts
+2. AI client spawns stage-server → MCP server starts
    → Connects to 127.0.0.1:9077
    → Receives handshake from addon
    → Sends handshake ACK
@@ -248,7 +248,7 @@ The server maintains an R-tree spatial index built from entity positions receive
 
 The index is rebuilt on every snapshot response (the server already has all positions). For delta responses, the index is updated incrementally (moved nodes re-inserted).
 
-**Performance:** rstar handles 10,000 entities with sub-millisecond query times. Spectator scenes rarely exceed 500 dynamic entities.
+**Performance:** rstar handles 10,000 entities with sub-millisecond query times. Stage scenes rarely exceed 500 dynamic entities.
 
 ### 2D: Grid Hash
 
@@ -434,11 +434,11 @@ The `summary` field is generated by examining common state properties across clu
 
 ## Clip Capture System
 
-Clips are saved automatically by the dashcam ring buffer when an interesting moment is marked. Markers can come from four sources: the agent calls `clips(action: "add_marker")`, the human presses F9 in-game, game scripts call `SpectatorRuntime.marker("label")`, or the system detects anomalies. The dashcam saves a clip containing the pre- and post-window around that moment. The agent then analyzes saved clips with `snapshot_at`, `query_range`, `diff_frames`, `find_event`.
+Clips are saved automatically by the dashcam ring buffer when an interesting moment is marked. Markers can come from four sources: the agent calls `clips(action: "add_marker")`, the human presses F9 in-game, game scripts call `StageRuntime.marker("label")`, or the system detects anomalies. The dashcam saves a clip containing the pre- and post-window around that moment. The agent then analyzes saved clips with `snapshot_at`, `query_range`, `diff_frames`, `find_event`.
 
 ### Storage: SQLite
 
-Clips are stored as SQLite databases. Each clip is a single `.sqlite` file in `user://spectator_recordings/`. The MCP server manages the SQLite connection (reads for analysis queries). The addon writes frame data directly during dashcam capture.
+Clips are stored as SQLite databases. Each clip is a single `.sqlite` file in `user://stage_recordings/`. The MCP server manages the SQLite connection (reads for analysis queries). The addon writes frame data directly during dashcam capture.
 
 ### Schema
 
@@ -498,7 +498,7 @@ Frame snapshot data is stored as MessagePack (not JSON) for compactness. A typic
 
 During dashcam capture:
 1. Addon captures frame data every N physics ticks (configurable, default 1) into a ring buffer
-2. On trigger (marker, F9, agent `save`, or `SpectatorRuntime.marker()` from game code), the pre- and post-window frames are written to a new SQLite file
+2. On trigger (marker, F9, agent `save`, or `StageRuntime.marker()` from game code), the pre- and post-window frames are written to a new SQLite file
 3. Frame data is serialized to MessagePack in the GDExtension
 4. Writes use WAL mode (non-blocking reads during writes)
 5. Markers are inserted at trigger time
@@ -591,7 +591,7 @@ The MCP tool interfaces, parameter names, and response structure keys are identi
 | Dashcam SQLite write (clip save) | < 5ms | WAL mode, batch write on trigger |
 | Token budget estimation | < 0.1ms | Simple arithmetic |
 
-At 60fps, the physics tick budget is ~16ms. Spectator's per-frame overhead should stay under 3ms (collection + dashcam + TCP poll), leaving 13ms+ for the actual game.
+At 60fps, the physics tick budget is ~16ms. Stage's per-frame overhead should stay under 3ms (collection + dashcam + TCP poll), leaving 13ms+ for the actual game.
 
 ---
 
@@ -612,7 +612,7 @@ For local development debugging, no auth is needed. The attack surface is: a loc
 - `set_property` can change any node property — same trust level as the Inspector panel
 - `remove_node` can delete nodes — same trust level as the Scene panel
 
-These are all things the developer can already do in the editor. Spectator just makes them available to the agent.
+These are all things the developer can already do in the editor. Stage just makes them available to the agent.
 
 ### Clip Privacy
 

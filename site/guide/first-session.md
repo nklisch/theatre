@@ -25,7 +25,7 @@ const messages4 = [
 
 # Your First Debugging Session
 
-This is a worked example of a complete Theatre debugging session. We will find and fix a real bug — an enemy that sometimes fails to detect the player — using Spectator's spatial tools with Claude Code.
+This is a worked example of a complete Theatre debugging session. We will find and fix a real bug — an enemy that sometimes fails to detect the player — using Stage's spatial tools with Claude Code.
 
 ## The setup
 
@@ -38,11 +38,11 @@ You have already tried reading the detection script and the collision layer sett
 
 ## Step 1: Start a recording session
 
-Click the **Start Recording** button in the Spectator dock to begin recording.
+Click the **Start Recording** button in the Stage dock to begin recording.
 
 Walk the player in front of the enemy a few times. On the third or fourth pass, the enemy fails to detect you — you see the player enters the zone visually but the alert animation does not play.
 
-Press **F9** to mark this as a bug moment (the dock shows "Bug marker set at frame 312"). Click the **Stop Recording** button in the Spectator dock.
+Press **F9** to mark this as a bug moment (the dock shows "Bug marker set at frame 312"). Click the **Stop Recording** button in the Stage dock.
 
 ## Step 2: Ask the agent to analyze the clip
 

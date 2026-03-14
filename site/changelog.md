@@ -9,7 +9,7 @@ Theatre uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Spectator
+### Stage
 - `spatial_query` type `relationship` now returns `in_fov` field for Camera3D `from` nodes
 - `clips` query conditions: added `velocity_above` and `property_equals` filter types
 - `spatial_config`: added `auto_record` and `max_clip_duration_s` for continuous background recording
@@ -34,7 +34,7 @@ Theatre uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Initial release of Theatre — an AI agent toolkit for Godot game engine.
 
-### Spectator
+### Stage
 
 **9 MCP tools for observing running Godot games:**
 
@@ -56,7 +56,7 @@ Initial release of Theatre — an AI agent toolkit for Godot game engine.
 
 - `clips` — Record gameplay to clip files, mark bug moments (F9), and query the spatial timeline. Supports condition filtering (`proximity`, `velocity_above`, `property_equals`) over frame ranges.
 
-**GDExtension (spectator-godot):**
+**GDExtension (stage-godot):**
 - Targets Godot 4.5+ with `compatibility_minimum = "4.5"`
 - Uses `lazy-function-tables` for forward compatibility with 4.6+
 - TCP listener on port 9077 (127.0.0.1 only)

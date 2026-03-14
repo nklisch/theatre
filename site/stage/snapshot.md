@@ -16,7 +16,7 @@ const messages0 = [
 
 Get an instant picture of every tracked node in the running game.
 
-`spatial_snapshot` is the entry point for most Spectator sessions. It returns positions, velocities, and key properties for all nodes the collector is tracking, subject to your token budget.
+`spatial_snapshot` is the entry point for most Stage sessions. It returns positions, velocities, and key properties for all nodes the collector is tracking, subject to your token budget.
 
 ## When to use it
 

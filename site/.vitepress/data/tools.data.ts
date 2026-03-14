@@ -11,7 +11,7 @@ interface ToolParam {
 }
 
 interface ToolDoc {
-  server: 'spectator' | 'director'
+  server: 'stage' | 'director'
   name: string
   description: string
   input_schema: {

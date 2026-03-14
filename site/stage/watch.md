@@ -14,7 +14,7 @@ const messages0 = [
 
 Monitor nodes continuously for changes.
 
-`spatial_watch` registers one or more nodes for continuous tracking. Once a watch is set, the Spectator server polls those nodes every tick and accumulates changes. You then read the changes by calling `spatial_delta` — only changed values since your last poll are returned.
+`spatial_watch` registers one or more nodes for continuous tracking. Once a watch is set, the Stage server polls those nodes every tick and accumulates changes. You then read the changes by calling `spatial_delta` — only changed values since your last poll are returned.
 
 Watches are useful when you want to observe a node over a long session without being surprised by what changed between tool calls.
 

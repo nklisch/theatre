@@ -20,13 +20,13 @@ When a tool call fails, the MCP response contains an `isError: true` flag and th
 
 The text content is a JSON object with at minimum an `"error"` field, and often a `"hint"` field with a suggestion.
 
-## Spectator errors
+## Stage errors
 
 ### Connection errors
 
 | Error | Cause | Resolution |
 |---|---|---|
-| `Game not running` | Port 9077 is not reachable | Start the game (F5) and ensure the Spectator addon is enabled |
+| `Game not running` | Port 9077 is not reachable | Start the game (F5) and ensure the Stage addon is enabled |
 | `Connection refused` | Nothing listening on 9077 | Game is not running, or addon failed to load |
 | `Connection timed out` | Game is running but not responding | Check for script errors in the Godot output panel |
 | `Handshake version mismatch` | Addon and server version mismatch | Rebuild and redeploy with `theatre deploy` |
@@ -152,9 +152,9 @@ Use `scene_tree` or `spatial_snapshot` to see exact names.
 
 The scene path in Director is relative to the scene's root node, not from the game's root. If `scene_read` shows the root as `"Player"`, use `"Player/CollisionShape3D"` (not `"/root/Player/CollisionShape3D"`).
 
-### Forgetting to start the game before using Spectator
+### Forgetting to start the game before using Stage
 
-Spectator requires the game to be running. Director does not.
+Stage requires the game to be running. Director does not.
 
 ```
 Error: Game not running

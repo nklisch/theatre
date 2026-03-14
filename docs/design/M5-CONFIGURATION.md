@@ -2,11 +2,11 @@
 
 ## Overview
 
-M5 delivers the `spatial_config` MCP tool and a three-tier configuration system: session config (MCP tool, highest priority), project file (`spectator.toml`, mid priority), and Godot Project Settings (lowest priority). The agent can configure static node classification, state property tracking, clustering strategy, bearing format, internal variable exposure, poll interval, and token hard cap — all at runtime.
+M5 delivers the `spatial_config` MCP tool and a three-tier configuration system: session config (MCP tool, highest priority), project file (`stage.toml`, mid priority), and Godot Project Settings (lowest priority). The agent can configure static node classification, state property tracking, clustering strategy, bearing format, internal variable exposure, poll interval, and token hard cap — all at runtime.
 
 **Depends on:** M1 (snapshot, budget, static classification, clustering)
 
-**Exit Criteria:** Agent calls `spatial_config(static_patterns: ["walls/*"], state_properties: { enemies: ["health"] })` — subsequent snapshots correctly classify walls as static and include only health in enemy state. Human sets port to 9078 in Project Settings — addon listens on 9078. `spectator.toml` overrides Project Settings.
+**Exit Criteria:** Agent calls `spatial_config(static_patterns: ["walls/*"], state_properties: { enemies: ["health"] })` — subsequent snapshots correctly classify walls as static and include only health in enemy state. Human sets port to 9078 in Project Settings — addon listens on 9078. `stage.toml` overrides Project Settings.
 
 ---
 
@@ -14,11 +14,11 @@ M5 delivers the `spatial_config` MCP tool and a three-tier configuration system:
 
 ### What exists (that M5 touches):
 
-1. **Static classification** — `spectator-protocol/src/static_classes.rs` has a hardcoded `STATIC_CLASSES` list. `is_static_class()` checks against this list. Used by `snapshot.rs` to separate static/dynamic entities.
+1. **Static classification** — `stage-protocol/src/static_classes.rs` has a hardcoded `STATIC_CLASSES` list. `is_static_class()` checks against this list. Used by `snapshot.rs` to separate static/dynamic entities.
 
-2. **Token budget** — `spectator-core/src/budget.rs` has `SnapshotBudgetDefaults::HARD_CAP` hardcoded to 5000. `resolve_budget()` clamps to this constant. `inject_budget()` in `mcp/mod.rs` references `SnapshotBudgetDefaults::HARD_CAP` directly.
+2. **Token budget** — `stage-core/src/budget.rs` has `SnapshotBudgetDefaults::HARD_CAP` hardcoded to 5000. `resolve_budget()` clamps to this constant. `inject_budget()` in `mcp/mod.rs` references `SnapshotBudgetDefaults::HARD_CAP` directly.
 
-3. **Clustering** — `spectator-core/src/cluster.rs` has `ClusterStrategy` enum and `cluster_by_group()`. Only group-based clustering is implemented. The strategy enum exists but isn't wired to anything — `build_summary_response` always calls `cluster_by_group()`.
+3. **Clustering** — `stage-core/src/cluster.rs` has `ClusterStrategy` enum and `cluster_by_group()`. Only group-based clustering is implemented. The strategy enum exists but isn't wired to anything — `build_summary_response` always calls `cluster_by_group()`.
 
 4. **State properties** — `EntityData.state` contains exported vars from the addon. The server passes them through without filtering. No per-group/class property selection exists.
 
@@ -26,14 +26,14 @@ M5 delivers the `spatial_config` MCP tool and a three-tier configuration system:
 
 6. **Session state** — `tcp.rs::SessionState` holds `spatial_index`, `delta_engine`, `watch_engine`. No config field.
 
-7. **Project Settings** — `runtime.gd` reads `spectator/connection/port` with default 9077. No other settings are registered.
+7. **Project Settings** — `runtime.gd` reads `stage/connection/port` with default 9077. No other settings are registered.
 
-8. **No spectator.toml support** exists.
+8. **No stage.toml support** exists.
 
 ### What M5 must change:
 
 - Add `SessionConfig` to `SessionState` (server-side config, mutable by `spatial_config`)
-- Add `spectator.toml` parsing (server reads on startup)
+- Add `stage.toml` parsing (server reads on startup)
 - Extend `plugin.gd` to register Project Settings
 - Extend `runtime.gd` to read more settings
 - Wire config into: static classification, state property filtering, clustering, bearing formatting, budget resolution
@@ -43,9 +43,9 @@ M5 delivers the `spatial_config` MCP tool and a three-tier configuration system:
 
 ## Implementation Units
 
-### Unit 1: Session Config Type (`spectator-core`)
+### Unit 1: Session Config Type (`stage-core`)
 
-**File:** `crates/spectator-core/src/config.rs` (new)
+**File:** `crates/stage-core/src/config.rs` (new)
 
 This is the canonical config type, shared by server and core logic. Pure data — no I/O, no Godot, no MCP.
 
@@ -72,7 +72,7 @@ impl Default for BearingFormat {
 
 /// Active session configuration.
 ///
-/// Three sources with precedence: spatial_config (session) > spectator.toml (project) > Project Settings (machine).
+/// Three sources with precedence: spatial_config (session) > stage.toml (project) > Project Settings (machine).
 /// This struct holds the merged effective config.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionConfig {
@@ -240,7 +240,7 @@ fn glob_match_parts(pattern: &[&str], path: &[&str]) -> bool {
 }
 ```
 
-**File:** `crates/spectator-core/src/lib.rs` — add `pub mod config;`
+**File:** `crates/stage-core/src/lib.rs` — add `pub mod config;`
 
 **Implementation Notes:**
 - `glob_match` is deliberately simple — no `**` recursive glob. Just `*` matching a single path segment. This covers the documented use cases (`walls/*`, `terrain/*`, `props/*`).
@@ -257,24 +257,24 @@ fn glob_match_parts(pattern: &[&str], path: &[&str]) -> bool {
 
 ---
 
-### Unit 2: spectator.toml Parsing (`spectator-server`)
+### Unit 2: stage.toml Parsing (`stage-server`)
 
-**File:** `crates/spectator-server/src/config.rs` (new)
+**File:** `crates/stage-server/src/config.rs` (new)
 
-Reads the `spectator.toml` project file on server startup. The server doesn't know the Godot project path directly — it receives the project path hint from the handshake or via environment variable.
+Reads the `stage.toml` project file on server startup. The server doesn't know the Godot project path directly — it receives the project path hint from the handshake or via environment variable.
 
 ```rust
 use anyhow::Result;
 use serde::Deserialize;
-use spectator_core::config::{BearingFormat, SessionConfig};
-use spectator_core::cluster::ClusterStrategy;
+use stage_core::config::{BearingFormat, SessionConfig};
+use stage_core::cluster::ClusterStrategy;
 use std::collections::HashMap;
 use std::path::Path;
 
-/// TOML file shape — maps to the documented spectator.toml format.
+/// TOML file shape — maps to the documented stage.toml format.
 /// All sections and fields are optional.
 #[derive(Debug, Default, Deserialize)]
-pub struct SpectatorToml {
+pub struct StageToml {
     pub connection: Option<ConnectionConfig>,
     pub tracking: Option<TrackingConfig>,
     pub recording: Option<RecordingConfig>,
@@ -310,12 +310,12 @@ pub struct DisplayConfig {
     pub show_recording_indicator: Option<bool>,
 }
 
-/// Load `spectator.toml` from a directory. Returns `SessionConfig` with the
+/// Load `stage.toml` from a directory. Returns `SessionConfig` with the
 /// tracking-related fields applied. Returns default config if file not found.
 pub fn load_toml_config(project_dir: &Path) -> SessionConfig {
-    let toml_path = project_dir.join("spectator.toml");
+    let toml_path = project_dir.join("stage.toml");
     match std::fs::read_to_string(&toml_path) {
-        Ok(contents) => match toml::from_str::<SpectatorToml>(&contents) {
+        Ok(contents) => match toml::from_str::<StageToml>(&contents) {
             Ok(parsed) => {
                 tracing::info!("Loaded config from {}", toml_path.display());
                 toml_to_session_config(&parsed)
@@ -326,7 +326,7 @@ pub fn load_toml_config(project_dir: &Path) -> SessionConfig {
             }
         },
         Err(_) => {
-            tracing::debug!("No spectator.toml found at {}", toml_path.display());
+            tracing::debug!("No stage.toml found at {}", toml_path.display());
             SessionConfig::default()
         }
     }
@@ -335,13 +335,13 @@ pub fn load_toml_config(project_dir: &Path) -> SessionConfig {
 /// Extract port from TOML config (separate from SessionConfig since port
 /// is a connection concern, not a session config concern).
 pub fn load_toml_port(project_dir: &Path) -> Option<u16> {
-    let toml_path = project_dir.join("spectator.toml");
+    let toml_path = project_dir.join("stage.toml");
     let contents = std::fs::read_to_string(toml_path).ok()?;
-    let parsed: SpectatorToml = toml::from_str(&contents).ok()?;
+    let parsed: StageToml = toml::from_str(&contents).ok()?;
     parsed.connection.and_then(|c| c.port)
 }
 
-fn toml_to_session_config(toml: &SpectatorToml) -> SessionConfig {
+fn toml_to_session_config(toml: &StageToml) -> SessionConfig {
     let mut config = SessionConfig::default();
     if let Some(ref tracking) = toml.tracking {
         if let Some(ref v) = tracking.static_patterns {
@@ -370,25 +370,25 @@ fn toml_to_session_config(toml: &SpectatorToml) -> SessionConfig {
 }
 ```
 
-**Dependencies:** Add `toml = "0.8"` to `crates/spectator-server/Cargo.toml`.
+**Dependencies:** Add `toml = "0.8"` to `crates/stage-server/Cargo.toml`.
 
 **Implementation Notes:**
 - The server finds the project directory via `SPECTATOR_PROJECT_DIR` env var (set by the MCP client in the `.mcp.json` config), or falls back to the current working directory.
-- Port from `spectator.toml` is loaded separately and used to override the default/env port before connecting.
+- Port from `stage.toml` is loaded separately and used to override the default/env port before connecting.
 - Recording and display configs are parsed but not consumed by the server — they're forwarded to the addon if connected. For M5 scope, we only use `tracking` fields.
 
 **Acceptance Criteria:**
 - [ ] `load_toml_config` returns default config when file doesn't exist
-- [ ] `load_toml_config` correctly parses a valid `spectator.toml` with all fields
+- [ ] `load_toml_config` correctly parses a valid `stage.toml` with all fields
 - [ ] `load_toml_config` logs warning and returns defaults for invalid TOML
 - [ ] Partial TOML (only `[tracking]` section) works without error
 - [ ] `load_toml_port` returns `Some(port)` when `[connection] port` is set
 
 ---
 
-### Unit 3: Add Config to Session State (`spectator-server`)
+### Unit 3: Add Config to Session State (`stage-server`)
 
-**File:** `crates/spectator-server/src/tcp.rs` (modify)
+**File:** `crates/stage-server/src/tcp.rs` (modify)
 
 Add `config` field to `SessionState` and load from TOML on startup.
 
@@ -397,7 +397,7 @@ Add `config` field to `SessionState` and load from TOML on startup.
 pub struct SessionState {
     // ... existing fields ...
     /// Active session configuration (merged from TOML defaults + spatial_config overrides).
-    pub config: spectator_core::config::SessionConfig,
+    pub config: stage_core::config::SessionConfig,
 }
 
 // In Default impl:
@@ -405,13 +405,13 @@ impl Default for SessionState {
     fn default() -> Self {
         Self {
             // ... existing fields ...
-            config: spectator_core::config::SessionConfig::default(),
+            config: stage_core::config::SessionConfig::default(),
         }
     }
 }
 ```
 
-**File:** `crates/spectator-server/src/main.rs` (modify)
+**File:** `crates/stage-server/src/main.rs` (modify)
 
 Load TOML config on startup and seed SessionState:
 
@@ -446,16 +446,16 @@ let state = Arc::new(Mutex::new(SessionState {
 
 ---
 
-### Unit 4: `spatial_config` MCP Tool (`spectator-server`)
+### Unit 4: `spatial_config` MCP Tool (`stage-server`)
 
-**File:** `crates/spectator-server/src/mcp/config.rs` (new)
+**File:** `crates/stage-server/src/mcp/config.rs` (new)
 
 ```rust
 use rmcp::model::ErrorData as McpError;
 use schemars::JsonSchema;
 use serde::Deserialize;
-use spectator_core::cluster::ClusterStrategy;
-use spectator_core::config::{BearingFormat, ConfigUpdate};
+use stage_core::cluster::ClusterStrategy;
+use stage_core::config::{BearingFormat, ConfigUpdate};
 use std::collections::HashMap;
 
 use super::serialize_response;
@@ -527,7 +527,7 @@ pub async fn handle_spatial_config(
 }
 ```
 
-**File:** `crates/spectator-server/src/mcp/mod.rs` (modify)
+**File:** `crates/stage-server/src/mcp/mod.rs` (modify)
 
 Add `pub mod config;` and register the tool:
 
@@ -565,9 +565,9 @@ pub async fn spatial_config(
 
 ---
 
-### Unit 5: Wire Config into Static Classification (`spectator-server`)
+### Unit 5: Wire Config into Static Classification (`stage-server`)
 
-**File:** `crates/spectator-server/src/mcp/snapshot.rs` (modify)
+**File:** `crates/stage-server/src/mcp/snapshot.rs` (modify)
 
 Currently `is_static_class(&entity.class)` is the only static check. M5 adds pattern-based classification from config.
 
@@ -631,9 +631,9 @@ let response = match detail {
 
 ---
 
-### Unit 6: Wire Config into State Property Filtering (`spectator-server`)
+### Unit 6: Wire Config into State Property Filtering (`stage-server`)
 
-**File:** `crates/spectator-server/src/mcp/snapshot.rs` (modify)
+**File:** `crates/stage-server/src/mcp/snapshot.rs` (modify)
 
 Apply state property filtering when building output entities. Currently `build_output_entity` includes all state properties. With config, only configured properties are included (when configured).
 
@@ -679,9 +679,9 @@ Also apply to `all_exported_vars` in full detail mode — if `expose_internals` 
 
 ---
 
-### Unit 7: Wire Config into Clustering and Bearing Format (`spectator-server`)
+### Unit 7: Wire Config into Clustering and Bearing Format (`stage-server`)
 
-**File:** `crates/spectator-core/src/cluster.rs` (modify)
+**File:** `crates/stage-core/src/cluster.rs` (modify)
 
 Add `cluster_by_class` and `cluster_by_proximity` functions, and a dispatch function:
 
@@ -850,7 +850,7 @@ fn cluster_none(
 }
 ```
 
-**File:** `crates/spectator-server/src/mcp/snapshot.rs` (modify)
+**File:** `crates/stage-server/src/mcp/snapshot.rs` (modify)
 
 In `build_summary_response`, replace `cluster::cluster_by_group(...)` with `cluster::cluster_entities(..., config.cluster_by)`.
 
@@ -889,9 +889,9 @@ Since `OutputEntity` currently serializes `rel` as a struct, the bearing format 
 
 ---
 
-### Unit 8: Wire Config into Budget Resolution (`spectator-server`)
+### Unit 8: Wire Config into Budget Resolution (`stage-server`)
 
-**File:** `crates/spectator-server/src/mcp/mod.rs` (modify)
+**File:** `crates/stage-server/src/mcp/mod.rs` (modify)
 
 The `inject_budget` function currently uses `SnapshotBudgetDefaults::HARD_CAP`. Change to use the config value:
 
@@ -945,9 +945,9 @@ inject_budget(&mut response, used, budget_limit, config.token_hard_cap);
 
 ---
 
-### Unit 9: Expose Internals Flag in Protocol (`spectator-protocol`)
+### Unit 9: Expose Internals Flag in Protocol (`stage-protocol`)
 
-**File:** `crates/spectator-protocol/src/query.rs` (modify)
+**File:** `crates/stage-protocol/src/query.rs` (modify)
 
 Add `expose_internals` to `GetSnapshotDataParams` and `GetNodeInspectParams`:
 
@@ -981,11 +981,11 @@ This tells the addon whether to collect internal variables. The addon already ha
 
 ---
 
-### Unit 10: Register Project Settings (`addons/spectator/plugin.gd`)
+### Unit 10: Register Project Settings (`addons/stage/plugin.gd`)
 
-**File:** `addons/spectator/plugin.gd` (modify)
+**File:** `addons/stage/plugin.gd` (modify)
 
-Register Spectator settings in the Godot Project Settings when the plugin is enabled.
+Register Stage settings in the Godot Project Settings when the plugin is enabled.
 
 ```gdscript
 @tool
@@ -994,28 +994,28 @@ extends EditorPlugin
 
 func _enable_plugin() -> void:
     _register_settings()
-    add_autoload_singleton("SpectatorRuntime", "res://addons/spectator/runtime.gd")
+    add_autoload_singleton("StageRuntime", "res://addons/stage/runtime.gd")
 
 
 func _disable_plugin() -> void:
-    remove_autoload_singleton("SpectatorRuntime")
+    remove_autoload_singleton("StageRuntime")
 
 
 func _register_settings() -> void:
-    _add_setting("spectator/connection/port", TYPE_INT, 9077,
+    _add_setting("stage/connection/port", TYPE_INT, 9077,
         PROPERTY_HINT_RANGE, "1024,65535")
-    _add_setting("spectator/connection/auto_start", TYPE_BOOL, true)
-    _add_setting("spectator/recording/storage_path", TYPE_STRING,
-        "user://spectator_recordings/")
-    _add_setting("spectator/recording/max_frames", TYPE_INT, 36000,
+    _add_setting("stage/connection/auto_start", TYPE_BOOL, true)
+    _add_setting("stage/recording/storage_path", TYPE_STRING,
+        "user://stage_recordings/")
+    _add_setting("stage/recording/max_frames", TYPE_INT, 36000,
         PROPERTY_HINT_RANGE, "600,360000")
-    _add_setting("spectator/recording/capture_interval", TYPE_INT, 1,
+    _add_setting("stage/recording/capture_interval", TYPE_INT, 1,
         PROPERTY_HINT_RANGE, "1,60")
-    _add_setting("spectator/display/show_agent_notifications", TYPE_BOOL, true)
-    _add_setting("spectator/display/show_recording_indicator", TYPE_BOOL, true)
-    _add_setting("spectator/tracking/default_static_patterns",
+    _add_setting("stage/display/show_agent_notifications", TYPE_BOOL, true)
+    _add_setting("stage/display/show_recording_indicator", TYPE_BOOL, true)
+    _add_setting("stage/tracking/default_static_patterns",
         TYPE_PACKED_STRING_ARRAY, PackedStringArray())
-    _add_setting("spectator/tracking/token_hard_cap", TYPE_INT, 5000,
+    _add_setting("stage/tracking/token_hard_cap", TYPE_INT, 5000,
         PROPERTY_HINT_RANGE, "500,50000")
 
 
@@ -1036,47 +1036,47 @@ func _add_setting(path: String, type: int, default_value: Variant,
 - Settings are registered on plugin enable, not on every editor start. Once set, they persist in `project.godot`.
 - `_add_setting` checks `has_setting` first to avoid overwriting user-configured values.
 - `set_initial_value` tells Godot what the default is (for the "reset" button in the editor).
-- Keybinding settings (`spectator/keybindings/*`) are deferred to M7 (when keyboard shortcuts are implemented).
+- Keybinding settings (`stage/keybindings/*`) are deferred to M7 (when keyboard shortcuts are implemented).
 
 **Acceptance Criteria:**
-- [ ] Enabling the plugin creates `spectator/` settings in Project Settings
+- [ ] Enabling the plugin creates `stage/` settings in Project Settings
 - [ ] Settings have correct types, defaults, and hints
 - [ ] Re-enabling the plugin doesn't overwrite user-changed values
 - [ ] Settings persist across editor restarts (saved in project.godot)
 
 ---
 
-### Unit 11: Read Settings in Runtime (`addons/spectator/runtime.gd`)
+### Unit 11: Read Settings in Runtime (`addons/stage/runtime.gd`)
 
-**File:** `addons/spectator/runtime.gd` (modify)
+**File:** `addons/stage/runtime.gd` (modify)
 
 Read more settings beyond just port.
 
 ```gdscript
 extends Node
 
-var tcp_server: SpectatorTCPServer
-var collector: SpectatorCollector
+var tcp_server: StageTCPServer
+var collector: StageCollector
 
 
 func _ready() -> void:
-    if not ClassDB.class_exists(&"SpectatorTCPServer"):
-        push_error("[Spectator] GDExtension not loaded — SpectatorTCPServer class not found.")
+    if not ClassDB.class_exists(&"StageTCPServer"):
+        push_error("[Stage] GDExtension not loaded — StageTCPServer class not found.")
         return
 
     var auto_start: bool = ProjectSettings.get_setting(
-        "spectator/connection/auto_start", true)
+        "stage/connection/auto_start", true)
     if not auto_start:
         return
 
-    collector = SpectatorCollector.new()
+    collector = StageCollector.new()
     add_child(collector)
 
-    tcp_server = SpectatorTCPServer.new()
+    tcp_server = StageTCPServer.new()
     add_child(tcp_server)
     tcp_server.set_collector(collector)
 
-    var port: int = ProjectSettings.get_setting("spectator/connection/port", 9077)
+    var port: int = ProjectSettings.get_setting("stage/connection/port", 9077)
     tcp_server.start(port)
 
 
@@ -1103,10 +1103,10 @@ func _exit_tree() -> void:
 
 ## Implementation Order
 
-1. **Unit 1:** Core config types (`spectator-core/src/config.rs`) — no dependencies, foundation for everything
+1. **Unit 1:** Core config types (`stage-core/src/config.rs`) — no dependencies, foundation for everything
 2. **Unit 10:** Register Project Settings (`plugin.gd`) — can be done in parallel with Unit 1
 3. **Unit 11:** Read settings in runtime (`runtime.gd`) — depends on Unit 10
-4. **Unit 2:** TOML parsing (`spectator-server/src/config.rs`) — depends on Unit 1
+4. **Unit 2:** TOML parsing (`stage-server/src/config.rs`) — depends on Unit 1
 5. **Unit 3:** Add config to SessionState (`tcp.rs`, `main.rs`) — depends on Units 1, 2
 6. **Unit 4:** `spatial_config` MCP tool (`mcp/config.rs`) — depends on Units 1, 3
 7. **Unit 9:** Expose internals flag in protocol — can be done in parallel
@@ -1119,7 +1119,7 @@ Units 5-8 can be implemented in any order after Unit 3 is complete.
 
 ## Testing
 
-### Unit Tests: `crates/spectator-core/src/config.rs`
+### Unit Tests: `crates/stage-core/src/config.rs`
 
 ```rust
 #[cfg(test)]
@@ -1213,7 +1213,7 @@ mod tests {
 }
 ```
 
-### Unit Tests: `crates/spectator-core/src/cluster.rs` (additions)
+### Unit Tests: `crates/stage-core/src/cluster.rs` (additions)
 
 ```rust
 #[test]
@@ -1249,7 +1249,7 @@ fn cluster_dispatch() {
 }
 ```
 
-### Unit Tests: `crates/spectator-server/src/config.rs`
+### Unit Tests: `crates/stage-server/src/config.rs`
 
 ```rust
 #[cfg(test)]
@@ -1268,7 +1268,7 @@ mod tests {
     #[test]
     fn load_valid_toml() {
         let dir = TempDir::new().unwrap();
-        let toml_path = dir.path().join("spectator.toml");
+        let toml_path = dir.path().join("stage.toml");
         let mut f = std::fs::File::create(&toml_path).unwrap();
         writeln!(f, r#"
 [connection]
@@ -1289,7 +1289,7 @@ cluster_by = "class"
     #[test]
     fn load_toml_port_present() {
         let dir = TempDir::new().unwrap();
-        let toml_path = dir.path().join("spectator.toml");
+        let toml_path = dir.path().join("stage.toml");
         std::fs::write(&toml_path, "[connection]\nport = 9078\n").unwrap();
         assert_eq!(load_toml_port(dir.path()), Some(9078));
     }
@@ -1330,12 +1330,12 @@ cargo clippy --workspace
 cargo fmt --check
 
 # Verify new module compiles
-cargo test -p spectator-core config
-cargo test -p spectator-server config
+cargo test -p stage-core config
+cargo test -p stage-server config
 
 # Check TOML parsing
-cargo test -p spectator-server config::tests
+cargo test -p stage-server config::tests
 
 # Check cluster dispatch
-cargo test -p spectator-core cluster::tests
+cargo test -p stage-core cluster::tests
 ```

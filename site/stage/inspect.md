@@ -19,7 +19,7 @@ const messages2 = [
 
 Deep inspection of a single node.
 
-`spatial_inspect` returns everything Spectator knows about one node: all tracked properties, signal connections, children, and spatial context (nearby nodes, relationship to parent). It is the right tool when you need complete information about a specific node.
+`spatial_inspect` returns everything Stage knows about one node: all tracked properties, signal connections, children, and spatial context (nearby nodes, relationship to parent). It is the right tool when you need complete information about a specific node.
 
 ## When to use it
 
@@ -101,7 +101,7 @@ You can combine any set:
 
 ### Property coverage by class
 
-Properties returned by Spectator depend on the node class. Here are the most common:
+Properties returned by Stage depend on the node class. Here are the most common:
 
 **`CharacterBody3D`**: `global_position`, `rotation_deg`, `velocity`, `scale`, `visible`, `collision_layer`, `collision_mask`, `on_floor`, `on_wall`, `on_ceiling`, `floor_snap_length`, `motion_mode`, `up_direction`
 

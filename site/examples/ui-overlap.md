@@ -28,9 +28,9 @@ const messages3 = [
 - `UI/HUD/Minimap`: `SubViewportContainer` — should be bottom-right, 10px from edges
 - `UI/HUD/AmmoLabel`: `Label` — should be bottom-center
 
-## Step 1: Configure Spectator to track UI nodes
+## Step 1: Configure Stage to track UI nodes
 
-By default, Spectator excludes UI nodes. Add them to the tracked types:
+By default, Stage excludes UI nodes. Add them to the tracked types:
 
 ```json
 {
@@ -76,7 +76,7 @@ For bottom-edge anchoring with 10px margin from the bottom:
 
 ## Key takeaways
 
-- **Configure Spectator to track UI types** — they are excluded by default. Add them to `extra_tracked_types` for UI debugging sessions.
+- **Configure Stage to track UI types** — they are excluded by default. Add them to `extra_tracked_types` for UI debugging sessions.
 - **UI positions from `spatial_snapshot` are pixel coordinates in screen space.** Compare them against screen resolution to spot off-screen elements.
 - **Hardcoded pixel offsets from top-left are the root cause of most HUD resolution bugs.** The fix is always anchors + margin offsets, not hardcoded positions.
 - **Verify at multiple resolutions** by changing the game window size and taking fresh snapshots.

@@ -1,4 +1,4 @@
-# Spectator — Roadmap
+# Stage — Roadmap
 
 This roadmap translates the full design (VISION, SPEC, CONTRACT, UX, USER_STORIES) into a phased implementation plan. Each milestone is a shippable state — usable, testable, and valuable on its own. Later milestones build on earlier ones without requiring rework.
 
@@ -14,16 +14,16 @@ The design docs describe the **complete system**. This roadmap describes **the o
 
 ### Deliverables
 
-- [x] Cargo workspace with 4 crates (`spectator-server`, `spectator-godot`, `spectator-protocol`, `spectator-core`)
-- [x] `spectator-server` compiles as a binary, starts tokio runtime, prints "waiting for connection"
-- [x] `spectator-godot` compiles as cdylib, loads in Godot 4.5+ without errors
+- [x] Cargo workspace with 4 crates (`stage-server`, `stage-godot`, `stage-protocol`, `stage-core`)
+- [x] `stage-server` compiles as a binary, starts tokio runtime, prints "waiting for connection"
+- [x] `stage-godot` compiles as cdylib, loads in Godot 4.5+ without errors
 - [x] GDExtension manifest (`.gdextension`) with at least Linux debug target
 - [x] GDScript `plugin.gd` (EditorPlugin) — enables/disables cleanly, registers autoload
-- [x] GDScript `runtime.gd` (autoload) — instantiates GDExtension `SpectatorTCPServer` node
-- [x] `SpectatorTCPServer` listens on configurable port (default 9077, localhost only)
-- [x] `spectator-server` connects to addon via TCP
+- [x] GDScript `runtime.gd` (autoload) — instantiates GDExtension `StageTCPServer` node
+- [x] `StageTCPServer` listens on configurable port (default 9077, localhost only)
+- [x] `stage-server` connects to addon via TCP
 - [x] Handshake exchange: addon sends version/dimensions/project, server ACKs
-- [x] `spectator-protocol` crate defines handshake message types with serde
+- [x] `stage-protocol` crate defines handshake message types with serde
 - [x] Length-prefixed JSON codec (4-byte big-endian + JSON) working in both directions
 - [x] Basic reconnection: server retries every 2s when connection drops
 - [x] `plugin.cfg` with metadata
@@ -32,7 +32,7 @@ The design docs describe the **complete system**. This roadmap describes **the o
 
 ### Exit Criteria
 
-Run Godot with the addon enabled → hit Play → `spectator-server` connects → handshake logged on both sides → stop game → server reconnects when game restarts.
+Run Godot with the addon enabled → hit Play → `stage-server` connects → handshake logged on both sides → stop game → server reconnects when game restarts.
 
 ### Notes
 
@@ -50,15 +50,15 @@ Run Godot with the addon enabled → hit Play → `spectator-server` connects �
 
 ### Deliverables
 
-- [ ] `SpectatorCollector` GDExtension class — traverses scene tree, collects node data
+- [ ] `StageCollector` GDExtension class — traverses scene tree, collects node data
   - [ ] `get_visible_nodes()` — returns nodes in camera frustum/viewport
   - [ ] `get_node_transform(path)` — position, rotation, velocity, physics state
   - [ ] `get_node_state(path)` — exported variables
   - [ ] `get_frame_info()` — current frame, delta, timestamp
   - [ ] `get_dimensions()` — 2D or 3D
 - [ ] TCP query/response flow: server sends query → addon dispatches to collector → returns data
-- [ ] `spectator-core`: bearing calculation (8-direction cardinal + degrees + elevation)
-- [ ] `spectator-core`: token budget estimation (`json_bytes / 4`)
+- [ ] `stage-core`: bearing calculation (8-direction cardinal + degrees + elevation)
+- [ ] `stage-core`: token budget estimation (`json_bytes / 4`)
 - [ ] MCP tool registration via rmcp: `spatial_snapshot` with parameters
 - [ ] `spatial_snapshot` detail tiers:
   - [ ] `summary` — clusters by group, nearest/farthest, counts
@@ -151,7 +151,7 @@ Agent calls `spatial_inspect(node: "enemies/scout_02")` → gets transform, phys
   - [ ] `advance_physics(frames)`
   - [ ] `spawn_node(scene_path, parent, name, position)`
   - [ ] `remove_node(path)`
-- [ ] `spectator-core`: spatial index (rstar R-tree for 3D) for efficient nearest/radius queries
+- [ ] `stage-core`: spatial index (rstar R-tree for 3D) for efficient nearest/radius queries
 - [ ] Error responses: `method_not_found`, `eval_error`, `dimension_mismatch`
 
 ### Exit Criteria
@@ -174,7 +174,7 @@ Agent pauses game, teleports enemy to wall, advances 5 frames, takes a snapshot 
   - [ ] `static_changed` flag
   - [ ] Same perspective/radius/filter options as snapshot
   - [ ] Token budget with truncation
-- [ ] Delta engine in `spectator-core`:
+- [ ] Delta engine in `stage-core`:
   - [ ] Last-snapshot state storage
   - [ ] Per-entity history tracking
   - [ ] Change detection thresholds (position < 0.01, rotation < 0.1°, float < 0.001)
@@ -201,7 +201,7 @@ Agent sets up watches on enemy group, advances game time, calls `spatial_delta()
 
 ## Milestone 5: Configuration (partial)
 
-**Goal:** Agent and human can configure Spectator's behavior — what to track, how to display, token limits. Three configuration surfaces with clear precedence.
+**Goal:** Agent and human can configure Stage's behavior — what to track, how to display, token limits. Three configuration surfaces with clear precedence.
 
 **Depends on:** M1
 
@@ -216,19 +216,19 @@ Agent sets up watches on enemy group, advances game time, calls `spatial_delta()
   - [ ] `poll_interval` — collection frequency
   - [ ] `token_hard_cap` — server-enforced ceiling
 - [x] Project Settings integration (Godot editor):
-  - [x] `spectator/connection/port`
-  - [x] `spectator/connection/auto_start`
-  - [x] `spectator/recording/storage_path`, `max_frames`, `capture_interval`
-  - [x] `spectator/display/show_agent_notifications`, `show_recording_indicator`
-  - [ ] `spectator/keybindings/toggle_recording`, `drop_marker`, `toggle_pause`
-  - [x] `spectator/tracking/default_static_patterns`, `token_hard_cap`
-- [ ] `spectator.toml` file support (project root, version-controllable)
-- [ ] Config precedence: `spatial_config` (session) > `spectator.toml` (project) > Project Settings (machine)
+  - [x] `stage/connection/port`
+  - [x] `stage/connection/auto_start`
+  - [x] `stage/recording/storage_path`, `max_frames`, `capture_interval`
+  - [x] `stage/display/show_agent_notifications`, `show_recording_indicator`
+  - [ ] `stage/keybindings/toggle_recording`, `drop_marker`, `toggle_pause`
+  - [x] `stage/tracking/default_static_patterns`, `token_hard_cap`
+- [ ] `stage.toml` file support (project root, version-controllable)
+- [ ] Config precedence: `spatial_config` (session) > `stage.toml` (project) > Project Settings (machine)
 - [ ] Static node classification using configured patterns + heuristics + observation
 
 ### Exit Criteria
 
-Agent calls `spatial_config(static_patterns: ["walls/*"], state_properties: { enemies: ["health"] })` — subsequent snapshots correctly classify walls as static and include only health in enemy state. Human sets port to 9078 in Project Settings — addon listens on 9078. `spectator.toml` overrides Project Settings.
+Agent calls `spatial_config(static_patterns: ["walls/*"], state_properties: { enemies: ["health"] })` — subsequent snapshots correctly classify walls as static and include only health in enemy state. Human sets port to 9078 in Project Settings — addon listens on 9078. `stage.toml` overrides Project Settings.
 
 ---
 
@@ -276,7 +276,7 @@ Human enables addon, sees "Waiting..." in dock. Agent connects, dock shows "Conn
 
 ### Deliverables
 
-- [x] `SpectatorRecorder` GDExtension class:
+- [x] `StageRecorder` GDExtension class:
   - [ ] Frame capture in `_physics_process` (configurable interval)
   - [ ] Tracked node snapshots to in-memory ring buffer
   - [ ] MessagePack serialization of frame data
@@ -287,7 +287,7 @@ Human enables addon, sees "Waiting..." in dock. Agent connects, dock shows "Conn
   - [ ] Schema: recording, frames, events, markers tables
   - [ ] WAL mode for non-blocking reads during writes
   - [ ] Periodic flush (every 60 frames) for crash safety
-  - [ ] Storage in `user://spectator_recordings/`
+  - [ ] Storage in `user://stage_recordings/`
 - [ ] `recording` tool — capture actions:
   - [ ] `start` — begin recording with name and capture config
   - [ ] `stop` — finalize recording, return metadata
@@ -337,7 +337,7 @@ Human presses F8, plays game for 10 seconds, presses F9 at bug moment, presses F
     - [ ] Markers between frames
   - [ ] `find_event` — search timeline for event types
     - [ ] Event types: signal, property_change, collision, area_enter, area_exit, node_added, node_removed, marker, input
-- [ ] Recording analysis engine in `spectator-server`:
+- [ ] Recording analysis engine in `stage-server`:
   - [ ] SQLite queries for frame range selection
   - [ ] MessagePack deserialization of frame data
   - [ ] Spatial condition evaluation in Rust (proximity, velocity spike detection)
@@ -355,7 +355,7 @@ The full workflow from UX.md works: human records, marks a bug with F9, stops re
 
 ## Milestone 9: 2D Support
 
-**Goal:** Spectator works correctly with 2D Godot games. All tools produce 2D-appropriate output.
+**Goal:** Stage works correctly with 2D Godot games. All tools produce 2D-appropriate output.
 
 **Depends on:** M1-M8 (layered on top of working 3D implementation)
 
@@ -364,13 +364,13 @@ The full workflow from UX.md works: human records, marks a bug with F9, stops re
 - [ ] Dimension detection in handshake (`scene_dimensions: 2`)
 - [ ] 2D coordinate output: `[x, y]` positions, single `rot` angle, `[x, y]` velocities
 - [ ] 2D bearing system: 8-direction compass without elevation
-- [ ] 2D spatial index: grid hash in `spectator-core`
+- [ ] 2D spatial index: grid hash in `stage-core`
 - [ ] 2D frustum check: Camera2D viewport rectangle instead of Camera3D frustum
 - [ ] 2D physics: `PhysicsRayQueryParameters2D` for raycasts
 - [ ] 2D transform output: `Transform2D` (origin + angle)
 - [ ] 2D physics state: CharacterBody2D fields (on_floor, on_wall, on_ceiling)
-- [ ] `spectator-godot`: dimension-aware collection (Node2D vs Node3D APIs)
-- [ ] `spectator-core`: dimension-aware bearing, indexing, delta computation
+- [ ] `stage-godot`: dimension-aware collection (Node2D vs Node3D APIs)
+- [ ] `stage-core`: dimension-aware bearing, indexing, delta computation
 - [ ] Mixed scene support (`scene_dimensions: "mixed"`)
 - [ ] 2D example project (`examples/2d-platformer-demo/`)
 
@@ -412,7 +412,7 @@ Agent calls `spatial_inspect(node: "enemies/scout_02", include: ["resources"])` 
 
 ### Deliverables
 
-- [ ] Ring buffer in `SpectatorRecorder` — always-on dashcam mode alongside explicit recording
+- [ ] Ring buffer in `StageRecorder` — always-on dashcam mode alongside explicit recording
 - [ ] Clip state machine: Buffering → PostCapture → flush to SQLite
 - [ ] Per-tier window configuration (system vs agent/human triggers)
 - [ ] Merge policy: overlapping triggers produce one merged clip, not multiple
@@ -421,19 +421,19 @@ Agent calls `spatial_inspect(node: "enemies/scout_02", include: ["resources"])` 
 - [ ] New signals: `dashcam_clip_saved`, `dashcam_clip_started`
 - [ ] `recording(action: "dashcam_status")` and `recording(action: "flush_dashcam")` MCP actions
 - [ ] New TCP methods: `dashcam_status`, `dashcam_flush`, `dashcam_config`
-- [ ] Configuration: `spectator.toml` dashcam keys + `spatial_config` session overrides
+- [ ] Configuration: `stage.toml` dashcam keys + `spatial_config` session overrides
 - [ ] Memory model with byte cap and adaptive pre-window
 - [ ] Dock integration: dashcam status line, F9 in dashcam-only mode
 
 ### Exit Criteria
 
-Addon starts buffering automatically with no MCP or human interaction. Game code calls `SpectatorRecorder.add_marker("system", "player_died")` from GDScript; a clip is saved covering the configured pre- and post-window around that frame. Agent calls `recording(action: "add_marker")` or human presses F9; clips save with appropriate tier windows. Overlapping triggers produce one merged clip. `recording(action: "list")` returns dashcam clips alongside explicit recordings. All M8 analysis actions work on dashcam clips unchanged.
+Addon starts buffering automatically with no MCP or human interaction. Game code calls `StageRecorder.add_marker("system", "player_died")` from GDScript; a clip is saved covering the configured pre- and post-window around that frame. Agent calls `recording(action: "add_marker")` or human presses F9; clips save with appropriate tier windows. Overlapping triggers produce one merged clip. `recording(action: "list")` returns dashcam clips alongside explicit recordings. All M8 analysis actions work on dashcam clips unchanged.
 
 ---
 
 ## Milestone 12: Distribution & Polish
 
-**Goal:** Spectator is installable by anyone. Platform binaries, documentation, agent skill file, and first public release.
+**Goal:** Stage is installable by anyone. Platform binaries, documentation, agent skill file, and first public release.
 
 **Depends on:** M0-M8 (core complete)
 
@@ -441,12 +441,12 @@ Addon starts buffering automatically with no MCP or human interaction. Game code
 
 - [ ] CI/CD: GitHub Actions release workflow
   - [ ] Cross-compilation matrix: linux-x86_64, macos-arm64, macos-x86_64, windows-x86_64
-  - [ ] Build both `spectator-server` and `spectator-godot` per target
+  - [ ] Build both `stage-server` and `stage-godot` per target
   - [ ] Package platform bundles (server binary + addon with matching GDExtension)
   - [ ] Upload to GitHub releases on tag push
-- [ ] `cargo install spectator-server` works (publish to crates.io)
+- [ ] `cargo install stage-server` works (publish to crates.io)
 - [ ] Godot Asset Library submission (addon only, with instructions for server)
-- [ ] Agent skill file (`skills/spectator.md`):
+- [ ] Agent skill file (`skills/stage.md`):
   - [ ] When to use each tool (decision tree)
   - [ ] Token-efficient patterns (summary → expand → inspect)
   - [ ] Common debugging workflows
@@ -464,7 +464,7 @@ Addon starts buffering automatically with no MCP or human interaction. Game code
 
 ### Exit Criteria
 
-A developer can download a release, copy the addon into their Godot project, add the MCP config, and have their AI agent debugging spatial issues within 5 minutes. The skill file teaches the agent effective Spectator usage. Works on Linux, macOS, and Windows.
+A developer can download a release, copy the addon into their Godot project, add the MCP config, and have their AI agent debugging spatial issues within 5 minutes. The skill file teaches the agent effective Stage usage. Works on Linux, macOS, and Windows.
 
 ---
 
@@ -483,7 +483,7 @@ Not scheduled, but the architecture supports these without breaking changes:
 - Enables debugging platform-specific spatial issues (Steam Deck, mobile)
 
 ### Custom Data Extractors
-- GDScript API: `SpectatorCollector.register_extractor(class_name, callable)`
+- GDScript API: `StageCollector.register_extractor(class_name, callable)`
 - Callable receives a node, returns a Dictionary of custom data
 - Custom data appears in `state` blocks alongside exported vars
 

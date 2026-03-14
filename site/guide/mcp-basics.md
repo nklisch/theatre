@@ -58,7 +58,7 @@ You can see Theatre's tool list by running the server manually:
 
 ```bash
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | \
-  ./target/release/spectator serve
+  ./target/release/stage serve
 ```
 
 ## Parallel tool calls
@@ -84,7 +84,7 @@ Used when there is a reported problem and the agent wants to understand the curr
 ### Pattern 2: Record → Query → Diagnose → Fix
 
 ```
-[human clicks Start Recording in the Spectator dock, plays, F9 to mark, clicks Stop Recording]
+[human clicks Start Recording in the Stage dock, plays, F9 to mark, clicks Stop Recording]
 clips { "action": "list" }
   → clips { "action": "query_range", ... }
     → spatial_inspect (on a specific node at a specific frame)
@@ -115,7 +115,7 @@ director { "op": "scene_create", ... }
         → spatial_query { "type": "radius", ... } (verify reachability)
 ```
 
-Used for AI-driven level construction with Spectator verifying the result.
+Used for AI-driven level construction with Stage verifying the result.
 
 ## Tool result caching
 

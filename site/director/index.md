@@ -82,12 +82,12 @@ Director uses Godot's API because:
 
 The rule is: if you would not hand-edit the `.tscn` directly, let Director do it through Godot.
 
-## Combining with Spectator
+## Combining with Stage
 
-Director builds; Spectator verifies. The flagship workflow:
+Director builds; Stage verifies. The flagship workflow:
 
 1. Use Director to create or modify a scene
 2. Press F5 to run the game
-3. Use Spectator to verify the result spatially — positions are correct, nodes are reachable, physics works
+3. Use Stage to verify the result spatially — positions are correct, nodes are reachable, physics works
 
 This loop — build → run → verify → adjust — is faster and more reliable than the traditional editor-only workflow because the agent can do the "inspect and verify" step without requiring manual observation.

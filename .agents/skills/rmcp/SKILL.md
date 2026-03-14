@@ -1,11 +1,11 @@
 ---
 name: rmcp
-description: Working with the rmcp Rust MCP SDK in the spectator-server crate. Use when writing or modifying MCP tool definitions, server initialization, or tool call handling.
+description: Working with the rmcp Rust MCP SDK in the stage-server crate. Use when writing or modifying MCP tool definitions, server initialization, or tool call handling.
 ---
 
 # rmcp — Rust MCP Server SDK
 
-This skill covers the `rmcp` crate used in `crates/spectator-server`. The MCP server exposes Spectator's 9 tools to AI agents via stdio transport.
+This skill covers the `rmcp` crate used in `crates/stage-server`. The MCP server exposes Stage's 9 tools to AI agents via stdio transport.
 
 ## Cargo.toml
 
@@ -27,7 +27,7 @@ use anyhow::Result;
 #[tokio::main]
 async fn main() -> Result<()> {
     // Build server with shared state
-    let server = SpectatorServer::new().await?;
+    let server = StageServer::new().await?;
 
     // Spawn background TCP client task BEFORE blocking on MCP
     let tcp_state = server.state.clone();
@@ -52,12 +52,12 @@ Tools live on a struct that derives `Clone` (required for shared state pattern):
 
 ```rust
 #[derive(Clone)]
-pub struct SpectatorServer {
+pub struct StageServer {
     pub state: Arc<Mutex<SessionState>>,
 }
 
 #[tool_box]
-impl SpectatorServer {
+impl StageServer {
     #[tool(description = "Get a spatial snapshot of the current scene from a perspective")]
     async fn spatial_snapshot(
         &self,
@@ -152,7 +152,7 @@ Err(McpError::internal_error("TCP connection lost", None))
 - `McpError::invalid_params(message, data)` — bad agent input
 - `McpError::internal_error(message, data)` — server/addon side failure
 - `McpError::not_found(message, data)` — resource doesn't exist
-- For Spectator's custom codes, use `McpError::new(code, message, data)` with our error code enum
+- For Stage's custom codes, use `McpError::new(code, message, data)` with our error code enum
 
 **Distinguish agent errors from server errors:**
 - Agent's fault (bad node path, invalid params) → `invalid_params` → agent can fix and retry
@@ -163,11 +163,11 @@ Err(McpError::internal_error("TCP connection lost", None))
 `#[tool_box]` generates much of `ServerHandler` automatically, but you still implement:
 
 ```rust
-impl ServerHandler for SpectatorServer {
+impl ServerHandler for StageServer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
             server_info: Implementation {
-                name: "spectator-server".to_string(),
+                name: "stage-server".to_string(),
                 version: env!("CARGO_PKG_VERSION").to_string(),
             },
             capabilities: ServerCapabilities::builder()
@@ -185,7 +185,7 @@ When using `#[tool_box]`, the `list_tools` and `call_tool` methods are generated
 
 ```rust
 #[derive(Clone)]
-pub struct SpectatorServer {
+pub struct StageServer {
     pub state: Arc<Mutex<SessionState>>,  // tokio::sync::Mutex for async
 }
 
@@ -193,11 +193,11 @@ pub struct SessionState {
     pub last_frame: Option<u64>,
     pub spatial_index: SpatialIndex,
     pub watches: Vec<Watch>,
-    pub config: SpectatorConfig,
+    pub config: StageConfig,
     pub tcp_client: Option<TcpClientHandle>,
 }
 
-impl SpectatorServer {
+impl StageServer {
     pub async fn new() -> anyhow::Result<Self> {
         Ok(Self {
             state: Arc::new(Mutex::new(SessionState::default())),
@@ -267,12 +267,12 @@ async fn spatial_snapshot(&self, params: SpatialSnapshotParams) -> Result<String
 
 ## Tool Organization
 
-Each MCP tool gets its own module in `crates/spectator-server/src/mcp/`:
+Each MCP tool gets its own module in `crates/stage-server/src/mcp/`:
 
 ```
 src/
 ├── main.rs
-├── server.rs          # SpectatorServer struct, ServerHandler impl
+├── server.rs          # StageServer struct, ServerHandler impl
 ├── state.rs           # SessionState, config types
 ├── tcp/               # TCP client, codec, reconnection
 └── mcp/

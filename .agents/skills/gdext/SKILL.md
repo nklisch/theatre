@@ -1,11 +1,11 @@
 ---
 name: gdext
-description: Working with godot-rust/gdext (Rust GDExtension bindings for Godot) in the spectator-godot crate. Use when writing or modifying Rust code that compiles to the GDExtension library.
+description: Working with godot-rust/gdext (Rust GDExtension bindings for Godot) in the stage-godot crate. Use when writing or modifying Rust code that compiles to the GDExtension library.
 ---
 
 # gdext — Rust GDExtension for Godot
 
-This skill covers the `godot-rust/gdext` crate used in `crates/spectator-godot`. That crate compiles to a `cdylib` loaded by Godot at runtime.
+This skill covers the `godot-rust/gdext` crate used in `crates/stage-godot`. That crate compiles to a `cdylib` loaded by Godot at runtime.
 
 ## Cargo.toml Setup
 
@@ -25,10 +25,10 @@ Every gdext library needs exactly one entry point:
 ```rust
 use godot::init::*;
 
-struct SpectatorExtension;
+struct StageExtension;
 
 #[gdextension]
-unsafe impl ExtensionLibrary for SpectatorExtension {}
+unsafe impl ExtensionLibrary for StageExtension {}
 ```
 
 The `#[gdextension]` macro:
@@ -43,13 +43,13 @@ use godot::prelude::*;
 
 #[derive(GodotClass)]
 #[class(base=Node)]                    // Inherits from Node (scene tree accessible)
-pub struct SpectatorCollector {
+pub struct StageCollector {
     base: Base<Node>,                  // Required field — the superclass instance
     poll_interval: u32,                // Rust-private fields
 }
 
 #[godot_api]
-impl INode for SpectatorCollector {   // I{BaseName} = virtual method interface
+impl INode for StageCollector {   // I{BaseName} = virtual method interface
     fn init(base: Base<Node>) -> Self {
         Self { base, poll_interval: 1 }
     }
@@ -64,7 +64,7 @@ impl INode for SpectatorCollector {   // I{BaseName} = virtual method interface
 }
 
 #[godot_api]
-impl SpectatorCollector {             // Custom methods — second impl block
+impl StageCollector {             // Custom methods — second impl block
     #[func]                           // GDScript-callable
     pub fn get_visible_nodes(&self) -> Array<Dictionary> {
         // ...
@@ -193,8 +193,8 @@ impl IEditorPlugin for MyEditorPlugin {
 }
 ```
 
-**CRITICAL GODOT LIMITATION:** GDScript cannot inherit from a GDExtension-derived EditorPlugin (godot#85268). In Spectator, we solve this with the hybrid pattern:
-- GDExtension provides `SpectatorCollector`, `SpectatorTCPServer`, `SpectatorRecorder` as plain `Node` subclasses
+**CRITICAL GODOT LIMITATION:** GDScript cannot inherit from a GDExtension-derived EditorPlugin (godot#85268). In Stage, we solve this with the hybrid pattern:
+- GDExtension provides `StageCollector`, `StageTCPServer`, `StageRecorder` as plain `Node` subclasses
 - GDScript `plugin.gd` is the actual `EditorPlugin` and instantiates those Rust classes
 - Do NOT make GDExtension classes inherit `EditorPlugin`
 
@@ -279,7 +279,7 @@ let arr = [pos.x, pos.y, pos.z];   // just destructure
 
 **`bind()` vs `bind_mut()`:** When you hold a `Gd<T>`, you can't directly call methods. Use `bind()` for `&self` access or `bind_mut()` for `&mut self`:
 ```rust
-let collector: Gd<SpectatorCollector> = ...;
+let collector: Gd<StageCollector> = ...;
 let count = collector.bind().get_node_count();   // calls &self method
 collector.bind_mut().poll();                      // calls &mut self method
 ```
@@ -298,6 +298,6 @@ compatibility_minimum = "4.5"
 reloading = true           # enables hot-reload in Godot 4.5+
 
 [libraries]
-linux.debug.x86_64 = "bin/linux/libspectator_godot.debug.so"
-linux.release.x86_64 = "bin/linux/libspectator_godot.so"
+linux.debug.x86_64 = "bin/linux/libstage_godot.debug.so"
+linux.release.x86_64 = "bin/linux/libstage_godot.so"
 ```

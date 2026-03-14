@@ -79,7 +79,7 @@ interface ToolParam {
 }
 
 interface ToolDoc {
-  server: 'spectator' | 'director'
+  server: 'stage' | 'director'
   name: string
   description: string
   input_schema: {
@@ -379,7 +379,7 @@ export default {
 
 Each tool page combines human-written prose with generated parameter tables.
 
-**Example**: `site/spectator/snapshot.md`
+**Example**: `site/stage/snapshot.md`
 
 ```markdown
 ---
@@ -444,7 +444,7 @@ Returns an `entities` array with per-node data...
 - If `tools.json` is missing, the page still renders (just with empty tables).
 
 **Acceptance Criteria**:
-- [ ] All 13 Spectator tool pages use `<ParamTable>` for parameters
+- [ ] All 13 Stage tool pages use `<ParamTable>` for parameters
 - [ ] All 12 Director tool pages use `<ParamTable>` for parameters
 - [ ] Parameter tables match actual Rust struct fields exactly
 - [ ] Human-written prose preserved around generated tables
@@ -552,7 +552,7 @@ ERRORS=0
 
 # For each tool doc page, check that any parameter mentioned in code blocks
 # or param tables actually exists in the schema
-for md in "$SITE_DIR"/spectator/*.md "$SITE_DIR"/director/*.md; do
+for md in "$SITE_DIR"/stage/*.md "$SITE_DIR"/director/*.md; do
   [ -f "$md" ] || continue
   page=$(basename "$md" .md)
   # This is a heuristic check — it catches the most common pattern of
@@ -592,7 +592,7 @@ Units 2 and 3 can be done in parallel. Unit 4 is the largest — 25 pages to upd
 ```bash
 cd site
 npm run dev
-# Open http://localhost:5173/theatre/spectator/snapshot
+# Open http://localhost:5173/theatre/stage/snapshot
 # Verify: parameter table shows all 10 params with correct types and defaults
 # Verify: enum values visible for detail, perspective
 ```
@@ -607,7 +607,7 @@ npm run build
 
 ### Visual Regression
 - Compare a generated param table against the actual Rust struct definition
-- Spot-check 3 tools (one Spectator, one Director, one with enums)
+- Spot-check 3 tools (one Stage, one Director, one with enums)
 
 ## Verification Checklist
 
@@ -623,9 +623,9 @@ python3 -c "
 import json
 tools = json.load(open('site/.generated/tools.json'))
 print(f'{len(tools)} tools')
-spectator = [t for t in tools if t['server'] == 'spectator']
+stage = [t for t in tools if t['server'] == 'stage']
 director = [t for t in tools if t['server'] == 'director']
-print(f'  Spectator: {len(spectator)}')
+print(f'  Stage: {len(stage)}')
 print(f'  Director: {len(director)}')
 
 # Check a specific tool
@@ -641,7 +641,7 @@ assert 'radius' in props
 cd site && npm run build
 
 # 4. Check built output
-ls -la .vitepress/dist/spectator/snapshot.html
+ls -la .vitepress/dist/stage/snapshot.html
 ```
 
 ## Migration Path

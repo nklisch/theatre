@@ -36,7 +36,7 @@ Godot's `move_and_slide` does not use continuous collision detection by default.
 
 ## Step 1: Reproduce with recording
 
-Click **Record** in the Spectator dock, fire several bullets at the wall at different angles and distances, then click **Stop** when you have captured a few tunneling events.
+Click **Record** in the Stage dock, fire several bullets at the wall at different angles and distances, then click **Stop** when you have captured a few tunneling events.
 
 ## Step 2: Query the recording
 

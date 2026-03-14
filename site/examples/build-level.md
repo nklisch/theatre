@@ -79,6 +79,6 @@ This level was built in 6 steps, all through Director:
 - Enemy and pickup instances (1 batch, 3 instances)
 - Lighting (1 batch, 4 operations)
 - Physics layers (1 batch, 2 operations)
-- Verification via Spectator (2 queries)
+- Verification via Stage (2 queries)
 
-Total: 5 batch calls + 2 Spectator calls = 7 round-trips to build a complete level.
+Total: 5 batch calls + 2 Stage calls = 7 round-trips to build a complete level.

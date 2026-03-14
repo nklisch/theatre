@@ -35,22 +35,22 @@ After `theatre install`, the filesystem looks like:
 ```
 ~/.local/bin/
   theatre                        # CLI binary
-  spectator                      # Spectator MCP server + CLI (serve / <tool>)
+  stage                      # Stage MCP server + CLI (serve / <tool>)
   director                       # Director MCP server + CLI (serve / <tool>)
 
 ~/.local/share/theatre/
   addons/
-    spectator/
+    stage/
       plugin.gd
       plugin.cfg
       runtime.gd
       dock.gd
       dock.tscn
       debugger_plugin.gd
-      spectator.gdextension
+      stage.gdextension
       *.uid
       bin/
-        linux/libspectator_godot.so    # (or macos/*.dylib, windows/*.dll)
+        linux/libstage_godot.so    # (or macos/*.dylib, windows/*.dll)
     director/
       plugin.gd
       plugin.cfg
@@ -192,10 +192,10 @@ impl TheatrePaths {
     }
 
     /// Path to the GDExtension binary within the share dir.
-    /// `~/.local/share/theatre/addons/spectator/bin/<platform>/<filename>`
+    /// `~/.local/share/theatre/addons/stage/bin/<platform>/<filename>`
     pub fn gdext_binary(&self) -> PathBuf {
         self.addon_source()
-            .join("spectator")
+            .join("stage")
             .join("bin")
             .join(platform_dir())
             .join(gdext_filename())
@@ -239,14 +239,14 @@ impl SourcePaths {
 /// Platform-specific GDExtension library filename.
 pub fn gdext_filename() -> &'static str {
     #[cfg(target_os = "linux")]
-    { "libspectator_godot.so" }
+    { "libstage_godot.so" }
     #[cfg(target_os = "macos")]
-    { "libspectator_godot.dylib" }
+    { "libstage_godot.dylib" }
     #[cfg(target_os = "windows")]
-    { "spectator_godot.dll" }
+    { "stage_godot.dll" }
 }
 
-/// Platform-specific subdirectory name under addons/spectator/bin/.
+/// Platform-specific subdirectory name under addons/stage/bin/.
 pub fn platform_dir() -> &'static str {
     #[cfg(target_os = "linux")]
     { "linux" }
@@ -331,7 +331,7 @@ pub fn validate_project(path: &Path) -> Result<()> { .. }
 pub fn read_project_godot(project: &Path) -> Result<String> { .. }
 
 /// Check which Theatre plugins are currently enabled in project.godot.
-/// Returns (spectator_enabled, director_enabled).
+/// Returns (stage_enabled, director_enabled).
 pub fn check_plugins_enabled(project: &Path) -> Result<(bool, bool)> { .. }
 
 /// Enable or disable a plugin in project.godot.
@@ -340,7 +340,7 @@ pub fn check_plugins_enabled(project: &Path) -> Result<(bool, bool)> { .. }
 /// `enabled=PackedStringArray(...)` value. Creates the section if missing.
 ///
 /// `plugin_cfg_path` is the res:// path, e.g.
-/// `"res://addons/spectator/plugin.cfg"`.
+/// `"res://addons/stage/plugin.cfg"`.
 pub fn set_plugin_enabled(
     project: &Path,
     plugin_cfg_path: &str,
@@ -365,12 +365,12 @@ pub fn remove_autoload(
 
 /// Generate .mcp.json content for a project.
 ///
-/// `spectator_bin` and `director_bin` are absolute paths to the installed
+/// `stage_bin` and `director_bin` are absolute paths to the installed
 /// binaries.
 pub fn generate_mcp_json(
-    spectator_bin: &Path,
+    stage_bin: &Path,
     director_bin: &Path,
-    include_spectator: bool,
+    include_stage: bool,
     include_director: bool,
     port: Option<u16>,
 ) -> serde_json::Value { .. }
@@ -391,7 +391,7 @@ project.godot is a Godot-flavored INI format. Key parsing rules:
 - Values are `key=value` (no spaces around `=` in Godot's output)
 - `PackedStringArray(...)` contains comma-separated quoted strings
 - Empty array: `PackedStringArray()`
-- With entries: `PackedStringArray("res://addons/spectator/plugin.cfg", "res://addons/director/plugin.cfg")`
+- With entries: `PackedStringArray("res://addons/stage/plugin.cfg", "res://addons/director/plugin.cfg")`
 
 `set_plugin_enabled` approach:
 1. Read file as string
@@ -416,9 +416,9 @@ The `.mcp.json` structure:
 ```json
 {
   "mcpServers": {
-    "spectator": {
+    "stage": {
       "type": "stdio",
-      "command": "/home/user/.local/bin/spectator",
+      "command": "/home/user/.local/bin/stage",
       "args": ["serve"]
     },
     "director": {
@@ -431,7 +431,7 @@ The `.mcp.json` structure:
 ```
 
 When `port` is `Some(p)` and `p != 9077`, add `"env": { "THEATRE_PORT": "<p>" }`
-to the spectator entry.
+to the stage entry.
 
 **Acceptance Criteria**:
 - [ ] `validate_project` returns Ok for a dir containing `project.godot`
@@ -482,20 +482,20 @@ pub fn run(args: InstallArgs) -> Result<()> { .. }
 2. Resolve `bin_dir` from args or `resolve_bin_dir()`.
 3. Resolve `share_dir` from args or `resolve_share_dir()`.
 4. Create both directories if they don't exist.
-5. Run `cargo build --release -p spectator-server -p spectator-godot -p director -p theatre-cli`
+5. Run `cargo build --release -p stage-server -p stage-godot -p director -p theatre-cli`
    from `repo_root` using `std::process::Command`. Stream output to
    stderr (inherit stderr). Fail if cargo returns non-zero.
 6. Copy three binaries from `target/release/` to `bin_dir`:
-   - `spectator`
+   - `stage`
    - `director`
    - `theatre`
 7. Copy addon templates from `repo_root/addons/` to `share_dir/addons/`:
-   - Copy `addons/spectator/` (all `.gd`, `.tscn`, `.cfg`, `.gdextension`,
+   - Copy `addons/stage/` (all `.gd`, `.tscn`, `.cfg`, `.gdextension`,
      `.uid` files — skip `bin/` subdirectory)
    - Copy `addons/director/` (all files including `ops/` subdirectory)
 8. Copy the built GDExtension binary:
    - From `target/release/<gdext_filename>`
-   - To `share_dir/addons/spectator/bin/<platform>/<gdext_filename>`
+   - To `share_dir/addons/stage/bin/<platform>/<gdext_filename>`
 9. Check if `bin_dir` is in `$PATH`. If not, print a warning.
 10. Print summary.
 
@@ -505,19 +505,19 @@ pub fn run(args: InstallArgs) -> Result<()> { .. }
 Theatre Install
 
   Building release binaries...
-  ✓ spectator
+  ✓ stage
   ✓ director
-  ✓ spectator-godot
+  ✓ stage-godot
   ✓ theatre
 
   Installing to ~/.local/bin/:
-  ✓ spectator
+  ✓ stage
   ✓ director
   ✓ theatre
 
   Installing to ~/.local/share/theatre/:
-  ✓ addons/spectator/ (23 files)
-  ✓ addons/spectator/bin/linux/libspectator_godot.so
+  ✓ addons/stage/ (23 files)
+  ✓ addons/stage/bin/linux/libstage_godot.so
   ✓ addons/director/ (15 files)
 
   ⚠ ~/.local/bin is not in your PATH. Add it:
@@ -530,7 +530,7 @@ Install complete. Run `theatre init <project>` to set up a Godot project.
 - `cargo build` is invoked once with all four `-p` flags for efficiency.
   The `--release` flag is hardcoded — install always builds release.
 - Addon copy from repo uses `copy_dir_recursive` with a skip closure that
-  excludes `bin/` under `spectator/` (we copy the built binary separately
+  excludes `bin/` under `stage/` (we copy the built binary separately
   in step 8 to ensure we get the freshly-built one, not whatever may have
   been in the repo's `bin/` from a previous local build).
 - The `theatre` binary copies itself. This is fine — on Linux, the running
@@ -578,13 +578,13 @@ pub fn run(args: DeployArgs) -> Result<()> { .. }
 1. Resolve `SourcePaths::discover()` (deploy rebuilds from source).
 2. Resolve `TheatrePaths::resolve()` (to update the share dir too).
 3. Validate all project paths (each must contain `project.godot`).
-4. Run `cargo build -p spectator-godot -p spectator-server -p director [--release]` (binary output: `spectator`).
+4. Run `cargo build -p stage-godot -p stage-server -p director [--release]` (binary output: `stage`).
 5. Update the share dir:
-   a. Copy fresh GDExtension binary to `share_dir/addons/spectator/bin/<platform>/`.
+   a. Copy fresh GDExtension binary to `share_dir/addons/stage/bin/<platform>/`.
    b. Sync addon GDScript files from repo to share dir.
    c. Copy fresh server binaries to `bin_dir`.
 6. For each project:
-   a. Copy addon files from `share_dir` to project (full `addons/spectator/`
+   a. Copy addon files from `share_dir` to project (full `addons/stage/`
       including `bin/` with fresh GDExtension, plus `addons/director/`).
    b. Skip copy if project's addon dir is a symlink (dev setup).
 7. Print summary per project.
@@ -595,7 +595,7 @@ pub fn run(args: DeployArgs) -> Result<()> { .. }
 - The share dir update means `theatre init` on a new project after a deploy
   will get the latest build too.
 - Symlink detection: `std::fs::symlink_metadata(path).map(|m| m.is_symlink())`.
-  If the project's `addons/spectator` is a symlink, print a note and skip
+  If the project's `addons/stage` is a symlink, print a note and skip
   the copy (it already points to the repo source).
 - Director addon files are also synced to target projects (they might have
   changed since `init`).
@@ -625,9 +625,9 @@ pub struct EnableArgs {
     /// Godot project path
     project: PathBuf,
 
-    /// Enable only Spectator (default: both)
+    /// Enable only Stage (default: both)
     #[arg(long)]
-    spectator: bool,
+    stage: bool,
 
     /// Enable only Director (default: both)
     #[arg(long)]
@@ -645,12 +645,12 @@ pub fn run(args: EnableArgs) -> Result<()> { .. }
 
 1. Validate project path.
 2. Determine which plugins to act on:
-   - If neither `--spectator` nor `--director` is set, act on both.
+   - If neither `--stage` nor `--director` is set, act on both.
    - Otherwise, act only on the ones specified.
 3. For each selected plugin:
    a. Call `set_plugin_enabled(project, plugin_cfg_path, !args.disable)`.
-   b. If enabling Spectator, also call `set_autoload(project, "SpectatorRuntime", "res://addons/spectator/runtime.gd")`.
-   c. If disabling Spectator, call `remove_autoload(project, "SpectatorRuntime")`.
+   b. If enabling Stage, also call `set_autoload(project, "StageRuntime", "res://addons/stage/runtime.gd")`.
+   c. If disabling Stage, call `remove_autoload(project, "StageRuntime")`.
 4. Print result.
 
 **Console output**:
@@ -658,24 +658,24 @@ pub fn run(args: EnableArgs) -> Result<()> { .. }
 ```
 Theatre Enable
 
-  ✓ Spectator enabled in project.godot
-  ✓ SpectatorRuntime autoload added
+  ✓ Stage enabled in project.godot
+  ✓ StageRuntime autoload added
   ✓ Director enabled in project.godot
 ```
 
 **Implementation Notes**:
-- Spectator requires both a plugin entry AND an autoload entry. Director
+- Stage requires both a plugin entry AND an autoload entry. Director
   only requires the plugin entry (it manages its own lifecycle).
 - This command is intentionally simple — no interactive prompts. It's the
   scriptable counterpart to `init`'s interactive mode.
 - Check if addon files actually exist in the project before enabling. If
-  `addons/spectator/plugin.cfg` is missing, warn that the plugin is enabled
+  `addons/stage/plugin.cfg` is missing, warn that the plugin is enabled
   in `project.godot` but won't load until files are copied (suggest
   `theatre init` or `theatre deploy`).
 
 **Acceptance Criteria**:
 - [ ] `theatre enable ~/game` enables both plugins + autoload
-- [ ] `theatre enable ~/game --spectator` enables only Spectator
+- [ ] `theatre enable ~/game --stage` enables only Stage
 - [ ] `theatre enable ~/game --director` enables only Director
 - [ ] `theatre enable ~/game --disable` disables both + removes autoload
 - [ ] Already-enabled plugins produce no error (idempotent)
@@ -712,7 +712,7 @@ pub fn run(args: InitArgs) -> Result<()> { .. }
    If not installed, print error: "Theatre is not installed. Run `theatre install` first."
 2. Validate project path.
 3. Check current state:
-   - Do `addons/spectator/` and `addons/director/` already exist in project?
+   - Do `addons/stage/` and `addons/director/` already exist in project?
    - Does `.mcp.json` already exist?
    - What plugins are enabled in `project.godot`?
 4. If `--yes`, use defaults (all addons, all plugins, generate `.mcp.json`,
@@ -723,14 +723,14 @@ pub fn run(args: InitArgs) -> Result<()> { .. }
 Theatre — Project Setup
 
 Which addons to install?
-> [x] Spectator — spatial awareness for AI agents
+> [x] Stage — spatial awareness for AI agents
   [x] Director — scene and resource authoring
 
 Generate .mcp.json for AI agent configuration? [Y/n]
 Port [9077]:
 
 Enable plugins in project.godot?
-> [x] Spectator
+> [x] Stage
   [x] Director
 
 Proceed with setup? [Y/n]
@@ -739,13 +739,13 @@ Proceed with setup? [Y/n]
 6. Execute selections:
    a. Copy selected addon directories from `share_dir/addons/` to
       project's `addons/`.
-      - For Spectator: copies everything including `bin/<platform>/` with
+      - For Stage: copies everything including `bin/<platform>/` with
         the GDExtension binary.
       - For Director: copies all GDScript files including `ops/` subdir.
       - If addon dir already exists in project, prompt to overwrite (or
         overwrite silently with `--yes`).
    b. Generate and write `.mcp.json` if selected.
-      - Binary paths resolve to `bin_dir / "spectator"` and
+      - Binary paths resolve to `bin_dir / "stage"` and
         `bin_dir / "director"`.
       - Verify binaries exist at those paths. If not, warn but still
         generate (user may install later).
@@ -756,7 +756,7 @@ Proceed with setup? [Y/n]
 **Interactive prompt details** (using `dialoguer`):
 
 - **Addon selection**: `MultiSelect` with items
-  `["Spectator — spatial awareness for AI agents", "Director — scene and resource authoring"]`,
+  `["Stage — spatial awareness for AI agents", "Director — scene and resource authoring"]`,
   both checked by default.
 - **MCP config**: `Confirm` default yes. If yes, `Input` for port with
   default `"9077"` and u16 validation.
@@ -769,10 +769,10 @@ Proceed with setup? [Y/n]
 ```
 Theatre — Project Setup
 
-  ✓ Copied addons/spectator/ (with GDExtension)
+  ✓ Copied addons/stage/ (with GDExtension)
   ✓ Copied addons/director/
   ✓ Generated .mcp.json
-  ✓ Enabled Spectator in project.godot
+  ✓ Enabled Stage in project.godot
   ✓ Enabled Director in project.godot
 
 Done. Open your project in Godot — plugins are active.
@@ -792,12 +792,12 @@ Done. Open your project in Godot — plugins are active.
 **Acceptance Criteria**:
 - [ ] `theatre init ~/game` launches interactive prompts
 - [ ] `theatre init ~/game --yes` skips prompts, uses all defaults
-- [ ] Spectator addon is copied with GDExtension binary
+- [ ] Stage addon is copied with GDExtension binary
 - [ ] Director addon is copied (GDScript only, with ops/ subdir)
 - [ ] `.mcp.json` is generated with correct absolute paths to bin_dir
 - [ ] `.mcp.json` includes THEATRE_PORT env only for non-default port
 - [ ] Plugins are enabled in `project.godot`
-- [ ] Autoload entry added for SpectatorRuntime
+- [ ] Autoload entry added for StageRuntime
 - [ ] Existing addons trigger overwrite prompt (not silent clobber)
 - [ ] Existing `.mcp.json` triggers overwrite prompt
 - [ ] Missing share dir triggers clear "run theatre install first" error
@@ -850,7 +850,7 @@ pattern. All tests use `tempfile::TempDir` for filesystem operations.
 - `test_remove_autoload_noop` — remove non-existent entry
 - `test_generate_mcp_json_default_port` — no env entry
 - `test_generate_mcp_json_custom_port` — includes THEATRE_PORT env
-- `test_generate_mcp_json_spectator_only` — director omitted
+- `test_generate_mcp_json_stage_only` — director omitted
 - `test_write_mcp_json_no_overwrite` — existing file, overwrite=false
 
 **install.rs, deploy.rs, enable.rs**:
@@ -900,7 +900,7 @@ fn enable_on_valid_project() {
     assert!(output.status.success());
 
     let content = std::fs::read_to_string(dir.path().join("project.godot")).unwrap();
-    assert!(content.contains("spectator/plugin.cfg"));
+    assert!(content.contains("stage/plugin.cfg"));
     assert!(content.contains("director/plugin.cfg"));
 }
 
@@ -948,21 +948,21 @@ cargo test -p theatre-cli
 # Full install (manual verification)
 ./target/debug/theatre install
 theatre --version
-ls ~/.local/bin/{theatre,spectator,director}
-ls ~/.local/share/theatre/addons/spectator/plugin.cfg
-ls ~/.local/share/theatre/addons/spectator/bin/linux/libspectator_godot.so
+ls ~/.local/bin/{theatre,stage,director}
+ls ~/.local/share/theatre/addons/stage/plugin.cfg
+ls ~/.local/share/theatre/addons/stage/bin/linux/libstage_godot.so
 ls ~/.local/share/theatre/addons/director/plugin.cfg
 
 # Init a test project (manual verification)
 theatre init ~/godot/test-harness --yes
 cat ~/godot/test-harness/.mcp.json
 grep -A2 'editor_plugins' ~/godot/test-harness/project.godot
-grep 'SpectatorRuntime' ~/godot/test-harness/project.godot
+grep 'StageRuntime' ~/godot/test-harness/project.godot
 
 # Enable/disable (manual verification)
-theatre enable ~/godot/test-harness --disable --spectator
+theatre enable ~/godot/test-harness --disable --stage
 grep -A2 'editor_plugins' ~/godot/test-harness/project.godot
-theatre enable ~/godot/test-harness --spectator
+theatre enable ~/godot/test-harness --stage
 grep -A2 'editor_plugins' ~/godot/test-harness/project.godot
 
 # Deploy after code change (manual verification)

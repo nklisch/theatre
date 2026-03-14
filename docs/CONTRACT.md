@@ -1,10 +1,10 @@
-# Spectator — MCP Tool Contracts
+# Stage — MCP Tool Contracts
 
 Version: 1.0-draft
 Protocol: MCP (Model Context Protocol)
 Transport: stdio (JSON-RPC 2.0)
 
-This document defines the complete MCP tool surface for Spectator. These 9 tools are the stable API contract between Spectator and any MCP-compatible AI agent. The tool surface is fixed — game-specific customization happens at the data layer (what properties are tracked, what nodes are grouped), not by adding or modifying tools.
+This document defines the complete MCP tool surface for Stage. These 9 tools are the stable API contract between Stage and any MCP-compatible AI agent. The tool surface is fixed — game-specific customization happens at the data layer (what properties are tracked, what nodes are grouped), not by adding or modifying tools.
 
 ---
 
@@ -1083,7 +1083,7 @@ Navigate and query the Godot scene tree structure. Not spatial — this is about
 {
   "roots": [
     { "name": "Main", "class": "Node3D", "groups": [] },
-    { "name": "SpectatorRuntime", "class": "Node", "groups": ["spectator_internal"] }
+    { "name": "StageRuntime", "class": "Node", "groups": ["stage_internal"] }
   ],
   "budget": { /* ... */ }
 }
@@ -1326,7 +1326,7 @@ Same shape as `spatial_snapshot` response (the recording is a queryable timeline
 Marker sources:
 - **human**: From the editor dock or F9 keyboard shortcut
 - **agent**: Via `recording(action: "add_marker")`
-- **code**: Via `SpectatorRuntime.marker("label")` from game scripts (system tier by default, rate-limited; supports `"deliberate"` and `"silent"` tiers)
+- **code**: Via `StageRuntime.marker("label")` from game scripts (system tier by default, rate-limited; supports `"deliberate"` and `"silent"` tiers)
 - **system**: Auto-detected anomalies (velocity spikes, collision events, property threshold crossings)
 
 ### Response — `list`

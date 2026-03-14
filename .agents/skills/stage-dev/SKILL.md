@@ -1,15 +1,15 @@
 ---
 name: stage-dev
-description: Orientation for working on the Spectator codebase itself. Covers repo layout, crate responsibilities, design decisions, key patterns, and how the pieces connect.
+description: Orientation for working on the Stage codebase itself. Covers repo layout, crate responsibilities, design decisions, key patterns, and how the pieces connect.
 ---
 
 # Theatre — Developer Orientation
 
 Theatre is a Godot AI agent toolkit containing two tools:
-- **Spectator**: Rust MCP server + GDExtension for runtime spatial observation
+- **Stage**: Rust MCP server + GDExtension for runtime spatial observation
 - **Director**: Rust MCP server + GDScript addon for editor-time scene manipulation
 
-This skill covers Spectator development. See the Director crate and
+This skill covers Stage development. See the Director crate and
 `docs/director-spec.md` for Director specifics.
 
 ## Crate Map
@@ -18,25 +18,25 @@ This skill covers Spectator development. See the Director crate and
 theatre/
 ├── crates/
 │   ├── stage-server/     # Stage MCP binary — Claude Code connects here
-│   ├── stage-godot/      # Spectator GDExtension cdylib — Godot loads this
+│   ├── stage-godot/      # Stage GDExtension cdylib — Godot loads this
 │   ├── stage-protocol/   # Shared: TCP wire format, message types
 │   ├── stage-core/       # Shared: spatial math, bearing, indexing, budget
 │   └── director/             # Director MCP binary
-├── addons/stage/         # Spectator Godot addon (copy into user projects)
+├── addons/stage/         # Stage Godot addon (copy into user projects)
 │   ├── plugin.gd             # @tool EditorPlugin (GDScript)
 │   ├── runtime.gd            # Autoload singleton (GDScript)
 │   ├── dock.tscn / dock.gd   # Editor dock UI
-│   └── spectator.gdextension # Manifest pointing to GDExtension binaries
+│   └── stage.gdextension # Manifest pointing to GDExtension binaries
 ├── addons/director/          # Director Godot addon
 ├── docs/                     # All design docs
 └── tests/
-    ├── wire-tests/           # Spectator E2E tests
+    ├── wire-tests/           # Stage E2E tests
     └── director-tests/       # Director E2E tests
 ```
 
 ## The Two-Artifact Rule
 
-There are two separate Rust compilation targets for Spectator:
+There are two separate Rust compilation targets for Stage:
 
 | Target | Crate | Type | Process |
 |---|---|---|---|
@@ -151,7 +151,7 @@ cargo build --release -p stage-server
 cargo build --release -p stage-godot
 
 # Copy built library to addon
-cp target/release/libspectator_godot.so addons/stage/bin/linux/
+cp target/release/libstage_godot.so addons/stage/bin/linux/
 ```
 
 For integration testing, run Godot with a test project in `--headless` mode and point it at the built addon.
@@ -161,4 +161,4 @@ For integration testing, run Godot with a test project in `--headless` mode and 
 - Working on GDExtension Rust code → `/gdext`
 - Working on MCP server Rust code → `/rmcp`
 - Working on GDScript plugin/autoload/dock → `/godot-addon`
-- Using Spectator to debug a Godot game (end-user) → `/spectator` (in `skills/stage/`)
+- Using Stage to debug a Godot game (end-user) → `/stage` (in `skills/stage/`)

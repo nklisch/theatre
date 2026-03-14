@@ -16,36 +16,36 @@ This is purely a **human-facing UI milestone**. No new MCP tools, no new Rust cr
 
 ### What exists (that M6 touches):
 
-1. **plugin.gd** — `EditorPlugin` that registers Project Settings and adds `SpectatorRuntime` as an autoload singleton. Does NOT add a dock panel.
+1. **plugin.gd** — `EditorPlugin` that registers Project Settings and adds `StageRuntime` as an autoload singleton. Does NOT add a dock panel.
 
-2. **runtime.gd** — Autoload that creates `SpectatorCollector` + `SpectatorTCPServer`, calls `tcp_server.poll()` every physics frame. No input handling, no overlays, no recording controls.
+2. **runtime.gd** — Autoload that creates `StageCollector` + `StageTCPServer`, calls `tcp_server.poll()` every physics frame. No input handling, no overlays, no recording controls.
 
 3. **TCP protocol** — `Message::Event` variant exists for addon → server push events (used for `signal_emitted`). No server → addon push mechanism for activity logs.
 
-4. **Project Settings** — `spectator/display/show_agent_notifications` and `spectator/display/show_recording_indicator` are registered but not read by anything.
+4. **Project Settings** — `stage/display/show_agent_notifications` and `stage/display/show_recording_indicator` are registered but not read by anything.
 
-5. **SpectatorTCPServer** (Rust) — Exposes `start()`, `stop()`, `poll()`, `set_collector()`. No method to query connection status from GDScript. No method to get session info (watch count, tracked node count, frame number).
+5. **StageTCPServer** (Rust) — Exposes `start()`, `stop()`, `poll()`, `set_collector()`. No method to query connection status from GDScript. No method to get session info (watch count, tracked node count, frame number).
 
-6. **spectator-server tcp.rs** — Read loop handles `Response`, `Error`, `Event`. Server currently only sends `Query`, `HandshakeAck`, `HandshakeError` to the addon. No `Event` push from server → addon.
+6. **stage-server tcp.rs** — Read loop handles `Response`, `Error`, `Event`. Server currently only sends `Query`, `HandshakeAck`, `HandshakeError` to the addon. No `Event` push from server → addon.
 
 ### What M6 must add:
 
 - **dock.tscn + dock.gd** — Editor dock panel scene and script
 - **plugin.gd** — Add dock on `_enter_tree`, remove on `_exit_tree`
 - **runtime.gd** — Keyboard shortcut handling (`_shortcut_input`), in-game overlay CanvasLayer, toast notification system
-- **SpectatorTCPServer** — GDScript-callable status methods: `is_connected()`, `get_session_info()`
+- **StageTCPServer** — GDScript-callable status methods: `is_connected()`, `get_session_info()`
 - **TCP protocol** — Server → addon `Event` push for activity logs
-- **spectator-server** — Activity log generation in MCP tool handlers, push to addon via TCP
+- **stage-server** — Activity log generation in MCP tool handlers, push to addon via TCP
 
 ---
 
 ## Implementation Units
 
-### Unit 1: Connection Status Queries (`spectator-godot`)
+### Unit 1: Connection Status Queries (`stage-godot`)
 
-**File:** `crates/spectator-godot/src/tcp_server.rs`
+**File:** `crates/stage-godot/src/tcp_server.rs`
 
-The dock needs to query the TCP server's connection state from GDScript. Add three methods to `SpectatorTCPServer`:
+The dock needs to query the TCP server's connection state from GDScript. Add three methods to `StageTCPServer`:
 
 ```rust
 #[func]
@@ -76,7 +76,7 @@ These read existing internal state — `handshake_completed` and `listening` are
 
 The dock also needs session info: tracked node count, active watch count, current frame, FPS. Most of this comes from the collector and Godot engine, not the TCP server. The dock can query these directly:
 
-- **Tracked node count**: `collector.get_tracked_count()` — new `#[func]` on `SpectatorCollector` that returns the number of nodes collected in the last frame
+- **Tracked node count**: `collector.get_tracked_count()` — new `#[func]` on `StageCollector` that returns the number of nodes collected in the last frame
 - **Active watch count**: Watches live on the server side, not the addon. The server pushes this as part of activity events (or the dock just shows "N/A" until the server reports it).
 - **Frame number**: `Engine.get_physics_frames()` — already available in GDScript
 - **FPS**: `Engine.get_frames_per_second()` — already available in GDScript
@@ -100,7 +100,7 @@ The collector already traverses the scene tree each frame — it just needs to r
 
 ---
 
-### Unit 2: Activity Log Protocol (`spectator-protocol`, `spectator-server`, `spectator-godot`)
+### Unit 2: Activity Log Protocol (`stage-protocol`, `stage-server`, `stage-godot`)
 
 The server needs to push activity events to the addon so the dock can display them. This uses the existing `Message::Event` variant, but in the **server → addon** direction (currently only used addon → server).
 
@@ -154,11 +154,11 @@ Each MCP tool handler generates a human-readable summary string for the activity
 
 #### Server-side implementation
 
-**File:** `crates/spectator-server/src/activity.rs` (new)
+**File:** `crates/stage-server/src/activity.rs` (new)
 
 ```rust
 use serde_json::json;
-use spectator_protocol::messages::Message;
+use stage_protocol::messages::Message;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Activity log entry types.
@@ -223,9 +223,9 @@ pub fn activity_event(
 }
 ```
 
-To avoid duplicating this pattern in every handler, add a helper method on `SpectatorServer`:
+To avoid duplicating this pattern in every handler, add a helper method on `StageServer`:
 
-**File:** `crates/spectator-server/src/tcp.rs`
+**File:** `crates/stage-server/src/tcp.rs`
 
 ```rust
 impl SessionState {
@@ -234,7 +234,7 @@ impl SessionState {
     pub async fn push_activity(&mut self, entry_type: &str, summary: &str, tool: &str) {
         if let Some(ref mut writer) = self.tcp_writer {
             let event = crate::activity::activity_event_from_str(entry_type, summary, tool);
-            let _ = spectator_protocol::codec::async_io::write_message(
+            let _ = stage_protocol::codec::async_io::write_message(
                 &mut writer.writer,
                 &event,
             ).await;
@@ -245,7 +245,7 @@ impl SessionState {
 
 #### Addon-side: receiving activity events
 
-**File:** `crates/spectator-godot/src/tcp_server.rs`
+**File:** `crates/stage-godot/src/tcp_server.rs`
 
 The TCP server's `poll()` method already reads messages. Add handling for incoming `Event` messages from the server:
 
@@ -286,15 +286,15 @@ The dock polls this every second (not every frame). Each call drains the buffer 
 
 ---
 
-### Unit 3: Dock Panel Scene (`addons/spectator`)
+### Unit 3: Dock Panel Scene (`addons/stage`)
 
-**File:** `addons/spectator/dock.tscn`
+**File:** `addons/stage/dock.tscn`
 
 The dock is a Godot scene (`.tscn`) with a `VBoxContainer` root. Layout follows UX.md exactly.
 
 ```
 dock.tscn
-├── VBoxContainer (root, "SpectatorDock")
+├── VBoxContainer (root, "StageDock")
 │   ├── HBoxContainer ("ConnectionSection")
 │   │   ├── ColorRect ("StatusDot")  — 12x12, colored square indicator
 │   │   ├── Label ("StatusLabel")      — "Connected" / "Waiting..." / "Stopped"
@@ -327,9 +327,9 @@ dock.tscn
 
 ---
 
-### Unit 4: Dock Panel Script (`addons/spectator`)
+### Unit 4: Dock Panel Script (`addons/stage`)
 
-**File:** `addons/spectator/dock.gd`
+**File:** `addons/stage/dock.gd`
 
 ```gdscript
 @tool
@@ -338,8 +338,8 @@ extends VBoxContainer
 ## Maximum number of activity entries displayed.
 const MAX_ACTIVITY_ENTRIES := 20
 
-var _tcp_server: SpectatorTCPServer
-var _collector: SpectatorCollector
+var _tcp_server: StageTCPServer
+var _collector: StageCollector
 var _update_timer := 0.0
 var _collapsed := false
 
@@ -355,7 +355,7 @@ var _collapsed := false
 @onready var collapse_btn: Button = %CollapseBtn
 
 
-func setup(tcp_server: SpectatorTCPServer, collector: SpectatorCollector) -> void:
+func setup(tcp_server: StageTCPServer, collector: StageCollector) -> void:
     _tcp_server = tcp_server
     _collector = collector
 
@@ -486,9 +486,9 @@ static func _format_timestamp(unix: float) -> String:
 
 ---
 
-### Unit 5: Plugin Integration (`addons/spectator`)
+### Unit 5: Plugin Integration (`addons/stage`)
 
-**File:** `addons/spectator/plugin.gd`
+**File:** `addons/stage/plugin.gd`
 
 The EditorPlugin creates the dock and wires it to the runtime.
 
@@ -500,7 +500,7 @@ var dock: Control
 
 
 func _enter_tree() -> void:
-    dock = preload("res://addons/spectator/dock.tscn").instantiate()
+    dock = preload("res://addons/stage/dock.tscn").instantiate()
     add_control_to_dock(DOCK_SLOT_RIGHT_BL, dock)
 
 
@@ -513,11 +513,11 @@ func _exit_tree() -> void:
 
 func _enable_plugin() -> void:
     _register_settings()
-    add_autoload_singleton("SpectatorRuntime", "res://addons/spectator/runtime.gd")
+    add_autoload_singleton("StageRuntime", "res://addons/stage/runtime.gd")
 
 
 func _disable_plugin() -> void:
-    remove_autoload_singleton("SpectatorRuntime")
+    remove_autoload_singleton("StageRuntime")
 
 
 func _register_settings() -> void:
@@ -526,7 +526,7 @@ func _register_settings() -> void:
 
 **Dock ↔ Runtime wiring:**
 
-The dock lives in the editor; the runtime autoload lives in the running game. They need to share the `SpectatorTCPServer` and `SpectatorCollector` references.
+The dock lives in the editor; the runtime autoload lives in the running game. They need to share the `StageTCPServer` and `StageCollector` references.
 
 Two options:
 
@@ -536,7 +536,7 @@ Two options:
 # In dock.gd _process:
 func _update_status() -> void:
     if not _tcp_server:
-        var runtime = Engine.get_singleton("SpectatorRuntime")
+        var runtime = Engine.get_singleton("StageRuntime")
         if runtime:
             _tcp_server = runtime.tcp_server
             _collector = runtime.collector
@@ -557,8 +557,8 @@ extends Node
 ## Class-level reference for dock access (set in _ready, cleared in _exit_tree).
 static var instance: Node = null
 
-var tcp_server: SpectatorTCPServer
-var collector: SpectatorCollector
+var tcp_server: StageTCPServer
+var collector: StageCollector
 
 
 func _ready() -> void:
@@ -574,11 +574,11 @@ func _exit_tree() -> void:
 ```gdscript
 # In dock.gd:
 func _update_status() -> void:
-    var runtime = SpectatorRuntime if ClassDB.class_exists(&"SpectatorRuntime") else null
-    # SpectatorRuntime is a GDScript autoload, not a class — use the static var pattern
+    var runtime = StageRuntime if ClassDB.class_exists(&"StageRuntime") else null
+    # StageRuntime is a GDScript autoload, not a class — use the static var pattern
     if not _tcp_server:
         # runtime.gd sets a static var; dock reads it
-        var rt_script := load("res://addons/spectator/runtime.gd")
+        var rt_script := load("res://addons/stage/runtime.gd")
         if rt_script and rt_script.get("instance"):
             var rt = rt_script.instance
             if rt:
@@ -593,9 +593,9 @@ This pattern works because:
 
 ---
 
-### Unit 6: In-Game Overlays & Notifications (`addons/spectator`)
+### Unit 6: In-Game Overlays & Notifications (`addons/stage`)
 
-**File:** `addons/spectator/runtime.gd`
+**File:** `addons/stage/runtime.gd`
 
 The runtime autoload handles keyboard shortcuts and in-game visual feedback. M6 delivers the overlay infrastructure; recording controls (F8) are wired in M7.
 
@@ -680,7 +680,7 @@ func _process_toasts() -> void:
 
 func _show_toast(text: String) -> void:
     if not ProjectSettings.get_setting(
-            "spectator/display/show_agent_notifications", true):
+            "stage/display/show_agent_notifications", true):
         return
 
     var panel := PanelContainer.new()
@@ -765,9 +765,9 @@ This is cleaner than a draining buffer — no coordination between consumers, no
 
 ---
 
-### Unit 7: Server-Side Activity Logging (`spectator-server`)
+### Unit 7: Server-Side Activity Logging (`stage-server`)
 
-**File:** `crates/spectator-server/src/activity.rs` (new)
+**File:** `crates/stage-server/src/activity.rs` (new)
 
 Summary generation functions for each tool:
 
@@ -913,18 +913,18 @@ pub fn config_summary(params: &serde_json::Value) -> String {
 
 #### Wiring into tool handlers
 
-Add a helper to `SpectatorServer` that pushes activity after each tool call:
+Add a helper to `StageServer` that pushes activity after each tool call:
 
-**File:** `crates/spectator-server/src/server.rs`
+**File:** `crates/stage-server/src/server.rs`
 
 ```rust
-impl SpectatorServer {
+impl StageServer {
     /// Push an activity log event to the addon (best-effort).
     pub(crate) async fn log_activity(&self, entry_type: &str, summary: &str, tool: &str) {
         let event = crate::activity::build_activity_message(entry_type, summary, tool);
         let mut s = self.state.lock().await;
         if let Some(ref mut writer) = s.tcp_writer {
-            let _ = spectator_protocol::codec::async_io::write_message(
+            let _ = stage_protocol::codec::async_io::write_message(
                 &mut writer.writer,
                 &event,
             ).await;
@@ -960,29 +960,29 @@ self.log_activity("query", &crate::activity::inspect_summary(&params.node), "spa
 
 | File | Purpose |
 |---|---|
-| `addons/spectator/dock.tscn` | Dock panel Godot scene |
-| `addons/spectator/dock.gd` | Dock panel script |
-| `crates/spectator-server/src/activity.rs` | Activity summary generation |
+| `addons/stage/dock.tscn` | Dock panel Godot scene |
+| `addons/stage/dock.gd` | Dock panel script |
+| `crates/stage-server/src/activity.rs` | Activity summary generation |
 
 ### Modified files
 
 | File | Changes |
 |---|---|
-| `addons/spectator/plugin.gd` | Add dock on `_enter_tree`, remove on `_exit_tree` |
-| `addons/spectator/runtime.gd` | Add CanvasLayer overlay, keyboard shortcut handling (F10 pause), toast notifications, static `instance` var |
-| `crates/spectator-godot/src/tcp_server.rs` | Add `is_connected()`, `get_connection_status()`, `get_port()`, `activity_received` signal, handle incoming `Event` messages |
-| `crates/spectator-godot/src/collector.rs` | Add `get_tracked_count()`, `get_group_count()` |
-| `crates/spectator-server/src/tcp.rs` | (no structural changes — activity push helper on `SessionState` or `SpectatorServer`) |
-| `crates/spectator-server/src/server.rs` | Add `log_activity()` helper |
-| `crates/spectator-server/src/mcp/mod.rs` | Add activity logging calls at end of each tool handler |
-| `crates/spectator-server/src/main.rs` | Add `mod activity;` |
+| `addons/stage/plugin.gd` | Add dock on `_enter_tree`, remove on `_exit_tree` |
+| `addons/stage/runtime.gd` | Add CanvasLayer overlay, keyboard shortcut handling (F10 pause), toast notifications, static `instance` var |
+| `crates/stage-godot/src/tcp_server.rs` | Add `is_connected()`, `get_connection_status()`, `get_port()`, `activity_received` signal, handle incoming `Event` messages |
+| `crates/stage-godot/src/collector.rs` | Add `get_tracked_count()`, `get_group_count()` |
+| `crates/stage-server/src/tcp.rs` | (no structural changes — activity push helper on `SessionState` or `StageServer`) |
+| `crates/stage-server/src/server.rs` | Add `log_activity()` helper |
+| `crates/stage-server/src/mcp/mod.rs` | Add activity logging calls at end of each tool handler |
+| `crates/stage-server/src/main.rs` | Add `mod activity;` |
 
 ### Unchanged
 
 | File | Reason |
 |---|---|
-| `crates/spectator-protocol/src/messages.rs` | `Message::Event` already supports both directions — no changes needed |
-| `crates/spectator-core/` | No core logic changes — this is a UI milestone |
+| `crates/stage-protocol/src/messages.rs` | `Message::Event` already supports both directions — no changes needed |
+| `crates/stage-core/` | No core logic changes — this is a UI milestone |
 
 ---
 

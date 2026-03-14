@@ -12,14 +12,14 @@ This page explains Theatre's architecture: how data flows from the running Godot
                │ MCP (stdio)
                ▼
 ┌─────────────────────────────────┐
-│       spectator (Rust)          │
+│       stage (Rust)          │
 │  Translates MCP ↔ TCP protocol  │
 └──────────────┬──────────────────┘
                │ TCP port 9077
                │ (length-prefixed JSON)
                ▼
 ┌─────────────────────────────────┐
-│   spectator-godot (GDExtension) │
+│   stage-godot (GDExtension) │
 │   Runs inside your Godot game   │
 │   Reads scene tree every tick   │
 └──────────────┬──────────────────┘
@@ -33,23 +33,23 @@ This page explains Theatre's architecture: how data flows from the running Godot
 
 The flow is always initiated by the AI agent (via the MCP server). The GDExtension does not push data unprompted — it collects data on every physics tick and serves it when the server requests.
 
-## Spectator: GDExtension architecture
+## Stage: GDExtension architecture
 
 ### The addon
 
-The Spectator GDExtension (`libspectator_godot.so`) is a compiled Rust library loaded by Godot at startup. It registers several GDExtension classes:
+The Stage GDExtension (`libstage_godot.so`) is a compiled Rust library loaded by Godot at startup. It registers several GDExtension classes:
 
-- **`SpectatorTCPServer`** — manages the TCP listener on port 9077, handles framing
-- **`SpectatorCollector`** — walks the scene tree on each `_physics_process` tick, collecting positions, velocities, and properties of tracked nodes into an in-memory frame buffer
-- **`SpectatorRecorder`** — writes frame buffers to clip files on disk when recording is active
+- **`StageTCPServer`** — manages the TCP listener on port 9077, handles framing
+- **`StageCollector`** — walks the scene tree on each `_physics_process` tick, collecting positions, velocities, and properties of tracked nodes into an in-memory frame buffer
+- **`StageRecorder`** — writes frame buffers to clip files on disk when recording is active
 
-These classes are instantiated by `addons/spectator/plugin.gd` (the GDScript `EditorPlugin`), which also manages the editor dock.
+These classes are instantiated by `addons/stage/plugin.gd` (the GDScript `EditorPlugin`), which also manages the editor dock.
 
 The collector runs at Godot's physics tick rate (default 60 Hz). It captures data in a ring buffer — old frames are dropped to keep memory bounded. The buffer depth determines how far back a `clips` query can look without an explicit clip file.
 
 ### The GDScript layer
 
-`addons/spectator/runtime.gd` is a thin GDScript file that:
+`addons/stage/runtime.gd` is a thin GDScript file that:
 - Checks if the GDExtension loaded via `ClassDB.class_exists`
 - Instantiates extension classes using `ClassDB.instantiate`
 - Provides graceful degradation if the extension is missing (logs a warning, no crash)
@@ -58,9 +58,9 @@ This design means the addon can be enabled in a project even if the GDExtension 
 
 ### The server
 
-`spectator` (crate: `spectator-server`) is a Rust binary that supports two modes:
-- **`spectator serve`** — MCP server on stdio (persistent TCP connection, auto-reconnect)
-- **`spectator <tool> '<json>'`** — CLI one-shot mode (connect once, execute, exit)
+`stage` (crate: `stage-server`) is a Rust binary that supports two modes:
+- **`stage serve`** — MCP server on stdio (persistent TCP connection, auto-reconnect)
+- **`stage <tool> '<json>'`** — CLI one-shot mode (connect once, execute, exit)
 
 When a tool is called (via MCP or CLI), the server:
 
@@ -97,7 +97,7 @@ See [Wire Format](/api/wire-format) for the full protocol specification.
 
 ## Director: GDScript architecture
 
-Director's architecture differs from Spectator's because it needs to **modify** scene files, which requires Godot's resource system.
+Director's architecture differs from Stage's because it needs to **modify** scene files, which requires Godot's resource system.
 
 ### Three backends
 
@@ -121,7 +121,7 @@ The GDScript addon receives operations as TCP messages, executes them using Godo
 
 ## MCP Transport
 
-Both `spectator serve` and `director serve` use the **stdio transport** for MCP. This means:
+Both `stage serve` and `director serve` use the **stdio transport** for MCP. This means:
 
 - The agent launcher starts the binary as a child process
 - The binary reads JSON-RPC requests from stdin
@@ -142,7 +142,7 @@ The agent can always request more detail by narrowing scope — use `spatial_ins
 
 ## Data freshness
 
-Spectator data is always one physics tick old. When you call `spatial_snapshot`, the server requests the most recent collected frame from the GDExtension. The GDExtension collects data at the end of each `_physics_process` call, so the data is current to within ~16ms (at 60 Hz).
+Stage data is always one physics tick old. When you call `spatial_snapshot`, the server requests the most recent collected frame from the GDExtension. The GDExtension collects data at the end of each `_physics_process` call, so the data is current to within ~16ms (at 60 Hz).
 
 For monitoring changes over time, use `spatial_delta` (returns only what changed since a given frame) or `spatial_watch` (set up a watch that the server polls automatically).
 

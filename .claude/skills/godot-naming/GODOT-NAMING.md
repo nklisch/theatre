@@ -42,7 +42,7 @@ was renamed to `position`. Use `position`/`global_position`.
 | Rotation as quaternion | `quaternion` | `quaternion` | `Quaternion` (x, y, z, w); from `Node3D.get_quaternion()` |
 
 **Key facts:**
-- `rotation_degrees` is the correct Godot 4 name (not `rotation_deg`). Spectator
+- `rotation_degrees` is the correct Godot 4 name (not `rotation_deg`). Stage
   uses `rotation_deg` in its API (both as a field name and in struct names) because
   it is shorter and unambiguous. When reading from Godot, call `get_rotation_degrees()`.
 - `rotation_degrees` still exists in Godot 4. It was not removed from Godot 3 to 4.
@@ -283,7 +283,7 @@ correctly reflects inherited visibility from parent nodes.
 ## Stage-Specific Fields (no direct Godot equivalent)
 
 These fields appear in Stage's MCP API output but have no exact Godot
-property they map to — they are computed or aggregated by Spectator.
+property they map to — they are computed or aggregated by Stage.
 
 | API field name | Description | Derived from |
 |---|---|---|

@@ -34,7 +34,7 @@ const messages7 = [
 
 # Build & Verify
 
-The flagship cross-tool workflow: Director builds a room, Spectator verifies a player can navigate it.
+The flagship cross-tool workflow: Director builds a room, Stage verifies a player can navigate it.
 
 This example demonstrates the **build → run → verify → adjust** loop — the most powerful pattern in Theatre. An AI agent constructs a section of geometry, then uses spatial queries to verify that:
 - The player can navigate through the area
@@ -65,7 +65,7 @@ Build a corridor room connecting two larger chambers. The corridor must be:
 
 <AgentConversation :messages="messages2" />
 
-## Phase 2: Verify with Spectator
+## Phase 2: Verify with Stage
 
 Press F5 to run the game.
 
@@ -97,10 +97,10 @@ Press F5 to run the game.
 | Build | Place geometry | Director batch |
 | Build | Instance enemies | Director batch |
 | Build | Configure exports | Director batch |
-| Verify | Check navmesh connectivity | Spectator `path_distance` |
-| Verify | Check corridor width | Spectator `spatial_query radius` |
-| Verify | Check patrol routes | Spectator `path_distance` |
+| Verify | Check navmesh connectivity | Stage `path_distance` |
+| Verify | Check corridor width | Stage `spatial_query radius` |
+| Verify | Check patrol routes | Stage `path_distance` |
 | Fix | Adjust wall position | Director `node_set_properties` |
-| Verify | Confirm fix | Spectator `spatial_inspect` |
+| Verify | Confirm fix | Stage `spatial_inspect` |
 
-This loop — build, run, verify, adjust — is what Theatre is designed for. Neither tool alone is sufficient: Director can build the geometry but cannot verify navigability; Spectator can verify navigability but cannot build geometry. Together, they close the loop.
+This loop — build, run, verify, adjust — is what Theatre is designed for. Neither tool alone is sufficient: Director can build the geometry but cannot verify navigability; Stage can verify navigability but cannot build geometry. Together, they close the loop.

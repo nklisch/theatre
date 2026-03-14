@@ -21,7 +21,7 @@ export default defineConfig({
 
     nav: [
       { text: 'Guide', link: '/guide/getting-started' },
-      { text: 'Spectator', link: '/spectator/' },
+      { text: 'Stage', link: '/stage/' },
       { text: 'Director', link: '/director/' },
       { text: 'Examples', link: '/examples/' },
       {
@@ -55,28 +55,28 @@ export default defineConfig({
         }
       ],
 
-      '/spectator/': [
+      '/stage/': [
         {
-          text: 'Spectator',
+          text: 'Stage',
           items: [
-            { text: 'Overview', link: '/spectator/' },
-            { text: 'Spatial Snapshot', link: '/spectator/snapshot' },
-            { text: 'Spatial Delta', link: '/spectator/delta' },
-            { text: 'Spatial Query', link: '/spectator/query' },
-            { text: 'Spatial Inspect', link: '/spectator/inspect' },
-            { text: 'Spatial Watch', link: '/spectator/watch' },
-            { text: 'Spatial Config', link: '/spectator/config' },
-            { text: 'Spatial Action', link: '/spectator/action' },
-            { text: 'Scene Tree', link: '/spectator/scene-tree' },
-            { text: 'Recording', link: '/spectator/recording' },
+            { text: 'Overview', link: '/stage/' },
+            { text: 'Spatial Snapshot', link: '/stage/snapshot' },
+            { text: 'Spatial Delta', link: '/stage/delta' },
+            { text: 'Spatial Query', link: '/stage/query' },
+            { text: 'Spatial Inspect', link: '/stage/inspect' },
+            { text: 'Spatial Watch', link: '/stage/watch' },
+            { text: 'Spatial Config', link: '/stage/config' },
+            { text: 'Spatial Action', link: '/stage/action' },
+            { text: 'Scene Tree', link: '/stage/scene-tree' },
+            { text: 'Recording', link: '/stage/recording' },
           ]
         },
         {
           text: 'Workflows',
           items: [
-            { text: 'The Dashcam', link: '/spectator/dashcam' },
-            { text: 'Watch & React', link: '/spectator/watch-workflow' },
-            { text: 'Editor Dock', link: '/spectator/editor-dock' },
+            { text: 'The Dashcam', link: '/stage/dashcam' },
+            { text: 'Watch & React', link: '/stage/watch-workflow' },
+            { text: 'Editor Dock', link: '/stage/editor-dock' },
           ]
         }
       ],
@@ -122,7 +122,7 @@ export default defineConfig({
           text: 'Building Scenarios',
           items: [
             { text: 'Level From Scratch', link: '/examples/build-level' },
-            { text: 'Director + Spectator Loop', link: '/examples/build-verify' },
+            { text: 'Director + Stage Loop', link: '/examples/build-verify' },
           ]
         }
       ],
@@ -131,7 +131,7 @@ export default defineConfig({
         {
           text: 'API Reference',
           items: [
-            { text: 'Spectator Tools', link: '/api/' },
+            { text: 'Stage Tools', link: '/api/' },
             { text: 'Director Tools', link: '/api/director' },
             { text: 'Wire Format', link: '/api/wire-format' },
             { text: 'Error Codes', link: '/api/errors' },

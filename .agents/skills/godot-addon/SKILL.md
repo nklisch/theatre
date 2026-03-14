@@ -1,11 +1,11 @@
 ---
 name: godot-addon
-description: Working with the Godot addon GDScript layer in addons/spectator/. Covers EditorPlugin patterns, autoload management, dock panels, input handling, and GDExtension integration from the GDScript side.
+description: Working with the Godot addon GDScript layer in addons/stage/. Covers EditorPlugin patterns, autoload management, dock panels, input handling, and GDExtension integration from the GDScript side.
 ---
 
 # Godot Addon — GDScript Layer
 
-This skill covers `addons/spectator/` — the GDScript side of Spectator. There are three GDScript files:
+This skill covers `addons/stage/` — the GDScript side of Stage. There are three GDScript files:
 - `plugin.gd` — `@tool` EditorPlugin (dock, autoload registration)
 - `runtime.gd` — Autoload singleton (instantiates GDExtension classes, input handling)
 - `dock.gd` — Dock panel script
@@ -13,23 +13,23 @@ This skill covers `addons/spectator/` — the GDScript side of Spectator. There 
 ## Plugin Structure
 
 ```
-addons/spectator/
+addons/stage/
 ├── plugin.cfg            # Required metadata
 ├── plugin.gd             # @tool EditorPlugin
 ├── runtime.gd            # Autoload singleton script
 ├── dock.tscn             # Dock panel scene
 ├── dock.gd               # Dock panel script
-├── spectator.gdextension # GDExtension manifest
+├── stage.gdextension # GDExtension manifest
 └── bin/                  # Compiled Rust libraries
-    ├── linux/libspectator_godot.so
-    ├── windows/spectator_godot.dll
-    └── macos/libspectator_godot.dylib
+    ├── linux/libstage_godot.so
+    ├── windows/stage_godot.dll
+    └── macos/libstage_godot.dylib
 ```
 
 `plugin.cfg`:
 ```ini
 [plugin]
-name="Spectator"
+name="Stage"
 description="Spatial debugging for AI agents"
 author="Your Name"
 version="0.1.0"
@@ -48,14 +48,14 @@ func _enable_plugin() -> void:
     # Use _enable_plugin, NOT _enter_tree, for autoload management
     # _enter_tree has a timing bug: autoloads aren't immediately
     # accessible when the editor starts with plugin already enabled
-    add_autoload_singleton("SpectatorRuntime", "res://addons/spectator/runtime.gd")
+    add_autoload_singleton("StageRuntime", "res://addons/stage/runtime.gd")
 
-    dock = preload("res://addons/spectator/dock.tscn").instantiate()
+    dock = preload("res://addons/stage/dock.tscn").instantiate()
     add_control_to_dock(DOCK_SLOT_RIGHT_UL, dock)
 
 func _disable_plugin() -> void:
     # Always pair with _enable_plugin
-    remove_autoload_singleton("SpectatorRuntime")
+    remove_autoload_singleton("StageRuntime")
 
     if dock:
         remove_control_from_docks(dock)
@@ -69,7 +69,7 @@ func _disable_plugin() -> void:
 ```gdscript
 DOCK_SLOT_LEFT_UL   # Left sidebar, upper-left tab
 DOCK_SLOT_LEFT_BL   # Left sidebar, bottom-left tab
-DOCK_SLOT_RIGHT_UL  # Right sidebar, upper-left tab (default for Spectator)
+DOCK_SLOT_RIGHT_UL  # Right sidebar, upper-left tab (default for Stage)
 DOCK_SLOT_RIGHT_BL  # Right sidebar, bottom-left tab
 # add_control_to_bottom_panel(control, title) for the bottom bar
 ```
@@ -81,22 +81,22 @@ The autoload is the runtime hub. It instantiates GDExtension classes and acts as
 ```gdscript
 extends Node
 
-# GDExtension class instances (defined in spectator-godot Rust crate)
-var collector: SpectatorCollector
-var tcp_server: SpectatorTCPServer
-var recorder: SpectatorRecorder
+# GDExtension class instances (defined in stage-godot Rust crate)
+var collector: StageCollector
+var tcp_server: StageTCPServer
+var recorder: StageRecorder
 
 func _ready() -> void:
-    collector = SpectatorCollector.new()
+    collector = StageCollector.new()
     add_child(collector)
 
-    tcp_server = SpectatorTCPServer.new()
+    tcp_server = StageTCPServer.new()
     add_child(tcp_server)
     tcp_server.start(ProjectSettings.get_setting(
-        "theatre/spectator/connection/port", 9077
+        "theatre/stage/connection/port", 9077
     ))
 
-    recorder = SpectatorRecorder.new()
+    recorder = StageRecorder.new()
     add_child(recorder)
 
 func _physics_process(_delta: float) -> void:
@@ -118,39 +118,39 @@ func _toggle_pause() -> void:
     get_tree().paused = not get_tree().paused
 ```
 
-### SpectatorRuntime.marker() — Code Markers API
+### StageRuntime.marker() — Code Markers API
 
-Game scripts can place markers directly in code using the `SpectatorRuntime` autoload:
+Game scripts can place markers directly in code using the `StageRuntime` autoload:
 
 ```gdscript
 # System tier (default) — rate-limited, safe in loops
-SpectatorRuntime.marker("player_hit")
+StageRuntime.marker("player_hit")
 
 # Deliberate tier — always triggers a clip (use for rare, important events)
-SpectatorRuntime.marker("boss_defeated", "deliberate")
+StageRuntime.marker("boss_defeated", "deliberate")
 
 # Silent tier — annotates only, no clip trigger; attached to the next clip
-SpectatorRuntime.marker("entered_zone_b", "silent")
+StageRuntime.marker("entered_zone_b", "silent")
 ```
 
 **Signature:** `func marker(label: String, tier: String = "system") -> void`
 
-- No-op when Spectator is not loaded (safe to leave in shipped builds)
-- Delegates to `SpectatorRecorder.add_code_marker(label, tier)` (GDExtension export)
+- No-op when Stage is not loaded (safe to leave in shipped builds)
+- Delegates to `StageRecorder.add_code_marker(label, tier)` (GDExtension export)
 - Markers appear in clip data with `source: "code"`
 
-**SpectatorRecorder.add_code_marker(label: GString, tier: GString)** — the underlying GDExtension export:
+**StageRecorder.add_code_marker(label: GString, tier: GString)** — the underlying GDExtension export:
 - `"system"` tier: rate-limited dashcam trigger (2 s minimum interval)
 - `"deliberate"` tier: always triggers a clip, no rate limit
 - `"silent"` tier: stores in pending list; merged into the next clip whose frame range includes it; cap of 1000 pending entries with FIFO eviction
 
 ## GDExtension Classes from GDScript
 
-GDExtension classes defined in `spectator-godot` (Rust) appear as regular GDScript classes after the `.gdextension` is loaded. No import needed — they're globally available by class name:
+GDExtension classes defined in `stage-godot` (Rust) appear as regular GDScript classes after the `.gdextension` is loaded. No import needed — they're globally available by class name:
 
 ```gdscript
 # These are Rust classes, used just like built-in Godot classes
-var collector = SpectatorCollector.new()
+var collector = StageCollector.new()
 var result: Array = collector.get_visible_nodes()
 var state: Dictionary = collector.get_node_state("enemies/scout_02")
 ```
@@ -160,7 +160,7 @@ var state: Dictionary = collector.get_node_state("enemies/scout_02")
 **The hybrid limitation (godot#85268):** GDScript cannot `extends` a GDExtension-derived class that itself extends `EditorPlugin`. This is why `plugin.gd` is a pure GDScript EditorPlugin that *uses* GDExtension classes, rather than extending a Rust EditorPlugin. Never attempt:
 ```gdscript
 # WRONG — will fail to load as editor plugin
-extends SpectatorRustEditorPlugin  # if SpectatorRustEditorPlugin extends EditorPlugin via GDExtension
+extends StageRustEditorPlugin  # if StageRustEditorPlugin extends EditorPlugin via GDExtension
 ```
 
 ## Input Handling
@@ -186,7 +186,7 @@ func _shortcut_input(event: InputEvent) -> void:
 3. `_gui_input` — for UI nodes
 4. `_unhandled_input` — what's left after UI
 
-Use `_shortcut_input` for Spectator's hotkeys to intercept before the game does.
+Use `_shortcut_input` for Stage's hotkeys to intercept before the game does.
 
 **Consuming input:** Call `get_viewport().set_input_as_handled()` if you don't want the game to also respond to the key.
 
@@ -216,7 +216,7 @@ func _ready() -> void:
 
 func _update_ui() -> void:
     # Access the autoload singleton by name
-    var runtime = get_node_or_null("/root/SpectatorRuntime")
+    var runtime = get_node_or_null("/root/StageRuntime")
     if not runtime:
         connection_label.text = "No runtime"
         return
@@ -225,7 +225,7 @@ func _update_ui() -> void:
     connection_label.text = "Connected" if is_connected else "Disconnected"
 
 func _on_save_clip_pressed() -> void:
-    var runtime = get_node("/root/SpectatorRuntime")
+    var runtime = get_node("/root/StageRuntime")
     var clip_id: String = runtime.recorder.flush_dashcam_clip("manual save")
     if not clip_id.is_empty():
         _update_clip_ui(clip_id)
@@ -240,16 +240,16 @@ func add_activity_entry(text: String) -> void:
 **Accessing the autoload from the dock:**
 ```gdscript
 # Safe — returns null if not found
-var runtime = get_node_or_null("/root/SpectatorRuntime")
+var runtime = get_node_or_null("/root/StageRuntime")
 
 # Panics if not found — only use when certain it exists
-var runtime = get_node("/root/SpectatorRuntime")
+var runtime = get_node("/root/StageRuntime")
 
 # Or use the autoload global name directly (only works at runtime, not in editor)
-SpectatorRuntime.tcp_server.is_connected()
+StageRuntime.tcp_server.is_connected()
 ```
 
-The dock runs inside the editor, so accessing `SpectatorRuntime` only works when the game is running (Play mode). Use `get_node_or_null` and check for null.
+The dock runs inside the editor, so accessing `StageRuntime` only works when the game is running (Play mode). Use `get_node_or_null` and check for null.
 
 ## Project Settings
 
@@ -257,9 +257,9 @@ Register custom project settings from the EditorPlugin:
 
 ```gdscript
 func _enable_plugin() -> void:
-    _add_setting("theatre/spectator/connection/port", TYPE_INT, 9077)
-    _add_setting("theatre/spectator/connection/auto_start", TYPE_BOOL, true)
-    _add_setting("theatre/spectator/display/show_agent_notifications", TYPE_BOOL, true)
+    _add_setting("theatre/stage/connection/port", TYPE_INT, 9077)
+    _add_setting("theatre/stage/connection/auto_start", TYPE_BOOL, true)
+    _add_setting("theatre/stage/display/show_agent_notifications", TYPE_BOOL, true)
 
 func _add_setting(name: String, type: int, default_value) -> void:
     if not ProjectSettings.has_setting(name):
@@ -274,7 +274,7 @@ func _add_setting(name: String, type: int, default_value) -> void:
 
 Read settings from any script:
 ```gdscript
-var port: int = ProjectSettings.get_setting("theatre/spectator/connection/port", 9077)
+var port: int = ProjectSettings.get_setting("theatre/stage/connection/port", 9077)
 ```
 
 ## In-Game Overlay (CanvasLayer)
@@ -302,10 +302,10 @@ func show_notification(text: String, duration: float = 3.0) -> void:
 
 **`_enter_tree` autoload timing bug:** When Godot starts and the plugin is already enabled, autoloads added in `_enter_tree` aren't immediately ready. Always use `_enable_plugin` for `add_autoload_singleton`.
 
-**GDExtension loads silently:** If the `.gdextension` binary is missing or wrong platform, Godot shows an error in the Output panel and the classes are unavailable. The plugin won't crash — GDExtension classes just won't exist. Check `ClassDB.class_exists("SpectatorCollector")` to detect this.
+**GDExtension loads silently:** If the `.gdextension` binary is missing or wrong platform, Godot shows an error in the Output panel and the classes are unavailable. The plugin won't crash — GDExtension classes just won't exist. Check `ClassDB.class_exists("StageCollector")` to detect this.
 
 **`@tool` is required:** Without `@tool` at the top of `plugin.gd`, the EditorPlugin lifecycle methods (`_enable_plugin`, `_disable_plugin`) won't run in the editor.
 
 **Dock scenes must be freed:** If you `instantiate()` a scene for the dock, you must `queue_free()` it in `_disable_plugin`. Forgetting leaks the Control node into the editor.
 
-**Autoload path:** Autoloads live at `/root/AutoloadName`. Access via `get_node("/root/SpectatorRuntime")` or just `SpectatorRuntime` (global alias, only works at game runtime, not in `@tool` editor code).
+**Autoload path:** Autoloads live at `/root/AutoloadName`. Access via `get_node("/root/StageRuntime")` or just `StageRuntime` (global alias, only works at game runtime, not in `@tool` editor code).

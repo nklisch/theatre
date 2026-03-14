@@ -39,7 +39,7 @@ Both paths produce the same directory layout — the tarball IS the
 
 ### Unit 1: Update `.gdextension` Manifest for All Platforms
 
-**File**: `addons/spectator/spectator.gdextension`
+**File**: `addons/stage/stage.gdextension`
 
 ```ini
 [configuration]
@@ -48,14 +48,14 @@ compatibility_minimum = "4.5"
 reloadable = true
 
 [libraries]
-linux.debug.x86_64 = "res://addons/spectator/bin/linux/libspectator_godot.so"
-linux.release.x86_64 = "res://addons/spectator/bin/linux/libspectator_godot.so"
-macos.debug.x86_64 = "res://addons/spectator/bin/macos/libspectator_godot.dylib"
-macos.release.x86_64 = "res://addons/spectator/bin/macos/libspectator_godot.dylib"
-macos.debug.arm64 = "res://addons/spectator/bin/macos/libspectator_godot.dylib"
-macos.release.arm64 = "res://addons/spectator/bin/macos/libspectator_godot.dylib"
-windows.debug.x86_64 = "res://addons/spectator/bin/windows/spectator_godot.dll"
-windows.release.x86_64 = "res://addons/spectator/bin/windows/spectator_godot.dll"
+linux.debug.x86_64 = "res://addons/stage/bin/linux/libstage_godot.so"
+linux.release.x86_64 = "res://addons/stage/bin/linux/libstage_godot.so"
+macos.debug.x86_64 = "res://addons/stage/bin/macos/libstage_godot.dylib"
+macos.release.x86_64 = "res://addons/stage/bin/macos/libstage_godot.dylib"
+macos.debug.arm64 = "res://addons/stage/bin/macos/libstage_godot.dylib"
+macos.release.arm64 = "res://addons/stage/bin/macos/libstage_godot.dylib"
+windows.debug.x86_64 = "res://addons/stage/bin/windows/stage_godot.dll"
+windows.release.x86_64 = "res://addons/stage/bin/windows/stage_godot.dll"
 ```
 
 **Implementation Notes**:
@@ -69,12 +69,12 @@ windows.release.x86_64 = "res://addons/spectator/bin/windows/spectator_godot.dll
   universal binary. **Decision**: universal binary on macOS (via `lipo`).
   Both arch entries point to the same file, and CI produces a fat binary.
   Only 3 release artifacts: linux, macos-universal, windows.
-- Windows uses `spectator_godot.dll` (no `lib` prefix) — matches the
+- Windows uses `stage_godot.dll` (no `lib` prefix) — matches the
   existing `gdext_filename()` in `paths.rs`.
 
 **Acceptance Criteria**:
 - [ ] All 8 library entries present (linux/macos/windows × debug/release, macos × x86_64/arm64)
-- [ ] Paths follow `res://addons/spectator/bin/<platform>/` convention
+- [ ] Paths follow `res://addons/stage/bin/<platform>/` convention
 
 ---
 
@@ -106,22 +106,22 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             runner: ubuntu-latest
             platform: linux
-            gdext: libspectator_godot.so
+            gdext: libstage_godot.so
             archive: tar.gz
           - target: x86_64-apple-darwin
             runner: macos-latest
             platform: macos
-            gdext: libspectator_godot.dylib
+            gdext: libstage_godot.dylib
             archive: tar.gz
           - target: aarch64-apple-darwin
             runner: macos-latest
             platform: macos
-            gdext: libspectator_godot.dylib
+            gdext: libstage_godot.dylib
             archive: tar.gz
           - target: x86_64-pc-windows-msvc
             runner: windows-latest
             platform: windows
-            gdext: spectator_godot.dll
+            gdext: stage_godot.dll
             archive: zip
 
     steps:
@@ -146,7 +146,7 @@ jobs:
       - name: Build release binaries
         run: >
           cargo build --release --target ${{ matrix.target }}
-          -p spectator-server -p director -p theatre-cli -p spectator-godot
+          -p stage-server -p director -p theatre-cli -p stage-godot
 
       - name: Prepare archive layout
         shell: bash
@@ -161,17 +161,17 @@ jobs:
           if [[ "${{ matrix.platform }}" == "windows" ]]; then
             BIN_EXT=".exe"
           fi
-          cp "target/${{ matrix.target }}/release/spectator-server${BIN_EXT}" "${ARCHIVE_NAME}/bin/"
+          cp "target/${{ matrix.target }}/release/stage-server${BIN_EXT}" "${ARCHIVE_NAME}/bin/"
           cp "target/${{ matrix.target }}/release/director${BIN_EXT}" "${ARCHIVE_NAME}/bin/"
           cp "target/${{ matrix.target }}/release/theatre${BIN_EXT}" "${ARCHIVE_NAME}/bin/"
 
-          # Copy addon templates (spectator without bin/)
-          rsync -a --exclude='bin/' addons/spectator/ "${ARCHIVE_NAME}/share/theatre/addons/spectator/"
+          # Copy addon templates (stage without bin/)
+          rsync -a --exclude='bin/' addons/stage/ "${ARCHIVE_NAME}/share/theatre/addons/stage/"
 
           # Copy GDExtension binary into correct platform dir
-          mkdir -p "${ARCHIVE_NAME}/share/theatre/addons/spectator/bin/${{ matrix.platform }}"
+          mkdir -p "${ARCHIVE_NAME}/share/theatre/addons/stage/bin/${{ matrix.platform }}"
           cp "target/${{ matrix.target }}/release/${{ matrix.gdext }}" \
-            "${ARCHIVE_NAME}/share/theatre/addons/spectator/bin/${{ matrix.platform }}/"
+            "${ARCHIVE_NAME}/share/theatre/addons/stage/bin/${{ matrix.platform }}/"
 
           # Copy director addon (pure GDScript)
           rsync -a addons/director/ "${ARCHIVE_NAME}/share/theatre/addons/director/"
@@ -234,11 +234,11 @@ jobs:
 
           # Create universal dylib with lipo
           lipo -create \
-            "${UNIVERSAL}/share/theatre/addons/spectator/bin/macos/libspectator_godot.dylib" \
-            "${X86_DIR}/share/theatre/addons/spectator/bin/macos/libspectator_godot.dylib" \
-            -output "${UNIVERSAL}/share/theatre/addons/spectator/bin/macos/libspectator_godot_universal.dylib"
-          mv "${UNIVERSAL}/share/theatre/addons/spectator/bin/macos/libspectator_godot_universal.dylib" \
-            "${UNIVERSAL}/share/theatre/addons/spectator/bin/macos/libspectator_godot.dylib"
+            "${UNIVERSAL}/share/theatre/addons/stage/bin/macos/libstage_godot.dylib" \
+            "${X86_DIR}/share/theatre/addons/stage/bin/macos/libstage_godot.dylib" \
+            -output "${UNIVERSAL}/share/theatre/addons/stage/bin/macos/libstage_godot_universal.dylib"
+          mv "${UNIVERSAL}/share/theatre/addons/stage/bin/macos/libstage_godot_universal.dylib" \
+            "${UNIVERSAL}/share/theatre/addons/stage/bin/macos/libstage_godot.dylib"
 
           # Use aarch64 CLI binaries (native on Apple Silicon, Rosetta on Intel)
 
@@ -306,11 +306,11 @@ jobs:
   theatre-v0.1.0-x86_64-unknown-linux-gnu/
     bin/
       theatre
-      spectator-server
+      stage-server
       director
     share/theatre/
       addons/
-        spectator/   (with bin/linux/*.so)
+        stage/   (with bin/linux/*.so)
         director/
     install.sh
     LICENSE
@@ -370,7 +370,7 @@ echo
 # Copy binaries
 echo "  Installing binaries to ${BIN_DIR}/"
 mkdir -p "${BIN_DIR}"
-for bin in theatre spectator-server director; do
+for bin in theatre stage-server director; do
     if [[ -f "${SCRIPT_DIR}/bin/${bin}" ]]; then
         cp "${SCRIPT_DIR}/bin/${bin}" "${BIN_DIR}/"
         chmod +x "${BIN_DIR}/${bin}"
@@ -387,7 +387,7 @@ echo "  Installing addons to ${SHARE_DIR}/"
 mkdir -p "${SHARE_DIR}"
 if [[ -d "${SCRIPT_DIR}/share/theatre" ]]; then
     cp -r "${SCRIPT_DIR}/share/theatre/"* "${SHARE_DIR}/"
-    echo "  ✓ addons/spectator/"
+    echo "  ✓ addons/stage/"
     echo "  ✓ addons/director/"
 fi
 echo
@@ -469,7 +469,7 @@ catches compilation failures on macOS/Windows before a release tag is pushed.
       - name: Build (release)
         run: >
           cargo build --release --target ${{ matrix.target }}
-          -p spectator-server -p director -p theatre-cli -p spectator-godot
+          -p stage-server -p director -p theatre-cli -p stage-godot
 ```
 
 **Implementation Notes**:
@@ -592,9 +592,9 @@ cd theatre-v0.1.0-x86_64-unknown-linux-gnu
 ./install.sh --bin-dir /tmp/test-bin --share-dir /tmp/test-share
 
 # 4. Verify installed files
-ls /tmp/test-bin/{theatre,spectator-server,director}
-ls /tmp/test-share/addons/spectator/plugin.cfg
-ls /tmp/test-share/addons/spectator/bin/linux/libspectator_godot.so
+ls /tmp/test-bin/{theatre,stage-server,director}
+ls /tmp/test-share/addons/stage/plugin.cfg
+ls /tmp/test-share/addons/stage/bin/linux/libstage_godot.so
 ls /tmp/test-share/addons/director/plugin.cfg
 
 # 5. Test init on a Godot project
@@ -606,7 +606,7 @@ cat ~/godot/test-harness/.mcp.json
 
 ```bash
 # Verify .gdextension has all entries
-grep -c 'res://addons/spectator/bin/' addons/spectator/spectator.gdextension
+grep -c 'res://addons/stage/bin/' addons/stage/stage.gdextension
 # Expected: 8
 
 # Verify install script is executable

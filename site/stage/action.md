@@ -15,7 +15,7 @@ const messages0 = [
 
 Set properties, call methods, or emit signals on running game nodes.
 
-`spatial_action` is the one Spectator tool that modifies game state. It is designed for testing — applying a quick change to verify a hypothesis or trigger an event without restarting the game.
+`spatial_action` is the one Stage tool that modifies game state. It is designed for testing — applying a quick change to verify a hypothesis or trigger an event without restarting the game.
 
 ## When to use it
 

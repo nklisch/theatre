@@ -1,9 +1,9 @@
 # Migrating to Theatre
 
-This document covers breaking changes when upgrading from the Spectator
+This document covers breaking changes when upgrading from the Stage
 project to the Theatre umbrella release.
 
-## For Users of the Spectator Addon
+## For Users of the Stage Addon
 
 ### Environment Variable
 
@@ -15,9 +15,9 @@ Update your `.mcp.json`:
 ```json
 {
   "mcpServers": {
-    "spectator": {
+    "stage": {
       "type": "stdio",
-      "command": "./target/release/spectator-server",
+      "command": "./target/release/stage-server",
       "env": {
         "THEATRE_PORT": "9077"
       }
@@ -28,28 +28,28 @@ Update your `.mcp.json`:
 
 ### Godot Project Settings
 
-The settings prefix changed from `spectator/` to `theatre/spectator/`.
+The settings prefix changed from `stage/` to `theatre/stage/`.
 
 If you had custom settings in `project.godot`, update the keys:
-- `spectator/connection/port` → `theatre/spectator/connection/port`
-- `spectator/connection/auto_start` → `theatre/spectator/connection/auto_start`
-- `spectator/connection/client_idle_timeout_secs` → `theatre/spectator/connection/client_idle_timeout_secs`
-- `spectator/display/show_agent_notifications` → `theatre/spectator/display/show_agent_notifications`
-- `spectator/shortcuts/marker_key` → `theatre/spectator/shortcuts/marker_key`
-- `spectator/shortcuts/pause_key` → `theatre/spectator/shortcuts/pause_key`
-- `spectator/tracking/default_static_patterns` → `theatre/spectator/tracking/default_static_patterns`
-- `spectator/tracking/token_hard_cap` → `theatre/spectator/tracking/token_hard_cap`
+- `stage/connection/port` → `theatre/stage/connection/port`
+- `stage/connection/auto_start` → `theatre/stage/connection/auto_start`
+- `stage/connection/client_idle_timeout_secs` → `theatre/stage/connection/client_idle_timeout_secs`
+- `stage/display/show_agent_notifications` → `theatre/stage/display/show_agent_notifications`
+- `stage/shortcuts/marker_key` → `theatre/stage/shortcuts/marker_key`
+- `stage/shortcuts/pause_key` → `theatre/stage/shortcuts/pause_key`
+- `stage/tracking/default_static_patterns` → `theatre/stage/tracking/default_static_patterns`
+- `stage/tracking/token_hard_cap` → `theatre/stage/tracking/token_hard_cap`
 
 Or delete the old keys and re-enable the plugin — defaults apply automatically.
 
 ### MCP Configuration
 
-The `spectator` MCP server name is **unchanged**. Only the env var changes:
+The `stage` MCP server name is **unchanged**. Only the env var changes:
 - `SPECTATOR_PORT` → `THEATRE_PORT`
 
 ### Deploy Script
 
-- `spectator-deploy` → `theatre-deploy`
+- `stage-deploy` → `theatre-deploy`
 
 The new script lives at `scripts/theatre-deploy` in the repo. Symlink it:
 ```bash
@@ -74,13 +74,13 @@ These identifiers are unchanged — they are tool-specific, not project-level:
 
 | Item | Value |
 |---|---|
-| Crate names | `spectator-server`, `spectator-godot`, `spectator-protocol`, `spectator-core`, `director` |
-| Binary names | `spectator-server`, `director` |
-| GDExtension binary | `libspectator_godot.so` |
-| Addon directories | `addons/spectator/`, `addons/director/` |
-| GDExtension manifest | `spectator.gdextension` |
-| Wire protocol identifiers | `spectator:status`, `spectator:command`, `spectator:activity` |
-| GDExtension class names | `SpectatorTCPServer`, `SpectatorCollector`, `SpectatorRecorder` |
-| MCP server name in `.mcp.json` | `"spectator"` |
-| Autoload name | `SpectatorRuntime` |
-| `spectator_internal` group name | (runtime marker) |
+| Crate names | `stage-server`, `stage-godot`, `stage-protocol`, `stage-core`, `director` |
+| Binary names | `stage-server`, `director` |
+| GDExtension binary | `libstage_godot.so` (formerly `libspectator_godot.so`) |
+| Addon directories | `addons/stage/`, `addons/director/` |
+| GDExtension manifest | `stage.gdextension` |
+| Wire protocol identifiers | `stage:status`, `stage:command`, `stage:activity` |
+| GDExtension class names | `StageTCPServer`, `StageCollector`, `StageRecorder` |
+| MCP server name in `.mcp.json` | `"stage"` |
+| Autoload name | `StageRuntime` |
+| `stage_internal` group name | (runtime marker) |

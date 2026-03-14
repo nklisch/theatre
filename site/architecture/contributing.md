@@ -26,13 +26,13 @@ cargo build --workspace --release
 
 ### First-time setup for tests
 
-The E2E tests require a Godot project with the Spectator GDExtension deployed. Deploy to the test project:
+The E2E tests require a Godot project with the Stage GDExtension deployed. Deploy to the test project:
 
 ```bash
 theatre deploy ~/dev/theatre/tests/godot-project
 ```
 
-This builds `spectator-godot` and copies the `.so` to the test project's addon directory.
+This builds `stage-godot` and copies the `.so` to the test project's addon directory.
 
 ## Running tests
 
@@ -68,10 +68,10 @@ The E2E tests start a real Godot process, send tool calls, and verify responses.
 
 ```bash
 # All tests in one crate
-cargo test -p spectator-core
+cargo test -p stage-core
 
 # Specific test by name
-cargo test -p spectator-server snapshot_budget_trimming
+cargo test -p stage-server snapshot_budget_trimming
 
 # E2E tests only
 cargo test -p wire-tests -- --include-ignored
@@ -103,8 +103,8 @@ Clippy warnings are treated as errors in CI. Fix all warnings before opening a P
 
 - **Edition 2024** for all crates
 - **`tracing` for all logging** — never `println!` in library code; never in server code (stdout is MCP protocol). Use `eprintln!` only for one-off debug prints that you will remove before committing.
-- **`anyhow` for application errors** — in `spectator-server` and `director` main/tools
-- **`thiserror`** for library errors — in `spectator-protocol`, `spectator-core`
+- **`anyhow` for application errors** — in `stage-server` and `director` main/tools
+- **`thiserror`** for library errors — in `stage-protocol`, `stage-core`
 - **No `unwrap()` in library code** — use `?` or explicit error handling. `unwrap()` is acceptable in tests and `main()` setup.
 - **`serde(rename_all = "snake_case")`** for enums; `serde(tag = "type")` for protocol message enums
 
@@ -126,19 +126,19 @@ Examples:
 ```
 add spatial_watch delete action
 fix budget trimmer excluding focus_node on truncation
-refactor: extract codec into spectator-protocol
+refactor: extract codec into stage-protocol
 test: add E2E scenario for navmesh disconnection
 ```
 
 ## Project structure for new features
 
-### Adding a new Spectator tool
+### Adding a new Stage tool
 
-1. Add request/response types to `crates/spectator-protocol/src/messages.rs`
-2. Add GDExtension handler in `crates/spectator-godot/src/tcp_server.rs`
-3. Add any pure-logic in `crates/spectator-core/`
-4. Add MCP tool handler in `crates/spectator-server/src/mcp/<tool_name>.rs`
-5. Register the tool in the `#[tool_router]` impl in `crates/spectator-server/src/mcp/mod.rs`
+1. Add request/response types to `crates/stage-protocol/src/messages.rs`
+2. Add GDExtension handler in `crates/stage-godot/src/tcp_server.rs`
+3. Add any pure-logic in `crates/stage-core/`
+4. Add MCP tool handler in `crates/stage-server/src/mcp/<tool_name>.rs`
+5. Register the tool in the `#[tool_router]` impl in `crates/stage-server/src/mcp/mod.rs`
 6. Add unit tests to the relevant crates
 7. Add an E2E test in `tests/wire-tests/`
 
@@ -164,7 +164,7 @@ test: add E2E scenario for navmesh disconnection
 
 ### Deploying changes to the test project
 
-After changing `spectator-godot`:
+After changing `stage-godot`:
 
 ```bash
 theatre deploy ~/dev/theatre/tests/godot-project
@@ -178,20 +178,20 @@ You can interact with the MCP server directly using JSON-RPC:
 
 ```bash
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | \
-  ./target/debug/spectator serve
+  ./target/debug/stage serve
 ```
 
 Or for a tool call (with game running):
 
 ```bash
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"spatial_snapshot","arguments":{"detail":"summary"}}}' | \
-  ./target/debug/spectator serve
+  ./target/debug/stage serve
 ```
 
 You can also use the CLI mode directly (no JSON-RPC wrapping):
 
 ```bash
-./target/debug/spectator spatial_snapshot '{"detail":"summary"}'
+./target/debug/stage spatial_snapshot '{"detail":"summary"}'
 ```
 
 ### Viewing trace output
@@ -199,9 +199,9 @@ You can also use the CLI mode directly (no JSON-RPC wrapping):
 The server uses `tracing` for structured logging. Set the `RUST_LOG` environment variable:
 
 ```bash
-RUST_LOG=debug ./target/debug/spectator serve
+RUST_LOG=debug ./target/debug/stage serve
 # Or for specific crates:
-RUST_LOG=spectator_server=trace ./target/debug/spectator serve
+RUST_LOG=stage_server=trace ./target/debug/stage serve
 ```
 
 All trace output goes to stderr, so it does not interfere with the MCP stdout protocol.

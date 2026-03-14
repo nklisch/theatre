@@ -2,7 +2,7 @@
 
 ## Overview
 
-Add a developer-facing `SpectatorRuntime.marker("label")` API so game scripts
+Add a developer-facing `StageRuntime.marker("label")` API so game scripts
 can place markers that fire when that line of code executes. This gives
 developers instrumentation points for dashcam clip capture without needing
 human input (F9) or an AI agent (MCP `add_marker`).
@@ -27,15 +27,15 @@ clip's frame range are included in the clip's `markers` table.
 
 ## Implementation Units
 
-### Unit 1: Silent marker storage on SpectatorRecorder
+### Unit 1: Silent marker storage on StageRecorder
 
-**File**: `crates/spectator-godot/src/recorder.rs`
+**File**: `crates/stage-godot/src/recorder.rs`
 
-Add a `Vec<DashcamTrigger>` field to `SpectatorRecorder` that accumulates
+Add a `Vec<DashcamTrigger>` field to `StageRecorder` that accumulates
 silent markers. Drain matching entries into clips at save time.
 
 ```rust
-// New field on SpectatorRecorder:
+// New field on StageRecorder:
 /// Silent markers waiting to be attached to the next saved clip.
 pending_silent_markers: Vec<DashcamTrigger>,
 ```
@@ -126,15 +126,15 @@ while self.pending_silent_markers.len() > MAX_PENDING_SILENT_MARKERS {
 
 ---
 
-### Unit 2: `add_code_marker` exported method on SpectatorRecorder
+### Unit 2: `add_code_marker` exported method on StageRecorder
 
-**File**: `crates/spectator-godot/src/recorder.rs`
+**File**: `crates/stage-godot/src/recorder.rs`
 
 New `#[func]` method that dispatches based on tier string.
 
 ```rust
 #[godot_api]
-impl SpectatorRecorder {
+impl StageRecorder {
     /// Add a code marker. Tier: "system" (default, rate-limited), "deliberate"
     /// (always triggers), "silent" (annotate-only).
     #[func]
@@ -232,9 +232,9 @@ which is handled in `add_silent_marker`).
 
 ---
 
-### Unit 3: `marker()` method on SpectatorRuntime autoload
+### Unit 3: `marker()` method on StageRuntime autoload
 
-**File**: `addons/spectator/runtime.gd`
+**File**: `addons/stage/runtime.gd`
 
 ```gdscript
 ## Place a code marker at the current frame.
@@ -251,24 +251,24 @@ func marker(label: String, tier: String = "system") -> void:
 **Implementation Notes**:
 - This is a thin wrapper. All logic lives in the Rust `add_code_marker`.
 - The method is callable from any GDScript in the project as
-  `SpectatorRuntime.marker("label")`.
-- When Spectator is not loaded (GDExtension missing), `recorder` is null and
+  `StageRuntime.marker("label")`.
+- When Stage is not loaded (GDExtension missing), `recorder` is null and
   the call is a no-op. This is important: game code with markers won't crash
   if the addon is removed.
 - The default `tier = "system"` means the one-arg form
-  `SpectatorRuntime.marker("hit detected")` is rate-limited and safe.
+  `StageRuntime.marker("hit detected")` is rate-limited and safe.
 
 **Acceptance Criteria**:
-- [ ] `SpectatorRuntime.marker("label")` is callable from any game script
+- [ ] `StageRuntime.marker("label")` is callable from any game script
 - [ ] Default tier is `"system"` when omitted
-- [ ] No-op when Spectator is not loaded (no crash, no error)
-- [ ] Two-arg form `SpectatorRuntime.marker("label", "deliberate")` works
+- [ ] No-op when Stage is not loaded (no crash, no error)
+- [ ] Two-arg form `StageRuntime.marker("label", "deliberate")` works
 
 ---
 
 ### Unit 4: TCP handler for `recording_marker` — support `source: "code"`
 
-**File**: `crates/spectator-godot/src/recording_handler.rs`
+**File**: `crates/stage-godot/src/recording_handler.rs`
 
 The existing `handle_marker` function in the TCP handler hardcodes
 `source: "agent"` as default and routes through `trigger_dashcam_clip`. No
@@ -289,7 +289,7 @@ string field, this should be fine.
 
 ### Unit 5: Unit tests for code markers
 
-**File**: `crates/spectator-godot/src/recorder.rs` (in `#[cfg(test)] mod tests`)
+**File**: `crates/stage-godot/src/recorder.rs` (in `#[cfg(test)] mod tests`)
 
 ```rust
 #[test]
@@ -351,7 +351,7 @@ The following files need updates to document the new code marker API:
 
 #### 6a: User-facing dashcam guide
 
-**File**: `site/spectator/dashcam.md`
+**File**: `site/stage/dashcam.md`
 
 Add a new section **"Code Markers"** after the existing marker documentation:
 
@@ -363,13 +363,13 @@ specific code paths execute:
 
 ```gdscript
 # Basic usage — system tier (rate-limited, safe in loops)
-SpectatorRuntime.marker("player_hit")
+StageRuntime.marker("player_hit")
 
 # Rare, important events — always triggers a clip
-SpectatorRuntime.marker("boss_defeated", "deliberate")
+StageRuntime.marker("boss_defeated", "deliberate")
 
 # Silent — annotates the next clip without triggering one
-SpectatorRuntime.marker("entered_zone_b", "silent")
+StageRuntime.marker("entered_zone_b", "silent")
 ```
 
 **Tiers:**
@@ -385,14 +385,14 @@ Code markers appear in clip data with `source: "code"`.
 
 #### 6b: Recording/clips reference
 
-**File**: `site/spectator/recording.md`
+**File**: `site/stage/recording.md`
 
 Add `"code"` to the list of marker sources (alongside `"human"`, `"agent"`,
 `"system"`).
 
-#### 6c: Spectator agent skill
+#### 6c: Stage agent skill
 
-**File**: `.agents/skills/spectator/SKILL.md`
+**File**: `.agents/skills/stage/SKILL.md`
 
 Add a note in the clips section that clips may contain `source: "code"`
 markers placed by game scripts, and what the tier implications are.
@@ -401,14 +401,14 @@ markers placed by game scripts, and what the tier implications are.
 
 **File**: `.agents/skills/godot-addon/SKILL.md`
 
-Document the `SpectatorRuntime.marker(label, tier)` method and the
-`SpectatorRecorder.add_code_marker(label, tier)` GDExtension export.
+Document the `StageRuntime.marker(label, tier)` method and the
+`StageRecorder.add_code_marker(label, tier)` GDExtension export.
 
 **Acceptance Criteria**:
-- [ ] `site/spectator/dashcam.md` documents the `SpectatorRuntime.marker()`
+- [ ] `site/stage/dashcam.md` documents the `StageRuntime.marker()`
       API with all three tiers and usage examples
-- [ ] `site/spectator/recording.md` lists `"code"` as a marker source
-- [ ] `.agents/skills/spectator/SKILL.md` mentions `source: "code"` markers
+- [ ] `site/stage/recording.md` lists `"code"` as a marker source
+- [ ] `.agents/skills/stage/SKILL.md` mentions `source: "code"` markers
 - [ ] `.agents/skills/godot-addon/SKILL.md` documents the new methods
 
 ---
@@ -442,7 +442,7 @@ distinguishes `"code"` from `"agent"` / `"human"` / `"system"`.
 
 ## Testing
 
-### Unit Tests: `crates/spectator-godot/src/recorder.rs`
+### Unit Tests: `crates/stage-godot/src/recorder.rs`
 
 See Unit 5 above. Tests operate on recorder internals without requiring Godot.
 
@@ -453,10 +453,10 @@ After `theatre deploy`, run a test Godot project with a script containing:
 ```gdscript
 func _physics_process(delta):
     if health < 50:
-        SpectatorRuntime.marker("low_health")
+        StageRuntime.marker("low_health")
     if health <= 0:
-        SpectatorRuntime.marker("player_died", "deliberate")
-    SpectatorRuntime.marker("frame_tick", "silent")
+        StageRuntime.marker("player_died", "deliberate")
+    StageRuntime.marker("frame_tick", "silent")
 ```
 
 Verify:
@@ -468,7 +468,7 @@ Verify:
 ### E2E Journey Test
 
 The existing E2E test infrastructure (`GodotFixture`, `E2EHarness`) can be
-extended with a test scene that calls `SpectatorRuntime.marker()` from
+extended with a test scene that calls `StageRuntime.marker()` from
 GDScript. This is optional for the initial implementation — the unit tests
 on recorder internals provide sufficient coverage of the core logic.
 
@@ -476,10 +476,10 @@ on recorder internals provide sufficient coverage of the core logic.
 
 ```bash
 # Build
-cargo build -p spectator-godot
+cargo build -p stage-godot
 
 # Unit tests
-cargo test -p spectator-godot
+cargo test -p stage-godot
 
 # Lint
 cargo clippy --workspace

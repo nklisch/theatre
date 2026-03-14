@@ -2,7 +2,7 @@
 
 Theatre's Rust workspace contains 5 crates. Each has a specific scope and dependency set designed to keep concerns separated.
 
-## `spectator-protocol`
+## `stage-protocol`
 
 **Type**: Library (`lib`)
 **Purpose**: Shared wire format types between server and GDExtension
@@ -16,11 +16,11 @@ This crate owns the TCP message types — the structs that are serialized to JSO
 
 **Dependency rules**:
 - Depends on: `serde`, `serde_json`, `tokio` (optional, async feature)
-- Depended on by: `spectator-server`, `spectator-godot`
+- Depended on by: `stage-server`, `stage-godot`
 
 The codec is shared rather than duplicated to ensure both sides always use the same framing implementation. A framing bug fixed in the codec is fixed for both sides simultaneously.
 
-## `spectator-core`
+## `stage-core`
 
 **Type**: Library (`lib`)
 **Purpose**: Pure spatial logic — no Godot, no MCP
@@ -35,29 +35,29 @@ This crate contains all reasoning that operates on spatial data but does not req
 
 **Dependency rules**:
 - Depends on: `serde`, standard math utilities, no external heavy deps
-- Depended on by: `spectator-server`
-- Does NOT depend on: `spectator-protocol`, `spectator-godot`, any MCP crate
+- Depended on by: `stage-server`
+- Does NOT depend on: `stage-protocol`, `stage-godot`, any MCP crate
 
-Keeping core logic here makes it testable without Godot or MCP infrastructure. Most unit tests in Theatre live in `spectator-core`.
+Keeping core logic here makes it testable without Godot or MCP infrastructure. Most unit tests in Theatre live in `stage-core`.
 
-## `spectator-godot`
+## `stage-godot`
 
 **Type**: `cdylib` (Godot GDExtension)
 **Purpose**: Collects spatial data from the running Godot engine
 
-This is the crate that compiles to `libspectator_godot.so`. It uses `gdext` to register GDExtension classes that Godot can instantiate.
+This is the crate that compiles to `libstage_godot.so`. It uses `gdext` to register GDExtension classes that Godot can instantiate.
 
 **Key classes**:
-- `SpectatorTCPServer`: manages the TCP listener, handles the connection lifecycle, serializes/deserializes messages using `spectator-protocol`
-- `SpectatorCollector`: called in `_physics_process`, walks the scene tree and writes to a ring buffer
-- `SpectatorRecorder`: writes frame data to clip files on disk
+- `StageTCPServer`: manages the TCP listener, handles the connection lifecycle, serializes/deserializes messages using `stage-protocol`
+- `StageCollector`: called in `_physics_process`, walks the scene tree and writes to a ring buffer
+- `StageRecorder`: writes frame data to clip files on disk
 
 **Dependency rules**:
-- Depends on: `gdext`, `spectator-protocol`, `serde_json`
-- Does NOT depend on: `spectator-core` (no spatial reasoning in the addon)
+- Depends on: `gdext`, `stage-protocol`, `serde_json`
+- Does NOT depend on: `stage-core` (no spatial reasoning in the addon)
 - Does NOT depend on: any MCP crates
 
-The no-`spectator-core` rule keeps the GDExtension lean. The addon collects raw data; all analysis happens in the server.
+The no-`stage-core` rule keeps the GDExtension lean. The addon collects raw data; all analysis happens in the server.
 
 ### GDExtension version targeting
 
@@ -65,25 +65,25 @@ The crate targets `api-4-5` with `lazy-function-tables` enabled. The `api-4-5` f
 
 To target a newer API, bump `api-4-5` to `api-4-6` in `Cargo.toml` once godot-rust adds that feature flag.
 
-## `spectator-server`
+## `stage-server`
 
-**Type**: Binary (crate: `spectator-server`, binary: `spectator`)
+**Type**: Binary (crate: `stage-server`, binary: `stage`)
 **Purpose**: MCP server + CLI that bridges AI agents to the running Godot game
 
 This is the binary your agent talks to. It supports two modes:
-- `spectator serve` — MCP server on stdio
-- `spectator <tool> '<json>'` — one-shot CLI mode
+- `stage serve` — MCP server on stdio
+- `stage <tool> '<json>'` — one-shot CLI mode
 
 It:
 - Implements the MCP protocol using `rmcp` (serve mode)
-- Maintains a persistent TCP connection to `spectator-godot` (serve) or connects once (CLI)
+- Maintains a persistent TCP connection to `stage-godot` (serve) or connects once (CLI)
 - Translates tool calls into protocol requests
-- Applies `spectator-core` logic to responses (budgeting, diffing, queries)
+- Applies `stage-core` logic to responses (budgeting, diffing, queries)
 - Logs activity to the editor dock (serve mode only)
 
 **Dependency rules**:
-- Depends on: `spectator-protocol`, `spectator-core`, `rmcp`, `tokio`, `tracing`, `anyhow`
-- Does NOT depend on: `spectator-godot` (no GDExtension code in the server)
+- Depends on: `stage-protocol`, `stage-core`, `rmcp`, `tokio`, `tracing`, `anyhow`
+- Does NOT depend on: `stage-godot` (no GDExtension code in the server)
 
 **Key modules**:
 - `mcp/` — one file per MCP tool, parameter structs and handlers
@@ -100,7 +100,7 @@ The director crate implements the Director MCP tools. It communicates with the G
 
 **Dependency rules**:
 - Depends on: `rmcp`, `tokio`, `tracing`, `anyhow`, `serde`
-- No dependency on any spectator crate
+- No dependency on any stage crate
 
 **Backend routing** (`backend.rs`):
 1. Try TCP connect to port 6550 (editor plugin)
@@ -124,7 +124,7 @@ The CLI replaces manual build-copy-configure workflows with four commands: `inst
 
 **Dependency rules**:
 - Depends on: `clap`, `dialoguer`, `console`, `serde_json`, `anyhow`
-- No dependency on any spectator, director, rmcp, tokio, or gdext crate
+- No dependency on any stage, director, rmcp, tokio, or gdext crate
 - All operations are synchronous (`std::process::Command` for cargo builds)
 
 ## Workspace layout
@@ -133,10 +133,10 @@ The CLI replaces manual build-copy-configure workflows with four commands: `inst
 # Cargo.toml (workspace root)
 [workspace]
 members = [
-    "crates/spectator-protocol",
-    "crates/spectator-core",
-    "crates/spectator-godot",
-    "crates/spectator-server",
+    "crates/stage-protocol",
+    "crates/stage-core",
+    "crates/stage-godot",
+    "crates/stage-server",
     "crates/director",
     "crates/theatre-cli",
 ]
@@ -154,15 +154,15 @@ Shared dependency versions are defined once in the workspace and referenced with
 ## Dependency graph
 
 ```
-spectator-godot  ──────────────────────────┐
+stage-godot  ──────────────────────────┐
                                             ▼
-spectator-protocol ──────────────── spectator-server
+stage-protocol ──────────────── stage-server
                                             │
-spectator-core   ──────────────────────────┘
+stage-core   ──────────────────────────┘
 
-director ─── (no spectator deps)
+director ─── (no stage deps)
 
-theatre-cli ─── (no spectator/director/MCP deps, only clap + filesystem)
+theatre-cli ─── (no stage/director/MCP deps, only clap + filesystem)
 ```
 
-The diamond dependency (both `spectator-godot` and `spectator-server` depend on `spectator-protocol`) is intentional — they both need the same wire format types.
+The diamond dependency (both `stage-godot` and `stage-server` depend on `stage-protocol`) is intentional — they both need the same wire format types.

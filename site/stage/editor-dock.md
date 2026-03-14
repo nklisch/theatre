@@ -1,12 +1,12 @@
-# Spectator Editor Dock
+# Stage Editor Dock
 
-The Spectator editor dock is a panel in the Godot editor that gives you direct control over recording and monitoring without leaving the editor.
+The Stage editor dock is a panel in the Godot editor that gives you direct control over recording and monitoring without leaving the editor.
 
 ## Opening the dock
 
-The dock appears automatically on the right side of the Godot editor when the Spectator plugin is enabled (**Project → Project Settings → Plugins → Spectator → Enable**).
+The dock appears automatically on the right side of the Godot editor when the Stage plugin is enabled (**Project → Project Settings → Plugins → Stage → Enable**).
 
-If the dock is not visible, go to **Editor → Editor Layout** and check that "Spectator" is enabled, or drag it from the dock panel list.
+If the dock is not visible, go to **Editor → Editor Layout** and check that "Stage" is enabled, or drag it from the dock panel list.
 
 ## Dock sections
 
@@ -15,10 +15,10 @@ If the dock is not visible, go to **Editor → Editor Layout** and check that "S
 At the top of the dock:
 
 ```
-● Spectator: Connected (frame 1247)
+● Stage: Connected (frame 1247)
 ```
 
-Shows whether the Spectator GDExtension is loaded and the MCP server is connected.
+Shows whether the Stage GDExtension is loaded and the MCP server is connected.
 
 | Status | Meaning |
 |---|---|
@@ -94,9 +94,9 @@ Use the dock's **Record** and **Stop** buttons to start and stop recordings. F9 
 
 ### Configuring shortcuts
 
-Shortcuts can be changed in **Editor → Editor Settings → Shortcuts → Spectator**:
-- `spectator_record_mark`
-- `spectator_record_pause`
+Shortcuts can be changed in **Editor → Editor Settings → Shortcuts → Stage**:
+- `stage_record_mark`
+- `stage_record_pause`
 
 If these conflict with your game's input, reassign them here.
 

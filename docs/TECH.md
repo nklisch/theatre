@@ -1,4 +1,4 @@
-# Spectator — Technical Choices & Strategy
+# Stage — Technical Choices & Strategy
 
 ## Stack Overview
 
@@ -22,14 +22,14 @@
 ## Repository Layout
 
 ```
-spectator/
+stage/
 ├── Cargo.toml                      # Workspace manifest
 ├── LICENSE                         # MIT
 ├── README.md
 ├── CLAUDE.md                       # Agent instructions for working in this repo
 │
 ├── crates/
-│   ├── spectator-server/           # MCP server binary
+│   ├── stage-server/           # MCP server binary
 │   │   ├── Cargo.toml
 │   │   └── src/
 │   │       ├── main.rs             # Entry point: MCP stdio + TCP client
@@ -51,17 +51,17 @@ spectator/
 │   │       ├── session.rs          # Per-session state (watches, config, cache)
 │   │       └── budget.rs           # Token budget calculation & enforcement
 │   │
-│   ├── spectator-godot/            # GDExtension cdylib
+│   ├── stage-godot/            # GDExtension cdylib
 │   │   ├── Cargo.toml
 │   │   └── src/
 │   │       ├── lib.rs              # gdext entry point
-│   │       ├── collector.rs        # SpectatorCollector: scene tree observation
-│   │       ├── tcp_server.rs       # SpectatorTCPServer: listen + respond
-│   │       ├── recorder.rs         # SpectatorRecorder: frame capture
+│   │       ├── collector.rs        # StageCollector: scene tree observation
+│   │       ├── tcp_server.rs       # StageTCPServer: listen + respond
+│   │       ├── recorder.rs         # StageRecorder: frame capture
 │   │       ├── query_handler.rs    # Dispatches incoming queries to collectors
 │   │       └── action_handler.rs   # Executes spatial_action operations
 │   │
-│   ├── spectator-protocol/         # Shared TCP wire format
+│   ├── stage-protocol/         # Shared TCP wire format
 │   │   ├── Cargo.toml
 │   │   └── src/
 │   │       ├── lib.rs
@@ -69,7 +69,7 @@ spectator/
 │   │       ├── handshake.rs        # Handshake message types
 │   │       └── codec.rs            # Length-prefixed JSON encoding/decoding
 │   │
-│   └── spectator-core/             # Shared logic
+│   └── stage-core/             # Shared logic
 │       ├── Cargo.toml
 │       └── src/
 │           ├── lib.rs
@@ -80,21 +80,21 @@ spectator/
 │           └── types.rs            # Entity, Transform, RelativePosition, etc.
 │
 ├── addons/
-│   └── spectator/                  # Godot addon (user copies this into their project)
+│   └── stage/                    # Godot addon (user copies this into their project)
 │       ├── plugin.cfg              # Godot plugin metadata
 │       ├── plugin.gd               # @tool EditorPlugin: dock, autoload registration
 │       ├── runtime.gd              # Autoload: instantiates GDExtension, handles input
 │       ├── dock.tscn               # Editor dock panel scene
 │       ├── dock.gd                 # Dock panel script
-│       ├── spectator.gdextension   # GDExtension manifest (platform binary paths)
+│       ├── stage.gdextension   # GDExtension manifest (platform binary paths)
 │       ├── icons/                  # Dock/button icons
 │       └── bin/                    # Platform binaries (populated by CI)
 │           ├── linux/
-│           │   └── libspectator_godot.so
+│           │   └── libstage_godot.so
 │           ├── windows/
-│           │   └── spectator_godot.dll
+│           │   └── stage_godot.dll
 │           └── macos/
-│               └── libspectator_godot.dylib
+│               └── libstage_godot.dylib
 │
 ├── docs/
 │   ├── VISION.md
@@ -105,7 +105,7 @@ spectator/
 │   └── USER_STORIES.md
 │
 ├── skills/
-│   └── spectator.md                # Agent skill file (teaches agents how to use Spectator)
+│   └── stage.md                # Agent skill file (teaches agents how to use Stage)
 │
 ├── examples/
 │   ├── 3d-debug-demo/              # Godot 3D project with enemies, patrols, etc.
@@ -121,21 +121,21 @@ spectator/
 ## Cargo Workspace
 
 ```toml
-# spectator/Cargo.toml
+# theatre/Cargo.toml
 [workspace]
 resolver = "2"
 members = [
-    "crates/spectator-server",
-    "crates/spectator-godot",
-    "crates/spectator-protocol",
-    "crates/spectator-core",
+    "crates/stage-server",
+    "crates/stage-godot",
+    "crates/stage-protocol",
+    "crates/stage-core",
 ]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-repository = "https://github.com/USER/spectator"
+repository = "https://github.com/USER/theatre"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }
@@ -148,45 +148,45 @@ rstar = "0.12"
 ### Crate Dependency Graph
 
 ```
-spectator-server
-├── spectator-protocol
-├── spectator-core
+stage-server
+├── stage-protocol
+├── stage-core
 ├── rmcp (MCP SDK)
 ├── tokio
 ├── rusqlite
 └── serde / serde_json
 
-spectator-godot
-├── spectator-protocol
+stage-godot
+├── stage-protocol
 ├── godot (gdext)
 └── serde / serde_json
 
-spectator-protocol
+stage-protocol
 └── serde / serde_json
 
-spectator-core
+stage-core
 ├── rstar
 └── serde / serde_json
 ```
 
-Note: `spectator-godot` depends on `spectator-protocol` but NOT on `spectator-core`. The core logic (spatial indexing, delta computation, budget management) lives exclusively in the server. The GDExtension is deliberately thin — it collects raw data and responds to queries. The server does the thinking.
+Note: `stage-godot` depends on `stage-protocol` but NOT on `stage-core`. The core logic (spatial indexing, delta computation, budget management) lives exclusively in the server. The GDExtension is deliberately thin — it collects raw data and responds to queries. The server does the thinking.
 
 ## Two Rust Artifacts
 
-### spectator-server (Binary)
+### stage-server (Binary)
 
 ```toml
-# crates/spectator-server/Cargo.toml
+# crates/stage-server/Cargo.toml
 [package]
-name = "spectator-server"
+name = "stage-server"
 
 [[bin]]
-name = "spectator-server"
+name = "stage-server"
 path = "src/main.rs"
 
 [dependencies]
-spectator-protocol.workspace = true
-spectator-core.workspace = true
+stage-protocol.workspace = true
+stage-core.workspace = true
 rmcp = { version = "0.16", features = ["server"] }
 tokio.workspace = true
 serde.workspace = true
@@ -195,26 +195,26 @@ rusqlite.workspace = true
 schemars = "1"
 ```
 
-Built with `cargo build --release -p spectator-server`. Produces a standalone binary. Distributed via GitHub releases and `cargo install spectator-server`.
+Built with `cargo build --release -p stage-server`. Produces a standalone binary. Distributed via GitHub releases and `cargo install stage-server`.
 
-### spectator-godot (cdylib)
+### stage-godot (cdylib)
 
 ```toml
-# crates/spectator-godot/Cargo.toml
+# crates/stage-godot/Cargo.toml
 [package]
-name = "spectator-godot"
+name = "stage-godot"
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
-spectator-protocol.workspace = true
+stage-protocol.workspace = true
 godot = { version = "0.4", features = ["register-docs"] }
 serde.workspace = true
 serde_json.workspace = true
 ```
 
-Built with `cargo build --release -p spectator-godot`. Produces a platform-specific shared library (`.so` / `.dll` / `.dylib`). Copied into `addons/spectator/bin/` and distributed as part of the Godot addon.
+Built with `cargo build --release -p stage-godot`. Produces a platform-specific shared library (`.so` / `.dll` / `.dylib`). Copied into `addons/stage/bin/` and distributed as part of the Godot addon.
 
 ## GDExtension Architecture
 
@@ -225,17 +225,17 @@ Godot has a known limitation: a GDScript inheriting from a GDExtension-derived E
 ```
 GDScript Layer (UI + lifecycle)          Rust GDExtension Layer (data + networking)
 ─────────────────────────────            ──────────────────────────────────────────
-plugin.gd (EditorPlugin)         uses → SpectatorCollector (Node)
+plugin.gd (EditorPlugin)         uses → StageCollector (Node)
   - adds dock panel                      - scene tree traversal
   - registers autoload                   - property collection
   - editor lifecycle                     - frame snapshots
 
-runtime.gd (Autoload)            uses → SpectatorTCPServer
+runtime.gd (Autoload)            uses → StageTCPServer
   - instantiates Rust classes            - TCP listener on port 9077
   - handles F8/F9/F10 input              - protocol framing
   - bridges scene tree events            - query dispatch
 
-dock.gd (Control)                uses → SpectatorRecorder
+dock.gd (Control)                uses → StageRecorder
   - recording UI                         - frame buffer
   - status display                       - SQLite write (via server)
   - marker controls                      - marker storage
@@ -247,7 +247,7 @@ GDScript calls Rust via `#[func]`-annotated methods. Rust accesses the scene tre
 
 ```rust
 // Registered as Godot classes, usable from GDScript
-SpectatorCollector : Node
+StageCollector : Node
   - fn get_visible_nodes() -> Array
   - fn get_near(position, radius) -> Array
   - fn get_node_state(path) -> Dictionary
@@ -256,7 +256,7 @@ SpectatorCollector : Node
   - fn raycast(from, to) -> Dictionary
   // ... all addon query methods from CONTRACT.md
 
-SpectatorTCPServer : Node
+StageTCPServer : Node
   - fn start(port: i32)
   - fn stop()
   - fn is_connected() -> bool
@@ -264,7 +264,7 @@ SpectatorTCPServer : Node
   // Called by runtime.gd in _physics_process to pump messages
   - fn poll()
 
-SpectatorRecorder : Node
+StageRecorder : Node
   - fn flush_dashcam_clip(label: String) -> String   // returns clip_id or ""
   - fn add_marker(source: String, label: String)     // TCP/human markers
   - fn add_code_marker(label: String, tier: String)  // game script markers (tier: "system"|"deliberate"|"silent")
@@ -276,17 +276,17 @@ SpectatorRecorder : Node
 
 Godot's scene tree is **not thread-safe**. All scene tree access must happen on the main thread. The GDExtension follows this constraint:
 
-1. `runtime.gd` calls `SpectatorTCPServer.poll()` every `_physics_process`
+1. `runtime.gd` calls `StageTCPServer.poll()` every `_physics_process`
 2. `poll()` checks for incoming TCP messages (non-blocking)
-3. For each query, `poll()` calls into `SpectatorCollector` to gather data (main thread, scene tree safe)
+3. For each query, `poll()` calls into `StageCollector` to gather data (main thread, scene tree safe)
 4. Response is serialized and queued for TCP send
 5. TCP send happens in the same `poll()` call (non-blocking write)
 
 This is single-threaded and frame-locked. For 60fps physics, each frame has ~16ms. Property collection for ~100 nodes takes <1ms in Rust. TCP I/O is non-blocking. No threading complexity needed.
 
 For dashcam capture at 60fps:
-1. `SpectatorRecorder` captures frames every `_physics_process` into a ring buffer
-2. On trigger (marker, F9, agent `save`, or `SpectatorRuntime.marker()` from game code), the ring buffer window is written to SQLite
+1. `StageRecorder` captures frames every `_physics_process` into a ring buffer
+2. On trigger (marker, F9, agent `save`, or `StageRuntime.marker()` from game code), the ring buffer window is written to SQLite
 3. Clip is identified by a `clip_id` (e.g. `clip_001a2b3c`)
 
 ## MCP Server Architecture
@@ -295,7 +295,7 @@ The server runs as a tokio async process with two concurrent tasks:
 
 ```
 ┌─────────────────────────────────────────────────┐
-│  spectator-server process                       │
+│  stage-server process                       │
 │                                                 │
 │  ┌─────────────────────────────────────────┐    │
 │  │  Task 1: MCP Handler (rmcp)             │    │
@@ -326,11 +326,11 @@ The server runs as a tokio async process with two concurrent tasks:
 ### Tool Call Flow
 
 ```
-AI Client → MCP (stdio) → spectator-server
+AI Client → MCP (stdio) → stage-server
   → tool handler builds query
   → TCP query → Godot addon
   → addon collects data from scene tree
-  → TCP response → spectator-server
+  → TCP response → stage-server
   → server processes (spatial index, bearing calc, delta, budget)
   → MCP response (stdio) → AI Client
 ```
@@ -344,54 +344,54 @@ Typical round-trip: <50ms for most queries (TCP localhost + scene tree collectio
 Each release produces per-platform archives:
 
 ```
-spectator-v0.1.0-linux-x86_64.tar.gz
-spectator-v0.1.0-macos-arm64.tar.gz
-spectator-v0.1.0-macos-x86_64.tar.gz
-spectator-v0.1.0-windows-x86_64.zip
+stage-v0.1.0-linux-x86_64.tar.gz
+stage-v0.1.0-macos-arm64.tar.gz
+stage-v0.1.0-macos-x86_64.tar.gz
+stage-v0.1.0-windows-x86_64.zip
 ```
 
 Each archive contains:
 ```
-spectator-v0.1.0-linux-x86_64/
+stage-v0.1.0-linux-x86_64/
 ├── bin/
-│   └── spectator-server           # MCP server binary
+│   └── stage-server           # MCP server binary
 ├── addons/
-│   └── spectator/                  # Complete Godot addon with matching GDExtension
+│   └── stage/                    # Complete Godot addon with matching GDExtension
 │       ├── plugin.cfg
 │       ├── plugin.gd
 │       ├── runtime.gd
 │       ├── dock.tscn
 │       ├── dock.gd
-│       ├── spectator.gdextension
+│       ├── stage.gdextension
 │       └── bin/
 │           └── linux/
-│               └── libspectator_godot.so
+│               └── libstage_godot.so
 └── README.md                       # Quick start instructions
 ```
 
 **Install steps:**
 1. Download the archive for your platform
-2. Copy `addons/spectator/` into your Godot project
+2. Copy `addons/stage/` into your Godot project
 3. Enable the plugin in Project Settings → Plugins
-4. Add the MCP server to your AI client config (path to `spectator-server` binary)
+4. Add the MCP server to your AI client config (path to `stage-server` binary)
 
 ### Secondary: Cargo Install (Server Only)
 
 ```bash
-cargo install spectator-server
+cargo install stage-server
 ```
 
 For Rust developers who want the server binary. The Godot addon (including GDExtension binaries) still comes from GitHub releases.
 
 ### Tertiary: Godot Asset Library (Addon Only)
 
-The `addons/spectator/` directory published to the Godot Asset Library. Includes pre-built GDExtension binaries for all platforms. Users install the server binary separately.
+The `addons/stage/` directory published to the Godot Asset Library. Includes pre-built GDExtension binaries for all platforms. Users install the server binary separately.
 
 ### Future: One-Click Install Script
 
 An install script (or the addon itself on first run) that:
 1. Detects the platform
-2. Downloads the matching `spectator-server` binary from GitHub releases
+2. Downloads the matching `stage-server` binary from GitHub releases
 3. Places it in a known location
 4. Outputs the MCP config snippet to paste into the AI client
 
@@ -405,8 +405,8 @@ ci:
   - cargo fmt --check
   - cargo clippy --workspace
   - cargo test --workspace
-  - cargo build --release -p spectator-server
-  - cargo build --release -p spectator-godot
+  - cargo build --release -p stage-server
+  - cargo build --release -p stage-godot
 
 # Triggered on tag push (v*)
 release:
@@ -416,15 +416,15 @@ release:
     - target: x86_64-apple-darwin
     - target: x86_64-pc-windows-msvc
   steps:
-    - Build spectator-server for target
-    - Build spectator-godot for target
+    - Build stage-server for target
+    - Build stage-godot for target
     - Package addon + server into archive
     - Upload to GitHub release
 ```
 
 ### Cross-Compilation
 
-Both `spectator-server` and `spectator-godot` must be cross-compiled for each target. The GDExtension cdylib requires the Godot API headers for the target platform — gdext handles this via its build script.
+Both `stage-server` and `stage-godot` must be cross-compiled for each target. The GDExtension cdylib requires the Godot API headers for the target platform — gdext handles this via its build script.
 
 Required Rust targets:
 - `x86_64-unknown-linux-gnu` (Linux)
@@ -436,30 +436,30 @@ Required Rust targets:
 
 ### Unit Tests
 
-- `spectator-core`: Bearing calculation, spatial indexing, delta computation, budget estimation. Pure logic, no external dependencies. High coverage target.
-- `spectator-protocol`: Serialization round-trips, codec correctness.
+- `stage-core`: Bearing calculation, spatial indexing, delta computation, budget estimation. Pure logic, no external dependencies. High coverage target.
+- `stage-protocol`: Serialization round-trips, codec correctness.
 
 ### Integration Tests
 
-- `spectator-server`: Mock TCP connection simulating addon responses. Verify MCP tool handlers produce correct output for given inputs.
-- `spectator-godot`: Requires a running Godot instance. Test scene tree collection, property reading, TCP server behavior. Run via Godot's `--headless` mode in CI.
+- `stage-server`: Mock TCP connection simulating addon responses. Verify MCP tool handlers produce correct output for given inputs.
+- `stage-godot`: Requires a running Godot instance. Test scene tree collection, property reading, TCP server behavior. Run via Godot's `--headless` mode in CI.
 
 ### End-to-End Tests
 
 - Launch Godot with a test project + addon enabled
-- Launch `spectator-server` connected to the addon
+- Launch `stage-server` connected to the addon
 - Send MCP tool calls, verify responses against known scene state
 - These are slow and run only on main branch merges, not every PR
 
 ## Versioning Strategy
 
-Spectator uses **workspace versioning** — all crates share the same version number. This simplifies compatibility: `spectator-server` v0.3.0 works with `spectator-godot` v0.3.0. Mismatched versions are detected during the TCP handshake.
+Stage uses **workspace versioning** — all crates share the same version number. This simplifies compatibility: `stage-server` v0.3.0 works with `stage-godot` v0.3.0. Mismatched versions are detected during the TCP handshake.
 
 The `.gdextension` manifest sets `compatibility_minimum = "4.5"` to match the `api-4-5` feature flag. The `lazy-function-tables` feature provides forward compatibility with 4.6+ releases.
 
 ### Version Compatibility Matrix
 
-| spectator-server | spectator-godot | TCP Protocol | Godot |
+| stage-server | stage-godot | TCP Protocol | Godot |
 |---|---|---|---|
 | 0.x | 0.x (matching) | v1 | 4.5+ |
 | 1.x | 1.x (matching) | v1 or v2 | 4.5+ |
@@ -468,7 +468,7 @@ Protocol version is exchanged in the TCP handshake. The server and addon negotia
 
 ## Agent Skill File
 
-Distributed as `skills/spectator.md`, this file teaches AI agents *when and how* to use Spectator's tools effectively. It includes:
+Distributed as `skills/stage.md`, this file teaches AI agents *when and how* to use Stage's tools effectively. It includes:
 
 - When to use each tool (decision tree)
 - Token-efficient querying patterns (start summary, drill down)
@@ -482,7 +482,7 @@ Users add this to their agent's skill/context configuration. For Claude Code, th
 
 ### Performance Telemetry (Future)
 
-Spectator is spatial-first. Performance data (FPS, draw calls, physics tick time) is out of scope for v1. However, the architecture supports adding a `spatial_perf` tool later — the GDExtension can collect `Engine.get_frames_per_second()` and `Performance` singleton data alongside spatial state. The TCP protocol and MCP tool surface can be extended without breaking changes.
+Stage is spatial-first. Performance data (FPS, draw calls, physics tick time) is out of scope for v1. However, the architecture supports adding a `spatial_perf` tool later — the GDExtension can collect `Engine.get_frames_per_second()` and `Performance` singleton data alongside spatial state. The TCP protocol and MCP tool surface can be extended without breaking changes.
 
 ### Exported Build Support (Future)
 
@@ -495,7 +495,7 @@ Desirable for debugging platform-specific issues (e.g., "this only clips on the 
 
 ### Extensibility (Data Layer)
 
-The 9 MCP tools are the stable API surface. Game developers extend Spectator at the **data layer**, not the tool layer:
+The 9 MCP tools are the stable API surface. Game developers extend Stage at the **data layer**, not the tool layer:
 
 - Register custom properties to track per node class or group
 - Define custom state extractors (GDScript callables returning data)
@@ -506,8 +506,8 @@ This keeps the agent interface stable while allowing game-specific data richness
 
 ### Plugin Marketplace Presence
 
-Once stable, Spectator should be listed on:
+Once stable, Stage should be listed on:
 - Godot Asset Library (addon)
-- crates.io (spectator-server)
+- crates.io (stage-server)
 - MCP tool registries (when they exist)
 - Agent skill registries / skilltap

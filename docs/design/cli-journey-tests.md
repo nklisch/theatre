@@ -2,7 +2,7 @@
 
 ## Overview
 
-Add multi-step journey tests that exercise the `spectator` and `director` CLI
+Add multi-step journey tests that exercise the `stage` and `director` CLI
 binaries against real Godot scenes. These tests validate the full binary path:
 argument parsing → connection/process management → tool dispatch → JSON output
 → exit codes. They complement the existing E2E harness journeys (which call
@@ -10,16 +10,16 @@ Rust handler functions directly) by proving the CLI subprocess interface works
 end-to-end.
 
 **Current state:**
-- Spectator CLI: 5 basic arg-validation tests in `crates/spectator-server/tests/cli_binary.rs` (version, no-args, unknown tool, invalid JSON, no Godot). Zero journey tests.
+- Stage CLI: 5 basic arg-validation tests in `crates/stage-server/tests/cli_binary.rs` (version, no-args, unknown tool, invalid JSON, no Godot). Zero journey tests.
 - Director CLI: 4 tests in `tests/director-tests/src/test_cli.rs` (create+read, node add, missing project, invalid JSON). Zero multi-step CLI journeys.
 
-**Goal:** Mirror the coverage of `e2e_journeys.rs` (spectator) and `test_journey*.rs` (director) but through the CLI binary subprocess interface.
+**Goal:** Mirror the coverage of `e2e_journeys.rs` (stage) and `test_journey*.rs` (director) but through the CLI binary subprocess interface.
 
 ## Implementation Units
 
-### Unit 1: SpectatorCliFixture
+### Unit 1: StageCliFixture
 
-**File**: `crates/spectator-server/tests/support/cli_fixture.rs`
+**File**: `crates/stage-server/tests/support/cli_fixture.rs`
 
 ```rust
 use super::godot_process::GodotProcess;
@@ -43,13 +43,13 @@ impl CliResult {
     pub fn is_ok(&self) -> bool { /* ... */ }
 }
 
-/// CLI fixture that manages a Godot process and shells out to the `spectator` binary.
-pub struct SpectatorCliFixture {
+/// CLI fixture that manages a Godot process and shells out to the `stage` binary.
+pub struct StageCliFixture {
     godot: GodotProcess,
     port: u16,
 }
 
-impl SpectatorCliFixture {
+impl StageCliFixture {
     /// Start Godot headless with a test scene. Reuses GodotProcess.
     pub async fn start_3d() -> anyhow::Result<Self> {
         let godot = GodotProcess::start_3d().await?;
@@ -63,11 +63,11 @@ impl SpectatorCliFixture {
         Ok(Self { godot, port })
     }
 
-    /// Invoke `spectator <tool> '<json>'` as a subprocess.
+    /// Invoke `stage <tool> '<json>'` as a subprocess.
     /// Sets THEATRE_PORT to the fixture's port.
     /// Returns CliResult based on exit code and stdout.
     pub fn run(&self, tool: &str, params: Value) -> anyhow::Result<CliResult> {
-        let bin = env!("CARGO_BIN_EXE_spectator");
+        let bin = env!("CARGO_BIN_EXE_stage");
         let output = Command::new(bin)
             .args([tool, &params.to_string()])
             .env("THEATRE_PORT", self.port.to_string())
@@ -97,13 +97,13 @@ impl SpectatorCliFixture {
 ```
 
 **Implementation Notes**:
-- Uses `env!("CARGO_BIN_EXE_spectator")` — cargo builds the binary automatically when running tests in `spectator-server`.
-- `THEATRE_PORT` env var tells the spectator CLI which port to connect to.
+- Uses `env!("CARGO_BIN_EXE_stage")` — cargo builds the binary automatically when running tests in `stage-server`.
+- `THEATRE_PORT` env var tells the stage CLI which port to connect to.
 - `run()` is synchronous (subprocess blocks) — no need for async. But tests are `#[tokio::test]` because `GodotProcess::start` is async and `wait_frames` uses `tokio::time::sleep`.
-- All spectator CLI output (success and error) goes to stdout as JSON, so we always parse stdout.
+- All stage CLI output (success and error) goes to stdout as JSON, so we always parse stdout.
 
 **Acceptance Criteria**:
-- [ ] `SpectatorCliFixture::start_3d()` launches Godot and makes port available
+- [ ] `StageCliFixture::start_3d()` launches Godot and makes port available
 - [ ] `run("spatial_snapshot", json!({}))` returns `CliResult::Ok(...)` with entities
 - [ ] `run("unknown_tool", json!({}))` returns `CliResult::Err { exit_code: 2, .. }`
 - [ ] Godot process is killed on fixture drop
@@ -122,25 +122,25 @@ changes needed. The new journey test files simply use `CliFixture` as-is.
 
 ---
 
-### Unit 3: Spectator CLI Journey Tests
+### Unit 3: Stage CLI Journey Tests
 
-**File**: `crates/spectator-server/tests/cli_journeys.rs`
+**File**: `crates/stage-server/tests/cli_journeys.rs`
 
 ```rust
 mod support;
 
 use serde_json::json;
-use support::cli_fixture::{SpectatorCliFixture, CliResult};
+use support::cli_fixture::{StageCliFixture, CliResult};
 ```
 
 **Journey 1: `cli_journey_explore_scene`** — mirrors `journey_explore_scene` from `e2e_journeys.rs`
 
 Steps:
-1. `spectator scene_tree '{"action":"roots"}'` → roots array non-empty
-2. `spectator spatial_snapshot '{"detail":"summary"}'` → non-null
-3. `spectator spatial_snapshot '{"detail":"standard"}'` → Player at ~(0,0,0), Scout at ~(5,0,-3)
-4. `spectator spatial_inspect '{"node":"Enemies/Scout"}'` → class, properties.health=80
-5. `spectator spatial_query '{"query_type":"nearest","from":[0,0,0],"k":2}'` → results with non-negative distances
+1. `stage scene_tree '{"action":"roots"}'` → roots array non-empty
+2. `stage spatial_snapshot '{"detail":"summary"}'` → non-null
+3. `stage spatial_snapshot '{"detail":"standard"}'` → Player at ~(0,0,0), Scout at ~(5,0,-3)
+4. `stage spatial_inspect '{"node":"Enemies/Scout"}'` → class, properties.health=80
+5. `stage spatial_query '{"query_type":"nearest","from":[0,0,0],"k":2}'` → results with non-negative distances
 
 **Journey 2: `cli_journey_mutate_and_observe`** — mirrors `journey_debug_spatial_bug`
 
@@ -185,7 +185,7 @@ Steps:
 #[tokio::test]
 #[ignore = "requires Godot binary"]
 async fn cli_journey_explore_scene() {
-    let f = SpectatorCliFixture::start_3d().await
+    let f = StageCliFixture::start_3d().await
         .expect("Failed to start Godot 3D scene");
 
     // Step 1: scene_tree roots
@@ -415,7 +415,7 @@ fn cli_journey_build_scene() {
 
 ### Unit 5: Register New Test Modules
 
-**File**: `crates/spectator-server/tests/cli_journeys.rs` — new integration test file (cargo discovers it automatically)
+**File**: `crates/stage-server/tests/cli_journeys.rs` — new integration test file (cargo discovers it automatically)
 
 **File**: `tests/director-tests/src/lib.rs` — add module registration
 
@@ -425,7 +425,7 @@ fn cli_journey_build_scene() {
 mod test_cli_journey;
 ```
 
-**File**: `crates/spectator-server/tests/support/mod.rs` — add cli_fixture module
+**File**: `crates/stage-server/tests/support/mod.rs` — add cli_fixture module
 
 ```rust
 // Add to mod.rs:
@@ -433,16 +433,16 @@ pub mod cli_fixture;
 ```
 
 **Acceptance Criteria**:
-- [ ] `cargo test -p spectator-server --test cli_journeys -- --list` lists all spectator CLI journeys
+- [ ] `cargo test -p stage-server --test cli_journeys -- --list` lists all stage CLI journeys
 - [ ] `cargo test -p director-tests -- --list` includes `test_cli_journey::*`
 
 ---
 
 ## Implementation Order
 
-1. **Unit 1**: `SpectatorCliFixture` — the foundational harness
+1. **Unit 1**: `StageCliFixture` — the foundational harness
 2. **Unit 5**: Module registration (support/mod.rs, cli_journeys.rs stub, lib.rs)
-3. **Unit 3**: Spectator CLI journey tests (using the fixture)
+3. **Unit 3**: Stage CLI journey tests (using the fixture)
 4. **Unit 4**: Director CLI journey tests (using existing `CliFixture`)
 5. **Unit 2**: Verify existing `CliFixture` works (no changes expected)
 
@@ -454,8 +454,8 @@ pub mod cli_fixture;
 # Build binaries first (required for CLI subprocess tests)
 cargo build --workspace
 
-# Run spectator CLI journeys
-cargo test -p spectator-server --test cli_journeys -- --ignored --nocapture
+# Run stage CLI journeys
+cargo test -p stage-server --test cli_journeys -- --ignored --nocapture
 
 # Run director CLI journeys
 cargo test -p director-tests test_cli_journey -- --ignored --nocapture
@@ -468,11 +468,11 @@ cargo test --workspace -- --include-ignored
 
 | Journey | Binary | Tools Exercised | Key Validation |
 |---------|--------|-----------------|----------------|
-| `cli_journey_explore_scene` | spectator | scene_tree, snapshot, inspect, query | Read-only observation via CLI |
-| `cli_journey_mutate_and_observe` | spectator | snapshot, action, delta, inspect | Mutation + observation round-trip |
-| `cli_journey_2d_scene` | spectator | snapshot, query, inspect, action | 2D coordinate handling via CLI |
-| `cli_journey_clips_lifecycle` | spectator | clips (status, save, list, delete) | Clip DB persistence across CLI sessions |
-| `cli_journey_error_handling` | spectator | inspect, query, action (invalid params) | Structured error JSON, exit codes |
+| `cli_journey_explore_scene` | stage | scene_tree, snapshot, inspect, query | Read-only observation via CLI |
+| `cli_journey_mutate_and_observe` | stage | snapshot, action, delta, inspect | Mutation + observation round-trip |
+| `cli_journey_2d_scene` | stage | snapshot, query, inspect, action | 2D coordinate handling via CLI |
+| `cli_journey_clips_lifecycle` | stage | clips (status, save, list, delete) | Clip DB persistence across CLI sessions |
+| `cli_journey_error_handling` | stage | inspect, query, action (invalid params) | Structured error JSON, exit codes |
 | `cli_journey_build_scene` | director | scene_create, node_add, shape_create, node_set_properties, scene_read, node_remove | Full node lifecycle via CLI |
 | `cli_journey_multi_scene_composition` | director | scene_create, node_add, scene_add_instance, node_reparent, scene_read, scene_list | Scene composition via CLI |
 | `cli_journey_animation_workflow` | director | scene_create, node_add, animation_create, animation_add_track, animation_read | Animation CRUD via CLI |
@@ -490,7 +490,7 @@ cargo test --workspace --no-run
 cargo test --workspace
 
 # 3. CLI binary tests pass (no Godot needed)
-cargo test -p spectator-server --test cli_binary
+cargo test -p stage-server --test cli_binary
 
 # 4. Full E2E + CLI journeys pass (requires Godot + deployed GDExtension)
 theatre deploy tests/godot-project

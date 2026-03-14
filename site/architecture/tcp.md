@@ -50,7 +50,7 @@ This prevents a malformed length field (e.g., `0xFFFFFFFF`) from causing the dec
 
 In practice, Theatre messages are much smaller — even a large snapshot response is rarely over 100 KB.
 
-## Spectator connection lifecycle
+## Stage connection lifecycle
 
 ### Initial connection
 
@@ -144,7 +144,7 @@ This stateless model means the Director backend is completely stateless — any 
 
 ## Codec implementation
 
-The codec is in `crates/spectator-protocol/src/codec.rs`. There are four functions:
+The codec is in `crates/stage-protocol/src/codec.rs`. There are four functions:
 
 ```rust
 // Synchronous write (for GDExtension — no async runtime)
@@ -168,7 +168,7 @@ pub fn read_message(reader: &mut impl Read) -> Result<Vec<u8>, CodecError> {
     Ok(payload)
 }
 
-// Async write (for spectator server — tokio runtime)
+// Async write (for stage server — tokio runtime)
 #[cfg(feature = "async")]
 pub async fn write_message_async(stream: &mut TcpStream, payload: &[u8]) -> Result<(), CodecError> {
     let len = payload.len() as u32;
@@ -177,7 +177,7 @@ pub async fn write_message_async(stream: &mut TcpStream, payload: &[u8]) -> Resu
     Ok(())
 }
 
-// Async read (for spectator server)
+// Async read (for stage server)
 #[cfg(feature = "async")]
 pub async fn read_message_async(stream: &mut TcpStream) -> Result<Vec<u8>, CodecError> {
     let mut len_buf = [0u8; 4];

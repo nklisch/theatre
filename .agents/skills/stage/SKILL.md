@@ -8,28 +8,28 @@ description: >
   subscriptions, or game state manipulation.
 ---
 
-# Spectator — Spatial Debugging for Godot
+# Stage — Spatial Debugging for Godot
 
-Spectator is part of the **Theatre** toolkit (alongside Director). It gives you 9 tools to observe and interact with a running Godot game: positions, distances, relationships, physics, signals — organized in space, not as code.
+Stage is part of the **Theatre** toolkit (alongside Director). It gives you 9 tools to observe and interact with a running Godot game: positions, distances, relationships, physics, signals — organized in space, not as code.
 
 **Two interfaces, identical capabilities:**
 
 | Interface | When to use | Example |
 |---|---|---|
-| MCP tools | Agent has MCP connection to spectator | `spatial_snapshot(detail: "summary")` |
-| CLI | Agent uses bash, no MCP server running | `spectator spatial_snapshot '{"detail":"summary"}'` |
+| MCP tools | Agent has MCP connection to stage | `spatial_snapshot(detail: "summary")` |
+| CLI | Agent uses bash, no MCP server running | `stage spatial_snapshot '{"detail":"summary"}'` |
 
 **CLI basics:**
 ```bash
-spectator <tool> '<json-params>'           # direct invocation
-echo '{"detail":"summary"}' | spectator spatial_snapshot  # stdin pipe
-spectator --help                           # list all tools
-spectator --version                        # {"version": "0.1.0"}
+stage <tool> '<json-params>'           # direct invocation
+echo '{"detail":"summary"}' | stage spatial_snapshot  # stdin pipe
+stage --help                           # list all tools
+stage --version                        # {"version": "0.1.0"}
 ```
 
 All CLI output is JSON to stdout. Errors are JSON to stdout with exit code 1 (runtime) or 2 (usage). Logs go to stderr.
 
-**Prerequisite:** Spectator addon must be enabled in the Godot project and the game must be running. If tools return `not_connected` / `connection_failed`, the game isn't running.
+**Prerequisite:** Stage addon must be enabled in the Godot project and the game must be running. If tools return `not_connected` / `connection_failed`, the game isn't running.
 
 ## When to Use Which Tool
 
@@ -248,7 +248,7 @@ Watch triggers arrive in `spatial_delta` responses under `watch_triggers`.
 
 ## spatial_config — Session Setup
 
-Call at the start of a session to tune what Spectator tracks:
+Call at the start of a session to tune what Stage tracks:
 
 ```jsonc
 {
@@ -285,7 +285,7 @@ Clips are captured by the dashcam ring buffer. Mark a moment to save; analyze sa
 // See markers in a clip
 { "action": "markers", "clip_id": "clip_001a2b3c" }
 // Note: marker entries have a "source" field: "human" (F9), "agent" (MCP add_marker),
-// "system" (automatic dashcam trigger), or "code" (SpectatorRuntime.marker() in game script).
+// "system" (automatic dashcam trigger), or "code" (StageRuntime.marker() in game script).
 // Code markers may be "system" tier (rate-limited), "deliberate" (always triggers),
 // or "silent" (annotation only — attached to clips triggered by other means).
 
@@ -369,7 +369,7 @@ Clips are captured by the dashcam ring buffer. Mark a moment to save; analyze sa
 | Error | Meaning | Fix |
 |---|---|---|
 | `not_connected` / `connection_failed` | Game not running or addon not enabled | Start the game in Godot |
-| `unknown_tool` | Invalid tool name (CLI only) | Check `spectator --help` |
+| `unknown_tool` | Invalid tool name (CLI only) | Check `stage --help` |
 | `invalid_json` | Bad JSON params (CLI only) | Fix JSON syntax |
 | `scene_not_loaded` | Between scene transitions | Wait for scene to load |
 | `node_not_found` | Path doesn't exist | Use `scene_tree(action: "find")` |

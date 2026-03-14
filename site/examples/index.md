@@ -49,7 +49,7 @@ Real debugging and development scenarios using Theatre. Each example is a comple
 <ScenarioCard
   title="Build & Verify"
   icon="✅"
-  problem="The flagship workflow: Director builds a room, Spectator verifies a player can navigate it. Full loop."
+  problem="The flagship workflow: Director builds a room, Stage verifies a player can navigate it. Full loop."
   link="/examples/build-verify"
 />
 </div>

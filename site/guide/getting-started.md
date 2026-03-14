@@ -8,18 +8,18 @@ By the end of this guide, your AI agent will be able to call `spatial_snapshot` 
 
 ## Step 1: Run your game
 
-Theatre's Spectator tool only works while a Godot game is running. The GDExtension starts its TCP listener when the scene tree initializes, and shuts it down on exit.
+Theatre's Stage tool only works while a Godot game is running. The GDExtension starts its TCP listener when the scene tree initializes, and shuts it down on exit.
 
 Press **F5** (or the play button) in Godot to run your project. Any scene will work — even an empty one with a single Node3D.
 
 In the Godot output panel, you should see something like:
 
 ```
-[Spectator] TCP server started on port 9077
-[Spectator] Collecting 3 nodes (physics tick 0)
+[Stage] TCP server started on port 9077
+[Stage] Collecting 3 nodes (physics tick 0)
 ```
 
-If you do not see this, confirm the Spectator addon is enabled in **Project → Project Settings → Plugins**.
+If you do not see this, confirm the Stage addon is enabled in **Project → Project Settings → Plugins**.
 
 ## Step 2: Ask for a snapshot
 
@@ -97,16 +97,16 @@ And return a list of nearby nodes with their distances — useful for debugging 
 You now have a working Theatre setup. Here are the natural next steps:
 
 - **[Your first debugging session](/guide/first-session)** — A complete worked example of finding and fixing a real bug.
-- **[Recording workflow](/spectator/dashcam)** — Record gameplay, mark the bug moment, and have the agent analyze the clip.
-- **[Watch & React](/spectator/watch-workflow)** — Set up watches on specific nodes to monitor changes over time.
-- **[spatial_snapshot reference](/spectator/snapshot)** — Full parameter documentation for the snapshot tool.
+- **[Recording workflow](/stage/dashcam)** — Record gameplay, mark the bug moment, and have the agent analyze the clip.
+- **[Watch & React](/stage/watch-workflow)** — Set up watches on specific nodes to monitor changes over time.
+- **[spatial_snapshot reference](/stage/snapshot)** — Full parameter documentation for the snapshot tool.
 
 ## Common first-time issues
 
-**Agent says "no tools available"** — The MCP server is not configured or not running. Check your `.mcp.json` and make sure the path to `spectator` is correct and the binary exists. Alternatively, use the CLI directly: `spectator spatial_snapshot '{}'`.
+**Agent says "no tools available"** — The MCP server is not configured or not running. Check your `.mcp.json` and make sure the path to `stage` is correct and the binary exists. Alternatively, use the CLI directly: `stage spatial_snapshot '{}'`.
 
 **Agent calls the tool but gets a connection error** — The game is not running, or port 9077 is blocked. Start the game first (F5), then retry.
 
-**Snapshot returns 0 nodes** — The Spectator addon is not collecting any nodes. Check that your nodes are in the scene tree (not orphaned), and that the Spectator plugin is enabled.
+**Snapshot returns 0 nodes** — The Stage addon is not collecting any nodes. Check that your nodes are in the scene tree (not orphaned), and that the Stage plugin is enabled.
 
 **Response is very large** — Add `"detail": "summary"` or `"token_budget": 500` to limit response size. See [Token Budgets](/guide/token-budgets).

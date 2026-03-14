@@ -4,11 +4,11 @@
 
 Director is a Godot editor-time MCP server: it lets an AI agent create and
 modify scenes, resources, tilemaps, animations, and physics configuration
-without touching `.tscn`/`.tres`/`.res` files directly. It pairs with Spectator
+without touching `.tscn`/`.tres`/`.res` files directly. It pairs with Stage
 (runtime observer) to complete the build-test-iterate loop.
 
 **Size estimate:** Medium-large. Director is architecturally comparable to
-Spectator but more GDScript-heavy. Spectator's complexity lives in spatial
+Stage but more GDScript-heavy. Stage's complexity lives in spatial
 indexing and the GDExtension layer. Director's complexity lives in the GDScript
 operations layer and the three-backend routing system.
 
@@ -37,7 +37,7 @@ structured JSON for every success and failure, and stay headless-safe.
 ### 1. Workspace restructuring
 
 Add `crates/director` and `tests/director-tests` to `Cargo.toml` workspace
-members. No new top-level changes needed to the existing Spectator crates.
+members. No new top-level changes needed to the existing Stage crates.
 
 ```toml
 # Cargo.toml — add to members
@@ -47,10 +47,10 @@ members. No new top-level changes needed to the existing Spectator crates.
 
 ### 2. Shared crate extraction (optional but recommended)
 
-`VariantTarget` currently lives in `spectator-protocol`. The spec calls for
+`VariantTarget` currently lives in `stage-protocol`. The spec calls for
 extracting it into a `theatre-common` crate so Director can import it without
 depending on the full protocol crate. This can be deferred to Phase 3 when
-`node_set_properties` first needs it — just import from `spectator-protocol`
+`node_set_properties` first needs it — just import from `stage-protocol`
 directly until then.
 
 ### 3. Addon directory scaffold
@@ -84,7 +84,7 @@ what it made. Everything headless one-shot. No daemon, no editor plugin.
   capture stdout, parse `OperationResult`
 - `backend.rs` — for now: always one-shot; backend enum stub ready for later
 - `mcp/mod.rs` — shared helpers (`serialize_params`, `finalize_response`, etc.)
-  mirroring Spectator's pattern exactly
+  mirroring Stage's pattern exactly
 - `mcp/scene.rs` — `scene_read`, `scene_create`
 - `mcp/node.rs` — `node_add`, `node_set_properties`, `node_remove`
 
@@ -307,7 +307,7 @@ arg to `add_to_group()`. Both are easy to miss and cause silent data loss.
 
 ## Parallel Work: Project Rename to Theatre
 
-The spec notes the repo should be renamed `spectator` → `theatre`. This is
+The repo has been renamed from `stage` → `theatre` (completed). This is
 independent of Director implementation and can happen any time:
 
 - GitHub repo rename
@@ -316,7 +316,7 @@ independent of Director implementation and can happen any time:
 - Root `README.md` rewritten to introduce both tools
 - `docs/` audit for project-name vs tool-name references
 
-Crate names (`spectator-*`) do not change.
+Crate names use `stage-*` (formerly `spectator-*`).
 
 ---
 
@@ -371,14 +371,14 @@ any order based on what the target project needs first.
 
 ---
 
-## Relationship to Spectator
+## Relationship to Stage
 
-Director and Spectator share this repository, workspace, and conventions but
+Director and Stage share this repository, workspace, and conventions but
 have no runtime coupling. Expected agent workflow:
 
 1. **Director** — create or modify scene structure, materials, physics layers
 2. **Agent** — edit `.gd` scripts directly (filesystem)
-3. **Spectator** — launch game, observe spatial state, verify behaviour
+3. **Stage** — launch game, observe spatial state, verify behaviour
 4. Iterate
 
 Both tools must be installed for the full loop. Neither requires the other to

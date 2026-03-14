@@ -102,7 +102,7 @@ Markers in clips carry a `source` field identifying who placed them:
 | `"human"` | F9 key or editor dock button |
 | `"agent"` | MCP `add_marker` action |
 | `"system"` | Automatic dashcam trigger |
-| `"code"` | `SpectatorRuntime.marker()` in game script |
+| `"code"` | `StageRuntime.marker()` in game script |
 
 ### `list`
 

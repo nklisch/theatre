@@ -1,8 +1,8 @@
-# Spectator — UX Design
+# Stage — UX Design
 
 ## Interaction Surfaces
 
-Spectator has two users interacting through three surfaces:
+Stage has two users interacting through three surfaces:
 
 | User | Surface | Interaction |
 |---|---|---|
@@ -21,7 +21,7 @@ The dock panel is added to Godot's editor by the EditorPlugin. It appears in the
 ### Layout
 
 ```
-┌─ Spectator ─────────────────────────────────┐
+┌─ Stage ─────────────────────────────────┐
 │                                              │
 │  ● Connected  |  Port 9077                   │  ← Connection status
 │                                              │
@@ -86,7 +86,7 @@ The dock panel is added to Godot's editor by the EditorPlugin. It appears in the
 
 #### Session Info
 
-Shows the current state of the Spectator session:
+Shows the current state of the Stage session:
 - **Tracking**: Number of nodes being actively monitored + group count
 - **Watches**: Number of active watch subscriptions (set by agent)
 - **Frame**: Current physics frame number
@@ -138,7 +138,7 @@ These work during gameplay (when the game is running from the editor). Handled b
 
 ### Input Priority
 
-These shortcuts use `_shortcut_input()` which fires before `_unhandled_input()`. This means they take priority over game input. If a game uses F8/F9/F10 for gameplay, the user can remap Spectator's shortcuts in Project Settings → Spectator → Keybindings.
+These shortcuts use `_shortcut_input()` which fires before `_unhandled_input()`. This means they take priority over game input. If a game uses F8/F9/F10 for gameplay, the user can remap Stage's shortcuts in Project Settings → Stage → Keybindings.
 
 ### Visual Feedback
 
@@ -192,7 +192,7 @@ Notifications appear as toast-style popups at the top-right of the game viewport
 - Auto-dismiss after the specified duration
 - Stack vertically if multiple notifications arrive at once (max 3 visible, oldest dismissed)
 - Rendered on the same CanvasLayer as shortcut feedback
-- Can be disabled entirely in Project Settings → Spectator → Show Agent Notifications
+- Can be disabled entirely in Project Settings → Stage → Show Agent Notifications
 
 ### Activity Log Synchronization
 
@@ -207,14 +207,14 @@ The recording system is the primary collaboration surface. Here's the intended U
 ### Phase 1: Setup
 
 **Human:**
-1. Opens Godot project with Spectator addon enabled
+1. Opens Godot project with Stage addon enabled
 2. Sees "Waiting..." (yellow dot) in the dock — addon is listening
-3. Starts their AI agent session (e.g., launches Claude Code with Spectator MCP server configured)
+3. Starts their AI agent session (e.g., launches Claude Code with Stage MCP server configured)
 4. Dock switches to "Connected" (green dot)
 5. Agent may send initial `spatial_config` — dock's Session section updates to reflect configuration
 
 **Agent:**
-1. Discovers Spectator tools are available
+1. Discovers Stage tools are available
 2. Optionally configures tracking: `spatial_config({ static_patterns: [...], state_properties: {...} })`
 3. Ready for debugging
 
@@ -288,36 +288,36 @@ The recording system is the primary collaboration surface. Here's the intended U
 
 ## Configuration UX
 
-Spectator can be configured through three surfaces, with clear precedence:
+Stage can be configured through three surfaces, with clear precedence:
 
 ```
 Session Config (spatial_config tool)   ← Highest priority (per-session override)
        ↓
-Project File (spectator.toml)          ← Mid priority (version-controlled)
+Project File (stage.toml)          ← Mid priority (version-controlled)
        ↓
 Project Settings (Godot editor)        ← Lowest priority (per-machine defaults)
 ```
 
 ### Project Settings (Godot Editor)
 
-Added by the EditorPlugin under **Project → Project Settings → Spectator**:
+Added by the EditorPlugin under **Project → Project Settings → Stage**:
 
 | Setting | Type | Default | Description |
 |---|---|---|---|
-| `spectator/connection/port` | int | 9077 | TCP listen port |
-| `spectator/connection/auto_start` | bool | true | Start TCP server automatically on Play |
-| `spectator/recording/storage_path` | String | `user://spectator_recordings/` | Where recordings are saved |
-| `spectator/recording/max_frames` | int | 36000 | Safety valve (10 min at 60fps) |
-| `spectator/recording/capture_interval` | int | 1 | Capture every N physics frames |
-| `spectator/display/show_agent_notifications` | bool | true | Show in-game toast notifications |
-| `spectator/display/show_recording_indicator` | bool | true | Show red dot during recording |
-| `spectator/keybindings/toggle_recording` | InputEvent | F8 | Recording toggle key |
-| `spectator/keybindings/drop_marker` | InputEvent | F9 | Marker key |
-| `spectator/keybindings/toggle_pause` | InputEvent | F10 | Pause toggle key |
-| `spectator/tracking/default_static_patterns` | PackedStringArray | `[]` | Default static node patterns |
-| `spectator/tracking/token_hard_cap` | int | 5000 | Max tokens per response |
+| `stage/connection/port` | int | 9077 | TCP listen port |
+| `stage/connection/auto_start` | bool | true | Start TCP server automatically on Play |
+| `stage/recording/storage_path` | String | `user://stage_recordings/` | Where recordings are saved |
+| `stage/recording/max_frames` | int | 36000 | Safety valve (10 min at 60fps) |
+| `stage/recording/capture_interval` | int | 1 | Capture every N physics frames |
+| `stage/display/show_agent_notifications` | bool | true | Show in-game toast notifications |
+| `stage/display/show_recording_indicator` | bool | true | Show red dot during recording |
+| `stage/keybindings/toggle_recording` | InputEvent | F8 | Recording toggle key |
+| `stage/keybindings/drop_marker` | InputEvent | F9 | Marker key |
+| `stage/keybindings/toggle_pause` | InputEvent | F10 | Pause toggle key |
+| `stage/tracking/default_static_patterns` | PackedStringArray | `[]` | Default static node patterns |
+| `stage/tracking/token_hard_cap` | int | 5000 | Max tokens per response |
 
-### Project File (spectator.toml)
+### Project File (stage.toml)
 
 Optional file in the Godot project root. Version-controllable. Read by both the addon and the MCP server.
 
@@ -334,7 +334,7 @@ enemies = ["health", "alert_level", "current_target"]
 CharacterBody3D = ["velocity"]
 
 [recording]
-storage_path = "user://spectator_recordings/"
+storage_path = "user://stage_recordings/"
 max_frames = 36000
 capture_interval = 1
 

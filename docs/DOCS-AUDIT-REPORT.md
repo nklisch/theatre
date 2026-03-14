@@ -26,7 +26,7 @@ The site documentation (`site/`) is **extensively out of sync** with the codebas
 | **Rust version understated** | Site says 1.75+, README says 1.80+, actual edition 2024 requires **1.85+** |
 | **Director port numbers swapped everywhere** | Docs say editor=6550, daemon=6551. Code: editor=**6551**, daemon=**6550** |
 
-### 1.2 Spectator Tool Pages
+### 1.2 Stage Tool Pages
 
 #### `snapshot.md` — MAJOR REWRITE NEEDED
 - `detail` default claimed as `"summary"`, actual is `"standard"`
@@ -197,17 +197,17 @@ The site documentation (`site/`) is **extensively out of sync** with the codebas
 
 #### `architecture/crates.md` — MODERATE FIXES
 - File structures wrong: `tools/` → `mcp/`, `session.rs` → `tcp.rs`, `spatial.rs` → doesn't exist, `diff.rs` → `delta.rs`
-- Claims director has no spectator-protocol dependency — **it does**
-- Omits many spectator-protocol files
+- Claims director has no stage-protocol dependency — **it does**
+- Omits many stage-protocol files
 
 #### `architecture/tcp.md` — MODERATE REWRITE
 - Codec function signatures wrong: shows `&[u8]` API, actual is generic `Serialize`/`DeserializeOwned`
 - `CodecError` variants wrong: missing `Serialize`/`Deserialize`, has non-existent `ConnectionClosed`
 - Claims `thiserror` — actual uses manual `impl Display`/`impl Error`
-- Handshake fields wrong: `version` → `spectator_version`, missing `protocol_version`/`scene_dimensions`/`physics_ticks_per_sec`
+- Handshake fields wrong: `version` → `stage_version`, missing `protocol_version`/`scene_dimensions`/`physics_ticks_per_sec`
 
 #### `api/index.md` — MAJOR REWRITE
-- All Spectator tool param/response details inherit errors from individual tool pages
+- All Stage tool param/response details inherit errors from individual tool pages
 - `spatial_config` params entirely fictional
 - `clips` actions wrong (start/stop model)
 - Default detail "summary" wrong (actual "standard")
@@ -266,7 +266,7 @@ The site documentation (`site/`) is **extensively out of sync** with the codebas
 | refactor-workspace-2.md | director_tool! macro extraction |
 | INTEGRATION-TESTS.md | TCP mock tests, scenarios, E2E journeys |
 | GDEXT-TESTING.md | Wire tests against real Godot headless |
-| E2E-JOURNEY-TESTS.md | 6 Spectator journey tests |
+| E2E-JOURNEY-TESTS.md | 6 Stage journey tests |
 | director-journey-e2e-tests.md | 20+ Director journey tests |
 | VERIFICATION-M6-M8.md | Historical verification report |
 | VERIFICATION-M8-M9.md | Historical verification report |
@@ -288,7 +288,7 @@ The site documentation (`site/`) is **extensively out of sync** with the codebas
 | Doc | Issue |
 |-----|-------|
 | SPEC.md | Tool #9 called `recording`, should be `clips` |
-| TECH.md | Layout header says `spectator/`, should be `theatre/` |
+| TECH.md | Layout header updated to `theatre/ |
 | CONTRACT.md | Tool #9 `recording` with start/stop/status — all removed |
 | ROADMAP.md | Many checkboxes unchecked despite features being implemented |
 | UX.md | References `recording` tool, start/stop controls |
@@ -307,7 +307,7 @@ The site documentation (`site/`) is **extensively out of sync** with the codebas
 ### Phase B: Fix Top-Level Docs (quick wins)
 
 1. **SPEC.md**: `recording` → `clips`, update action list
-2. **TECH.md**: `spectator/` → `theatre/` in layout header
+2. **TECH.md**: `theatre/` in layout header (updated)
 3. **CONTRACT.md**: Update tool #9 contract for clips/dashcam model
 4. **ROADMAP.md**: Update checkboxes to reflect actual implementation status
 5. **UX.md**: Update recording references to clips/dashcam
@@ -318,7 +318,7 @@ The site documentation (`site/`) is **extensively out of sync** with the codebas
 2. Fix Rust minimum version to 1.85+ in installation.md, contributing.md, README.md
 3. Fix Director port numbers everywhere (editor=6551, daemon=6550)
 
-### Phase D: Fix Site — Spectator Tool Pages (highest priority)
+### Phase D: Fix Site — Stage Tool Pages (highest priority)
 
 Rewrite these from code as source of truth:
 
@@ -352,7 +352,7 @@ Fix parameter names (systematic `scene`→`scene_path`, `node`→`node_path`, et
 
 ### Phase F: Fix Site — Architecture & API Pages
 
-1. **architecture/crates.md** — fix file structures, add director→spectator-protocol dep
+1. **architecture/crates.md** — fix file structures, add director→stage-protocol dep
 2. **architecture/tcp.md** — fix codec signatures, CodecError, handshake fields
 3. **api/index.md** — regenerate from corrected tool pages
 4. **api/director.md** — fix tool names, add missing tools
@@ -369,7 +369,7 @@ Add warning about completed design docs not being ground truth.
 
 1. **Phase A** (archive) + **Phase G** (CLAUDE.md) — prevent future confusion
 2. **Phase C** (global fixes) — low effort, high impact
-3. **Phase D** (Spectator tool pages) — most user-facing, most broken
+3. **Phase D** (Stage tool pages) — most user-facing, most broken
 4. **Phase E** (Director tool pages) — systematic param name fixes
 5. **Phase B** (top-level docs) — internal reference
 6. **Phase F** (architecture/API) — secondary reference pages

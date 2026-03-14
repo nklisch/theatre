@@ -1,10 +1,10 @@
-# Spectator
+# Stage
 
-Spectator gives your AI agent spatial awareness of your running Godot game. It is a read-only observation layer — it never modifies game state, never affects physics, and has negligible performance impact.
+Stage gives your AI agent spatial awareness of your running Godot game. It is a read-only observation layer — it never modifies game state, never affects physics, and has negligible performance impact.
 
-## What Spectator does
+## What Stage does
 
-Spectator continuously tracks every node in your scene tree that has spatial relevance — `CharacterBody3D`, `RigidBody3D`, `Area3D`, `Camera3D`, `AnimationPlayer`, `NavigationAgent3D`, and more. On every physics tick, it snapshots their positions, velocities, and key properties into an in-memory frame buffer.
+Stage continuously tracks every node in your scene tree that has spatial relevance — `CharacterBody3D`, `RigidBody3D`, `Area3D`, `Camera3D`, `AnimationPlayer`, `NavigationAgent3D`, and more. On every physics tick, it snapshots their positions, velocities, and key properties into an in-memory frame buffer.
 
 Your AI agent can then:
 - Ask for an instant picture of the whole scene
@@ -21,55 +21,55 @@ Your AI agent can then:
   title="spatial_snapshot"
   icon="📸"
   description="Instant picture of every tracked node's position and properties. The starting point for most investigations."
-  link="/spectator/snapshot"
+  link="/stage/snapshot"
 />
 <ToolCard
   title="spatial_delta"
   icon="⚡"
   description="Only what changed since a given frame. Much smaller than a full snapshot when most nodes are stationary."
-  link="/spectator/delta"
+  link="/stage/delta"
 />
 <ToolCard
   title="spatial_query"
   icon="🔍"
   description="Geometric queries: nearest nodes, radius search, area query, raycast, path distance, relationship between two nodes."
-  link="/spectator/query"
+  link="/stage/query"
 />
 <ToolCard
   title="spatial_inspect"
   icon="🔬"
   description="Deep inspection of a single node: all properties, signals, children, and spatial context."
-  link="/spectator/inspect"
+  link="/stage/inspect"
 />
 <ToolCard
   title="spatial_watch"
   icon="👁️"
   description="Monitor a node continuously. Returns a watch_id; poll with spatial_delta to see changes."
-  link="/spectator/watch"
+  link="/stage/watch"
 />
 <ToolCard
   title="spatial_config"
   icon="⚙️"
   description="Configure tick rate, capture radius, and which node types are tracked."
-  link="/spectator/config"
+  link="/stage/config"
 />
 <ToolCard
   title="spatial_action"
   icon="🎮"
   description="Set a property, call a method, or emit a signal on a running game node. For testing, not production."
-  link="/spectator/action"
+  link="/stage/action"
 />
 <ToolCard
   title="scene_tree"
   icon="🌳"
   description="Scene tree structure without spatial data. Fast and compact — good for understanding node layout."
-  link="/spectator/scene-tree"
+  link="/stage/scene-tree"
 />
 <ToolCard
   title="clips"
   icon="🎬"
   description="Record gameplay clips, query frame ranges, mark bug moments. The foundation of the dashcam workflow."
-  link="/spectator/recording"
+  link="/stage/recording"
 />
 </div>
 
@@ -127,7 +127,7 @@ Mutates the running game for testing. Changes are not saved — they only affect
 
 ## Performance impact
 
-Spectator is designed to be invisible to the player:
+Stage is designed to be invisible to the player:
 
 - **Collection**: O(n) walk of tracked nodes during `_physics_process`. With 100 tracked nodes, this takes < 0.1ms per frame.
 - **Memory**: The ring buffer holds 600 frames (10 seconds at 60Hz) by default. Each frame is roughly 1-2KB depending on node count.
@@ -138,6 +138,6 @@ You can adjust the collection tick rate with `spatial_config` if you need to red
 
 ## Limitations
 
-Spectator reads the **engine's view** of node properties. Properties that are computed at render time (shader uniforms on the GPU, specific animation blend results) may not be available. Properties that are only in GDScript variables (not Godot node properties) are not visible — only exported properties and built-in node properties are tracked.
+Stage reads the **engine's view** of node properties. Properties that are computed at render time (shader uniforms on the GPU, specific animation blend results) may not be available. Properties that are only in GDScript variables (not Godot node properties) are not visible — only exported properties and built-in node properties are tracked.
 
-Spectator cannot read data from `@tool` scripts running in the editor — it only sees the running game.
+Stage cannot read data from `@tool` scripts running in the editor — it only sees the running game.

@@ -5,7 +5,7 @@
 Director is an MCP server that exposes Godot Engine's internal APIs for operations that are too fragile or complex to perform via raw filesystem editing. It is one of two MCP tools in the **Theatre** toolkit (this repository):
 
 - **Director** (this spec): Scene/resource manipulation at editor-time
-- **Spectator** (sibling tool): Runtime spatial observation of a running game
+- **Stage** (sibling tool): Runtime spatial observation of a running game
 
 The agent handles scripts (`.gd`), project config (`project.godot`), and simple text files directly through filesystem access. Director handles everything that needs Godot's own API to serialize correctly.
 
@@ -18,38 +18,38 @@ The tool surface is identical in both cases. Backend selection is invisible to t
 
 ## Repository Location
 
-Director lives in this repository (`theatre`) as a sibling crate to Spectator:
+Director lives in this repository (`theatre`) as a sibling crate to Stage:
 
 ```
 crates/
-  spectator-server/     — Spectator MCP binary (runtime observer)
-  spectator-godot/      — GDExtension cdylib loaded by Godot
-  spectator-protocol/   — Shared TCP wire format + VariantTarget types
-  spectator-core/       — Shared spatial logic
+  stage-server/     — Stage MCP binary (runtime observer)
+  stage-godot/      — GDExtension cdylib loaded by Godot
+  stage-protocol/   — Shared TCP wire format + VariantTarget types
+  stage-core/       — Shared spatial logic
   director/             — Director MCP binary (editor-time operator)
-addons/spectator/       — Godot addon (GDScript + GDExtension manifest)
+addons/stage/       — Godot addon (GDScript + GDExtension manifest)
 docs/
   director-spec.md      — This document
   ...
 tests/
-  wire-tests/           — Spectator E2E wire tests (Rust)
+  wire-tests/           — Stage E2E wire tests (Rust)
   director-tests/       — Director E2E operation tests (Rust)
   godot-project/        — Shared headless test project
 ```
 
 ## Pending: Project Rename to Theatre
 
-The repository is currently named `spectator`. Before or alongside the Director implementation, the project should be aligned to the Theatre name:
+The repository has been renamed from the old name to `theatre`. This alignment is complete:
 
-- **Repo rename**: `spectator` → `theatre` (GitHub repo rename + update any clone URLs)
+- **Repo rename**: Done
 - **Workspace name**: Update `name` in root `Cargo.toml` if set
 - **CLAUDE.md**: Update repo-level instructions to reference Theatre as the umbrella project
-- **Spectator skill file** (`spectator-dev` skill): Update orientation text to describe Theatre as the project containing both Spectator and Director
-- **Distributed skill files**: The `spectator` and `director` skills that ship with the tools should reference Theatre as the parent project and explain the two-tool setup
+- **Stage skill file** (`stage-dev` skill): Update orientation text to describe Theatre as the project containing both Stage and Director
+- **Distributed skill files**: The `stage` and `director` skills that ship with the tools should reference Theatre as the parent project and explain the two-tool setup
 - **README**: Rewrite root README to introduce Theatre, then describe each tool
-- **docs/**: Audit existing design docs for `spectator`-as-project-name references vs `spectator`-as-tool-name (the tool name stays, only the project umbrella name changes)
+- **docs/**: Audit existing design docs for stale project-name references (completed)
 
-The crate names (`spectator-server`, `spectator-godot`, `spectator-protocol`, `spectator-core`) do not need to change — they refer to the Spectator tool, not the project.
+The crate names (`stage-server`, `stage-godot`, `stage-protocol`, `stage-core`) do not need to change — they refer to the Stage tool, not the project.
 
 ## Design Principles
 
@@ -59,7 +59,7 @@ The crate names (`spectator-server`, `spectator-godot`, `spectator-protocol`, `s
 4. **Lean tool count, grow organically.** Start with what you need, add domains as projects demand them. No speculative tooling.
 5. **Detect and adapt.** Director checks whether the editor is running and routes accordingly. The editor is never required, but is preferred for modifications when available. Same tool surface, two backends.
 6. **Creation is always headless.** New files have no open-editor conflict. Creating a `.tscn` or `.tres` headlessly while the editor is running is safe — the editor's filesystem watcher detects the new file automatically.
-7. **Consistent with Spectator conventions.** Same contract rules, same error layering, same MCP response patterns. An agent that knows Spectator should find Director immediately familiar.
+7. **Consistent with Stage conventions.** Same contract rules, same error layering, same MCP response patterns. An agent that knows Stage should find Director immediately familiar.
 
 ## Architecture
 
@@ -98,7 +98,7 @@ Reads are always headless — they're safe and stateless regardless. Headless fo
 
 ### Key decisions
 
-- **Rust + rmcp + tokio** for the MCP server. Matches Spectator's stack exactly. Same `#[tool_router]`, `Parameters<T>`, `McpError` patterns. Same workspace, same build command (`cargo build --workspace`).
+- **Rust + rmcp + tokio** for the MCP server. Matches Stage's stack exactly. Same `#[tool_router]`, `Parameters<T>`, `McpError` patterns. Same workspace, same build command (`cargo build --workspace`).
 - **Editor detection via plugin port.** Director tries to connect to the Director EditorPlugin on `:6551` (default, configurable via `DIRECTOR_EDITOR_PORT` env var or `project.godot` setting). If it connects, the editor backend is available. If not, headless is used. No LSP port probing — detection and capability are tied to the same connection. Configurable port handles multiple Godot projects open simultaneously.
 - **EditorPlugin as the editor backend.** A minimal GDScript EditorPlugin (`addons/director/plugin.gd`) listens on `:6551` and accepts JSON operation commands. It dispatches to `EditorInterface` API calls. The plugin is part of the Director addon — users install it once and it auto-connects when the editor is open.
 - **Single GDScript file** (`operations.gd`) handles all headless operations. Extends `SceneTree`, runs in `_init()`, dispatches via `match` on the operation name.
@@ -176,13 +176,13 @@ director serve
 }
 ```
 
-## Shared Foundations with Spectator
+## Shared Foundations with Stage
 
 Director inherits the following from the Theatre codebase. These are not aspirational — they are existing, tested patterns to follow directly.
 
-### VariantTarget (spectator-protocol)
+### VariantTarget (stage-protocol)
 
-`VariantTarget` is the type conversion system for JSON → Godot types. Director's `node_set_properties` operation needs exactly this. It will be extracted from `spectator-protocol` into a `theatre-common` crate so both Spectator and Director import it as a proper shared dependency.
+`VariantTarget` is the type conversion system for JSON → Godot types. Director's `node_set_properties` operation needs exactly this. It will be extracted from `stage-protocol` into a `theatre-common` crate so both Stage and Director import it as a proper shared dependency.
 
 ```rust
 // Already exists — Director uses this directly
@@ -198,7 +198,7 @@ impl VariantTarget {
 
 ### MCP Tool Pattern (mcp-tool-handler)
 
-Director's tool handlers follow the same pattern as Spectator's. See `.claude/skills/patterns/mcp-tool-handler.md` for the full definition. In brief:
+Director's tool handlers follow the same pattern as Stage's. See `.claude/skills/patterns/mcp-tool-handler.md` for the full definition. In brief:
 
 ```rust
 #[tool_router(vis = "pub")]
@@ -214,11 +214,11 @@ impl DirectorServer {
 }
 ```
 
-The same helper functions apply: `serialize_params`, `deserialize_response`, `parse_enum_param`, `require_param!`, `finalize_response`. These live in `mcp/mod.rs` in Spectator; Director has its own copy in `crates/director/src/mcp/mod.rs` following the same structure.
+The same helper functions apply: `serialize_params`, `deserialize_response`, `parse_enum_param`, `require_param!`, `finalize_response`. These live in `mcp/mod.rs` in Stage; Director has its own copy in `crates/director/src/mcp/mod.rs` following the same structure.
 
 ### Error Layering (error-layering)
 
-Same three-layer pattern as Spectator. See `.claude/skills/patterns/error-layering.md`:
+Same three-layer pattern as Stage. See `.claude/skills/patterns/error-layering.md`:
 
 - `OperationError` (library, `Display + Error`) — subprocess/parse failures
 - `anyhow::Result` — internal async tasks, main setup
@@ -228,7 +228,7 @@ No `.unwrap()` in library code. Unwrap OK in tests and `main.rs` setup.
 
 ### Contract Rules (contracts)
 
-Director follows the same wire format rules as Spectator. See `.claude/rules/contracts.md`:
+Director follows the same wire format rules as Stage. See `.claude/rules/contracts.md`:
 
 - ID fields: always `<resource>_id`, never bare `id`
 - Distance fields: always `distance`, never `dist`
@@ -237,7 +237,7 @@ Director follows the same wire format rules as Spectator. See `.claude/rules/con
 
 ### Serde Conventions (serde-tagged-enum)
 
-Operation request/response types use the same serde conventions as Spectator. See `.claude/skills/patterns/serde-tagged-enum.md`:
+Operation request/response types use the same serde conventions as Stage. See `.claude/skills/patterns/serde-tagged-enum.md`:
 
 ```rust
 #[derive(Serialize, Deserialize)]
@@ -299,7 +299,7 @@ fn scene_create_then_read_round_trips() {
 }
 ```
 
-The shared `tests/godot-project/` is extended with Director-specific test scenes. Director tests add scenes for manipulation; Spectator tests use scenes for runtime observation. Same project, different scenes.
+The shared `tests/godot-project/` is extended with Director-specific test scenes. Director tests add scenes for manipulation; Stage tests use scenes for runtime observation. Same project, different scenes.
 
 The `GODOT_BIN` env var convention and `assert_approx` helper are shared from the wire-tests harness.
 
@@ -764,21 +764,21 @@ Build these in the order you need them.
 - `batch`
 - `scene_diff`
 
-## Relationship to Spectator
+## Relationship to Stage
 
-Director and Spectator are complementary tools in the same repository. They share no runtime state and no TCP protocol, but they share conventions, patterns, and the Theatre workspace.
+Director and Stage are complementary tools in the same repository. They share no runtime state and no TCP protocol, but they share conventions, patterns, and the Theatre workspace.
 
-| | Director | Spectator |
+| | Director | Stage |
 |---|---|---|
 | Godot process | EditorPlugin (live) or headless (one-shot/daemon) | Persistent GDExtension in running game |
 | Communication | TCP :6551 (editor) or stdout/TCP :6550 (headless) | TCP length-prefixed JSON to GDExtension |
 | State | Stateless (headless) / editor-stateful (plugin) | Stateful (game is running) |
 | Operations | Read/write scenes and resources | Observe spatial state, emit signals, teleport |
 | When used | Building/modifying the game | Testing/verifying the game |
-| GDScript layer | `addons/director/ops/`, `plugin.gd`, `operations.gd` | `addons/spectator/runtime.gd` |
+| GDScript layer | `addons/director/ops/`, `plugin.gd`, `operations.gd` | `addons/stage/runtime.gd` |
 | Test harness | `DirectorFixture` (subprocess/stdout) | `GodotFixture` (TCP handshake) |
 
-An agent can have both enabled and use them in sequence: build with Director, test with Spectator, iterate.
+An agent can have both enabled and use them in sequence: build with Director, test with Stage, iterate.
 
 ## Agent Guardrails
 
@@ -806,7 +806,7 @@ Place this in the project's `CLAUDE.md`:
 
 You have two MCP servers available:
 - **director**: Scene and resource manipulation (scenes, materials, tilemaps, animations)
-- **spectator**: Runtime observation (spatial queries, signals, game state)
+- **stage**: Runtime observation (spatial queries, signals, game state)
 
 ### Edit directly:
 - `.gd` (GDScript), `.gdshader`, `.cfg`, `.import`, `.md`, `.json`, `project.godot`
@@ -826,7 +826,7 @@ hand-editing produces scenes that appear valid but corrupt silently.
 1. Use or search for a `director` read tool to understand current scene structure
 2. Use or search for the appropriate `director` tool to make changes
 3. Edit `.gd` scripts directly as normal
-4. Use or search for a `spectator` tool to observe and test the running game
+4. Use or search for a `stage` tool to observe and test the running game
 ```
 
 ### Defense in Depth

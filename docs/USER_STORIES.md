@@ -1,8 +1,8 @@
-# Spectator — User Stories
+# Stage — User Stories
 
 Stories are organized by epic. Each story has a priority level:
 
-- **P0** — Core. Spectator is not usable without this.
+- **P0** — Core. Stage is not usable without this.
 - **P1** — Important. Required for a complete v1 experience.
 - **P2** — Valuable. Enhances the experience, can ship after initial release.
 
@@ -12,19 +12,19 @@ Within each epic, stories are ordered by dependency (earlier stories enable late
 
 ## Epic 1: Connection & Setup
 
-The foundational infrastructure — getting Spectator running and connected.
+The foundational infrastructure — getting Stage running and connected.
 
 ### S1.1: GDExtension Addon Loads in Godot Editor
 **Priority:** P0
 **As a** Godot developer,
-**I want to** copy the `addons/spectator/` folder into my project and enable it in Project Settings → Plugins,
-**So that** the Spectator addon initializes without errors.
+**I want to** copy the `addons/stage/` folder into my project and enable it in Project Settings → Plugins,
+**So that** the Stage addon initializes without errors.
 
 **Acceptance Criteria:**
 - plugin.cfg is valid and recognized by Godot 4.5+
 - Enabling the plugin in Project Settings shows no errors in the Output panel
-- The EditorPlugin registers the SpectatorRuntime autoload
-- The GDExtension binary loads and SpectatorCollector, SpectatorTCPServer, SpectatorRecorder classes are available
+- The EditorPlugin registers the StageRuntime autoload
+- The GDExtension binary loads and StageCollector, StageTCPServer, StageRecorder classes are available
 - Disabling the plugin cleanly removes the autoload and frees resources
 
 ### S1.2: TCP Server Starts on Game Play
@@ -43,11 +43,11 @@ The foundational infrastructure — getting Spectator running and connected.
 ### S1.3: MCP Server Connects to Addon
 **Priority:** P0
 **As an** AI agent (via MCP client),
-**I want** the spectator-server process to connect to the Godot addon over TCP,
+**I want** the stage-server process to connect to the Godot addon over TCP,
 **So that** I can query the running game's state.
 
 **Acceptance Criteria:**
-- spectator-server connects to localhost:9077 on startup
+- stage-server connects to localhost:9077 on startup
 - TCP handshake exchanges version, Godot version, scene dimensions (2D/3D), project name
 - Protocol version mismatch produces a clear error
 - If addon is not available, server retries every 2 seconds
@@ -69,14 +69,14 @@ The foundational infrastructure — getting Spectator running and connected.
 ### S1.5: MCP Server Configuration for AI Clients
 **Priority:** P0
 **As a** developer,
-**I want** clear instructions and config snippets for adding spectator-server to my AI client (Claude Code, Cursor, etc.),
-**So that** my AI agent can discover and use Spectator's tools.
+**I want** clear instructions and config snippets for adding stage-server to my AI client (Claude Code, Cursor, etc.),
+**So that** my AI agent can discover and use Stage's tools.
 
 **Acceptance Criteria:**
 - README includes config snippets for Claude Code (`.mcp.json` format)
-- Config specifies `type: "stdio"`, command path to `spectator-server` binary
-- Agent skill file (`skills/spectator.md`) is distributed and documented
-- After configuration, the AI client lists all 9 Spectator tools as available
+- Config specifies `type: "stdio"`, command path to `stage-server` binary
+- Agent skill file (`skills/stage.md`) is distributed and documented
+- After configuration, the AI client lists all 9 Stage tools as available
 
 ---
 
@@ -567,18 +567,18 @@ Human-drives, agent-analyzes workflow.
 - `recording(action: "list")` returns all saved recordings with name, duration, date, size
 - `recording(action: "status")` shows if recording is active, frame count, duration
 - `recording(action: "delete", recording_id: "rec_001")` removes a recording
-- Recordings persist to disk (SQLite in `user://spectator_recordings/`)
+- Recordings persist to disk (SQLite in `user://stage_recordings/`)
 
 ---
 
 ## Epic 9: Configuration
 
-Tuning Spectator for the project and debugging task.
+Tuning Stage for the project and debugging task.
 
 ### S9.1: Static Node Classification
 **Priority:** P1
 **As an** AI agent,
-**I want to** tell Spectator which nodes are static (walls, terrain, props) so they're treated differently,
+**I want to** tell Stage which nodes are static (walls, terrain, props) so they're treated differently,
 **So that** static geometry doesn't waste tokens in every response.
 
 **Acceptance Criteria:**
@@ -637,22 +637,22 @@ Tuning Spectator for the project and debugging task.
 ### S9.6: Configuration via Project Settings
 **Priority:** P1
 **As a** Godot developer,
-**I want to** configure Spectator's default settings in Godot's Project Settings,
+**I want to** configure Stage's default settings in Godot's Project Settings,
 **So that** I don't have to reconfigure via the agent every session.
 
 **Acceptance Criteria:**
-- Project Settings → Spectator section with: port, static patterns, default properties, hard cap
+- Project Settings → Stage section with: port, static patterns, default properties, hard cap
 - These serve as defaults; `spatial_config` tool calls override them per-session
 - Settings persist across editor restarts (saved in project.godot)
 
 ### S9.7: Configuration via File
 **Priority:** P2
 **As a** developer,
-**I want to** configure Spectator via a `spectator.toml` file in my project root,
-**So that** I can version-control my Spectator configuration.
+**I want to** configure Stage via a `stage.toml` file in my project root,
+**So that** I can version-control my Stage configuration.
 
 **Acceptance Criteria:**
-- `spectator.toml` in project root is read by both the addon and the MCP server
+- `stage.toml` in project root is read by both the addon and the MCP server
 - Contains: port, static patterns, state properties, cluster_by, token_hard_cap
 - Overrides Project Settings values
 - `spatial_config` tool calls override file values per-session
@@ -742,7 +742,7 @@ Full 2D scene debugging.
 ### S11.1: 2D Scene Detection
 **Priority:** P1
 **As an** AI agent,
-**I want** Spectator to automatically detect whether the scene is 2D or 3D,
+**I want** Stage to automatically detect whether the scene is 2D or 3D,
 **So that** spatial data uses the correct coordinate system.
 
 **Acceptance Criteria:**
@@ -806,7 +806,7 @@ Graceful behavior when things go wrong.
 ### S12.3: Graceful Degradation During Scene Transitions
 **Priority:** P1
 **As an** AI agent,
-**I want** Spectator to handle scene changes gracefully,
+**I want** Stage to handle scene changes gracefully,
 **So that** queries during transitions don't crash or return garbage.
 
 **Acceptance Criteria:**

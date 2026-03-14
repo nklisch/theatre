@@ -38,7 +38,7 @@ You do not need to narrate the bug to the agent. You do not need screenshots. Yo
 | **F9** | Mark the current frame as a bug moment |
 | **F11** | Pause / unpause recording |
 
-These shortcuts are active while the game is running. They are handled by the Spectator editor dock — they work whether you are focused on the game window or the Godot editor.
+These shortcuts are active while the game is running. They are handled by the Stage editor dock — they work whether you are focused on the game window or the Godot editor.
 
 Use the editor dock's **Record** button to start and stop recording. You can also trigger marking via the dock UI's **Mark Bug** button. From the agent side, use the `clips` tool's `"start"` and `"stop"` actions.
 
@@ -48,13 +48,13 @@ Place markers directly in your GDScript to trigger dashcam clips when specific c
 
 ```gdscript
 # Basic usage — system tier (rate-limited, safe in loops)
-SpectatorRuntime.marker("player_hit")
+StageRuntime.marker("player_hit")
 
 # Rare, important events — always triggers a clip
-SpectatorRuntime.marker("boss_defeated", "deliberate")
+StageRuntime.marker("boss_defeated", "deliberate")
 
 # Silent — annotates the next clip without triggering one
-SpectatorRuntime.marker("entered_zone_b", "silent")
+StageRuntime.marker("entered_zone_b", "silent")
 ```
 
 **Tiers:**
@@ -77,7 +77,7 @@ You have a stealth game. Enemies have a detection cone — an `Area3D` shaped ro
 
 ### Step 1: Enable continuous recording
 
-Start the game, then click **Record** in the Spectator dock immediately. The dock shows "Recording: clip_stealth_01". Now every physics frame is captured.
+Start the game, then click **Record** in the Stage dock immediately. The dock shows "Recording: clip_stealth_01". Now every physics frame is captured.
 
 Play normally. Move around. Do some stealth sections. Wait for the bug to occur.
 
@@ -127,7 +127,7 @@ If the bug is obvious and repeatable, you do not need a marker:
 
 ### Continuous background recording
 
-Enable continuous recording in the Spectator config so recording always starts with the game:
+Enable continuous recording in the Stage config so recording always starts with the game:
 
 ```json
 {
