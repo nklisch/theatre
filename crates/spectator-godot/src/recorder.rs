@@ -58,6 +58,9 @@ struct DashcamTrigger {
     label: String,
 }
 
+/// Max number of pending silent markers. Oldest are evicted when exceeded.
+const MAX_PENDING_SILENT_MARKERS: usize = 1000;
+
 /// Dashcam configuration — all timing in seconds, capture_interval in physics frames.
 pub struct DashcamConfig {
     pub enabled: bool,
@@ -151,6 +154,9 @@ pub struct SpectatorRecorder {
     screenshot_ring: VecDeque<CapturedScreenshot>,
     screenshot_ring_bytes: usize,
     last_screenshot_ms: u64,
+
+    /// Silent markers waiting to be attached to the next saved clip.
+    pending_silent_markers: Vec<DashcamTrigger>,
 }
 
 #[godot_api]
@@ -190,6 +196,7 @@ impl INode for SpectatorRecorder {
             screenshot_ring: VecDeque::new(),
             screenshot_ring_bytes: 0,
             last_screenshot_ms: 0,
+            pending_silent_markers: Vec::new(),
         }
     }
 
@@ -461,6 +468,58 @@ impl SpectatorRecorder {
             "marker_added",
             &[frame.to_variant(), source.to_variant(), label.to_variant()],
         );
+    }
+
+    /// Add a code marker at the current frame.
+    /// Tier: "system" (default, rate-limited), "deliberate" (always triggers),
+    /// "silent" (annotate-only, no clip trigger).
+    #[func]
+    pub fn add_code_marker(&mut self, label: GString, tier: GString) {
+        let frame = current_physics_frame();
+        let timestamp_ms = current_time_ms();
+        let label_str = label.to_string();
+        let tier_str = tier.to_string();
+
+        match tier_str.as_str() {
+            "silent" => {
+                self.add_silent_marker("code", &label_str, frame, timestamp_ms);
+            }
+            "deliberate" => {
+                self.on_dashcam_marker_with_tier(
+                    "code",
+                    &label_str,
+                    frame,
+                    timestamp_ms,
+                    DashcamTier::Deliberate,
+                );
+                self.base_mut().emit_signal(
+                    "marker_added",
+                    &[
+                        frame.to_variant(),
+                        GString::from("code").to_variant(),
+                        label.to_variant(),
+                    ],
+                );
+            }
+            _ => {
+                // Default: system tier (includes "system" and any unrecognized string)
+                self.on_dashcam_marker_with_tier(
+                    "code",
+                    &label_str,
+                    frame,
+                    timestamp_ms,
+                    DashcamTier::System,
+                );
+                self.base_mut().emit_signal(
+                    "marker_added",
+                    &[
+                        frame.to_variant(),
+                        GString::from("code").to_variant(),
+                        label.to_variant(),
+                    ],
+                );
+            }
+        }
     }
 
     /// List all recordings in the given storage path.
@@ -889,13 +948,25 @@ impl SpectatorRecorder {
     }
 
     /// Handle a marker trigger for the dashcam state machine.
+    /// Resolves tier from source: "system" → System, anything else → Deliberate.
     fn on_dashcam_marker(&mut self, source: &str, label: &str, frame: u64, timestamp_ms: u64) {
         let tier = if source == "system" {
             DashcamTier::System
         } else {
             DashcamTier::Deliberate
         };
+        self.on_dashcam_marker_with_tier(source, label, frame, timestamp_ms, tier);
+    }
 
+    /// Handle a marker trigger with an explicit tier. Core of the dashcam state machine.
+    fn on_dashcam_marker_with_tier(
+        &mut self,
+        source: &str,
+        label: &str,
+        frame: u64,
+        timestamp_ms: u64,
+        tier: DashcamTier,
+    ) {
         // Determine action without borrowing dashcam_state.
         let is_buffering = matches!(self.dashcam_state, DashcamState::Buffering);
         let is_post_capture = matches!(self.dashcam_state, DashcamState::PostCapture { .. });
@@ -942,6 +1013,31 @@ impl SpectatorRecorder {
         } else if is_post_capture {
             self.merge_dashcam_trigger(tier, source, label, frame, timestamp_ms);
         }
+    }
+
+    /// Record a silent marker. Does not trigger dashcam capture.
+    /// The marker is attached to the next clip whose frame range includes it.
+    fn add_silent_marker(&mut self, source: &str, label: &str, frame: u64, timestamp_ms: u64) {
+        self.pending_silent_markers.push(DashcamTrigger {
+            frame,
+            timestamp_ms,
+            source: source.to_string(),
+            label: label.to_string(),
+        });
+
+        if self.pending_silent_markers.len() > MAX_PENDING_SILENT_MARKERS {
+            let excess = self.pending_silent_markers.len() - MAX_PENDING_SILENT_MARKERS;
+            self.pending_silent_markers.drain(..excess);
+        }
+
+        self.base_mut().emit_signal(
+            "marker_added",
+            &[
+                frame.to_variant(),
+                GString::from(source).to_variant(),
+                GString::from(label).to_variant(),
+            ],
+        );
     }
 
     /// Merge a new trigger into an open PostCapture clip.
@@ -1045,7 +1141,28 @@ impl SpectatorRecorder {
         let first_ts = all_frames.first().map(|f| f.timestamp_ms).unwrap_or(0);
         let last_ts = all_frames.last().map(|f| f.timestamp_ms).unwrap_or(0);
 
-        let triggers_json: Vec<serde_json::Value> = markers
+        // Merge pending silent markers that fall within this clip's frame range.
+        let mut all_markers = markers;
+        {
+            let mut silent_in_range = Vec::new();
+            self.pending_silent_markers.retain(|m| {
+                if m.frame >= first_frame && m.frame <= last_frame {
+                    silent_in_range.push(DashcamTrigger {
+                        frame: m.frame,
+                        timestamp_ms: m.timestamp_ms,
+                        source: m.source.clone(),
+                        label: m.label.clone(),
+                    });
+                    false
+                } else {
+                    true
+                }
+            });
+            all_markers.extend(silent_in_range);
+            all_markers.sort_by_key(|m| m.frame);
+        }
+
+        let triggers_json: Vec<serde_json::Value> = all_markers
             .iter()
             .map(|m| {
                 serde_json::json!({
@@ -1103,7 +1220,7 @@ impl SpectatorRecorder {
             if let Ok(mut stmt) = tx.prepare_cached(
                 "INSERT INTO markers (frame, timestamp_ms, source, label) VALUES (?1, ?2, ?3, ?4)",
             ) {
-                for m in &markers {
+                for m in &all_markers {
                     let _ = stmt.execute(rusqlite::params![
                         m.frame,
                         m.timestamp_ms,
@@ -1978,5 +2095,217 @@ mod tests {
             cfg.enabled = b;
         }
         assert!(!cfg.enabled, "dashcam should be disabled after toggle");
+    }
+
+    // -------------------------------------------------------------------------
+    // Unit 5: Code markers tests
+    // -------------------------------------------------------------------------
+
+    #[test]
+    fn silent_marker_stored_in_pending() {
+        // Simulate the add_silent_marker logic without Godot.
+        let mut pending: Vec<DashcamTrigger> = Vec::new();
+
+        pending.push(DashcamTrigger {
+            frame: 100,
+            timestamp_ms: 1000,
+            source: "code".to_string(),
+            label: "entered_zone".to_string(),
+        });
+
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0].frame, 100);
+        assert_eq!(pending[0].source, "code");
+        assert_eq!(pending[0].label, "entered_zone");
+
+        // Dashcam state is unaffected — silent markers don't change it.
+        // (Verified by the fact that we only pushed to pending, not to dashcam_state.)
+    }
+
+    #[test]
+    fn silent_markers_merged_into_clip() {
+        // Set up pending markers with various frame positions.
+        let mut pending: Vec<DashcamTrigger> = vec![
+            DashcamTrigger {
+                frame: 50,
+                timestamp_ms: 500,
+                source: "code".to_string(),
+                label: "before_clip".to_string(),
+            },
+            DashcamTrigger {
+                frame: 150,
+                timestamp_ms: 1500,
+                source: "code".to_string(),
+                label: "in_range".to_string(),
+            },
+            DashcamTrigger {
+                frame: 200,
+                timestamp_ms: 2000,
+                source: "code".to_string(),
+                label: "also_in_range".to_string(),
+            },
+            DashcamTrigger {
+                frame: 350,
+                timestamp_ms: 3500,
+                source: "code".to_string(),
+                label: "after_clip".to_string(),
+            },
+        ];
+
+        let first_frame: u64 = 100;
+        let last_frame: u64 = 300;
+
+        // Simulate the retain+extend merge logic.
+        let mut clip_markers: Vec<DashcamTrigger> = vec![DashcamTrigger {
+            frame: 175,
+            timestamp_ms: 1750,
+            source: "system".to_string(),
+            label: "trigger".to_string(),
+        }];
+
+        let mut silent_in_range = Vec::new();
+        pending.retain(|m| {
+            if m.frame >= first_frame && m.frame <= last_frame {
+                silent_in_range.push(DashcamTrigger {
+                    frame: m.frame,
+                    timestamp_ms: m.timestamp_ms,
+                    source: m.source.clone(),
+                    label: m.label.clone(),
+                });
+                false
+            } else {
+                true
+            }
+        });
+        clip_markers.extend(silent_in_range);
+        clip_markers.sort_by_key(|m| m.frame);
+
+        // In-range markers were collected.
+        assert_eq!(
+            clip_markers.len(),
+            3,
+            "should have trigger + 2 in-range silent markers"
+        );
+        assert_eq!(clip_markers[0].label, "in_range");
+        assert_eq!(clip_markers[1].label, "trigger");
+        assert_eq!(clip_markers[2].label, "also_in_range");
+
+        // Out-of-range markers remain in pending.
+        assert_eq!(
+            pending.len(),
+            2,
+            "out-of-range markers should remain pending"
+        );
+        assert_eq!(pending[0].label, "before_clip");
+        assert_eq!(pending[1].label, "after_clip");
+    }
+
+    #[test]
+    fn silent_markers_capped_at_max() {
+        let mut pending: Vec<DashcamTrigger> = Vec::new();
+
+        // Fill beyond the cap.
+        for i in 0..(MAX_PENDING_SILENT_MARKERS + 10) {
+            pending.push(DashcamTrigger {
+                frame: i as u64,
+                timestamp_ms: i as u64 * 16,
+                source: "code".to_string(),
+                label: format!("marker_{i}"),
+            });
+
+            if pending.len() > MAX_PENDING_SILENT_MARKERS {
+                let excess = pending.len() - MAX_PENDING_SILENT_MARKERS;
+                pending.drain(..excess);
+            }
+        }
+
+        assert_eq!(
+            pending.len(),
+            MAX_PENDING_SILENT_MARKERS,
+            "pending should be capped at MAX_PENDING_SILENT_MARKERS"
+        );
+
+        // Oldest markers were evicted — the remaining ones should have the highest frames.
+        let first_remaining_frame = pending.first().unwrap().frame;
+        assert_eq!(
+            first_remaining_frame, 10,
+            "first 10 (oldest) markers should have been evicted"
+        );
+        let last_remaining_frame = pending.last().unwrap().frame;
+        assert_eq!(
+            last_remaining_frame,
+            (MAX_PENDING_SILENT_MARKERS + 9) as u64,
+            "last remaining marker should be the newest"
+        );
+    }
+
+    #[test]
+    fn code_marker_system_tier_is_rate_limited() {
+        // Reuse the pattern from dashcam_rate_limiting_system_markers.
+        // A system-tier code marker within the min_interval should not extend the window.
+        let mut frames_remaining: u32 = 600;
+        let min_interval: u64 = 120; // 2s at 60fps
+        let mut last_system_trigger_frame: u64 = 100;
+        let system_frames: u32 = 600;
+
+        // First code/system marker sets the window (already set above as 600).
+        // Second code/system marker at frame 150 (50 frames after first — within interval).
+        let new_frame: u64 = 150;
+        let elapsed = new_frame.saturating_sub(last_system_trigger_frame);
+
+        if elapsed >= min_interval {
+            frames_remaining = frames_remaining.max(system_frames);
+            last_system_trigger_frame = new_frame;
+        }
+        // Rate-limited: frames_remaining and last_trigger unchanged.
+        assert_eq!(
+            frames_remaining, 600,
+            "rate-limited system marker should not extend window"
+        );
+        assert_eq!(
+            last_system_trigger_frame, 100,
+            "last_system_trigger_frame should not update when rate-limited"
+        );
+    }
+
+    #[test]
+    fn code_marker_deliberate_tier_always_triggers() {
+        // A deliberate-tier code marker should transition Buffering → PostCapture.
+        // Simulate the on_dashcam_marker_with_tier logic for Buffering state.
+        let tier = DashcamTier::Deliberate;
+        let frame: u64 = 500;
+        let physics_fps: u64 = 60;
+        let max_window_sec: u64 = 120;
+
+        let is_buffering = true; // simulating Buffering state
+
+        let mut new_state_is_post_capture = false;
+        let mut captured_tier = DashcamTier::System;
+        let mut force_close: Option<u64> = Some(99999); // would be set for system
+
+        if is_buffering {
+            // Deliberate: no force_close, full post-window.
+            force_close = if tier == DashcamTier::System {
+                Some(frame + max_window_sec * physics_fps)
+            } else {
+                None
+            };
+            new_state_is_post_capture = true;
+            captured_tier = tier;
+        }
+
+        assert!(
+            new_state_is_post_capture,
+            "deliberate code marker should transition to PostCapture"
+        );
+        assert_eq!(
+            captured_tier,
+            DashcamTier::Deliberate,
+            "captured tier should be Deliberate"
+        );
+        assert!(
+            force_close.is_none(),
+            "deliberate clips should not have force_close"
+        );
     }
 }

@@ -95,6 +95,15 @@ Mark the current frame as a point of interest (e.g., "bug happened here"). This 
 }
 ```
 
+Markers in clips carry a `source` field identifying who placed them:
+
+| Source | Origin |
+|--------|--------|
+| `"human"` | F9 key or editor dock button |
+| `"agent"` | MCP `add_marker` action |
+| `"system"` | Automatic dashcam trigger |
+| `"code"` | `SpectatorRuntime.marker()` in game script |
+
 ### `list`
 
 List all available clips.

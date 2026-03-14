@@ -284,6 +284,10 @@ Clips are captured by the dashcam ring buffer. Mark a moment to save; analyze sa
 
 // See markers in a clip
 { "action": "markers", "clip_id": "clip_001a2b3c" }
+// Note: marker entries have a "source" field: "human" (F9), "agent" (MCP add_marker),
+// "system" (automatic dashcam trigger), or "code" (SpectatorRuntime.marker() in game script).
+// Code markers may be "system" tier (rate-limited), "deliberate" (always triggers),
+// or "silent" (annotation only — attached to clips triggered by other means).
 
 // Spatial state at a frame (omit clip_id for most recent)
 { "action": "snapshot_at", "at_frame": 4582, "detail": "standard" }

@@ -217,6 +217,17 @@ func _drop_marker() -> void:
 			_show_toast("Dashcam clip saved")
 
 
+## Place a code marker at the current frame.
+## Tier controls dashcam behavior:
+##   "system"     — rate-limited clip trigger (default, safe in loops)
+##   "deliberate" — always triggers a clip (use for rare, important events)
+##   "silent"     — annotates only, no clip trigger
+func marker(label: String, tier: String = "system") -> void:
+	if not recorder:
+		return
+	recorder.add_code_marker(label, tier)
+
+
 func _update_dashcam_label() -> void:
 	if not recorder or not _dashcam_label:
 		return

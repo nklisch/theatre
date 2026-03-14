@@ -118,6 +118,32 @@ func _toggle_pause() -> void:
     get_tree().paused = not get_tree().paused
 ```
 
+### SpectatorRuntime.marker() — Code Markers API
+
+Game scripts can place markers directly in code using the `SpectatorRuntime` autoload:
+
+```gdscript
+# System tier (default) — rate-limited, safe in loops
+SpectatorRuntime.marker("player_hit")
+
+# Deliberate tier — always triggers a clip (use for rare, important events)
+SpectatorRuntime.marker("boss_defeated", "deliberate")
+
+# Silent tier — annotates only, no clip trigger; attached to the next clip
+SpectatorRuntime.marker("entered_zone_b", "silent")
+```
+
+**Signature:** `func marker(label: String, tier: String = "system") -> void`
+
+- No-op when Spectator is not loaded (safe to leave in shipped builds)
+- Delegates to `SpectatorRecorder.add_code_marker(label, tier)` (GDExtension export)
+- Markers appear in clip data with `source: "code"`
+
+**SpectatorRecorder.add_code_marker(label: GString, tier: GString)** — the underlying GDExtension export:
+- `"system"` tier: rate-limited dashcam trigger (2 s minimum interval)
+- `"deliberate"` tier: always triggers a clip, no rate limit
+- `"silent"` tier: stores in pending list; merged into the next clip whose frame range includes it; cap of 1000 pending entries with FIFO eviction
+
 ## GDExtension Classes from GDScript
 
 GDExtension classes defined in `spectator-godot` (Rust) appear as regular GDScript classes after the `.gdextension` is loaded. No import needed — they're globally available by class name:

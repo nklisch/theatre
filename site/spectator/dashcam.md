@@ -42,6 +42,31 @@ These shortcuts are active while the game is running. They are handled by the Sp
 
 Use the editor dock's **Record** button to start and stop recording. You can also trigger marking via the dock UI's **Mark Bug** button. From the agent side, use the `clips` tool's `"start"` and `"stop"` actions.
 
+### Code Markers
+
+Place markers directly in your GDScript to trigger dashcam clips when specific code paths execute:
+
+```gdscript
+# Basic usage — system tier (rate-limited, safe in loops)
+SpectatorRuntime.marker("player_hit")
+
+# Rare, important events — always triggers a clip
+SpectatorRuntime.marker("boss_defeated", "deliberate")
+
+# Silent — annotates the next clip without triggering one
+SpectatorRuntime.marker("entered_zone_b", "silent")
+```
+
+**Tiers:**
+
+| Tier | Triggers clip? | Rate-limited? | Best for |
+|------|---------------|---------------|----------|
+| `"system"` (default) | Yes | Yes (2 s) | General instrumentation |
+| `"deliberate"` | Yes | No | Rare, high-value events |
+| `"silent"` | No | — | Annotations for other clips |
+
+Code markers appear in clip data with `source: "code"`.
+
 ## A complete debugging session
 
 Here is a real debugging story, from start to finish.
