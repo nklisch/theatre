@@ -12,7 +12,7 @@ The GDExtension addon (`spectator-godot`) does as little as possible:
 - Serialize to the wire format
 - Send over TCP when requested
 
-All spatial reasoning — budgeting, diffing, indexing, budget trimming, query geometry — happens in the Rust server (`spectator-server`). This separation means:
+All spatial reasoning — budgeting, diffing, indexing, budget trimming, query geometry — happens in the Rust server (crate: `spectator-server`, binary: `spectator`). This separation means:
 
 1. The addon stays stable across Godot versions (less surface area)
 2. Bugs in spatial logic are fixed in the server without redeploying the GDExtension
@@ -45,11 +45,12 @@ Each layer can change without affecting the others. The MCP schema can evolve wi
 ```
 theatre/
 ├── crates/
-│   ├── spectator-server/     MCP binary (stdio)
-│   │   ├── tools/            9 MCP tool handlers
-│   │   ├── session.rs        TCP connection management
+│   ├── spectator-server/     MCP server + CLI (binary: spectator)
+│   │   ├── mcp/              9 MCP tool handlers
+│   │   ├── cli.rs            CLI one-shot executor
+│   │   ├── tcp.rs            TCP connection management
 │   │   ├── activity.rs       Activity logging
-│   │   └── main.rs           rmcp server setup
+│   │   └── main.rs           serve / CLI dispatch
 │   │
 │   ├── spectator-godot/      GDExtension cdylib
 │   │   ├── tcp_server.rs     TCP listener + codec
@@ -90,7 +91,7 @@ theatre/
 ```
 1. Agent calls spatial_snapshot tool
 
-2. spectator-server receives MCP tool call via stdin
+2. spectator receives MCP tool call via stdin (serve mode)
 
 3. server serializes SnapshotRequest { detail, token_budget, ... }
    → 4-byte length prefix + JSON
@@ -102,7 +103,7 @@ theatre/
    → serializes SnapshotResponse { frame, nodes: [...] }
    → writes back over TCP
 
-5. spectator-server reads response
+5. spectator reads response
    → passes raw node list to spectator-core budget trimmer
    → trims to token_budget (prioritizing focal_node / class_filter)
    → serializes final MCP response JSON
@@ -119,9 +120,9 @@ All GDExtension code runs on Godot's **main thread**. `_physics_process` is call
 
 The TCP server listens on a separate thread (Rust `std::thread::spawn`), but the thread only reads/writes the TCP socket and a shared `Arc<Mutex<FrameBuffer>>`. It never accesses Godot engine APIs directly.
 
-### spectator-server (MCP binary)
+### spectator (MCP server + CLI)
 
-The server is a `tokio` async binary. The main TCP connection to the addon runs as a background task. MCP tool call handlers are async and await responses via `oneshot` channels stored in shared state (`Arc<Mutex<SessionState>>`).
+The `spectator` binary is a `tokio` async binary. In serve mode, the TCP connection to the addon runs as a persistent background task. In CLI mode, it connects once, runs one tool, and exits. MCP tool call handlers are async and await responses via `oneshot` channels stored in shared state (`Arc<Mutex<SessionState>>`).
 
 No tool handler holds the session lock while awaiting the TCP response — locks are acquired to place the request, released, then re-acquired to read the response. This prevents deadlocks.
 

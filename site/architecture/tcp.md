@@ -168,7 +168,7 @@ pub fn read_message(reader: &mut impl Read) -> Result<Vec<u8>, CodecError> {
     Ok(payload)
 }
 
-// Async write (for spectator-server — tokio runtime)
+// Async write (for spectator server — tokio runtime)
 #[cfg(feature = "async")]
 pub async fn write_message_async(stream: &mut TcpStream, payload: &[u8]) -> Result<(), CodecError> {
     let len = payload.len() as u32;
@@ -177,7 +177,7 @@ pub async fn write_message_async(stream: &mut TcpStream, payload: &[u8]) -> Resu
     Ok(())
 }
 
-// Async read (for spectator-server)
+// Async read (for spectator server)
 #[cfg(feature = "async")]
 pub async fn read_message_async(stream: &mut TcpStream) -> Result<Vec<u8>, CodecError> {
     let mut len_buf = [0u8; 4];

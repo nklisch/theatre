@@ -36,7 +36,7 @@ The agent does not see a screenshot. It sees **structured data** — the same da
 Spectator is a read-only observation tool for running Godot games. It consists of:
 
 - **A Rust GDExtension addon** (`addons/spectator/`) that runs inside your game and collects spatial data from the scene tree on every physics tick. It listens for incoming TCP connections on port 9077.
-- **A Rust MCP server** (`spectator-server`) that connects to the addon and exposes 9 MCP tools to your AI agent.
+- **A Rust MCP server + CLI** (`spectator`) that connects to the addon and exposes 9 tools to your AI agent — via MCP (`spectator serve`) or CLI (`spectator <tool> '<json>'`).
 
 Spectator answers questions like:
 

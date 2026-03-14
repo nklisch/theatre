@@ -137,8 +137,8 @@ test: add E2E scenario for navmesh disconnection
 1. Add request/response types to `crates/spectator-protocol/src/messages.rs`
 2. Add GDExtension handler in `crates/spectator-godot/src/tcp_server.rs`
 3. Add any pure-logic in `crates/spectator-core/`
-4. Add MCP tool handler in `crates/spectator-server/src/tools/<tool_name>.rs`
-5. Register the tool in `crates/spectator-server/src/main.rs`
+4. Add MCP tool handler in `crates/spectator-server/src/mcp/<tool_name>.rs`
+5. Register the tool in the `#[tool_router]` impl in `crates/spectator-server/src/mcp/mod.rs`
 6. Add unit tests to the relevant crates
 7. Add an E2E test in `tests/wire-tests/`
 
@@ -178,14 +178,20 @@ You can interact with the MCP server directly using JSON-RPC:
 
 ```bash
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | \
-  ./target/debug/spectator-server
+  ./target/debug/spectator serve
 ```
 
 Or for a tool call (with game running):
 
 ```bash
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"spatial_snapshot","arguments":{"detail":"summary"}}}' | \
-  ./target/debug/spectator-server
+  ./target/debug/spectator serve
+```
+
+You can also use the CLI mode directly (no JSON-RPC wrapping):
+
+```bash
+./target/debug/spectator spatial_snapshot '{"detail":"summary"}'
 ```
 
 ### Viewing trace output
@@ -193,9 +199,9 @@ echo '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"spatial_sn
 The server uses `tracing` for structured logging. Set the `RUST_LOG` environment variable:
 
 ```bash
-RUST_LOG=debug ./target/debug/spectator-server
+RUST_LOG=debug ./target/debug/spectator serve
 # Or for specific crates:
-RUST_LOG=spectator_server=trace ./target/debug/spectator-server
+RUST_LOG=spectator_server=trace ./target/debug/spectator serve
 ```
 
 All trace output goes to stderr, so it does not interfere with the MCP stdout protocol.

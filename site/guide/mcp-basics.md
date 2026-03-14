@@ -58,7 +58,7 @@ You can see Theatre's tool list by running the server manually:
 
 ```bash
 echo '{"jsonrpc":"2.0","id":1,"method":"tools/list","params":{}}' | \
-  ./target/release/spectator-server
+  ./target/release/spectator serve
 ```
 
 ## Parallel tool calls

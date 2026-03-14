@@ -12,7 +12,7 @@ This page explains Theatre's architecture: how data flows from the running Godot
                │ MCP (stdio)
                ▼
 ┌─────────────────────────────────┐
-│      spectator-server (Rust)    │
+│       spectator (Rust)          │
 │  Translates MCP ↔ TCP protocol  │
 └──────────────┬──────────────────┘
                │ TCP port 9077
@@ -58,18 +58,22 @@ This design means the addon can be enabled in a project even if the GDExtension 
 
 ### The server
 
-`spectator-server` is a Rust binary that implements the MCP protocol over stdio. When your agent calls `spatial_snapshot`, the server:
+`spectator` (crate: `spectator-server`) is a Rust binary that supports two modes:
+- **`spectator serve`** — MCP server on stdio (persistent TCP connection, auto-reconnect)
+- **`spectator <tool> '<json>'`** — CLI one-shot mode (connect once, execute, exit)
 
-1. Receives the MCP tool call over stdin
+When a tool is called (via MCP or CLI), the server:
+
+1. Receives the tool call (stdin JSON-RPC in serve mode, or CLI arg/stdin in CLI mode)
 2. Serializes the request to length-prefixed JSON
 3. Sends it over the TCP socket to the GDExtension
 4. Waits for the response (with timeout)
 5. Deserializes the response
 6. Applies token budget trimming
-7. Serializes the MCP tool response
+7. Serializes the result as JSON
 8. Writes it to stdout
 
-The server maintains a persistent TCP connection to the running game. If the game restarts, the server automatically reconnects on the next tool call.
+In serve mode, the server maintains a persistent TCP connection. If the game restarts, it automatically reconnects. In CLI mode, it connects once and exits after the tool completes.
 
 ## TCP Protocol
 
@@ -117,7 +121,7 @@ The GDScript addon receives operations as TCP messages, executes them using Godo
 
 ## MCP Transport
 
-Both `spectator-server` and `director` use the **stdio transport** for MCP. This means:
+Both `spectator serve` and `director serve` use the **stdio transport** for MCP. This means:
 
 - The agent launcher starts the binary as a child process
 - The binary reads JSON-RPC requests from stdin

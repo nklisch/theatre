@@ -67,25 +67,29 @@ To target a newer API, bump `api-4-5` to `api-4-6` in `Cargo.toml` once godot-ru
 
 ## `spectator-server`
 
-**Type**: Binary (`bin`)
-**Purpose**: MCP server that bridges AI agents to the running Godot game
+**Type**: Binary (crate: `spectator-server`, binary: `spectator`)
+**Purpose**: MCP server + CLI that bridges AI agents to the running Godot game
 
-This is the binary your agent talks to via stdio. It:
-- Implements the MCP protocol using `rmcp`
-- Maintains a persistent TCP connection to `spectator-godot`
-- Translates MCP tool calls into protocol requests
+This is the binary your agent talks to. It supports two modes:
+- `spectator serve` — MCP server on stdio
+- `spectator <tool> '<json>'` — one-shot CLI mode
+
+It:
+- Implements the MCP protocol using `rmcp` (serve mode)
+- Maintains a persistent TCP connection to `spectator-godot` (serve) or connects once (CLI)
+- Translates tool calls into protocol requests
 - Applies `spectator-core` logic to responses (budgeting, diffing, queries)
-- Logs activity to the editor dock
+- Logs activity to the editor dock (serve mode only)
 
 **Dependency rules**:
 - Depends on: `spectator-protocol`, `spectator-core`, `rmcp`, `tokio`, `tracing`, `anyhow`
 - Does NOT depend on: `spectator-godot` (no GDExtension code in the server)
 
 **Key modules**:
-- `tools/` — one file per MCP tool, each implementing the tool handler
-- `session.rs` — TCP connection management and request-response matching
+- `mcp/` — one file per MCP tool, parameter structs and handlers
+- `cli.rs` — CLI one-shot executor (param parsing, dispatch, JSON output)
+- `tcp.rs` — TCP connection management and request-response matching
 - `activity.rs` — Activity logging to editor dock
-- `budget.rs` — Response size measurement and trimming
 
 ## `director`
 
