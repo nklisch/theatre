@@ -103,7 +103,7 @@ You now have a working Theatre setup. Here are the natural next steps:
 
 ## Common first-time issues
 
-**Agent says "no tools available"** — The MCP server is not configured or not running. Check your `.mcp.json` and make sure the path to `spectator-server` is correct and the binary exists.
+**Agent says "no tools available"** — The MCP server is not configured or not running. Check your `.mcp.json` and make sure the path to `spectator` is correct and the binary exists. Alternatively, use the CLI directly: `spectator spatial_snapshot '{}'`.
 
 **Agent calls the tool but gets a connection error** — The game is not running, or port 9077 is blocked. Start the game first (F5), then retry.
 

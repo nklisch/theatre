@@ -109,10 +109,18 @@ theatre init ~/your-godot-project
 
 This copies addons, generates `.mcp.json`, and enables plugins — all interactively.
 
-### 3. Run your game and ask
+### 3. Install agent skills (optional)
+
+```bash
+npx skilltap install nklisch/theatre
+```
+
+Teaches your agent how to use Spectator and Director effectively — tool selection, workflows, and pitfalls.
+
+### 4. Run your game and ask
 
 ```
 "Take a spatial snapshot of my scene"
 ```
 
-Your AI agent now sees your game world.
+Your AI agent now sees your game world — via MCP tools or CLI (`spectator spatial_snapshot '{"detail":"summary"}'`).

@@ -50,7 +50,7 @@ cargo run -p theatre-cli -- install
 ```
 
 This builds all crates in release mode and installs to:
-- `~/.local/bin/` — `theatre`, `spectator-server`, `director` binaries
+- `~/.local/bin/` — `theatre`, `spectator`, `director` binaries
 - `~/.local/share/theatre/` — addon templates and GDExtension binary
 
 Override install locations with `--bin-dir` and `--share-dir` flags.
@@ -134,7 +134,7 @@ cargo build --workspace --release
 ```
 
 Build output:
-- `target/release/spectator-server` — Spectator MCP server binary
+- `target/release/spectator` — Spectator MCP server + CLI binary
 - `target/release/director` — Director MCP server binary
 - `target/release/libspectator_godot.so` — Spectator GDExtension (Linux)
 - `target/release/libspectator_godot.dylib` — Spectator GDExtension (macOS)
@@ -165,7 +165,8 @@ Create `.mcp.json` in your project root:
   "mcpServers": {
     "spectator": {
       "type": "stdio",
-      "command": "/home/yourname/.local/bin/spectator-server"
+      "command": "/home/yourname/.local/bin/spectator",
+      "args": ["serve"]
     },
     "director": {
       "type": "stdio",
@@ -176,9 +177,70 @@ Create `.mcp.json` in your project root:
 }
 ```
 
-The `command` field must be an absolute path. Do not use `~` or relative paths — they are not expanded by most MCP launchers.
+The `command` field must be an absolute path. Do not use `~` or relative paths — they are not expanded by most MCP launchers. Both binaries require the `serve` subcommand for MCP mode (without it, they run in CLI mode).
 
 Use `THEATRE_PORT=9078` in an `env` block if you need a non-default port.
+
+## Install agent skills (optional)
+
+Theatre ships agent skills that teach AI agents how to use Spectator and Director effectively — tool selection, parameter patterns, debugging workflows, and common pitfalls.
+
+### Via npx (recommended)
+
+```bash
+# Install both skills to the current project
+npx skilltap install nklisch/theatre
+
+# Or install globally (available to all projects)
+npx skilltap install nklisch/theatre --global
+```
+
+This installs two skills:
+- **spectator** — 9 spatial observation tools, debugging workflows, clip analysis
+- **theatre** — 31 Director scene/resource authoring tools with full parameter reference
+
+### Via skilltap CLI
+
+If you have [skilltap](https://skilltap.dev) installed:
+
+```bash
+skilltap install nklisch/theatre
+```
+
+### Manual installation
+
+Copy the skill directories from the Theatre repo directly:
+
+```bash
+# From within the theatre repo
+cp -r .agents/skills/spectator <your-project>/.agents/skills/
+cp -r .agents/skills/theatre <your-project>/.agents/skills/
+```
+
+## Using the CLI (alternative to MCP)
+
+Both Spectator and Director can be used as standalone CLIs without an MCP server. This is useful when your agent prefers shell commands over MCP, or for scripting.
+
+```bash
+# Spectator — observe a running game
+spectator spatial_snapshot '{"detail": "summary"}'
+spectator spatial_inspect '{"node": "player"}'
+spectator scene_tree '{"action": "roots"}'
+
+# Director — modify project files
+director scene_create '{"project_path": "/home/user/game", "scene_path": "res://level.tscn", "root_type": "Node3D"}'
+director scene_read '{"project_path": "/home/user/game", "scene_path": "res://level.tscn"}'
+
+# Stdin piping works too
+echo '{"detail": "summary"}' | spectator spatial_snapshot
+
+# Help and version
+spectator --help
+director --help
+spectator --version   # {"version": "0.1.0"}
+```
+
+CLI output is always JSON to stdout. Errors are structured JSON with exit codes: 0 (success), 1 (runtime error), 2 (usage error).
 
 ## Verify the full setup
 

@@ -1,23 +1,23 @@
 # Theatre
 
-A toolkit giving AI agents the ability to build and debug Godot games. Two MCP
-servers — **Director** (build) and **Spectator** (observe) — that work together
-or independently.
+A toolkit giving AI agents the ability to build and debug Godot games. Two tools
+— **Director** (build) and **Spectator** (observe) — available via MCP servers
+or standalone CLI, working together or independently.
 
 **Documentation**: [godot-theatre.dev](https://godot-theatre.dev)
 
 ## Tools
 
-| Tool | Purpose | MCP Server | Godot Side |
-|---|---|---|---|
-| **Director** | Create/modify scenes, resources, tilemaps, animations | `director serve` | GDScript addon (`addons/director/`) |
-| **Spectator** | Observe spatial state of a running game | `spectator-server` | GDExtension + GDScript (`addons/spectator/`) |
+| Tool | Purpose | MCP | CLI | Godot Side |
+|---|---|---|---|---|
+| **Director** | Create/modify scenes, resources, tilemaps, animations | `director serve` | `director <tool> '<json>'` | GDScript addon |
+| **Spectator** | Observe spatial state of a running game | `spectator serve` | `spectator <tool> '<json>'` | GDExtension + GDScript |
 
 ## Prerequisites
 
 - Rust (stable, 1.80+) — `rustup update stable`
 - Godot 4.5+ (GDExtension built with `api-4-5` + `lazy-function-tables` for forward compatibility with 4.6+)
-- An MCP client — Claude Code, Claude Desktop, or any MCP-compatible agent
+- An MCP client or CLI access — Claude Code, Cursor, or any agent with bash/MCP
 
 ---
 
@@ -51,9 +51,36 @@ and enables plugins in `project.godot`. Use `--yes` to accept all defaults.
 
 The agent should return a JSON summary of the entities in your scene.
 
+### 4. Install agent skills (optional)
+
+```bash
+npx skilltap install nklisch/theatre
+```
+
+Teaches your agent how to use Spectator and Director effectively — tool selection, workflows, parameter patterns, and debugging strategies.
+
 ---
 
-## CLI Commands
+## Agent CLI
+
+Both tools work as standalone CLIs (no MCP server required):
+
+```bash
+# Spectator — observe a running game
+spectator spatial_snapshot '{"detail": "summary"}'
+spectator spatial_inspect '{"node": "player"}'
+echo '{"action": "roots"}' | spectator scene_tree
+
+# Director — modify project files
+director scene_create '{"project_path": "~/game", "scene_path": "res://level.tscn", "root_type": "Node3D"}'
+director node_add '{"project_path": "~/game", "scene_path": "res://level.tscn", "parent_path": ".", "node_type": "Sprite2D", "node_name": "Hero"}'
+```
+
+Output is always JSON to stdout. Exit codes: 0 success, 1 runtime error, 2 usage error.
+
+---
+
+## Theatre CLI Commands
 
 | Command | Description |
 |---|---|
@@ -117,7 +144,8 @@ Create `.mcp.json` in your project root:
   "mcpServers": {
     "spectator": {
       "type": "stdio",
-      "command": "/absolute/path/to/spectator-server"
+      "command": "/absolute/path/to/spectator",
+      "args": ["serve"]
     },
     "director": {
       "type": "stdio",
@@ -127,6 +155,8 @@ Create `.mcp.json` in your project root:
   }
 }
 ```
+
+Both binaries require the `serve` subcommand for MCP mode.
 
 Use absolute paths — `~` and relative paths are not expanded by most MCP launchers.
 
