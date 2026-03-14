@@ -7,6 +7,8 @@ mod test_batch;
 #[cfg(test)]
 mod test_cli;
 #[cfg(test)]
+mod test_cli_journey;
+#[cfg(test)]
 mod test_daemon;
 #[cfg(test)]
 mod test_deferred;
