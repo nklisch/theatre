@@ -43,3 +43,7 @@ path = "tests/e2e_journeys.rs"
 [[test]]
 name = "cli_binary"
 path = "tests/cli_binary.rs"
+
+[[test]]
+name = "cli_journeys"
+path = "tests/cli_journeys.rs"

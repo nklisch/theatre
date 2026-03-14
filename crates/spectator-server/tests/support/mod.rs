@@ -2,6 +2,7 @@ pub mod fixtures;
 pub mod harness;
 pub mod mock_addon;
 
+pub mod cli_fixture;
 pub mod e2e_harness;
 pub mod godot_process;
 
