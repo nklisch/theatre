@@ -28,6 +28,14 @@ pub enum ActionType {
     SpawnNode,
     /// Delete a node. Requires: node.
     RemoveNode,
+    /// Hold a named InputMap action. Requires: input_action. Optional: strength.
+    ActionPress,
+    /// Release a named InputMap action. Requires: input_action.
+    ActionRelease,
+    /// Inject a key press/release. Requires: keycode, pressed.
+    InjectKey,
+    /// Inject a mouse button press/release. Requires: button, pressed.
+    InjectMouseButton,
 }
 
 /// MCP parameters for the spatial_action tool.
@@ -85,6 +93,26 @@ pub struct SpatialActionParams {
     /// Whether to return a spatial_delta after the action (M4 placeholder).
     #[serde(default)]
     pub return_delta: bool,
+
+    /// For action_press/action_release: InputMap action name (e.g. "jump").
+    pub input_action: Option<String>,
+
+    /// For action_press: strength 0.0–1.0 (default 1.0).
+    pub strength: Option<f32>,
+
+    /// For inject_key: Godot key name ("A", "SPACE", "UP", etc.).
+    pub keycode: Option<String>,
+
+    /// For inject_key/inject_mouse_button: whether pressed (true) or released (false).
+    pub pressed: Option<bool>,
+
+    /// For inject_key: whether this is an echo event.
+    #[serde(default)]
+    pub echo: bool,
+
+    /// For inject_mouse_button: button name ("left", "right", "middle",
+    /// "wheel_up", "wheel_down").
+    pub button: Option<String>,
 }
 
 /// Build the addon ActionRequest from MCP params.
@@ -206,6 +234,55 @@ pub fn build_action_request(params: &SpatialActionParams) -> Result<ActionReques
             );
             Ok(ActionRequest::RemoveNode { path: node.clone() })
         }
+        ActionType::ActionPress => {
+            let input_action = require_param!(
+                params.input_action.as_ref(),
+                "'input_action' is required for action_press"
+            );
+            Ok(ActionRequest::ActionPress {
+                action_name: input_action.clone(),
+                strength: params.strength.unwrap_or(1.0),
+            })
+        }
+        ActionType::ActionRelease => {
+            let input_action = require_param!(
+                params.input_action.as_ref(),
+                "'input_action' is required for action_release"
+            );
+            Ok(ActionRequest::ActionRelease {
+                action_name: input_action.clone(),
+            })
+        }
+        ActionType::InjectKey => {
+            let keycode = require_param!(
+                params.keycode.as_ref(),
+                "'keycode' (e.g. \"SPACE\", \"W\") is required for inject_key"
+            );
+            let pressed = require_param!(
+                params.pressed,
+                "'pressed' (bool) is required for inject_key"
+            );
+            Ok(ActionRequest::InjectKey {
+                keycode: keycode.clone(),
+                pressed,
+                echo: params.echo,
+            })
+        }
+        ActionType::InjectMouseButton => {
+            let button = require_param!(
+                params.button.as_ref(),
+                "'button' (\"left\", \"right\", \"middle\") is required for inject_mouse_button"
+            );
+            let pressed = require_param!(
+                params.pressed,
+                "'pressed' (bool) is required for inject_mouse_button"
+            );
+            Ok(ActionRequest::InjectMouseButton {
+                button: button.clone(),
+                pressed,
+                position: params.position.clone(),
+            })
+        }
     }
 }
 
@@ -232,6 +309,12 @@ mod tests {
             parent: None,
             name: None,
             return_delta: false,
+            input_action: None,
+            strength: None,
+            keycode: None,
+            pressed: None,
+            echo: false,
+            button: None,
         }
     }
 
@@ -274,5 +357,51 @@ mod tests {
         p.method_args = Some(vec![serde_json::json!(50)]);
         let req = build_action_request(&p).unwrap();
         assert!(matches!(req, ActionRequest::CallMethod { args, .. } if args.len() == 1));
+    }
+
+    #[test]
+    fn build_action_request_action_press() {
+        let mut p = base_params(ActionType::ActionPress);
+        p.input_action = Some("jump".into());
+        let req = build_action_request(&p).unwrap();
+        assert!(
+            matches!(req, ActionRequest::ActionPress { action_name, strength } if action_name == "jump" && (strength - 1.0).abs() < 0.01)
+        );
+    }
+
+    #[test]
+    fn build_action_request_action_press_missing_input_action() {
+        let p = base_params(ActionType::ActionPress);
+        assert!(build_action_request(&p).is_err());
+    }
+
+    #[test]
+    fn build_action_request_inject_key() {
+        let mut p = base_params(ActionType::InjectKey);
+        p.keycode = Some("SPACE".into());
+        p.pressed = Some(true);
+        let req = build_action_request(&p).unwrap();
+        assert!(
+            matches!(req, ActionRequest::InjectKey { keycode, pressed: true, echo: false } if keycode == "SPACE")
+        );
+    }
+
+    #[test]
+    fn build_action_request_inject_key_missing_pressed() {
+        let mut p = base_params(ActionType::InjectKey);
+        p.keycode = Some("W".into());
+        assert!(build_action_request(&p).is_err());
+    }
+
+    #[test]
+    fn build_action_request_inject_mouse_button() {
+        let mut p = base_params(ActionType::InjectMouseButton);
+        p.button = Some("left".into());
+        p.pressed = Some(true);
+        p.position = Some(vec![100.0, 200.0]);
+        let req = build_action_request(&p).unwrap();
+        assert!(
+            matches!(req, ActionRequest::InjectMouseButton { button, pressed: true, .. } if button == "left")
+        );
     }
 }

@@ -1,5 +1,9 @@
-use godot::builtin::{Array, GString, VarDictionary, Variant, Vector2, Vector3};
-use godot::classes::{Node, Node2D, Node3D, PackedScene, ResourceLoader, SceneTree};
+use godot::builtin::{Array, GString, StringName, VarDictionary, Variant, Vector2, Vector3};
+use godot::classes::{
+    Input, InputEvent, InputEventKey, InputEventMouseButton, InputMap, Node, Node2D, Node3D,
+    PackedScene, ResourceLoader, SceneTree,
+};
+use godot::global::{Key, MouseButton};
 use godot::obj::Gd;
 use godot::prelude::*;
 
@@ -65,6 +69,24 @@ pub fn execute_action(
         ActionRequest::RemoveNode { path } => {
             execute_remove_node(path, collector).map(ActionResult::Done)
         }
+        ActionRequest::ActionPress {
+            action_name,
+            strength,
+        } => execute_action_press(action_name, *strength, collector).map(ActionResult::Done),
+        ActionRequest::ActionRelease { action_name } => {
+            execute_action_release(action_name, collector).map(ActionResult::Done)
+        }
+        ActionRequest::InjectKey {
+            keycode,
+            pressed,
+            echo,
+        } => execute_inject_key(keycode, *pressed, *echo, collector).map(ActionResult::Done),
+        ActionRequest::InjectMouseButton {
+            button,
+            pressed,
+            position,
+        } => execute_inject_mouse_button(button, *pressed, position.as_deref(), collector)
+            .map(ActionResult::Done),
     }
 }
 
@@ -359,6 +381,208 @@ fn execute_remove_node(path: &str, collector: &StageCollector) -> Result<ActionR
         ]),
         frame: get_frame(collector),
     })
+}
+
+fn execute_action_press(
+    action_name: &str,
+    strength: f32,
+    collector: &StageCollector,
+) -> Result<ActionResponse, String> {
+    let mut input = Input::singleton();
+    let sn = StringName::from(action_name);
+
+    // Validate the action exists in the InputMap
+    if !InputMap::singleton().has_action(&sn) {
+        return Err(format!("Unknown InputMap action: '{action_name}'"));
+    }
+
+    input.action_press_ex(&sn).strength(strength).done();
+
+    let mut details = serde_json::Map::new();
+    details.insert("action_name".into(), serde_json::json!(action_name));
+    details.insert("strength".into(), serde_json::json!(strength));
+
+    Ok(ActionResponse {
+        action: "action_press".into(),
+        result: "ok".into(),
+        details,
+        frame: get_frame(collector),
+    })
+}
+
+fn execute_action_release(
+    action_name: &str,
+    collector: &StageCollector,
+) -> Result<ActionResponse, String> {
+    let mut input = Input::singleton();
+    let sn = StringName::from(action_name);
+
+    if !InputMap::singleton().has_action(&sn) {
+        return Err(format!("Unknown InputMap action: '{action_name}'"));
+    }
+
+    input.action_release(&sn);
+
+    let mut details = serde_json::Map::new();
+    details.insert("action_name".into(), serde_json::json!(action_name));
+
+    Ok(ActionResponse {
+        action: "action_release".into(),
+        result: "ok".into(),
+        details,
+        frame: get_frame(collector),
+    })
+}
+
+fn execute_inject_key(
+    keycode: &str,
+    pressed: bool,
+    echo: bool,
+    collector: &StageCollector,
+) -> Result<ActionResponse, String> {
+    let key = parse_key(keycode)?;
+
+    let mut event = InputEventKey::new_gd();
+    event.set_keycode(key);
+    event.set_pressed(pressed);
+    event.set_echo(echo);
+
+    let input_event: Gd<InputEvent> = event.upcast();
+    Input::singleton().parse_input_event(&input_event);
+
+    let mut details = serde_json::Map::new();
+    details.insert("keycode".into(), serde_json::json!(keycode));
+    details.insert("pressed".into(), serde_json::json!(pressed));
+    if echo {
+        details.insert("echo".into(), serde_json::json!(true));
+    }
+
+    Ok(ActionResponse {
+        action: "inject_key".into(),
+        result: "ok".into(),
+        details,
+        frame: get_frame(collector),
+    })
+}
+
+fn execute_inject_mouse_button(
+    button: &str,
+    pressed: bool,
+    position: Option<&[f64]>,
+    collector: &StageCollector,
+) -> Result<ActionResponse, String> {
+    let button_index = parse_mouse_button(button)?;
+
+    let mut event = InputEventMouseButton::new_gd();
+    event.set_button_index(button_index);
+    event.set_pressed(pressed);
+
+    if let Some(pos) = position {
+        if pos.len() >= 2 {
+            event.set_position(Vector2::new(pos[0] as f32, pos[1] as f32));
+        }
+    }
+
+    let input_event: Gd<InputEvent> = event.upcast();
+    Input::singleton().parse_input_event(&input_event);
+
+    let mut details = serde_json::Map::new();
+    details.insert("button".into(), serde_json::json!(button));
+    details.insert("pressed".into(), serde_json::json!(pressed));
+    if let Some(pos) = position {
+        details.insert("position".into(), serde_json::json!(pos));
+    }
+
+    Ok(ActionResponse {
+        action: "inject_mouse_button".into(),
+        result: "ok".into(),
+        details,
+        frame: get_frame(collector),
+    })
+}
+
+fn parse_key(name: &str) -> Result<Key, String> {
+    let normalized = name.to_uppercase();
+    let name = normalized.strip_prefix("KEY_").unwrap_or(&normalized);
+    match name {
+        "A" => Ok(Key::A),
+        "B" => Ok(Key::B),
+        "C" => Ok(Key::C),
+        "D" => Ok(Key::D),
+        "E" => Ok(Key::E),
+        "F" => Ok(Key::F),
+        "G" => Ok(Key::G),
+        "H" => Ok(Key::H),
+        "I" => Ok(Key::I),
+        "J" => Ok(Key::J),
+        "K" => Ok(Key::K),
+        "L" => Ok(Key::L),
+        "M" => Ok(Key::M),
+        "N" => Ok(Key::N),
+        "O" => Ok(Key::O),
+        "P" => Ok(Key::P),
+        "Q" => Ok(Key::Q),
+        "R" => Ok(Key::R),
+        "S" => Ok(Key::S),
+        "T" => Ok(Key::T),
+        "U" => Ok(Key::U),
+        "V" => Ok(Key::V),
+        "W" => Ok(Key::W),
+        "X" => Ok(Key::X),
+        "Y" => Ok(Key::Y),
+        "Z" => Ok(Key::Z),
+        "0" => Ok(Key::KEY_0),
+        "1" => Ok(Key::KEY_1),
+        "2" => Ok(Key::KEY_2),
+        "3" => Ok(Key::KEY_3),
+        "4" => Ok(Key::KEY_4),
+        "5" => Ok(Key::KEY_5),
+        "6" => Ok(Key::KEY_6),
+        "7" => Ok(Key::KEY_7),
+        "8" => Ok(Key::KEY_8),
+        "9" => Ok(Key::KEY_9),
+        "SPACE" => Ok(Key::SPACE),
+        "ENTER" | "RETURN" => Ok(Key::ENTER),
+        "ESCAPE" | "ESC" => Ok(Key::ESCAPE),
+        "TAB" => Ok(Key::TAB),
+        "BACKSPACE" => Ok(Key::BACKSPACE),
+        "DELETE" => Ok(Key::DELETE),
+        "UP" => Ok(Key::UP),
+        "DOWN" => Ok(Key::DOWN),
+        "LEFT" => Ok(Key::LEFT),
+        "RIGHT" => Ok(Key::RIGHT),
+        "SHIFT" => Ok(Key::SHIFT),
+        "CTRL" | "CONTROL" => Ok(Key::CTRL),
+        "ALT" => Ok(Key::ALT),
+        "F1" => Ok(Key::F1),
+        "F2" => Ok(Key::F2),
+        "F3" => Ok(Key::F3),
+        "F4" => Ok(Key::F4),
+        "F5" => Ok(Key::F5),
+        "F6" => Ok(Key::F6),
+        "F7" => Ok(Key::F7),
+        "F8" => Ok(Key::F8),
+        "F9" => Ok(Key::F9),
+        "F10" => Ok(Key::F10),
+        "F11" => Ok(Key::F11),
+        "F12" => Ok(Key::F12),
+        _ => Err(format!(
+            "Unknown key: '{name}'. Use Godot key names: A-Z, 0-9, SPACE, ENTER, ESCAPE, UP, DOWN, LEFT, RIGHT, SHIFT, CTRL, ALT, TAB, BACKSPACE, DELETE, F1-F12."
+        )),
+    }
+}
+
+fn parse_mouse_button(name: &str) -> Result<MouseButton, String> {
+    match name.to_lowercase().as_str() {
+        "left" => Ok(MouseButton::LEFT),
+        "right" => Ok(MouseButton::RIGHT),
+        "middle" => Ok(MouseButton::MIDDLE),
+        "wheel_up" => Ok(MouseButton::WHEEL_UP),
+        "wheel_down" => Ok(MouseButton::WHEEL_DOWN),
+        _ => Err(format!(
+            "Unknown mouse button: '{name}'. Use: left, right, middle, wheel_up, wheel_down."
+        )),
+    }
 }
 
 /// Convert a JSON value to a Godot Variant.

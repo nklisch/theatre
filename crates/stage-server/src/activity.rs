@@ -127,6 +127,33 @@ pub fn action_summary(params: &SpatialActionParams) -> String {
             let node = params.node.as_deref().unwrap_or("?");
             format!("Removed {node}")
         }
+        ActionType::ActionPress => {
+            let action = params.input_action.as_deref().unwrap_or("?");
+            let strength = params.strength.unwrap_or(1.0);
+            format!("Pressed action '{action}' (strength {strength:.2})")
+        }
+        ActionType::ActionRelease => {
+            let action = params.input_action.as_deref().unwrap_or("?");
+            format!("Released action '{action}'")
+        }
+        ActionType::InjectKey => {
+            let key = params.keycode.as_deref().unwrap_or("?");
+            let state = if params.pressed.unwrap_or(true) {
+                "press"
+            } else {
+                "release"
+            };
+            format!("Key {state}: {key}")
+        }
+        ActionType::InjectMouseButton => {
+            let btn = params.button.as_deref().unwrap_or("?");
+            let state = if params.pressed.unwrap_or(true) {
+                "press"
+            } else {
+                "release"
+            };
+            format!("Mouse {state}: {btn}")
+        }
     }
 }
 

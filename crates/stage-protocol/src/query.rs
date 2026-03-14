@@ -529,6 +529,43 @@ pub enum ActionRequest {
     RemoveNode {
         path: String,
     },
+    /// Press (hold) a named InputMap action.
+    ActionPress {
+        /// InputMap action name (e.g. "jump", "move_left").
+        action_name: String,
+        /// Press strength 0.0–1.0. Default 1.0.
+        #[serde(default = "default_strength")]
+        strength: f32,
+    },
+    /// Release a named InputMap action.
+    ActionRelease {
+        /// InputMap action name.
+        action_name: String,
+    },
+    /// Inject a keyboard key event.
+    InjectKey {
+        /// Godot key name: "A", "SPACE", "UP", "ESCAPE", etc.
+        keycode: String,
+        /// true = press, false = release.
+        pressed: bool,
+        /// Whether this is an echo (key held down repeat). Default false.
+        #[serde(default)]
+        echo: bool,
+    },
+    /// Inject a mouse button event.
+    InjectMouseButton {
+        /// Button name: "left", "right", "middle", "wheel_up", "wheel_down".
+        button: String,
+        /// true = press, false = release.
+        pressed: bool,
+        /// Screen position [x, y]. Defaults to current mouse position if absent.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        position: Option<Vec<f64>>,
+    },
+}
+
+fn default_strength() -> f32 {
+    1.0
 }
 
 /// Response from action execution.
@@ -872,5 +909,42 @@ mod tests {
         let json = serde_json::json!("resources");
         let cat: InspectCategory = serde_json::from_value(json).unwrap();
         assert_eq!(cat, InspectCategory::Resources);
+    }
+
+    #[test]
+    fn action_press_serde_roundtrip() {
+        let req = ActionRequest::ActionPress {
+            action_name: "jump".into(),
+            strength: 0.5,
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains(r#""action":"action_press""#));
+        let back: ActionRequest = serde_json::from_str(&json).unwrap();
+        assert!(
+            matches!(back, ActionRequest::ActionPress { action_name, strength } if action_name == "jump" && (strength - 0.5).abs() < 0.01)
+        );
+    }
+
+    #[test]
+    fn inject_key_serde_roundtrip() {
+        let req = ActionRequest::InjectKey {
+            keycode: "SPACE".into(),
+            pressed: true,
+            echo: false,
+        };
+        let json = serde_json::to_string(&req).unwrap();
+        let back: ActionRequest = serde_json::from_str(&json).unwrap();
+        assert!(
+            matches!(back, ActionRequest::InjectKey { keycode, pressed: true, echo: false } if keycode == "SPACE")
+        );
+    }
+
+    #[test]
+    fn action_press_default_strength() {
+        let json = r#"{"action":"action_press","action_name":"fire"}"#;
+        let req: ActionRequest = serde_json::from_str(json).unwrap();
+        assert!(
+            matches!(req, ActionRequest::ActionPress { strength, .. } if (strength - 1.0).abs() < 0.01)
+        );
     }
 }
