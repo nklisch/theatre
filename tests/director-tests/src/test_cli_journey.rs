@@ -219,59 +219,38 @@ fn cli_journey_multi_scene_composition() {
     assert!(scenes.len() >= 2);
 }
 
-/// Journey 3: animation CRUD — create animation, add track, read back.
+/// Journey 3: animation CRUD — create resource, add track, read back.
+///
+/// Animation API uses `resource_path` (standalone .tres files), not scene_path/node_path.
 #[test]
 #[ignore = "requires Godot binary"]
 fn cli_journey_animation_workflow() {
     let cli = CliFixture::new();
-    let scene = DirectorFixture::journey_scene_path("cli_anim");
+    let anim = DirectorFixture::temp_resource_path("cli_anim_walk");
 
-    // 1. scene_create → Node2D scene
-    cli.run(
-        "scene_create",
-        json!({"scene_path": scene, "root_type": "Node2D"}),
-    )
-    .unwrap()
-    .unwrap_data();
-
-    // 2. node_add → AnimationPlayer named "AnimPlayer"
-    cli.run(
-        "node_add",
-        json!({
-            "scene_path": scene,
-            "node_type": "AnimationPlayer",
-            "node_name": "AnimPlayer"
-        }),
-    )
-    .unwrap()
-    .unwrap_data();
-
-    // 3. animation_create → "walk" animation
+    // 1. animation_create → "walk" animation as standalone resource
     let anim_data = cli
         .run(
             "animation_create",
             json!({
-                "scene_path": scene,
-                "node_path": "AnimPlayer",
-                "animation_name": "walk",
+                "resource_path": anim,
                 "length": 1.0,
                 "loop_mode": "linear"
             }),
         )
         .unwrap()
         .unwrap_data();
-    assert_eq!(anim_data["animation_name"], "walk");
+    assert_eq!(anim_data["loop_mode"], "linear");
+    assert_approx(anim_data["length"].as_f64().unwrap(), 1.0);
 
-    // 4. animation_add_track → property track for ".:position"
+    // 2. animation_add_track → value track for "Sprite2D:position"
     let track_data = cli
         .run(
             "animation_add_track",
             json!({
-                "scene_path": scene,
-                "node_path": "AnimPlayer",
-                "animation_name": "walk",
+                "resource_path": anim,
                 "track_type": "value",
-                "track_path": ".:position",
+                "node_path": "Sprite2D:position",
                 "keyframes": [
                     {"time": 0.0, "value": {"x": 0, "y": 0}},
                     {"time": 1.0, "value": {"x": 100, "y": 0}}
@@ -282,21 +261,15 @@ fn cli_journey_animation_workflow() {
         .unwrap_data();
     assert!(track_data["track_index"].as_u64().is_some());
 
-    // 5. animation_read → verify animation exists, 1 track, duration 1.0
+    // 3. animation_read → verify 1 track, duration 1.0, loop_mode linear
     let read_data = cli
-        .run(
-            "animation_read",
-            json!({
-                "scene_path": scene,
-                "node_path": "AnimPlayer",
-                "animation_name": "walk"
-            }),
-        )
+        .run("animation_read", json!({"resource_path": anim}))
         .unwrap()
         .unwrap_data();
     let tracks = read_data["tracks"].as_array().unwrap();
     assert_eq!(tracks.len(), 1);
     assert_approx(read_data["length"].as_f64().unwrap(), 1.0);
+    assert_eq!(read_data["loop_mode"], "linear");
 }
 
 /// Journey 4: physics layers + signal wiring.
@@ -459,19 +432,32 @@ fn cli_journey_batch_operations() {
 }
 
 /// Journey 6: validate error handling for invalid operations.
+///
+/// Director CLI exits 0 but returns `OperationResult { success: false, error: ... }`
+/// for tool-level errors. We use `unwrap_err()` to assert the error message.
 #[test]
 #[ignore = "requires Godot binary"]
 fn cli_journey_error_cases() {
     let cli = CliFixture::new();
 
-    // 1. scene_read with nonexistent scene path → CLI exits non-zero → Err
-    let result = cli.run(
-        "scene_read",
-        json!({"scene_path": "tmp/nonexistent_scene_xyzzy.tscn"}),
+    // 1. scene_read with nonexistent scene → success=false with error message
+    let result = cli
+        .run(
+            "scene_read",
+            json!({"scene_path": "tmp/nonexistent_scene_xyzzy.tscn"}),
+        )
+        .unwrap();
+    assert!(
+        !result.success,
+        "scene_read nonexistent scene should return success=false"
     );
-    assert!(result.is_err(), "scene_read nonexistent scene should fail");
+    let err = result.unwrap_err();
+    assert!(
+        err.contains("not found") || err.contains("Not found") || err.contains("scene"),
+        "error should mention scene not found: {err}"
+    );
 
-    // 2. node_add with nonexistent parent_path → Err
+    // 2. node_add with nonexistent parent_path → success=false
     let scene = DirectorFixture::journey_scene_path("cli_err_cases");
     cli.run(
         "scene_create",
@@ -480,30 +466,34 @@ fn cli_journey_error_cases() {
     .unwrap()
     .unwrap_data();
 
-    let result = cli.run(
-        "node_add",
-        json!({
-            "scene_path": scene,
-            "parent_path": "NonExistentParent",
-            "node_type": "Sprite2D",
-            "node_name": "Orphan"
-        }),
-    );
+    let result = cli
+        .run(
+            "node_add",
+            json!({
+                "scene_path": scene,
+                "parent_path": "NonExistentParent",
+                "node_type": "Sprite2D",
+                "node_name": "Orphan"
+            }),
+        )
+        .unwrap();
     assert!(
-        result.is_err(),
-        "node_add with nonexistent parent_path should fail"
+        !result.success,
+        "node_add with nonexistent parent_path should return success=false"
     );
 
-    // 3. node_remove with nonexistent node_path → Err
-    let result = cli.run(
-        "node_remove",
-        json!({
-            "scene_path": scene,
-            "node_path": "NonExistentNode"
-        }),
-    );
+    // 3. node_remove with nonexistent node_path → success=false
+    let result = cli
+        .run(
+            "node_remove",
+            json!({
+                "scene_path": scene,
+                "node_path": "NonExistentNode"
+            }),
+        )
+        .unwrap();
     assert!(
-        result.is_err(),
-        "node_remove with nonexistent node_path should fail"
+        !result.success,
+        "node_remove with nonexistent node_path should return success=false"
     );
 }
