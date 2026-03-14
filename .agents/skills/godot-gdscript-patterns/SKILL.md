@@ -799,9 +799,3 @@ func _on_off_screen() -> void:
 - **Don't put logic in resources** - Keep them data-only
 - **Don't ignore the Profiler** - Monitor performance
 - **Don't fight the scene tree** - Work with Godot's design
-
-## Resources
-
-- [Godot Documentation](https://docs.godotengine.org/en/stable/)
-- [GDQuest Tutorials](https://www.gdquest.com/)
-- [Godot Recipes](https://kidscancode.org/godot_recipes/)
