@@ -4,7 +4,8 @@
 .godot/
 *.uid
 
-# Compiled GDExtension binaries (build with: cargo build -p spectator-godot)
+# Compiled GDExtension binaries (build with: cargo build -p stage-godot)
+addons/stage/bin/
 addons/spectator/bin/
 
 # VitePress build output
