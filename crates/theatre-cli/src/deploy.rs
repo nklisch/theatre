@@ -46,9 +46,9 @@ pub fn run(args: DeployArgs) -> Result<()> {
         .args([
             "build",
             "-p",
-            "spectator-godot",
+            "stage-godot",
             "-p",
-            "spectator-server",
+            "stage-server",
             "-p",
             "director",
         ])
@@ -64,8 +64,8 @@ pub fn run(args: DeployArgs) -> Result<()> {
         anyhow::bail!("cargo build failed with exit code: {:?}", status.code());
     }
 
-    eprintln!("  {} spectator-godot", style("✓").green());
-    eprintln!("  {} spectator", style("✓").green());
+    eprintln!("  {} stage-godot", style("✓").green());
+    eprintln!("  {} stage", style("✓").green());
     eprintln!("  {} director", style("✓").green());
     eprintln!();
 
@@ -76,7 +76,7 @@ pub fn run(args: DeployArgs) -> Result<()> {
     let gdext_src = source.built_gdext(args.release);
     let gdext_platform_dir = theatre
         .addon_source()
-        .join("spectator")
+        .join("stage")
         .join("bin")
         .join(platform_dir());
     std::fs::create_dir_all(&gdext_platform_dir).with_context(|| {
@@ -96,12 +96,12 @@ pub fn run(args: DeployArgs) -> Result<()> {
     eprintln!("  {} Updated GDExtension in share dir", style("✓").green());
 
     // 5b: Sync addon GDScript from repo to share dir
-    let spectator_src = source.addon_source().join("spectator");
-    let spectator_share_dst = theatre.addon_source().join("spectator");
-    copy_dir_recursive(&spectator_src, &spectator_share_dst, &|p| {
+    let stage_src = source.addon_source().join("stage");
+    let stage_share_dst = theatre.addon_source().join("stage");
+    copy_dir_recursive(&stage_src, &stage_share_dst, &|p| {
         p.file_name().map(|n| n == "bin").unwrap_or(false)
     })
-    .context("Failed to sync spectator addon to share dir")?;
+    .context("Failed to sync stage addon to share dir")?;
 
     let director_src = source.addon_source().join("director");
     let director_share_dst = theatre.addon_source().join("director");
@@ -111,7 +111,7 @@ pub fn run(args: DeployArgs) -> Result<()> {
     eprintln!("  {} Synced addon scripts to share dir", style("✓").green());
 
     // 5c: Copy fresh server binaries to bin_dir
-    for bin_name in &["spectator", "director"] {
+    for bin_name in &["stage", "director"] {
         let src = source.built_binary(bin_name, args.release);
         let dst = theatre.bin_dir.join(bin_name);
         if theatre.bin_dir.exists() {
@@ -127,33 +127,33 @@ pub fn run(args: DeployArgs) -> Result<()> {
     for project in &args.projects {
         eprintln!("  Deploying to {}...", project.display());
 
-        // Deploy spectator addon
-        let spectator_project_dst = project.join("addons").join("spectator");
-        let is_symlink = std::fs::symlink_metadata(&spectator_project_dst)
+        // Deploy stage addon
+        let stage_project_dst = project.join("addons").join("stage");
+        let is_symlink = std::fs::symlink_metadata(&stage_project_dst)
             .map(|m| m.file_type().is_symlink())
             .unwrap_or(false);
 
         if is_symlink {
             eprintln!(
-                "  {} addons/spectator/ is a symlink — skipping copy (dev setup)",
+                "  {} addons/stage/ is a symlink — skipping copy (dev setup)",
                 style("⚠").yellow()
             );
         } else {
             // Copy everything from share dir including bin/
             copy_dir_recursive(
-                &theatre.addon_source().join("spectator"),
-                &spectator_project_dst,
+                &theatre.addon_source().join("stage"),
+                &stage_project_dst,
                 &|_| false,
             )
             .with_context(|| {
                 format!(
-                    "Failed to copy spectator addon to {}",
-                    spectator_project_dst.display()
+                    "Failed to copy stage addon to {}",
+                    stage_project_dst.display()
                 )
             })?;
 
             // Also copy the GDExtension binary
-            let gdext_proj_dir = spectator_project_dst.join("bin").join(platform_dir());
+            let gdext_proj_dir = stage_project_dst.join("bin").join(platform_dir());
             std::fs::create_dir_all(&gdext_proj_dir).with_context(|| {
                 format!(
                     "Failed to create GDExtension dir in project: {}",
@@ -169,10 +169,7 @@ pub fn run(args: DeployArgs) -> Result<()> {
                 },
             )?;
 
-            eprintln!(
-                "  {} addons/spectator/ (with GDExtension)",
-                style("✓").green()
-            );
+            eprintln!("  {} addons/stage/ (with GDExtension)", style("✓").green());
         }
 
         // Deploy director addon

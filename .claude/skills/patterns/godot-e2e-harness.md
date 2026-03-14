@@ -93,9 +93,9 @@ pub fn find_entity<'a>(data: &'a serde_json::Value, name: &str) -> &'a serde_jso
 
 ## TestHarness (Integration Tests — Mock TCP)
 
-Connects a real `SpectatorServer` to a `MockAddon` (fake Godot) over an in-process TCP socket. Used for integration tests that need a real server but not a real Godot process.
+Connects a real `StageServer` to a `MockAddon` (fake Godot) over an in-process TCP socket. Used for integration tests that need a real server but not a real Godot process.
 
-**File**: `crates/spectator-server/tests/support/harness.rs:15`
+**File**: `crates/stage-server/tests/support/harness.rs:15`
 
 ### Usage
 ```rust
@@ -112,7 +112,7 @@ async fn snapshot_returns_budget() {
 ### Structure
 ```rust
 pub struct TestHarness {
-    pub server: SpectatorServer,
+    pub server: StageServer,
     pub mock: MockAddon,
     pub state: Arc<Mutex<SessionState>>,
     _tcp_task: JoinHandle<()>,   // aborted on Drop
@@ -145,9 +145,9 @@ impl MockAddon {
 
 ## E2EHarness (Full-Stack E2E — Numbered Steps with Trace)
 
-Wraps `GodotProcess` + `SpectatorServer` with a numbered-step API and automatic trace output on failure. Used for multi-step journey tests that verify real Godot behavior.
+Wraps `GodotProcess` + `StageServer` with a numbered-step API and automatic trace output on failure. Used for multi-step journey tests that verify real Godot behavior.
 
-**File**: `crates/spectator-server/tests/support/e2e_harness.rs:16`
+**File**: `crates/stage-server/tests/support/e2e_harness.rs:16`
 
 ### Usage
 ```rust

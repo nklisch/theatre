@@ -1,10 +1,10 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/spectator-server",
-    "crates/spectator-godot",
-    "crates/spectator-protocol",
-    "crates/spectator-core",
+    "crates/stage-server",
+    "crates/stage-godot",
+    "crates/stage-protocol",
+    "crates/stage-core",
     "crates/director",
     "crates/theatre-docs-gen",
     "crates/theatre-cli",
@@ -14,10 +14,10 @@ members = [
 
 # Exclude wire-tests and director-tests from `cargo build --workspace` (they need Godot at runtime).
 default-members = [
-    "crates/spectator-server",
-    "crates/spectator-godot",
-    "crates/spectator-protocol",
-    "crates/spectator-core",
+    "crates/stage-server",
+    "crates/stage-godot",
+    "crates/stage-protocol",
+    "crates/stage-core",
     "crates/director",
     "crates/theatre-cli",
 ]
@@ -36,5 +36,5 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rusqlite = { version = "0.33", features = ["bundled"] }
 rmp-serde = "1"
-spectator-protocol = { path = "crates/spectator-protocol" }
-spectator-core = { path = "crates/spectator-core" }
+stage-protocol = { path = "crates/stage-protocol" }
+stage-core = { path = "crates/stage-core" }

@@ -3,12 +3,12 @@
 All TCP messages are framed as `[4-byte BE u32 length][JSON payload]` with a 16 MiB cap. The codec module provides both sync and async variants behind a feature flag.
 
 ## Rationale
-Enables reliable message framing over a raw TCP stream. Sync variant used in spectator-godot (main-thread Godot); async variant used in spectator-server (tokio). Both share the same `encode()` and `CodecError` type.
+Enables reliable message framing over a raw TCP stream. Sync variant used in stage-godot (main-thread Godot); async variant used in stage-server (tokio). Both share the same `encode()` and `CodecError` type.
 
 ## Examples
 
 ### Example 1: Codec implementation — encode + sync read/write
-**File**: `crates/spectator-protocol/src/codec.rs:10-46`
+**File**: `crates/stage-protocol/src/codec.rs:10-46`
 ```rust
 pub fn encode<T: Serialize>(msg: &T) -> Result<Vec<u8>, CodecError> {
     let json = serde_json::to_vec(msg).map_err(CodecError::Serialize)?;
@@ -31,8 +31,8 @@ pub fn read_message<T: DeserializeOwned>(reader: &mut impl io::Read) -> Result<T
 }
 ```
 
-### Example 2: Async variant (feature-gated, used in spectator-server)
-**File**: `crates/spectator-protocol/src/codec.rs:81-116`
+### Example 2: Async variant (feature-gated, used in stage-server)
+**File**: `crates/stage-protocol/src/codec.rs:81-116`
 ```rust
 #[cfg(feature = "async")]
 pub mod async_io {
@@ -53,7 +53,7 @@ pub mod async_io {
 ```
 
 ### Example 3: Codec used in server TCP connection handshake
-**File**: `crates/spectator-server/src/tcp.rs:127-130`
+**File**: `crates/stage-server/src/tcp.rs:127-130`
 ```rust
 let msg: Message = async_io::read_message(&mut reader)
     .await
@@ -61,9 +61,9 @@ let msg: Message = async_io::read_message(&mut reader)
 ```
 
 ### Example 4: Codec used in godot TCP server (sync, main thread)
-**File**: `crates/spectator-godot/src/tcp_server.rs` (uses `codec::read_message` / `codec::write_message`)
+**File**: `crates/stage-godot/src/tcp_server.rs` (uses `codec::read_message` / `codec::write_message`)
 ```rust
-use spectator_protocol::{codec, handshake::Handshake, messages::Message};
+use stage_protocol::{codec, handshake::Handshake, messages::Message};
 // ...
 codec::write_message(&mut stream, &Message::Handshake(handshake))?;
 let ack: Message = codec::read_message(&mut stream)?;
@@ -71,8 +71,8 @@ let ack: Message = codec::read_message(&mut stream)?;
 
 ## When to Use
 - Any new TCP message type: wrap with `write_message` / `read_message`
-- Adding async TCP I/O in spectator-server: use `codec::async_io`
-- Adding sync TCP I/O in spectator-godot: use `codec` directly (sync)
+- Adding async TCP I/O in stage-server: use `codec::async_io`
+- Adding sync TCP I/O in stage-godot: use `codec` directly (sync)
 
 ## When NOT to Use
 - Inter-thread communication within a single process — use channels instead

@@ -3,12 +3,12 @@
 Protocol enums use `#[serde(tag = "type")]` (internally tagged) or `#[serde(rename_all = "snake_case")]` for wire-format dispatch. All enum variants have explicit `#[serde(rename = "...")]` snake_case names to ensure stable JSON keys.
 
 ## Rationale
-Tagged enums map cleanly to the JSON `"type"` field pattern used across the TCP protocol. `rename_all = "snake_case"` ensures Rust PascalCase enum variants serialize to snake_case without per-variant annotations. Used consistently across `spectator-protocol` and `spectator-core`.
+Tagged enums map cleanly to the JSON `"type"` field pattern used across the TCP protocol. `rename_all = "snake_case"` ensures Rust PascalCase enum variants serialize to snake_case without per-variant annotations. Used consistently across `stage-protocol` and `stage-core`.
 
 ## Examples
 
 ### Example 1: Top-level protocol dispatch (internally tagged)
-**File**: `crates/spectator-protocol/src/messages.rs:4-47`
+**File**: `crates/stage-protocol/src/messages.rs:4-47`
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(tag = "type")]
@@ -26,10 +26,10 @@ pub enum Message {
 ```
 
 ### Example 2: Action request dispatch (internally tagged)
-**File**: `crates/spectator-protocol/src/query.rs` — `ActionRequest` enum uses `#[serde(tag = "type")]` so that `{"type":"teleport","path":"...","position":[...]}` deserializes directly.
+**File**: `crates/stage-protocol/src/query.rs` — `ActionRequest` enum uses `#[serde(tag = "type")]` so that `{"type":"teleport","path":"...","position":[...]}` deserializes directly.
 
 ### Example 3: Internal enums with rename_all
-**File**: `crates/spectator-core/src/delta.rs:44-50`
+**File**: `crates/stage-core/src/delta.rs:44-50`
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -41,7 +41,7 @@ pub enum BufferedEventType {
 ```
 
 ### Example 4: PerspectiveParam — externally-tagged with inline structs
-**File**: `crates/spectator-protocol/src/query.rs` — `PerspectiveParam` uses `#[serde(tag = "type")]` for `Camera`, `Node { path }`, `Point { position }` variants.
+**File**: `crates/stage-protocol/src/query.rs` — `PerspectiveParam` uses `#[serde(tag = "type")]` for `Camera`, `Node { path }`, `Point { position }` variants.
 
 ## When to Use
 - Any enum that appears in JSON and needs a discriminant field: use `#[serde(tag = "type")]`

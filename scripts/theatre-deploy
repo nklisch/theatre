@@ -14,12 +14,12 @@ TARGETS=("${@:-$HOME/godot/test-harness}")
 THEATRE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 # Build GDExtension
-cargo build -p spectator-godot ${MODE:+--$MODE}
+cargo build -p stage-godot ${MODE:+--$MODE}
 
-SRC="$THEATRE_ROOT/target/$MODE/libspectator_godot.so"
+SRC="$THEATRE_ROOT/target/$MODE/libstage_godot.so"
 for PROJECT in "${TARGETS[@]}"; do
-    DST="$PROJECT/addons/spectator/bin/linux/"
+    DST="$PROJECT/addons/stage/bin/linux/"
     mkdir -p "$DST"
     cp "$SRC" "$DST"
-    echo "Deployed spectator-godot → $PROJECT"
+    echo "Deployed stage-godot → $PROJECT"
 done

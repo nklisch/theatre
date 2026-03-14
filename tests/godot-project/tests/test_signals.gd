@@ -1,4 +1,4 @@
-## Tests signal emission from SpectatorRecorder.
+## Tests signal emission from StageRecorder.
 ##
 ## Verifies that dashcam signals fire correctly from GDScript.
 extends RefCounted
@@ -11,10 +11,10 @@ func setup(root: Window) -> void:
 
 
 func test_recorder_emits_marker_added() -> String:
-	var collector := SpectatorCollector.new()
+	var collector := StageCollector.new()
 	_root.add_child(collector)
 
-	var recorder := SpectatorRecorder.new()
+	var recorder := StageRecorder.new()
 	recorder.set_collector(collector)
 	_root.add_child(recorder)
 	await _root.get_tree().process_frame
@@ -45,5 +45,5 @@ func test_recorder_emits_marker_added() -> String:
 
 
 func test_tcp_server_emits_activity_received() -> String:
-	var server := SpectatorTCPServer.new()
+	var server := StageTCPServer.new()
 	return Assert.obj_has_signal(server, "activity_received")

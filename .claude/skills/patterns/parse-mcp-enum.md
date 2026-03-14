@@ -9,7 +9,7 @@ MCP tool parameters arrive as JSON strings. Without a standard approach each han
 ## Examples
 
 ### Example 1: Two enums for spatial_config (cluster_by, bearing_format)
-**File**: `crates/spectator-server/src/mcp/config.rs:13-33`
+**File**: `crates/stage-server/src/mcp/config.rs:13-33`
 ```rust
 impl super::ParseMcpEnum for ClusterStrategy {
     const FIELD_NAME: &'static str = "cluster_by";
@@ -36,7 +36,7 @@ impl super::ParseMcpEnum for BearingFormat {
 ```
 
 ### Example 2: List parsing for InspectCategory (include field accepts multiple values)
-**File**: `crates/spectator-server/src/mcp/inspect.rs:35-48`
+**File**: `crates/stage-server/src/mcp/inspect.rs:35-48`
 ```rust
 impl super::ParseMcpEnum for InspectCategory {
     const FIELD_NAME: &'static str = "include";
@@ -59,7 +59,7 @@ let include = InspectCategory::parse_list(&params.include.unwrap_or_default())?;
 ```
 
 ### Example 3: Three enums for scene_tree (action, find_by, include)
-**File**: `crates/spectator-server/src/mcp/scene_tree.rs:44-79`
+**File**: `crates/stage-server/src/mcp/scene_tree.rs:44-79`
 ```rust
 impl super::ParseMcpEnum for SceneTreeAction {
     const FIELD_NAME: &'static str = "action";
@@ -75,7 +75,7 @@ impl super::ParseMcpEnum for SceneTreeAction {
 ```
 
 ### Trait definition (for reference)
-**File**: `crates/spectator-server/src/mcp/mod.rs:107-118`
+**File**: `crates/stage-server/src/mcp/mod.rs:107-118`
 ```rust
 pub(crate) trait ParseMcpEnum: Sized + Clone + 'static {
     const FIELD_NAME: &'static str;

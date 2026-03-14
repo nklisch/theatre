@@ -27,7 +27,7 @@ echo
 # Copy binaries
 echo "  Installing binaries to ${BIN_DIR}/"
 mkdir -p "${BIN_DIR}"
-for bin in theatre spectator-server director; do
+for bin in theatre stage director; do
     if [[ -f "${SCRIPT_DIR}/bin/${bin}" ]]; then
         cp "${SCRIPT_DIR}/bin/${bin}" "${BIN_DIR}/"
         chmod +x "${BIN_DIR}/${bin}"
@@ -44,7 +44,7 @@ echo "  Installing addons to ${SHARE_DIR}/"
 mkdir -p "${SHARE_DIR}"
 if [[ -d "${SCRIPT_DIR}/share/theatre" ]]; then
     cp -r "${SCRIPT_DIR}/share/theatre/"* "${SHARE_DIR}/"
-    echo "  ✓ addons/spectator/"
+    echo "  ✓ addons/stage/"
     echo "  ✓ addons/director/"
 fi
 echo

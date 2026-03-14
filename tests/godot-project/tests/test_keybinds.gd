@@ -19,7 +19,7 @@ func _make_key_event(keycode: Key) -> InputEventKey:
 
 
 func test_f11_toggles_pause() -> String:
-	var rt = load("res://addons/spectator/runtime.gd").new()
+	var rt = load("res://addons/stage/runtime.gd").new()
 	_root.add_child(rt)
 	await _root.get_tree().process_frame
 
@@ -38,7 +38,7 @@ func test_f11_toggles_pause() -> String:
 
 
 func test_f11_toggles_pause_twice() -> String:
-	var rt = load("res://addons/spectator/runtime.gd").new()
+	var rt = load("res://addons/stage/runtime.gd").new()
 	_root.add_child(rt)
 	await _root.get_tree().process_frame
 
@@ -55,11 +55,11 @@ func test_f11_toggles_pause_twice() -> String:
 	return err
 
 
-func test_editor_shortcut_keys_do_not_trigger_spectator() -> String:
+func test_editor_shortcut_keys_do_not_trigger_stage() -> String:
 	## Regression: F8 (Godot "Stop") and F7 (Godot "Step Into") must NOT
 	## drop a marker. They're reserved for the editor and should be
 	## no-ops in the runtime's _shortcut_input.
-	var rt = load("res://addons/spectator/runtime.gd").new()
+	var rt = load("res://addons/stage/runtime.gd").new()
 	_root.add_child(rt)
 	await _root.get_tree().process_frame
 
@@ -82,7 +82,7 @@ func test_editor_shortcut_keys_do_not_trigger_spectator() -> String:
 func test_default_keycode_fields_match_expected() -> String:
 	## Regression: verify the runtime's hardcoded default key codes match our
 	## chosen safe defaults (not F5-F10 which Godot editor owns).
-	var rt = load("res://addons/spectator/runtime.gd").new()
+	var rt = load("res://addons/stage/runtime.gd").new()
 	_root.add_child(rt)
 	await _root.get_tree().process_frame
 

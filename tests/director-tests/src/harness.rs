@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use spectator_protocol::codec;
+use stage_protocol::codec;
 use std::io::Read;
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
@@ -78,7 +78,7 @@ impl DirectorFixture {
         let stderr = String::from_utf8_lossy(&output.stderr);
 
         // Parse the last JSON-like line of stdout (starts with '{' or '[').
-        // Non-JSON lines like "[Spectator] TCP server stopped" may appear after
+        // Non-JSON lines like "[Stage] TCP server stopped" may appear after
         // the result when the GDExtension prints during Godot's shutdown.
         let json_line = stdout
             .lines()
@@ -199,7 +199,7 @@ fn spawn_godot_fixture(script: &str, port_env: &str, port: u16) -> (Child, TcpSt
 
     // Read stdout line-by-line until we see the ready signal, then keep
     // draining it in a background thread so the pipe stays open and Godot
-    // doesn't get SIGPIPE when printing later output (e.g. Spectator logs).
+    // doesn't get SIGPIPE when printing later output (e.g. Stage logs).
     let stdout = child.stdout.take().expect("stdout was piped");
     let mut reader = std::io::BufReader::new(stdout);
     let mut ready = false;

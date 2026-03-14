@@ -13,7 +13,7 @@ func setup(root: Window) -> void:
 
 
 func test_dock_instantiates() -> String:
-	var dock_scene: PackedScene = load("res://addons/spectator/dock.tscn")
+	var dock_scene: PackedScene = load("res://addons/stage/dock.tscn")
 	if not dock_scene:
 		return "dock.tscn failed to load"
 	var dock := dock_scene.instantiate()
@@ -23,7 +23,7 @@ func test_dock_instantiates() -> String:
 func test_dock_has_no_try_acquire_runtime() -> String:
 	## Regression: _try_acquire_runtime was the broken approach (reads static var
 	## across process boundary). It must not exist in the new implementation.
-	var dock_scene: PackedScene = load("res://addons/spectator/dock.tscn")
+	var dock_scene: PackedScene = load("res://addons/stage/dock.tscn")
 	if not dock_scene:
 		return "dock.tscn failed to load"
 	var dock := dock_scene.instantiate()
@@ -40,7 +40,7 @@ func test_dock_has_no_try_acquire_runtime() -> String:
 
 func test_dock_has_no_tcp_server_field() -> String:
 	## Regression: the dock must not have a _tcp_server field.
-	var dock_scene: PackedScene = load("res://addons/spectator/dock.tscn")
+	var dock_scene: PackedScene = load("res://addons/stage/dock.tscn")
 	if not dock_scene:
 		return "dock.tscn failed to load"
 	var dock := dock_scene.instantiate()
@@ -57,7 +57,7 @@ func test_dock_has_no_tcp_server_field() -> String:
 
 func test_dock_has_no_recorder_field() -> String:
 	## Regression: the dock must not have a _recorder field.
-	var dock_scene: PackedScene = load("res://addons/spectator/dock.tscn")
+	var dock_scene: PackedScene = load("res://addons/stage/dock.tscn")
 	if not dock_scene:
 		return "dock.tscn failed to load"
 	var dock := dock_scene.instantiate()
@@ -74,7 +74,7 @@ func test_dock_has_no_recorder_field() -> String:
 
 func test_dock_has_no_recording_buttons() -> String:
 	## Regression: record/stop/marker buttons were removed in dashcam-only refactor.
-	var dock_scene: PackedScene = load("res://addons/spectator/dock.tscn")
+	var dock_scene: PackedScene = load("res://addons/stage/dock.tscn")
 	if not dock_scene:
 		return "dock.tscn failed to load"
 	var dock := dock_scene.instantiate()
@@ -94,7 +94,7 @@ func test_dock_has_no_recording_buttons() -> String:
 func test_dock_receive_status_connected() -> String:
 	## receive_status("connected", ...) must update the status label to "Connected"
 	## and fill in tracking / frame info.
-	var dock_scene: PackedScene = load("res://addons/spectator/dock.tscn")
+	var dock_scene: PackedScene = load("res://addons/stage/dock.tscn")
 	if not dock_scene:
 		return "dock.tscn failed to load"
 	var dock := dock_scene.instantiate()
@@ -123,7 +123,7 @@ func test_dock_receive_status_connected() -> String:
 
 func test_dock_receive_status_stopped() -> String:
 	## receive_status("stopped", ...) must show "Stopped" and clear info labels.
-	var dock_scene: PackedScene = load("res://addons/spectator/dock.tscn")
+	var dock_scene: PackedScene = load("res://addons/stage/dock.tscn")
 	if not dock_scene:
 		return "dock.tscn failed to load"
 	var dock := dock_scene.instantiate()
@@ -147,7 +147,7 @@ func test_dock_receive_status_stopped() -> String:
 
 func test_dock_receive_status_waiting() -> String:
 	## receive_status("waiting", ...) must show "Waiting...".
-	var dock_scene: PackedScene = load("res://addons/spectator/dock.tscn")
+	var dock_scene: PackedScene = load("res://addons/stage/dock.tscn")
 	if not dock_scene:
 		return "dock.tscn failed to load"
 	var dock := dock_scene.instantiate()
@@ -165,7 +165,7 @@ func test_dock_receive_status_waiting() -> String:
 
 func test_dock_receive_activity_adds_entry() -> String:
 	## receive_activity(...) must add a new entry to the activity list.
-	var dock_scene: PackedScene = load("res://addons/spectator/dock.tscn")
+	var dock_scene: PackedScene = load("res://addons/stage/dock.tscn")
 	if not dock_scene:
 		return "dock.tscn failed to load"
 	var dock := dock_scene.instantiate()
@@ -187,7 +187,7 @@ func test_dock_receive_activity_adds_entry() -> String:
 
 func test_dock_activity_list_respects_max() -> String:
 	## Dock must trim activity entries once MAX_ACTIVITY_ENTRIES is reached.
-	var dock_scene: PackedScene = load("res://addons/spectator/dock.tscn")
+	var dock_scene: PackedScene = load("res://addons/stage/dock.tscn")
 	if not dock_scene:
 		return "dock.tscn failed to load"
 	var dock := dock_scene.instantiate()

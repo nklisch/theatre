@@ -1,6 +1,6 @@
 ---
 name: godot-naming
-description: "Godot 4 property and field naming conventions for Spectator API
+description: "Godot 4 property and field naming conventions for Stage API
   output. Use when naming any JSON response field, MCP parameter, or protocol
   struct field that corresponds to a Godot node property or method."
 user-invocable: false
@@ -21,7 +21,7 @@ Contract rules: `.claude/rules/contracts.md`
 3. **Godot `is_X()` method** → drop `is_`:
    `is_on_floor()` → `on_floor`, `is_on_wall()` → `on_wall`
 4. **`rotation_degrees`** → `rotation_deg` (only allowed abbreviation)
-5. **Spectator-computed, no Godot equivalent** → full descriptive snake_case,
+5. **Stage-computed, no Godot equivalent** → full descriptive snake_case,
    no abbreviations: `relative`, `bearing`, `bearing_deg`, `distance`,
    `occluded`, `timestamp_ms`, `global_position` (from `global_transform.origin`)
 
@@ -55,7 +55,7 @@ Contract rules: `.claude/rules/contracts.md`
 | Script path | `get_script().get_path()` | `script` |
 | Process mode | `process_mode` | `process_mode` |
 
-## Spectator-Specific (no Godot equivalent)
+## Stage-Specific (no Godot equivalent)
 
 | Field | Description |
 |-------|-------------|

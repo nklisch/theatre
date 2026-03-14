@@ -1,13 +1,13 @@
 /// Wire tests for connection resilience bugs:
 ///
-/// - Bug 3A: spectator-server must not hang forever if Godot won't send handshake
+/// - Bug 3A: stage-server must not hang forever if Godot won't send handshake
 /// - Bug 3B: Godot drops zombie clients after idle timeout; new client can connect
 ///
 /// These tests exercise the live TCP protocol between a real Godot process and
-/// the spectator wire protocol — they catch bugs that unit tests miss (actual
+/// the stage wire protocol — they catch bugs that unit tests miss (actual
 /// socket lifecycle, GDExtension process_mode, TCP state).
 use crate::harness::GodotFixture;
-use spectator_protocol::{codec, handshake::PROTOCOL_VERSION, messages::Message};
+use stage_protocol::{codec, handshake::PROTOCOL_VERSION, messages::Message};
 use std::net::TcpStream;
 use std::time::{Duration, Instant};
 
@@ -29,7 +29,7 @@ fn connect_raw(port: u16) -> anyhow::Result<TcpStream> {
 #[test]
 #[ignore = "requires Godot binary and built GDExtension"]
 fn second_client_connects_after_clean_disconnect() {
-    // Regression for Bug 3: after the active spectator-server disconnects cleanly,
+    // Regression for Bug 3: after the active stage-server disconnects cleanly,
     // the next connection must receive the Godot handshake and reach "connected" state.
     //
     // This guards against the GDExtension failing to call try_accept() on subsequent
@@ -110,7 +110,7 @@ fn dashcam_works_after_reconnect() {
     // Regression for snapshot Bug 5: after a disconnect + reconnect cycle, the
     // dashcam must still be buffering and respond to status queries.
     //
-    // This guards against state leaks in SpectatorRecorder when connections reset.
+    // This guards against state leaks in StageRecorder when connections reset.
     let mut f1 = GodotFixture::start("test_scene_3d.tscn").unwrap();
     let port = f1.port;
 
@@ -141,8 +141,8 @@ fn dashcam_works_after_reconnect() {
     };
 
     // Send ack
-    let ack = Message::HandshakeAck(spectator_protocol::handshake::HandshakeAck {
-        spectator_version: "test".into(),
+    let ack = Message::HandshakeAck(stage_protocol::handshake::HandshakeAck {
+        stage_version: "test".into(),
         protocol_version: PROTOCOL_VERSION,
         session_id: "reconnect-test".into(),
     });

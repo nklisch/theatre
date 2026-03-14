@@ -40,7 +40,7 @@ use shader::VisualShaderCreateParams;
 use signal::{SignalConnectParams, SignalDisconnectParams, SignalListParams};
 use tilemap::{TileMapClearParams, TileMapGetCellsParams, TileMapSetCellsParams};
 
-use spectator_protocol::mcp_helpers::{deserialize_response, serialize_params, serialize_response};
+use stage_protocol::mcp_helpers::{deserialize_response, serialize_params, serialize_response};
 
 use crate::responses::{
     AnimationAddTrackResponse, AnimationCreateResponse, AnimationReadResponse,

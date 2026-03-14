@@ -8,7 +8,7 @@ Keeps test logic co-located with the code under test. Builder fixture functions 
 ## Examples
 
 ### Example 1: Index tests — entity builder with optional group
-**File**: `crates/spectator-core/src/index.rs:143-160`
+**File**: `crates/stage-core/src/index.rs:143-160`
 ```rust
 #[cfg(test)]
 mod tests {
@@ -37,7 +37,7 @@ mod tests {
 ```
 
 ### Example 2: Delta tests — entity with state map
-**File**: `crates/spectator-core/src/delta.rs:307-320`
+**File**: `crates/stage-core/src/delta.rs:307-320`
 ```rust
 fn entity(path: &str, pos: Position3, state: &[(&str, serde_json::Value)]) -> EntitySnapshot {
     EntitySnapshot {
@@ -54,7 +54,7 @@ fn entity(path: &str, pos: Position3, state: &[(&str, serde_json::Value)]) -> En
 ```
 
 ### Example 3: Cluster tests — two separate builders for entity and relative position
-**File**: `crates/spectator-core/src/cluster.rs:338-360`
+**File**: `crates/stage-core/src/cluster.rs:338-360`
 ```rust
 fn make_entity(path: &str, groups: &[&str], is_static: bool) -> RawEntityData {
     RawEntityData {
@@ -71,7 +71,7 @@ fn make_rel(dist: f64) -> RelativePosition {
 ```
 
 ### Example 4: Config tests with TOML file I/O (tempfile)
-**File**: `crates/spectator-server/src/config.rs:91-130`
+**File**: `crates/stage-server/src/config.rs:91-130`
 ```rust
 #[cfg(test)]
 mod tests {
@@ -83,7 +83,7 @@ mod tests {
     #[test]
     fn load_valid_toml() {
         let dir = TempDir::new().unwrap();
-        let path = dir.path().join("spectator.toml");
+        let path = dir.path().join("stage.toml");
         let mut f = File::create(&path).unwrap();
         writeln!(f, "[connection]\nport = 9078").unwrap();
         writeln!(f, "[tracking]\ntoken_hard_cap = 2000").unwrap();

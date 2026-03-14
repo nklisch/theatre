@@ -11,10 +11,10 @@ use crate::project::{
     write_mcp_json,
 };
 
-const SPECTATOR_PLUGIN_CFG: &str = "res://addons/spectator/plugin.cfg";
+const STAGE_PLUGIN_CFG: &str = "res://addons/stage/plugin.cfg";
 const DIRECTOR_PLUGIN_CFG: &str = "res://addons/director/plugin.cfg";
-const SPECTATOR_RUNTIME_NAME: &str = "SpectatorRuntime";
-const SPECTATOR_RUNTIME_SCRIPT: &str = "res://addons/spectator/runtime.gd";
+const STAGE_RUNTIME_NAME: &str = "StageRuntime";
+const STAGE_RUNTIME_SCRIPT: &str = "res://addons/stage/runtime.gd";
 
 #[derive(Args)]
 pub struct InitArgs {
@@ -41,19 +41,19 @@ pub fn run(args: InitArgs) -> Result<()> {
     validate_project(&args.project)?;
 
     // Step 3: Check current state
-    let spectator_exists = args.project.join("addons").join("spectator").exists();
+    let stage_exists = args.project.join("addons").join("stage").exists();
     let director_exists = args.project.join("addons").join("director").exists();
     let mcp_json_exists = args.project.join(".mcp.json").exists();
 
     // Step 4 & 5: Determine selections
-    let (do_spectator, do_director, do_mcp, port, enable_spectator, enable_director) = if args.yes {
+    let (do_stage, do_director, do_mcp, port, enable_stage, enable_director) = if args.yes {
         (true, true, true, 9077u16, true, true)
     } else {
-        gather_interactive_selections(spectator_exists, director_exists, mcp_json_exists)?
+        gather_interactive_selections(stage_exists, director_exists, mcp_json_exists)?
     };
 
     // Check if nothing was selected
-    if !do_spectator && !do_director && !do_mcp && !enable_spectator && !enable_director {
+    if !do_stage && !do_director && !do_mcp && !enable_stage && !enable_director {
         eprintln!("Nothing selected. Exiting.");
         return Ok(());
     }
@@ -61,17 +61,17 @@ pub fn run(args: InitArgs) -> Result<()> {
     eprintln!();
 
     // Step 6a: Copy addon directories
-    if do_spectator {
-        let src = theatre.addon_source().join("spectator");
-        let dst = args.project.join("addons").join("spectator");
+    if do_stage {
+        let src = theatre.addon_source().join("stage");
+        let dst = args.project.join("addons").join("stage");
 
-        if spectator_exists && !args.yes {
+        if stage_exists && !args.yes {
             // Was already prompted for overwrite in interactive mode
         }
 
         std::fs::create_dir_all(args.project.join("addons"))
             .context("Failed to create addons directory")?;
-        copy_dir_recursive(&src, &dst, &|_| false).context("Failed to copy spectator addon")?;
+        copy_dir_recursive(&src, &dst, &|_| false).context("Failed to copy stage addon")?;
 
         // Also copy GDExtension binary
         let gdext_src = theatre.gdext_binary();
@@ -82,7 +82,7 @@ pub fn run(args: InitArgs) -> Result<()> {
             .with_context(|| format!("Failed to copy GDExtension from {}", gdext_src.display()))?;
 
         eprintln!(
-            "  {} Copied addons/spectator/ (with GDExtension)",
+            "  {} Copied addons/stage/ (with GDExtension)",
             style("✓").green()
         );
     }
@@ -100,14 +100,14 @@ pub fn run(args: InitArgs) -> Result<()> {
 
     // Step 6b: Generate and write .mcp.json
     if do_mcp {
-        let spectator_bin = theatre.bin_dir.join("spectator");
+        let stage_bin = theatre.bin_dir.join("stage");
         let director_bin = theatre.bin_dir.join("director");
 
-        if !spectator_bin.exists() {
+        if !stage_bin.exists() {
             eprintln!(
-                "  {} spectator not found at {} — generating .mcp.json anyway",
+                "  {} stage not found at {} — generating .mcp.json anyway",
                 style("⚠").yellow(),
-                spectator_bin.display()
+                stage_bin.display()
             );
         }
         if !director_bin.exists() {
@@ -119,13 +119,7 @@ pub fn run(args: InitArgs) -> Result<()> {
         }
 
         let port_opt = if port == 9077 { Some(9077) } else { Some(port) };
-        let mcp = generate_mcp_json(
-            &spectator_bin,
-            &director_bin,
-            do_spectator,
-            do_director,
-            port_opt,
-        );
+        let mcp = generate_mcp_json(&stage_bin, &director_bin, do_stage, do_director, port_opt);
         let overwrite = args.yes || !mcp_json_exists;
         let written = write_mcp_json(&args.project, &mcp, overwrite)?;
         if written {
@@ -139,21 +133,14 @@ pub fn run(args: InitArgs) -> Result<()> {
     }
 
     // Step 6c: Enable plugins
-    if enable_spectator {
-        set_plugin_enabled(&args.project, SPECTATOR_PLUGIN_CFG, true)?;
-        eprintln!(
-            "  {} Enabled Spectator in project.godot",
-            style("✓").green()
-        );
-        set_autoload(
-            &args.project,
-            SPECTATOR_RUNTIME_NAME,
-            SPECTATOR_RUNTIME_SCRIPT,
-        )?;
-        eprintln!("  {} SpectatorRuntime autoload added", style("✓").green());
+    if enable_stage {
+        set_plugin_enabled(&args.project, STAGE_PLUGIN_CFG, true)?;
+        eprintln!("  {} Enabled Stage in project.godot", style("✓").green());
+        set_autoload(&args.project, STAGE_RUNTIME_NAME, STAGE_RUNTIME_SCRIPT)?;
+        eprintln!("  {} StageRuntime autoload added", style("✓").green());
     } else {
         // If not enabling, ensure it's disabled
-        remove_autoload(&args.project, SPECTATOR_RUNTIME_NAME)?;
+        remove_autoload(&args.project, STAGE_RUNTIME_NAME)?;
     }
 
     if enable_director {
@@ -168,15 +155,15 @@ pub fn run(args: InitArgs) -> Result<()> {
 }
 
 /// Run the interactive TUI and return selections.
-/// Returns (do_spectator, do_director, do_mcp, port, enable_spectator, enable_director).
+/// Returns (do_stage, do_director, do_mcp, port, enable_stage, enable_director).
 fn gather_interactive_selections(
-    spectator_exists: bool,
+    stage_exists: bool,
     director_exists: bool,
     mcp_json_exists: bool,
 ) -> Result<(bool, bool, bool, u16, bool, bool)> {
     // Addon selection
     let addon_items = vec![
-        "Spectator — spatial awareness for AI agents",
+        "Stage — spatial awareness for AI agents",
         "Director — scene and resource authoring",
     ];
     let addon_defaults = vec![true, true];
@@ -187,18 +174,18 @@ fn gather_interactive_selections(
         .interact()
         .context("Addon selection cancelled")?;
 
-    let do_spectator = addon_selections.contains(&0);
+    let do_stage = addon_selections.contains(&0);
     let do_director = addon_selections.contains(&1);
 
     // Check overwrite if addons already exist
-    if do_spectator && spectator_exists {
+    if do_stage && stage_exists {
         let overwrite = Confirm::new()
-            .with_prompt("addons/spectator/ already exists. Overwrite?")
+            .with_prompt("addons/stage/ already exists. Overwrite?")
             .default(true)
             .interact()
             .context("Overwrite prompt cancelled")?;
         if !overwrite {
-            // User declined — treat as not installing spectator
+            // User declined — treat as not installing stage
             return gather_interactive_selections(false, director_exists, mcp_json_exists)
                 .map(|(_, d, m, p, _, ed)| (false, d, m, p, false, ed));
         }
@@ -211,7 +198,7 @@ fn gather_interactive_selections(
             .interact()
             .context("Overwrite prompt cancelled")?;
         if !overwrite {
-            return gather_interactive_selections(spectator_exists, false, mcp_json_exists)
+            return gather_interactive_selections(stage_exists, false, mcp_json_exists)
                 .map(|(s, _, m, p, es, _)| (s, false, m, p, es, false));
         }
     }
@@ -232,7 +219,7 @@ fn gather_interactive_selections(
                 .context("Overwrite prompt cancelled")?;
             if !overwrite {
                 // Skip MCP generation
-                return gather_interactive_selections_no_mcp(do_spectator, do_director);
+                return gather_interactive_selections_no_mcp(do_stage, do_director);
             }
         }
 
@@ -256,8 +243,8 @@ fn gather_interactive_selections(
     // Plugin enable selection (only for selected addons)
     let mut plugin_items = vec![];
     let mut plugin_defaults = vec![];
-    if do_spectator {
-        plugin_items.push("Spectator");
+    if do_stage {
+        plugin_items.push("Stage");
         plugin_defaults.push(true);
     }
     if do_director {
@@ -265,7 +252,7 @@ fn gather_interactive_selections(
         plugin_defaults.push(true);
     }
 
-    let (enable_spectator, enable_director) = if !plugin_items.is_empty() {
+    let (enable_stage, enable_director) = if !plugin_items.is_empty() {
         let plugin_selections = MultiSelect::new()
             .with_prompt("Enable plugins in project.godot?")
             .items(&plugin_items)
@@ -273,13 +260,13 @@ fn gather_interactive_selections(
             .interact()
             .context("Plugin selection cancelled")?;
 
-        let enable_spectator = do_spectator && plugin_selections.contains(&0);
-        let enable_director = if do_spectator {
+        let enable_stage = do_stage && plugin_selections.contains(&0);
+        let enable_director = if do_stage {
             do_director && plugin_selections.contains(&1)
         } else {
             do_director && plugin_selections.contains(&0)
         };
-        (enable_spectator, enable_director)
+        (enable_stage, enable_director)
     } else {
         (false, false)
     };
@@ -297,24 +284,24 @@ fn gather_interactive_selections(
     }
 
     Ok((
-        do_spectator,
+        do_stage,
         do_director,
         do_mcp,
         port,
-        enable_spectator,
+        enable_stage,
         enable_director,
     ))
 }
 
 fn gather_interactive_selections_no_mcp(
-    do_spectator: bool,
+    do_stage: bool,
     do_director: bool,
 ) -> Result<(bool, bool, bool, u16, bool, bool)> {
     // Plugin enable selection
     let mut plugin_items = vec![];
     let mut plugin_defaults = vec![];
-    if do_spectator {
-        plugin_items.push("Spectator");
+    if do_stage {
+        plugin_items.push("Stage");
         plugin_defaults.push(true);
     }
     if do_director {
@@ -322,7 +309,7 @@ fn gather_interactive_selections_no_mcp(
         plugin_defaults.push(true);
     }
 
-    let (enable_spectator, enable_director) = if !plugin_items.is_empty() {
+    let (enable_stage, enable_director) = if !plugin_items.is_empty() {
         let plugin_selections = MultiSelect::new()
             .with_prompt("Enable plugins in project.godot?")
             .items(&plugin_items)
@@ -330,23 +317,23 @@ fn gather_interactive_selections_no_mcp(
             .interact()
             .context("Plugin selection cancelled")?;
 
-        let enable_spectator = do_spectator && plugin_selections.contains(&0);
-        let enable_director = if do_spectator {
+        let enable_stage = do_stage && plugin_selections.contains(&0);
+        let enable_director = if do_stage {
             do_director && plugin_selections.contains(&1)
         } else {
             do_director && plugin_selections.contains(&0)
         };
-        (enable_spectator, enable_director)
+        (enable_stage, enable_director)
     } else {
         (false, false)
     };
 
     Ok((
-        do_spectator,
+        do_stage,
         do_director,
         false,
         9077,
-        enable_spectator,
+        enable_stage,
         enable_director,
     ))
 }

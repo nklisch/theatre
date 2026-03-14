@@ -21,7 +21,7 @@ silently dropped — a dead TCP writer must never crash a handler.
 ## Examples
 
 ### Example 1: spatial_snapshot (standard case)
-**File**: `crates/spectator-server/src/mcp/mod.rs:154`
+**File**: `crates/stage-server/src/mcp/mod.rs:154`
 ```rust
 pub async fn spatial_snapshot(
     &self,
@@ -38,7 +38,7 @@ pub async fn spatial_snapshot(
 ```
 
 ### Example 2: spatial_inspect (same shape)
-**File**: `crates/spectator-server/src/mcp/mod.rs:330`
+**File**: `crates/stage-server/src/mcp/mod.rs:330`
 ```rust
 pub async fn spatial_inspect(
     &self,
@@ -55,7 +55,7 @@ pub async fn spatial_inspect(
 ```
 
 ### Example 3: spatial_watch (metadata variant)
-**File**: `crates/spectator-server/src/mcp/mod.rs` (watch handler)
+**File**: `crates/stage-server/src/mcp/mod.rs` (watch handler)
 ```rust
 let summary = crate::activity::watch_summary(&params);
 let result = watch::handle_spatial_watch(params, &self.state).await;
@@ -84,11 +84,11 @@ Each tool has a dedicated summary function in `activity.rs`:
 | spatial_config | `config_summary(&params)` | `"config"` |
 | clips | `clips_summary(&params)` | `"clips"` |
 
-**File**: `crates/spectator-server/src/activity.rs`
+**File**: `crates/stage-server/src/activity.rs`
 
 ## log_activity implementation
 
-**File**: `crates/spectator-server/src/server.rs:25`
+**File**: `crates/stage-server/src/server.rs:25`
 ```rust
 pub(crate) async fn log_activity(&self, entry_type: &str, summary: &str, tool: &str) {
     self.log_activity_with_meta(entry_type, summary, tool, None).await;
@@ -106,7 +106,7 @@ pub(crate) async fn log_activity_with_meta(..., meta: Option<serde_json::Value>)
 
 ## When to Use
 
-- Every MCP tool handler method in `#[tool_router] impl SpectatorServer`
+- Every MCP tool handler method in `#[tool_router] impl StageServer`
 - Add a new `*_summary()` fn to `activity.rs` for each new tool
 
 ## When NOT to Use

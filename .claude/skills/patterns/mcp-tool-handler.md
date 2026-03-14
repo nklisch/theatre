@@ -1,6 +1,6 @@
 # Pattern: MCP Tool Handler
 
-All MCP tools follow the same structure: `#[tool_router]` impl block on `SpectatorServer`, individual `async fn` methods with `#[tool]`, typed parameter extraction via `Parameters<T>`, `query_addon` for addon calls, and `log_activity` at the end.
+All MCP tools follow the same structure: `#[tool_router]` impl block on `StageServer`, individual `async fn` methods with `#[tool]`, typed parameter extraction via `Parameters<T>`, `query_addon` for addon calls, and `log_activity` at the end.
 
 ## Rationale
 The rmcp `#[tool_router]` macro generates the dispatch table. `Parameters<T>` deserialization handles validation. All responses are `Result<String, McpError>` — MCP SDK requirement. Activity logging at the end of every handler provides an audit trail.
@@ -8,7 +8,7 @@ The rmcp `#[tool_router]` macro generates the dispatch table. `Parameters<T>` de
 ## Examples
 
 ### Example 1: Minimal handler structure (spatial_delta)
-**File**: `crates/spectator-server/src/mcp/mod.rs:405-412`
+**File**: `crates/stage-server/src/mcp/mod.rs:405-412`
 ```rust
 #[tool(description = "See what changed since the last query...")]
 pub async fn spatial_delta(
@@ -22,7 +22,7 @@ pub async fn spatial_delta(
 ```
 
 ### Example 2: Handler with query_addon call and response building (spatial_inspect)
-**File**: `crates/spectator-server/src/mcp/mod.rs:226-262`
+**File**: `crates/stage-server/src/mcp/mod.rs:226-262`
 ```rust
 pub async fn spatial_inspect(
     &self,
@@ -46,7 +46,7 @@ pub async fn spatial_inspect(
 ```
 
 ### Example 3: Shared helpers used by all handlers
-**File**: `crates/spectator-server/src/mcp/mod.rs:32-76`
+**File**: `crates/stage-server/src/mcp/mod.rs:32-76`
 ```rust
 fn serialize_params<T: Serialize>(params: &T) -> Result<serde_json::Value, McpError> {
     serde_json::to_value(params).map_err(|e| {
@@ -62,7 +62,7 @@ fn deserialize_response<T: for<'de> Deserialize<'de>>(data: serde_json::Value) -
 
 fn finalize_response(response: &mut serde_json::Value, budget_limit: u32, hard_cap: u32) -> Result<String, McpError> {
     let json_bytes = serde_json::to_vec(response).unwrap_or_default().len();
-    let used = spectator_core::budget::estimate_tokens(json_bytes);
+    let used = stage_core::budget::estimate_tokens(json_bytes);
     inject_budget(response, used, budget_limit, hard_cap);
     serialize_response(response)
 }

@@ -6,7 +6,7 @@ Every Director MCP tool handler is a one-liner using the `director_tool!` macro,
 
 Director has 38+ tools that all follow the same dispatch path: serialize params to JSON, route through the backend (editor/daemon/one-shot), unwrap the result, serialize to string. The macro collapses this to a single call per tool, keeping boilerplate in one place.
 
-Unlike Spectator tools, Director tools:
+Unlike Stage tools, Director tools:
 - Have no activity logging (no addon-side instrumentation)
 - Have no budget/token injection (`finalize_response` not used)
 - Always include `project_path: String` as the first field in every params struct
@@ -60,7 +60,7 @@ pub struct NodeAddParams {
 - The operation name string (`"op_name"`) must match the GDScript `match` arm in `operations.gd`
 
 ## When NOT to Use
-- Spectator tools — they use `query_addon` + `finalize_response` + `log_activity` instead
+- Stage tools — they use `query_addon` + `finalize_response` + `log_activity` instead
 - Any tool that needs custom response transformation before returning — extract the logic into a helper and call `director_tool!` inside it, or skip the macro
 
 ## Common Violations

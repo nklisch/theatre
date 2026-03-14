@@ -8,7 +8,7 @@ Keeps library crates dependency-free from MCP concerns. Server startup uses `any
 ## Examples
 
 ### Example 1: Library layer — custom error type with Display + Error impl
-**File**: `crates/spectator-protocol/src/codec.rs:48-77`
+**File**: `crates/stage-protocol/src/codec.rs:48-77`
 ```rust
 #[derive(Debug)]
 pub enum CodecError {
@@ -31,7 +31,7 @@ impl std::error::Error for CodecError {
 ```
 
 ### Example 2: Background task layer — anyhow::Result for ergonomic propagation
-**File**: `crates/spectator-server/src/tcp.rs:123` and `crates/spectator-server/src/main.rs:19`
+**File**: `crates/stage-server/src/tcp.rs:123` and `crates/stage-server/src/main.rs:19`
 ```rust
 // main.rs
 #[tokio::main]
@@ -47,7 +47,7 @@ async fn handle_connection(stream: TcpStream, state: Arc<Mutex<SessionState>>) -
 ```
 
 ### Example 3: MCP handler layer — McpError with inline construction
-**File**: `crates/spectator-server/src/mcp/mod.rs:32-44`
+**File**: `crates/stage-server/src/mcp/mod.rs:32-44`
 ```rust
 fn serialize_params<T: Serialize>(params: &T) -> Result<serde_json::Value, McpError> {
     serde_json::to_value(params).map_err(|e| {
@@ -63,7 +63,7 @@ fn deserialize_response<T: for<'de> Deserialize<'de>>(data: serde_json::Value) -
 ```
 
 ### Example 4: Handler-layer parameter validation
-**File**: `crates/spectator-server/src/mcp/query.rs` — validation returns `Result<QueryOrigin, McpError>` with `McpError::invalid_params(msg, None)` for user input errors.
+**File**: `crates/stage-server/src/mcp/query.rs` — validation returns `Result<QueryOrigin, McpError>` with `McpError::invalid_params(msg, None)` for user input errors.
 
 ## When to Use
 - New library crate error type: implement `Display` + `std::error::Error` manually (use `thiserror` is acceptable too)

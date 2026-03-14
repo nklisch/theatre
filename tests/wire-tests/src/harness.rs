@@ -1,4 +1,4 @@
-use spectator_protocol::{
+use stage_protocol::{
     codec,
     handshake::{Handshake, HandshakeAck, PROTOCOL_VERSION},
     messages::Message,
@@ -58,7 +58,7 @@ impl GodotFixture {
 
         // Send HandshakeAck to complete the connection
         let ack = Message::HandshakeAck(HandshakeAck {
-            spectator_version: env!("CARGO_PKG_VERSION").to_string(),
+            stage_version: env!("CARGO_PKG_VERSION").to_string(),
             protocol_version: PROTOCOL_VERSION,
             session_id: "wire-test-session".into(),
         });

@@ -39,7 +39,7 @@ fn enable_on_valid_project() {
     assert!(output.status.success());
 
     let content = std::fs::read_to_string(dir.path().join("project.godot")).unwrap();
-    assert!(content.contains("spectator/plugin.cfg"));
+    assert!(content.contains("stage/plugin.cfg"));
     assert!(content.contains("director/plugin.cfg"));
 }
 

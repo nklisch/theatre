@@ -3,9 +3,9 @@
   "description": "Agent skills for the Theatre Godot AI agent toolkit",
   "skills": [
     {
-      "name": "spectator",
-      "description": "Use Spectator to spatially debug a running Godot game via MCP tools or CLI. Invoke when the user asks about game state, node positions, spatial bugs, physics, pathfinding, signals, or anything requiring understanding what's happening in the running game world.",
-      "path": ".agents/skills/spectator",
+      "name": "stage",
+      "description": "Use Stage to spatially debug a running Godot game via MCP tools or CLI. Invoke when the user asks about game state, node positions, spatial bugs, physics, pathfinding, signals, or anything requiring understanding what's happening in the running game world.",
+      "path": ".agents/skills/stage",
       "tags": ["godot", "mcp", "cli", "spatial", "debugging", "game-development"]
     },
     {

@@ -1,0 +1,49 @@
+[package]
+name = "stage-server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "stage"
+path = "src/main.rs"
+
+[dependencies]
+stage-protocol = { workspace = true, features = ["async", "mcp", "schema"] }
+stage-core = { workspace = true, features = ["schema"] }
+rmcp = { version = "0.16", features = ["server", "transport-io", "macros"] }
+tokio.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+schemars = "1"
+tracing.workspace = true
+tracing-subscriber.workspace = true
+anyhow = "1"
+toml = "0.8"
+uuid = { version = "1", features = ["v4"] }
+rusqlite.workspace = true
+rmp-serde.workspace = true
+base64 = "0.22"
+
+[dev-dependencies]
+tempfile = "3"
+
+[[test]]
+name = "tcp_mock"
+path = "tests/tcp_mock.rs"
+
+[[test]]
+name = "scenarios"
+path = "tests/scenarios.rs"
+
+[[test]]
+name = "e2e_journeys"
+path = "tests/e2e_journeys.rs"
+
+[[test]]
+name = "cli_binary"
+path = "tests/cli_binary.rs"
+
+[[test]]
+name = "cli_journeys"
+path = "tests/cli_journeys.rs"

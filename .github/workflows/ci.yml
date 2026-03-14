@@ -66,13 +66,13 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Build GDExtension (debug)
-        run: cargo build -p spectator-godot
+        run: cargo build -p stage-godot
 
       - name: Deploy GDExtension to test project
         run: |
-          mkdir -p tests/godot-project/addons/spectator/bin/linux
-          cp target/debug/libspectator_godot.so \
-            tests/godot-project/addons/spectator/bin/linux/
+          mkdir -p tests/godot-project/addons/stage/bin/linux
+          cp target/debug/libstage_godot.so \
+            tests/godot-project/addons/stage/bin/linux/
 
       - name: Download Godot ${{ env.GODOT_VERSION }} headless
         run: |
@@ -89,7 +89,7 @@ jobs:
 
       - name: Run E2E journey tests
         run: |
-          cargo test -p spectator-server --test e2e_journeys \
+          cargo test -p stage-server --test e2e_journeys \
             -- --include-ignored --nocapture
 
   build:
@@ -113,14 +113,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-release-
 
-      - name: Build Spectator server (release)
-        run: cargo build --release -p spectator-server
+      - name: Build Stage server (release)
+        run: cargo build --release -p stage-server
 
       - name: Build Director server (release)
         run: cargo build --release -p director
 
-      - name: Build GDExtension (release)
-        run: cargo build --release -p spectator-godot
+      - name: Build Stage GDExtension (release)
+        run: cargo build --release -p stage-godot
 
   cross-build:
     name: Cross-build ${{ matrix.target }}
@@ -156,4 +156,4 @@ jobs:
       - name: Build (release)
         run: >
           cargo build --release --target ${{ matrix.target }}
-          -p spectator-server -p director -p theatre-cli -p spectator-godot
+          -p stage-server -p director -p theatre-cli -p stage-godot

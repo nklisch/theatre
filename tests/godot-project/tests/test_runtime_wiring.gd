@@ -15,12 +15,12 @@ func setup(root: Window) -> void:
 
 
 func test_runtime_loads() -> String:
-	var script: GDScript = load("res://addons/spectator/runtime.gd")
+	var script: GDScript = load("res://addons/stage/runtime.gd")
 	return Assert.not_null(script, "runtime.gd loads")
 
 
 func test_runtime_creates_children() -> String:
-	var rt = load("res://addons/spectator/runtime.gd").new()
+	var rt = load("res://addons/stage/runtime.gd").new()
 	_root.add_child(rt)
 	await _root.get_tree().process_frame
 
@@ -40,9 +40,9 @@ func test_runtime_creates_children() -> String:
 func test_runtime_server_is_listening() -> String:
 	## Verify runtime creates a tcp_server and attempts to start it.
 	## We can't assert "waiting" status because the test project's autoload
-	## already holds port 9077. Instead we test SpectatorTCPServer directly
+	## already holds port 9077. Instead we test StageTCPServer directly
 	## with port 0 (ephemeral) to confirm the "waiting" path works.
-	var server := SpectatorTCPServer.new()
+	var server := StageTCPServer.new()
 	_root.add_child(server)
 	await _root.get_tree().process_frame
 
@@ -52,14 +52,14 @@ func test_runtime_server_is_listening() -> String:
 	server.queue_free()
 
 	return Assert.eq(status, "waiting",
-		"SpectatorTCPServer should be 'waiting' after start(0) with a free port")
+		"StageTCPServer should be 'waiting' after start(0) with a free port")
 
 
 func test_runtime_has_no_static_instance_var() -> String:
 	## Regression: static var instance was removed in the EditorDebuggerPlugin
 	## refactor. The dock no longer reads it — accessing it should return null.
 	## This guards against accidentally re-adding it.
-	var script: GDScript = load("res://addons/spectator/runtime.gd")
+	var script: GDScript = load("res://addons/stage/runtime.gd")
 	var inst = script.get("instance")
 	# Should be null because the property doesn't exist on the script object.
 	return Assert.is_null(inst, "runtime.gd must not have static var instance (removed in EditorDebuggerPlugin refactor)")
@@ -68,7 +68,7 @@ func test_runtime_has_no_static_instance_var() -> String:
 func test_runtime_process_mode_is_always() -> String:
 	## Verify runtime sets PROCESS_MODE_ALWAYS so TCP polling and dashcam
 	## continue even when the scene tree is paused via F11 / advance_frames.
-	var rt = load("res://addons/spectator/runtime.gd").new()
+	var rt = load("res://addons/stage/runtime.gd").new()
 	_root.add_child(rt)
 	await _root.get_tree().process_frame
 
@@ -83,7 +83,7 @@ func test_runtime_polls_during_pause() -> String:
 	## When the tree is paused, tcp_server.poll() must still be called because
 	## runtime sets PROCESS_MODE_ALWAYS. We test this with a direct server on an
 	## ephemeral port (bypasses the runtime's port-9077 conflict in test env).
-	var server := SpectatorTCPServer.new()
+	var server := StageTCPServer.new()
 	server.set_process_mode(Node.PROCESS_MODE_ALWAYS)
 	_root.add_child(server)
 	await _root.get_tree().process_frame
@@ -109,7 +109,7 @@ func test_runtime_polls_during_pause() -> String:
 
 
 func test_runtime_stops_server_on_exit() -> String:
-	var rt = load("res://addons/spectator/runtime.gd").new()
+	var rt = load("res://addons/stage/runtime.gd").new()
 	_root.add_child(rt)
 	await _root.get_tree().process_frame
 
@@ -128,7 +128,7 @@ func test_runtime_stops_server_on_exit() -> String:
 func test_runtime_has_push_status_method() -> String:
 	## Regression: runtime must have _push_status_to_editor for EditorDebuggerPlugin
 	## integration. If this method is missing, the dock will never update.
-	var rt = load("res://addons/spectator/runtime.gd").new()
+	var rt = load("res://addons/stage/runtime.gd").new()
 	_root.add_child(rt)
 	await _root.get_tree().process_frame
 
@@ -142,7 +142,7 @@ func test_runtime_has_push_status_method() -> String:
 func test_runtime_push_status_does_not_crash_without_debugger() -> String:
 	## When EngineDebugger.is_active() is false (headless, standalone),
 	## _push_status_to_editor must be a safe no-op.
-	var rt = load("res://addons/spectator/runtime.gd").new()
+	var rt = load("res://addons/stage/runtime.gd").new()
 	_root.add_child(rt)
 	await _root.get_tree().process_frame
 
@@ -157,7 +157,7 @@ func test_runtime_push_status_does_not_crash_without_debugger() -> String:
 func test_runtime_has_debugger_command_handler() -> String:
 	## Regression: runtime must register _on_debugger_command so the dock can
 	## trigger marker/pause actions in the game.
-	var rt = load("res://addons/spectator/runtime.gd").new()
+	var rt = load("res://addons/stage/runtime.gd").new()
 	_root.add_child(rt)
 	await _root.get_tree().process_frame
 
@@ -170,7 +170,7 @@ func test_runtime_has_debugger_command_handler() -> String:
 
 func test_debugger_command_add_marker() -> String:
 	## The "add_marker" debugger command must attempt to flush the dashcam clip.
-	var rt = load("res://addons/spectator/runtime.gd").new()
+	var rt = load("res://addons/stage/runtime.gd").new()
 	_root.add_child(rt)
 	await _root.get_tree().process_frame
 
@@ -183,7 +183,7 @@ func test_debugger_command_add_marker() -> String:
 	var signal_result := {"fired": false}
 	recorder.marker_added.connect(func(_f, _s, _l): signal_result["fired"] = true)
 
-	rt._on_debugger_command("spectator:command", ["add_marker"])
+	rt._on_debugger_command("stage:command", ["add_marker"])
 	await _root.get_tree().process_frame
 
 	rt.queue_free()
@@ -195,12 +195,12 @@ func test_debugger_command_add_marker() -> String:
 
 func test_debugger_command_unknown_is_no_op() -> String:
 	## Unknown commands must not crash the runtime.
-	var rt = load("res://addons/spectator/runtime.gd").new()
+	var rt = load("res://addons/stage/runtime.gd").new()
 	_root.add_child(rt)
 	await _root.get_tree().process_frame
 
 	# Should return false and not crash
-	var _result: bool = rt._on_debugger_command("spectator:command", ["unknown_command_xyz"])
+	var _result: bool = rt._on_debugger_command("stage:command", ["unknown_command_xyz"])
 	await _root.get_tree().process_frame
 
 	rt.queue_free()

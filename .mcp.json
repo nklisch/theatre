@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "spectator": {
+    "stage": {
       "type": "stdio",
-      "command": "./target/release/spectator-server",
+      "command": "./target/release/stage",
       "env": {
         "THEATRE_PORT": "9077"
       }

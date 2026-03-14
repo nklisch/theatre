@@ -4,7 +4,7 @@ use serde_json::Value;
 /// One tool's complete documentation metadata.
 #[derive(Serialize)]
 struct ToolDoc {
-    /// "spectator" or "director"
+    /// "stage" or "director"
     server: &'static str,
     /// MCP tool name (e.g. "spatial_snapshot", "scene_create")
     name: String,
@@ -18,14 +18,14 @@ struct ToolDoc {
 }
 
 fn main() {
-    let spectator_router = spectator_server::server::SpectatorServer::router_with_schemas();
+    let stage_router = stage_server::server::StageServer::router_with_schemas();
     let director_router = director::server::DirectorServer::new().tool_router;
 
     let mut tools: Vec<ToolDoc> = Vec::new();
 
-    for tool in spectator_router.list_all() {
+    for tool in stage_router.list_all() {
         tools.push(ToolDoc {
-            server: "spectator",
+            server: "stage",
             name: tool.name.to_string(),
             description: tool.description.as_deref().unwrap_or_default().to_string(),
             input_schema: tool.schema_as_json_value(),

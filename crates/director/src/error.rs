@@ -11,4 +11,4 @@ impl From<ResolveError> for McpError {
     }
 }
 
-spectator_protocol::impl_mcp_internal!(DaemonError, EditorError, OperationError);
+stage_protocol::impl_mcp_internal!(DaemonError, EditorError, OperationError);

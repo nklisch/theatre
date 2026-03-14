@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use spectator_protocol::codec::async_io;
+use stage_protocol::codec::async_io;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::process::{Child, ChildStdout, Command};
@@ -217,8 +217,8 @@ pub fn resolve_daemon_port() -> u16 {
 }
 
 /// Map a `CodecError` to `DaemonError`.
-fn codec_error_to_daemon(e: spectator_protocol::codec::CodecError) -> DaemonError {
-    use spectator_protocol::codec::CodecError;
+fn codec_error_to_daemon(e: stage_protocol::codec::CodecError) -> DaemonError {
+    use stage_protocol::codec::CodecError;
     match e {
         CodecError::Io(io) => DaemonError::IoError(io),
         CodecError::Serialize(src) => DaemonError::ParseFailed {

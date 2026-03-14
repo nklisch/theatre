@@ -25,7 +25,7 @@ in one step.
 ## Examples
 
 ### Example 1: ClipSession definition
-**File**: `crates/spectator-server/src/clip_analysis.rs:161`
+**File**: `crates/stage-server/src/clip_analysis.rs:161`
 ```rust
 pub struct ClipSession {
     pub db: Connection,
@@ -66,7 +66,7 @@ impl ClipSession {
 ```
 
 ### Example 2: snapshot_at handler using ClipSession
-**File**: `crates/spectator-server/src/mcp/clips.rs`
+**File**: `crates/stage-server/src/mcp/clips.rs`
 ```rust
 "snapshot_at" => {
     let session = ClipSession::open(&self.state, params.clip_id.as_deref()).await?;
@@ -81,7 +81,7 @@ impl ClipSession {
 ```
 
 ### Example 3: trajectory handler using ClipSession
-**File**: `crates/spectator-server/src/mcp/clips.rs`
+**File**: `crates/stage-server/src/mcp/clips.rs`
 ```rust
 "trajectory" => {
     let session = ClipSession::open(&self.state, params.clip_id.as_deref()).await?;
@@ -116,7 +116,7 @@ fn resolve_frame_range(
 
 `resolve_clip_storage_path` queries the addon once, then caches in `SessionState.clip_storage_path`.
 
-**File**: `crates/spectator-server/src/clip_analysis.rs:20`
+**File**: `crates/stage-server/src/clip_analysis.rs:20`
 
 ## When to Use
 

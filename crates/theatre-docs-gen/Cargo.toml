@@ -9,7 +9,7 @@ name = "theatre-docs-gen"
 path = "src/main.rs"
 
 [dependencies]
-spectator-server = { path = "../spectator-server", default-features = false }
+stage-server = { path = "../stage-server", default-features = false }
 director = { path = "../director", default-features = false }
 serde = { workspace = true }
 serde_json = { workspace = true }

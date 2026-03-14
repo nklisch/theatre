@@ -159,7 +159,7 @@ fn pause_and_advance_frames() {
     assert_eq!(result["result"], "ok");
 
     let new_frame = result["details"]["new_frame"].as_u64().unwrap();
-    // Accept frame1+5 or frame1+6: the SpectatorTCPServer runs PROCESS_MODE_ALWAYS
+    // Accept frame1+5 or frame1+6: the StageTCPServer runs PROCESS_MODE_ALWAYS
     // so physics frames can increment while the tree is paused, making the
     // exact count non-deterministic by ±1.
     assert!(

@@ -1,19 +1,19 @@
 [package]
-name = "spectator-wire-tests"
+name = "stage-wire-tests"
 version = "0.0.0"
 edition = "2024"
 publish = false
 
 # These tests require a Godot binary (GODOT_BIN env var or `godot` in PATH)
-# and the GDExtension built (`cargo build -p spectator-godot`).
-# Run with: cargo test -p spectator-wire-tests
-# Skip in CI without Godot: cargo test -p spectator-wire-tests -- --ignored
+# and the GDExtension built (`cargo build -p stage-godot`).
+# Run with: cargo test -p stage-wire-tests
+# Skip in CI without Godot: cargo test -p stage-wire-tests -- --ignored
 
 [lib]
-name = "spectator_wire_tests"
+name = "stage_wire_tests"
 
 [dependencies]
-spectator-protocol = { path = "../../crates/spectator-protocol" }
+stage-protocol = { path = "../../crates/stage-protocol" }
 serde_json = "1"
 anyhow = "1"
 portpicker = "0.1"

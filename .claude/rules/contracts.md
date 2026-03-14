@@ -67,8 +67,8 @@ position          ✓    local_origin     ✗   (Godot: position)
 - Godot property → use exact name: `velocity`, `scale`, `visible`, `collision_layer`
 - Godot `get_X()` method → drop `get_`: `get_class()` → `class`, `get_path()` → `path`
 - Godot `is_X()` method → drop `is_`: `is_on_floor()` → `on_floor`
-- `rotation_degrees` → `rotation_deg` (Spectator abbreviation convention — the only allowed abbreviation)
-- Spectator-computed fields (no Godot equivalent) → descriptive snake_case, no abbreviations:
+- `rotation_degrees` → `rotation_deg` (Stage abbreviation convention — the only allowed abbreviation)
+- Stage-computed fields (no Godot equivalent) → descriptive snake_case, no abbreviations:
   `relative`, `bearing`, `bearing_deg`, `distance`, `occluded`, `timestamp_ms`
 
 ## Echo Fields Must Match Input Field Names

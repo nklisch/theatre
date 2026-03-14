@@ -4,12 +4,12 @@ Optional parameters with non-`Default` defaults use `#[serde(default = "fn_name"
 
 ## Rationale
 
-Rust's `Default` trait returns `0`, `false`, `""`, or `None` — wrong for most MCP parameters. The serde `default = "path"` attribute allows arbitrary default values without wrapping fields in `Option`. Spectator groups shared defaults in `defaults.rs`; Director and spectator-core define defaults inline near the struct.
+Rust's `Default` trait returns `0`, `false`, `""`, or `None` — wrong for most MCP parameters. The serde `default = "path"` attribute allows arbitrary default values without wrapping fields in `Option`. Stage groups shared defaults in `defaults.rs`; Director and stage-core define defaults inline near the struct.
 
 ## Examples
 
-### Example 1: Shared defaults module (Spectator)
-**File**: `crates/spectator-server/src/mcp/defaults.rs`
+### Example 1: Shared defaults module (Stage)
+**File**: `crates/stage-server/src/mcp/defaults.rs`
 ```rust
 pub fn default_perspective() -> String { "camera".to_string() }
 pub fn default_radius() -> f64 { 50.0 }
@@ -20,7 +20,7 @@ pub fn default_query_radius() -> f64 { 20.0 }
 
 Used by parameter structs in the same crate:
 ```rust
-// crates/spectator-server/src/mcp/snapshot.rs:21,34,38
+// crates/stage-server/src/mcp/snapshot.rs:21,34,38
 #[serde(default = "default_perspective")]
 pub perspective: String,
 #[serde(default = "default_radius")]
@@ -39,8 +39,8 @@ pub parent_path: String,
 fn default_root() -> String { ".".to_string() }
 ```
 
-### Example 3: Config defaults (spectator-core)
-**File**: `crates/spectator-core/src/config.rs:45-80`
+### Example 3: Config defaults (stage-core)
+**File**: `crates/stage-core/src/config.rs:45-80`
 ```rust
 #[serde(default = "default_poll_interval")]
 pub poll_interval: u64,

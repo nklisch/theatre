@@ -8,7 +8,7 @@ MCP handlers and the TCP read loop run on different tokio tasks. `Arc<Mutex<>>` 
 ## Examples
 
 ### Example 1: SessionState definition — all shared fields in one struct
-**File**: `crates/spectator-server/src/tcp.rs:40-55`
+**File**: `crates/stage-server/src/tcp.rs:40-55`
 ```rust
 pub struct SessionState {
     pub tcp_writer: Option<TcpClientHandle>,
@@ -22,7 +22,7 @@ pub struct SessionState {
 ```
 
 ### Example 2: Background task spawned from main with Arc clone
-**File**: `crates/spectator-server/src/main.rs:53-57`
+**File**: `crates/stage-server/src/main.rs:53-57`
 ```rust
 let tcp_state = Arc::clone(&state);
 tokio::spawn(async move {
@@ -31,7 +31,7 @@ tokio::spawn(async move {
 ```
 
 ### Example 3: Fine-grained lock — acquire, mutate, release, then await
-**File**: `crates/spectator-server/src/tcp.rs` (query_addon pattern)
+**File**: `crates/stage-server/src/tcp.rs` (query_addon pattern)
 ```rust
 // Register oneshot sender while holding lock
 let rx = {
@@ -47,7 +47,7 @@ rx.await.map_err(|_| McpError::internal_error("disconnected", None))
 ```
 
 ### Example 4: Lock for read-only config snapshot
-**File**: `crates/spectator-server/src/tcp.rs` — `get_config` clones config while locked:
+**File**: `crates/stage-server/src/tcp.rs` — `get_config` clones config while locked:
 ```rust
 pub async fn get_config(state: &Arc<Mutex<SessionState>>) -> SessionConfig {
     state.lock().await.config.clone()

@@ -10,8 +10,8 @@ config/features=PackedStringArray("4.3")
 
 [autoload]
 
-SpectatorRuntime="*res://addons/spectator/runtime.gd"
+StageRuntime="*res://addons/stage/runtime.gd"
 
 [editor_plugins]
 
-enabled=PackedStringArray("res://addons/spectator/plugin.cfg")
+enabled=PackedStringArray("res://addons/stage/plugin.cfg")

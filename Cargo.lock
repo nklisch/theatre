@@ -274,7 +274,7 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
- "spectator-protocol",
+ "stage-protocol",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -291,7 +291,7 @@ dependencies = [
  "director",
  "serde",
  "serde_json",
- "spectator-protocol",
+ "stage-protocol",
 ]
 
 [[package]]
@@ -1245,7 +1245,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "spectator-core"
+name = "stable_deref_trait"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
+
+[[package]]
+name = "stage-core"
 version = "0.1.0"
 dependencies = [
  "rstar",
@@ -1255,7 +1261,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "spectator-godot"
+name = "stage-godot"
 version = "0.1.0"
 dependencies = [
  "godot",
@@ -1263,12 +1269,12 @@ dependencies = [
  "rusqlite",
  "serde",
  "serde_json",
- "spectator-protocol",
+ "stage-protocol",
  "tracing",
 ]
 
 [[package]]
-name = "spectator-protocol"
+name = "stage-protocol"
 version = "0.1.0"
 dependencies = [
  "rmcp",
@@ -1280,7 +1286,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "spectator-server"
+name = "stage-server"
 version = "0.1.0"
 dependencies = [
  "anyhow",
@@ -1291,8 +1297,8 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
- "spectator-core",
- "spectator-protocol",
+ "stage-core",
+ "stage-protocol",
  "tempfile",
  "tokio",
  "toml",
@@ -1302,20 +1308,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "spectator-wire-tests"
+name = "stage-wire-tests"
 version = "0.0.0"
 dependencies = [
  "anyhow",
  "portpicker",
  "serde_json",
- "spectator-protocol",
+ "stage-protocol",
 ]
-
-[[package]]
-name = "stable_deref_trait"
-version = "1.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 
 [[package]]
 name = "strsim"
@@ -1367,7 +1367,7 @@ dependencies = [
  "director",
  "serde",
  "serde_json",
- "spectator-server",
+ "stage-server",
 ]
 
 [[package]]

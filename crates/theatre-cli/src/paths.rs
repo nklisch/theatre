@@ -31,10 +31,10 @@ impl TheatrePaths {
     }
 
     /// Path to the GDExtension binary within the share dir.
-    /// `~/.local/share/theatre/addons/spectator/bin/<platform>/<filename>`
+    /// `~/.local/share/theatre/addons/stage/bin/<platform>/<filename>`
     pub fn gdext_binary(&self) -> PathBuf {
         self.addon_source()
-            .join("spectator")
+            .join("stage")
             .join("bin")
             .join(platform_dir())
             .join(gdext_filename())
@@ -50,12 +50,12 @@ impl TheatrePaths {
                 self.share_dir.display()
             );
         }
-        let spectator_cfg = addon_dir.join("spectator").join("plugin.cfg");
-        if !spectator_cfg.exists() {
+        let stage_cfg = addon_dir.join("stage").join("plugin.cfg");
+        if !stage_cfg.exists() {
             bail!(
                 "Theatre is not installed. Expected plugin.cfg at: {}\n\
                 Run `theatre install` first.",
-                spectator_cfg.display()
+                stage_cfg.display()
             );
         }
         Ok(())
@@ -154,19 +154,19 @@ fn walk_up_for_workspace(start: &Path) -> Option<PathBuf> {
 pub fn gdext_filename() -> &'static str {
     #[cfg(target_os = "linux")]
     {
-        "libspectator_godot.so"
+        "libstage_godot.so"
     }
     #[cfg(target_os = "macos")]
     {
-        "libspectator_godot.dylib"
+        "libstage_godot.dylib"
     }
     #[cfg(target_os = "windows")]
     {
-        "spectator_godot.dll"
+        "stage_godot.dll"
     }
 }
 
-/// Platform-specific subdirectory name under addons/spectator/bin/.
+/// Platform-specific subdirectory name under addons/stage/bin/.
 pub fn platform_dir() -> &'static str {
     #[cfg(target_os = "linux")]
     {
@@ -279,11 +279,11 @@ mod tests {
     fn test_gdext_filename() {
         let name = gdext_filename();
         #[cfg(target_os = "linux")]
-        assert_eq!(name, "libspectator_godot.so");
+        assert_eq!(name, "libstage_godot.so");
         #[cfg(target_os = "macos")]
-        assert_eq!(name, "libspectator_godot.dylib");
+        assert_eq!(name, "libstage_godot.dylib");
         #[cfg(target_os = "windows")]
-        assert_eq!(name, "spectator_godot.dll");
+        assert_eq!(name, "stage_godot.dll");
     }
 
     #[test]

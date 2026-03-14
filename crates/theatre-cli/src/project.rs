@@ -34,14 +34,14 @@ fn write_project_godot(project: &Path, content: &str) -> Result<()> {
 }
 
 /// Check which Theatre plugins are currently enabled in project.godot.
-/// Returns (spectator_enabled, director_enabled).
+/// Returns (stage_enabled, director_enabled).
 #[allow(dead_code)]
 pub fn check_plugins_enabled(project: &Path) -> Result<(bool, bool)> {
     let content = read_project_godot(project)?;
     let array = find_enabled_array(&content);
-    let spectator = array.contains("addons/spectator/plugin.cfg");
+    let stage = array.contains("addons/stage/plugin.cfg");
     let director = array.contains("addons/director/plugin.cfg");
-    Ok((spectator, director))
+    Ok((stage, director))
 }
 
 /// Extract the PackedStringArray content from [editor_plugins] section.
@@ -82,7 +82,7 @@ fn find_in_section(content: &str, section_name: &str, key: &str) -> Option<Strin
 /// `enabled=PackedStringArray(...)` value. Creates the section if missing.
 ///
 /// `plugin_cfg_path` is the res:// path, e.g.
-/// `"res://addons/spectator/plugin.cfg"`.
+/// `"res://addons/stage/plugin.cfg"`.
 pub fn set_plugin_enabled(project: &Path, plugin_cfg_path: &str, enabled: bool) -> Result<()> {
     let content = read_project_godot(project)?;
     let new_content = modify_plugin_enabled(&content, plugin_cfg_path, enabled);
@@ -266,31 +266,31 @@ fn modify_autoload(content: &str, name: &str, script_path: &str, add: bool) -> S
 
 /// Generate .mcp.json content for a project.
 ///
-/// `spectator_bin` and `director_bin` are absolute paths to the installed
+/// `stage_bin` and `director_bin` are absolute paths to the installed
 /// binaries.
 pub fn generate_mcp_json(
-    spectator_bin: &Path,
+    stage_bin: &Path,
     director_bin: &Path,
-    include_spectator: bool,
+    include_stage: bool,
     include_director: bool,
     port: Option<u16>,
 ) -> serde_json::Value {
     let mut servers = serde_json::Map::new();
 
-    if include_spectator {
-        let mut spectator = serde_json::json!({
+    if include_stage {
+        let mut stage = serde_json::json!({
             "type": "stdio",
-            "command": spectator_bin.to_string_lossy(),
+            "command": stage_bin.to_string_lossy(),
             "args": ["serve"]
         });
         if let Some(p) = port
             && p != 9077
         {
-            spectator["env"] = serde_json::json!({
+            stage["env"] = serde_json::json!({
                 "THEATRE_PORT": p.to_string()
             });
         }
-        servers.insert("spectator".to_string(), spectator);
+        servers.insert("stage".to_string(), stage);
     }
 
     if include_director {
@@ -360,7 +360,7 @@ mod tests {
     #[test]
     fn test_check_plugins_one_enabled() {
         let dir = make_project(
-            "[editor_plugins]\nenabled=PackedStringArray(\"res://addons/spectator/plugin.cfg\")\n",
+            "[editor_plugins]\nenabled=PackedStringArray(\"res://addons/stage/plugin.cfg\")\n",
         );
         let (s, d) = check_plugins_enabled(dir.path()).unwrap();
         assert!(s);
@@ -370,7 +370,7 @@ mod tests {
     #[test]
     fn test_check_plugins_both_enabled() {
         let dir = make_project(
-            "[editor_plugins]\nenabled=PackedStringArray(\"res://addons/spectator/plugin.cfg\", \"res://addons/director/plugin.cfg\")\n",
+            "[editor_plugins]\nenabled=PackedStringArray(\"res://addons/stage/plugin.cfg\", \"res://addons/director/plugin.cfg\")\n",
         );
         let (s, d) = check_plugins_enabled(dir.path()).unwrap();
         assert!(s);
@@ -380,152 +380,131 @@ mod tests {
     #[test]
     fn test_set_plugin_enabled_add_to_empty() {
         let dir = make_project("[editor_plugins]\nenabled=PackedStringArray()\n");
-        set_plugin_enabled(dir.path(), "res://addons/spectator/plugin.cfg", true).unwrap();
+        set_plugin_enabled(dir.path(), "res://addons/stage/plugin.cfg", true).unwrap();
         let content = read_project_godot(dir.path()).unwrap();
-        assert!(content.contains("res://addons/spectator/plugin.cfg"));
+        assert!(content.contains("res://addons/stage/plugin.cfg"));
     }
 
     #[test]
     fn test_set_plugin_enabled_add_second() {
         let dir = make_project(
-            "[editor_plugins]\nenabled=PackedStringArray(\"res://addons/spectator/plugin.cfg\")\n",
+            "[editor_plugins]\nenabled=PackedStringArray(\"res://addons/stage/plugin.cfg\")\n",
         );
         set_plugin_enabled(dir.path(), "res://addons/director/plugin.cfg", true).unwrap();
         let content = read_project_godot(dir.path()).unwrap();
-        assert!(content.contains("res://addons/spectator/plugin.cfg"));
+        assert!(content.contains("res://addons/stage/plugin.cfg"));
         assert!(content.contains("res://addons/director/plugin.cfg"));
     }
 
     #[test]
     fn test_set_plugin_enabled_remove() {
         let dir = make_project(
-            "[editor_plugins]\nenabled=PackedStringArray(\"res://addons/spectator/plugin.cfg\", \"res://addons/director/plugin.cfg\")\n",
+            "[editor_plugins]\nenabled=PackedStringArray(\"res://addons/stage/plugin.cfg\", \"res://addons/director/plugin.cfg\")\n",
         );
-        set_plugin_enabled(dir.path(), "res://addons/spectator/plugin.cfg", false).unwrap();
+        set_plugin_enabled(dir.path(), "res://addons/stage/plugin.cfg", false).unwrap();
         let content = read_project_godot(dir.path()).unwrap();
-        assert!(!content.contains("res://addons/spectator/plugin.cfg"));
+        assert!(!content.contains("res://addons/stage/plugin.cfg"));
         assert!(content.contains("res://addons/director/plugin.cfg"));
     }
 
     #[test]
     fn test_set_plugin_enabled_idempotent() {
         let dir = make_project("[editor_plugins]\nenabled=PackedStringArray()\n");
-        set_plugin_enabled(dir.path(), "res://addons/spectator/plugin.cfg", true).unwrap();
-        set_plugin_enabled(dir.path(), "res://addons/spectator/plugin.cfg", true).unwrap();
+        set_plugin_enabled(dir.path(), "res://addons/stage/plugin.cfg", true).unwrap();
+        set_plugin_enabled(dir.path(), "res://addons/stage/plugin.cfg", true).unwrap();
         let content = read_project_godot(dir.path()).unwrap();
-        let count = content.matches("res://addons/spectator/plugin.cfg").count();
+        let count = content.matches("res://addons/stage/plugin.cfg").count();
         assert_eq!(count, 1);
     }
 
     #[test]
     fn test_set_plugin_enabled_creates_section() {
         let dir = make_project("[application]\nconfig/name=\"MyGame\"\n");
-        set_plugin_enabled(dir.path(), "res://addons/spectator/plugin.cfg", true).unwrap();
+        set_plugin_enabled(dir.path(), "res://addons/stage/plugin.cfg", true).unwrap();
         let content = read_project_godot(dir.path()).unwrap();
         assert!(content.contains("[editor_plugins]"));
-        assert!(content.contains("res://addons/spectator/plugin.cfg"));
+        assert!(content.contains("res://addons/stage/plugin.cfg"));
     }
 
     #[test]
     fn test_set_autoload_add() {
         let dir = make_project("[autoload]\n");
-        set_autoload(
-            dir.path(),
-            "SpectatorRuntime",
-            "res://addons/spectator/runtime.gd",
-        )
-        .unwrap();
+        set_autoload(dir.path(), "StageRuntime", "res://addons/stage/runtime.gd").unwrap();
         let content = read_project_godot(dir.path()).unwrap();
-        assert!(content.contains("SpectatorRuntime"));
-        assert!(content.contains("*res://addons/spectator/runtime.gd"));
+        assert!(content.contains("StageRuntime"));
+        assert!(content.contains("*res://addons/stage/runtime.gd"));
     }
 
     #[test]
     fn test_set_autoload_idempotent() {
         let dir = make_project("[autoload]\n");
-        set_autoload(
-            dir.path(),
-            "SpectatorRuntime",
-            "res://addons/spectator/runtime.gd",
-        )
-        .unwrap();
-        set_autoload(
-            dir.path(),
-            "SpectatorRuntime",
-            "res://addons/spectator/runtime.gd",
-        )
-        .unwrap();
+        set_autoload(dir.path(), "StageRuntime", "res://addons/stage/runtime.gd").unwrap();
+        set_autoload(dir.path(), "StageRuntime", "res://addons/stage/runtime.gd").unwrap();
         let content = read_project_godot(dir.path()).unwrap();
-        let count = content.matches("SpectatorRuntime").count();
+        let count = content.matches("StageRuntime").count();
         assert_eq!(count, 1);
     }
 
     #[test]
     fn test_set_autoload_creates_section() {
         let dir = make_project("[application]\nconfig/name=\"MyGame\"\n");
-        set_autoload(
-            dir.path(),
-            "SpectatorRuntime",
-            "res://addons/spectator/runtime.gd",
-        )
-        .unwrap();
+        set_autoload(dir.path(), "StageRuntime", "res://addons/stage/runtime.gd").unwrap();
         let content = read_project_godot(dir.path()).unwrap();
         assert!(content.contains("[autoload]"));
-        assert!(content.contains("SpectatorRuntime"));
+        assert!(content.contains("StageRuntime"));
     }
 
     #[test]
     fn test_remove_autoload() {
-        let dir =
-            make_project("[autoload]\nSpectatorRuntime=\"*res://addons/spectator/runtime.gd\"\n");
-        remove_autoload(dir.path(), "SpectatorRuntime").unwrap();
+        let dir = make_project("[autoload]\nStageRuntime=\"*res://addons/stage/runtime.gd\"\n");
+        remove_autoload(dir.path(), "StageRuntime").unwrap();
         let content = read_project_godot(dir.path()).unwrap();
-        assert!(!content.contains("SpectatorRuntime"));
+        assert!(!content.contains("StageRuntime"));
     }
 
     #[test]
     fn test_remove_autoload_noop() {
         let dir = make_project("[autoload]\n");
         // Should not error
-        remove_autoload(dir.path(), "SpectatorRuntime").unwrap();
+        remove_autoload(dir.path(), "StageRuntime").unwrap();
         let content = read_project_godot(dir.path()).unwrap();
-        assert!(!content.contains("SpectatorRuntime"));
+        assert!(!content.contains("StageRuntime"));
     }
 
     #[test]
     fn test_generate_mcp_json_default_port() {
-        let spec_bin = Path::new("/home/user/.local/bin/spectator");
+        let spec_bin = Path::new("/home/user/.local/bin/stage");
         let dir_bin = Path::new("/home/user/.local/bin/director");
         let json = generate_mcp_json(spec_bin, dir_bin, true, true, Some(9077));
         let servers = json["mcpServers"].as_object().unwrap();
-        assert!(servers.contains_key("spectator"));
+        assert!(servers.contains_key("stage"));
         assert!(servers.contains_key("director"));
-        // spectator uses "serve" arg since bare spectator defaults to CLI mode
-        assert_eq!(servers["spectator"]["args"][0], "serve");
+        // stage uses "serve" arg since bare stage defaults to CLI mode
+        assert_eq!(servers["stage"]["args"][0], "serve");
         // No env for default port
-        assert!(servers["spectator"].get("env").is_none());
+        assert!(servers["stage"].get("env").is_none());
     }
 
     #[test]
     fn test_generate_mcp_json_custom_port() {
-        let spec_bin = Path::new("/home/user/.local/bin/spectator");
+        let spec_bin = Path::new("/home/user/.local/bin/stage");
         let dir_bin = Path::new("/home/user/.local/bin/director");
         let json = generate_mcp_json(spec_bin, dir_bin, true, true, Some(9999));
-        let spectator = &json["mcpServers"]["spectator"];
-        assert_eq!(spectator["args"][0], "serve");
-        assert!(spectator.get("env").is_some());
-        assert_eq!(spectator["env"]["THEATRE_PORT"], "9999");
+        let stage = &json["mcpServers"]["stage"];
+        assert_eq!(stage["args"][0], "serve");
+        assert!(stage.get("env").is_some());
+        assert_eq!(stage["env"]["THEATRE_PORT"], "9999");
     }
 
     #[test]
-    fn test_generate_mcp_json_spectator_only() {
-        let spec_bin = Path::new("/home/user/.local/bin/spectator");
+    fn test_generate_mcp_json_stage_only() {
+        let spec_bin = Path::new("/home/user/.local/bin/stage");
         let dir_bin = Path::new("/home/user/.local/bin/director");
         let json = generate_mcp_json(spec_bin, dir_bin, true, false, None);
         let servers = json["mcpServers"].as_object().unwrap();
-        assert!(servers.contains_key("spectator"));
+        assert!(servers.contains_key("stage"));
         assert!(!servers.contains_key("director"));
-        assert_eq!(servers["spectator"]["args"][0], "serve");
+        assert_eq!(servers["stage"]["args"][0], "serve");
     }
 
     #[test]

@@ -1,6 +1,6 @@
 # Godot 4 Naming Dictionary
 
-Reference for Spectator API field naming. When adding fields to MCP responses,
+Reference for Stage API field naming. When adding fields to MCP responses,
 use the "API field name" column. Prefer Godot's exact property name when it
 exists; use descriptive snake_case when Godot uses a method (`get_X`) with no
 corresponding property name.
@@ -90,7 +90,7 @@ forward direction, use `-col_c()` (Godot forward is -Z in local space).
 | RigidBody3D angular velocity | `angular_velocity` (property) | `angular_velocity` | `Vector3`; `get_angular_velocity()` / `set_angular_velocity()` |
 | RigidBody2D angular velocity | `angular_velocity` (property) | `angular_velocity` | `f32` scalar for 2D |
 
-**Naming decision:** Spectator uses `velocity` as the unified field name in entity
+**Naming decision:** Stage uses `velocity` as the unified field name in entity
 snapshots. For `CharacterBody*` nodes this maps directly. For `RigidBody*` nodes,
 `linear_velocity` is aliased to `velocity` in the snapshot output for consistency.
 When more granularity is needed (e.g., in `spatial_inspect`), use `linear_velocity`
@@ -110,7 +110,7 @@ and `angular_velocity` to match Godot.
 | Apply velocity + collide | `move_and_slide()` | — | Mutating method; not in output |
 
 **Note:** These are all **methods**, not properties. They return results computed
-during the last `move_and_slide()` call in the same physics frame. Spectator strips
+during the last `move_and_slide()` call in the same physics frame. Stage strips
 `is_` prefix for API fields: `is_on_floor()` → `on_floor`.
 
 ---
@@ -181,7 +181,7 @@ was replaced in Godot 4 with separate `freeze` / `freeze_mode` properties.
 | Visible (3D) | `visible` (property on `Node3D`) | — | `is_visible()` getter; also has `is_visible_in_tree()` |
 
 **Note:** `visible` is a property on both `Node3D` and `CanvasItem` (the 2D base).
-Spectator uses `is_visible_in_tree()` for both 2D and 3D snapshot output because it
+Stage uses `is_visible_in_tree()` for both 2D and 3D snapshot output because it
 correctly reflects inherited visibility from parent nodes.
 
 ---
@@ -280,9 +280,9 @@ correctly reflects inherited visibility from parent nodes.
 
 ---
 
-## Spectator-Specific Fields (no direct Godot equivalent)
+## Stage-Specific Fields (no direct Godot equivalent)
 
-These fields appear in Spectator's MCP API output but have no exact Godot
+These fields appear in Stage's MCP API output but have no exact Godot
 property they map to — they are computed or aggregated by Spectator.
 
 | API field name | Description | Derived from |
@@ -315,7 +315,7 @@ property they map to — they are computed or aggregated by Spectator.
 | Godot property → API field | Use exact Godot property name unchanged |
 | Godot `get_X()` method → API field | Drop `get_` prefix: `get_class()` → `class` |
 | Godot `is_X()` method → API field | Drop `is_` prefix: `is_on_floor()` → `on_floor` |
-| Godot abbreviation for API | `rotation_degrees` → `rotation_deg` (Spectator convention) |
+| Godot abbreviation for API | `rotation_degrees` → `rotation_deg` (Stage convention) |
 | Computed fields | Use descriptive snake_case: `bearing_deg`, `global_origin` |
 | Boolean state | No `is_` prefix in JSON output: `on_floor: true`, not `is_on_floor: true` |
 | Enum values in JSON | Use `snake_case` (serde `rename_all = "snake_case"`) |

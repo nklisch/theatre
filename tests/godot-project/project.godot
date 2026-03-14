@@ -20,7 +20,7 @@ config/features=PackedStringArray("4.6", "Forward Plus")
 
 [autoload]
 
-SpectatorRuntime="*res://addons/spectator/runtime.gd"
+StageRuntime="*res://addons/stage/runtime.gd"
 
 [display]
 

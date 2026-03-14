@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::time::Duration;
 
-use spectator_protocol::codec::async_io;
+use stage_protocol::codec::async_io;
 use tokio::net::TcpStream;
 
 use crate::oneshot::{OperationError, OperationResult};
@@ -151,8 +151,8 @@ fn parse_editor_port_from_project(contents: &str) -> Option<u16> {
 }
 
 /// Map a `CodecError` to `EditorError`.
-fn codec_error_to_editor(e: spectator_protocol::codec::CodecError) -> EditorError {
-    use spectator_protocol::codec::CodecError;
+fn codec_error_to_editor(e: stage_protocol::codec::CodecError) -> EditorError {
+    use stage_protocol::codec::CodecError;
     match e {
         CodecError::Io(io) => EditorError::IoError(io),
         CodecError::Serialize(src) => EditorError::ParseFailed {
@@ -204,7 +204,7 @@ mod tests {
 
     #[test]
     fn parse_project_godot_wrong_section() {
-        let contents = "[spectator]\nconnection/editor_port=6600\n";
+        let contents = "[stage]\nconnection/editor_port=6600\n";
         assert_eq!(parse_editor_port_from_project(contents), None);
     }
 }

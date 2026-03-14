@@ -7,33 +7,33 @@ GDExtension registers classes at library load time through gdext's macro system.
 
 ## Examples
 
-### Example 1: SpectatorTCPServer — full class with signal and multiple funcs
-**File**: `crates/spectator-godot/src/tcp_server.rs:10-65`
+### Example 1: StageTCPServer — full class with signal and multiple funcs
+**File**: `crates/stage-godot/src/tcp_server.rs:10-65`
 ```rust
 #[derive(GodotClass)]
 #[class(base = Node)]
-pub struct SpectatorTCPServer {
+pub struct StageTCPServer {
     base: Base<Node>,
     listener: Option<TcpListener>,
     client: Option<TcpStream>,
     port: i32,
-    collector: Option<Gd<SpectatorCollector>>,
+    collector: Option<Gd<StageCollector>>,
 }
 
 #[godot_api]
-impl INode for SpectatorTCPServer {
+impl INode for StageTCPServer {
     fn init(base: Base<Node>) -> Self {
         Self { base, listener: None, client: None, port: 9077, collector: None, ... }
     }
 }
 
 #[godot_api]
-impl SpectatorTCPServer {
+impl StageTCPServer {
     #[signal]
     fn activity_received(entry_type: GString, summary: GString, tool_name: GString);
 
     #[func]
-    pub fn set_collector(&mut self, collector: Gd<SpectatorCollector>) {
+    pub fn set_collector(&mut self, collector: Gd<StageCollector>) {
         self.collector = Some(collector);
     }
 
@@ -45,35 +45,35 @@ impl SpectatorTCPServer {
 }
 ```
 
-### Example 2: SpectatorCollector — class with cross-reference to another GdClass
-**File**: `crates/spectator-godot/src/collector.rs:28-67`
+### Example 2: StageCollector — class with cross-reference to another GdClass
+**File**: `crates/stage-godot/src/collector.rs:28-67`
 ```rust
 #[derive(GodotClass)]
 #[class(base = Node)]
-pub struct SpectatorCollector {
+pub struct StageCollector {
     base: Base<Node>,
     // ...fields
 }
 
 #[godot_api]
-impl INode for SpectatorCollector {
+impl INode for StageCollector {
     fn init(base: Base<Node>) -> Self { Self { base, ... } }
 }
 
 #[godot_api]
-impl SpectatorCollector {
+impl StageCollector {
     #[func]
     pub fn get_tracked_count(&self) -> u32 { ... }
 }
 ```
 
 ### Example 3: Library entry point — ExtensionLibrary registration
-**File**: `crates/spectator-godot/src/lib.rs:8-11`
+**File**: `crates/stage-godot/src/lib.rs:8-11`
 ```rust
-struct SpectatorExtension;
+struct StageExtension;
 
 #[gdextension]
-unsafe impl ExtensionLibrary for SpectatorExtension {}
+unsafe impl ExtensionLibrary for StageExtension {}
 ```
 
 ## When to Use

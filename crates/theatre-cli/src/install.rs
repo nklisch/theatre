@@ -51,9 +51,9 @@ pub fn run(args: InstallArgs) -> Result<()> {
             "build",
             "--release",
             "-p",
-            "spectator-server",
+            "stage-server",
             "-p",
-            "spectator-godot",
+            "stage-godot",
             "-p",
             "director",
             "-p",
@@ -67,16 +67,16 @@ pub fn run(args: InstallArgs) -> Result<()> {
         anyhow::bail!("cargo build failed with exit code: {:?}", status.code());
     }
 
-    eprintln!("  {} spectator", style("✓").green());
+    eprintln!("  {} stage", style("✓").green());
     eprintln!("  {} director", style("✓").green());
-    eprintln!("  {} spectator-godot", style("✓").green());
+    eprintln!("  {} stage-godot", style("✓").green());
     eprintln!("  {} theatre", style("✓").green());
     eprintln!();
 
     // Step 6: Copy binaries to bin_dir
     eprintln!("  Installing to {}/:", bin_dir.display());
 
-    for bin_name in &["spectator", "director", "theatre"] {
+    for bin_name in &["stage", "director", "theatre"] {
         let src = source.built_binary(bin_name, true);
         let dst = bin_dir.join(bin_name);
         std::fs::copy(&src, &dst)
@@ -90,26 +90,21 @@ pub fn run(args: InstallArgs) -> Result<()> {
 
     let share_addons = share_dir.join("addons");
 
-    // Copy spectator addon, skipping bin/ subdir
-    let spectator_src = source.addon_source().join("spectator");
-    let spectator_dst = share_addons.join("spectator");
-    let spectator_count = copy_dir_recursive(&spectator_src, &spectator_dst, &|p| {
+    // Copy stage addon, skipping bin/ subdir
+    let stage_src = source.addon_source().join("stage");
+    let stage_dst = share_addons.join("stage");
+    let stage_count = copy_dir_recursive(&stage_src, &stage_dst, &|p| {
         p.file_name().map(|n| n == "bin").unwrap_or(false)
     })
-    .with_context(|| {
-        format!(
-            "Failed to copy spectator addon from {}",
-            spectator_src.display()
-        )
-    })?;
+    .with_context(|| format!("Failed to copy stage addon from {}", stage_src.display()))?;
     eprintln!(
-        "  {} addons/spectator/ ({spectator_count} files)",
+        "  {} addons/stage/ ({stage_count} files)",
         style("✓").green()
     );
 
     // Step 8: Copy GDExtension binary
     let gdext_src = source.built_gdext(true);
-    let gdext_platform_dir = spectator_dst.join("bin").join(platform_dir());
+    let gdext_platform_dir = stage_dst.join("bin").join(platform_dir());
     std::fs::create_dir_all(&gdext_platform_dir).with_context(|| {
         format!(
             "Failed to create GDExtension bin dir: {}",
@@ -125,7 +120,7 @@ pub fn run(args: InstallArgs) -> Result<()> {
         )
     })?;
     eprintln!(
-        "  {} addons/spectator/bin/{}/{gdext_filename}",
+        "  {} addons/stage/bin/{}/{gdext_filename}",
         style("✓").green(),
         platform_dir(),
         gdext_filename = gdext_filename()

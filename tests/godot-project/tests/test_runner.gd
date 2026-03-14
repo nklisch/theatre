@@ -1,4 +1,4 @@
-## GDScript test runner for the Spectator addon.
+## GDScript test runner for the Stage addon.
 ##
 ## Discovers all test_*.gd files in res://tests/, instantiates each one,
 ## and calls every method starting with "test_". Each method returns "" on

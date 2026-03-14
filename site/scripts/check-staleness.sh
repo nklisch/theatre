@@ -26,7 +26,7 @@ ERRORS=0
 
 # For each tool doc page, check that any parameter mentioned in code blocks
 # or param tables actually exists in the schema
-for md in "$SITE_DIR"/spectator/*.md "$SITE_DIR"/director/*.md; do
+for md in "$SITE_DIR"/stage/*.md "$SITE_DIR"/director/*.md; do
   [ -f "$md" ] || continue
   page=$(basename "$md" .md)
   # This is a heuristic check — it catches the most common pattern of
