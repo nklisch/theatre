@@ -1,13 +1,35 @@
 ---
 name: spectator
-description: Use Spectator's MCP tools to spatially debug a running Godot game. Invoke when the user is asking about game state, node positions, spatial bugs, physics, pathfinding, signals, or anything that requires understanding what's happening in the running game world. Also invoke when the user wants to analyze clips, watch for changes, or manipulate game state for debugging.
+description: >
+  Use Spectator to spatially debug a running Godot game via MCP tools or CLI.
+  Invoke when the user asks about game state, node positions, spatial bugs,
+  physics, pathfinding, signals, or anything requiring understanding what's
+  happening in the running game world. Also invoke for clip analysis, watch
+  subscriptions, or game state manipulation.
 ---
 
 # Spectator — Spatial Debugging for Godot
 
-Spectator is part of the **Theatre** toolkit (alongside Director). It gives you 9 MCP tools to observe and interact with a running Godot game: 8 spatial tools + the `clips` tool for capturing and analyzing gameplay moments. These tools see the game's spatial reality: positions, distances, relationships, physics, signals — organized in space, not as code.
+Spectator is part of the **Theatre** toolkit (alongside Director). It gives you 9 tools to observe and interact with a running Godot game: positions, distances, relationships, physics, signals — organized in space, not as code.
 
-**Prerequisite:** Spectator addon must be enabled in the Godot project and the game must be running (Play mode). If tools return `not_connected`, the game isn't running yet.
+**Two interfaces, identical capabilities:**
+
+| Interface | When to use | Example |
+|---|---|---|
+| MCP tools | Agent has MCP connection to spectator | `spatial_snapshot(detail: "summary")` |
+| CLI | Agent uses bash, no MCP server running | `spectator spatial_snapshot '{"detail":"summary"}'` |
+
+**CLI basics:**
+```bash
+spectator <tool> '<json-params>'           # direct invocation
+echo '{"detail":"summary"}' | spectator spatial_snapshot  # stdin pipe
+spectator --help                           # list all tools
+spectator --version                        # {"version": "0.1.0"}
+```
+
+All CLI output is JSON to stdout. Errors are JSON to stdout with exit code 1 (runtime) or 2 (usage). Logs go to stderr.
+
+**Prerequisite:** Spectator addon must be enabled in the Godot project and the game must be running. If tools return `not_connected` / `connection_failed`, the game isn't running.
 
 ## When to Use Which Tool
 
@@ -50,10 +72,7 @@ Never start with `detail: "full"` on the full scene — that's expensive and usu
 }
 
 // Drill into a summary cluster
-{
-  "expand": "enemies",
-  "detail": "standard"
-}
+{ "expand": "enemies", "detail": "standard" }
 
 // From a specific node's perspective
 {
@@ -76,18 +95,14 @@ Never start with `detail: "full"` on the full scene — that's expensive and usu
 
 ## spatial_delta — What Changed?
 
-Use after taking an action or advancing time to see what happened. Always compares against
-the baseline from the most recent `spatial_snapshot` or `spatial_action`.
+Use after taking an action or advancing time. Compares against the baseline from the most recent `spatial_snapshot` or `spatial_action`.
 
 ```jsonc
-// See what changed since last snapshot (all defaults)
+// See what changed (all defaults)
 {}
 
-// Filtered delta (reduces tokens)
-{
-  "groups": ["enemies"],
-  "radius": 30.0
-}
+// Filtered delta
+{ "groups": ["enemies"], "radius": 30.0 }
 ```
 
 Parameters: `perspective` (camera/point), `radius` (default 50.0), `groups`, `class_filter`, `token_budget`.
@@ -96,7 +111,6 @@ Response includes: `from_frame`, `to_frame`, and any non-empty of: `moved`, `sta
 
 **The act-then-delta pattern** — use `return_delta: true` on actions instead of a separate delta call:
 ```jsonc
-// spatial_action with return_delta saves a round-trip
 {
   "action": "teleport",
   "node": "enemies/scout_02",
@@ -109,41 +123,19 @@ Response includes: `from_frame`, `to_frame`, and any non-empty of: `moved`, `sta
 
 ```jsonc
 // What's near the player?
-{
-  "query_type": "nearest",
-  "from": "player",
-  "k": 5,
-  "groups": ["enemies"]
-}
+{ "query_type": "nearest", "from": "player", "k": 5, "groups": ["enemies"] }
 
 // Can the enemy see the player?
-{
-  "query_type": "raycast",
-  "from": "enemies/scout_02",
-  "to": "player"
-}
+{ "query_type": "raycast", "from": "enemies/scout_02", "to": "player" }
 
 // Full relationship between two nodes
-{
-  "query_type": "relationship",
-  "from": "enemies/scout_02",
-  "to": "player"
-}
+{ "query_type": "relationship", "from": "enemies/scout_02", "to": "player" }
 
 // Navmesh path distance
-{
-  "query_type": "path_distance",
-  "from": "enemies/guard_01",
-  "to": "player"
-}
+{ "query_type": "path_distance", "from": "enemies/guard_01", "to": "player" }
 
 // All enemies within 15 units of player
-{
-  "query_type": "radius",
-  "from": "player",
-  "radius": 15.0,
-  "groups": ["enemies"]
-}
+{ "query_type": "radius", "from": "player", "radius": 15.0, "groups": ["enemies"] }
 ```
 
 `from` and `to` accept either a **node path** (`"player"`) or a **world position** (`[10.0, 0.0, 5.0]`).
@@ -155,32 +147,26 @@ Response includes: `from_frame`, `to_frame`, and any non-empty of: `moved`, `sta
 { "node": "enemies/scout_02" }
 
 // Specific categories only (cheaper)
-{
-  "node": "enemies/scout_02",
-  "include": ["physics", "state"]
-}
+{ "node": "enemies/scout_02", "include": ["physics", "state"] }
 
 // Available categories:
 // transform, physics, state, children, signals, script, spatial_context
 ```
 
 **Useful include combos:**
-- `["physics"]` — velocity, on_floor, collision_layer/mask → collision debugging
-- `["state"]` — all exported vars → logic/AI state debugging
-- `["children"]` — immediate children with key properties → hierarchy check
-- `["signals"]` — connected signals + recent emissions → event flow debugging
-- `["spatial_context"]` — nearby entities, areas, camera visibility → spatial context
+- `["physics"]` — velocity, on_floor, collision_layer/mask
+- `["state"]` — all exported vars
+- `["children"]` — immediate children with key properties
+- `["signals"]` — connected signals + recent emissions
+- `["spatial_context"]` — nearby entities, areas, camera visibility
 
 ## spatial_watch — Subscribe to Changes
 
 ```jsonc
 // Watch a node for all changes
-{
-  "action": "add",
-  "watch": { "node": "enemies/scout_02", "track": ["all"] }
-}
+{ "action": "add", "watch": { "node": "enemies/scout_02", "track": ["all"] } }
 
-// Conditional watch — only fires when health < 20
+// Conditional watch — fires when health < 20
 {
   "action": "add",
   "watch": {
@@ -191,10 +177,7 @@ Response includes: `from_frame`, `to_frame`, and any non-empty of: `moved`, `sta
 }
 
 // Watch entire group
-{
-  "action": "add",
-  "watch": { "node": "group:enemies", "track": ["position", "state"] }
-}
+{ "action": "add", "watch": { "node": "group:enemies", "track": ["position", "state"] } }
 
 // List active watches
 { "action": "list" }
@@ -203,7 +186,9 @@ Response includes: `from_frame`, `to_frame`, and any non-empty of: `moved`, `sta
 { "action": "clear" }
 ```
 
-Watch triggers arrive in `spatial_delta` responses under `watch_triggers`. After setting up watches, call `spatial_delta` periodically to see if anything fired.
+Watch triggers arrive in `spatial_delta` responses under `watch_triggers`.
+
+**Note:** Watches require a persistent session (MCP mode). In CLI one-shot mode, watches only exist for the duration of a single call.
 
 ## spatial_action — Debugging Manipulation
 
@@ -211,7 +196,7 @@ Watch triggers arrive in `spatial_delta` responses under `watch_triggers`. After
 // Pause the game
 { "action": "pause", "paused": true }
 
-// Advance 30 frames while paused (0.5s at 60fps)
+// Advance 30 frames while paused
 { "action": "advance_frames", "frames": 30 }
 
 // Teleport a node
@@ -224,28 +209,13 @@ Watch triggers arrive in `spatial_delta` responses under `watch_triggers`. After
 }
 
 // Change a property
-{
-  "action": "set_property",
-  "node": "enemies/scout_02",
-  "property": "collision_mask",
-  "value": 7
-}
+{ "action": "set_property", "node": "enemies/scout_02", "property": "collision_mask", "value": 7 }
 
 // Call a method
-{
-  "action": "call_method",
-  "node": "enemies/scout_02",
-  "method": "take_damage",
-  "method_args": [50]
-}
+{ "action": "call_method", "node": "enemies/scout_02", "method": "take_damage", "method_args": [50] }
 
 // Emit a signal
-{
-  "action": "emit_signal",
-  "node": "enemies/scout_02",
-  "signal": "health_changed",
-  "args": [10]
-}
+{ "action": "emit_signal", "node": "enemies/scout_02", "signal": "health_changed", "args": [10] }
 
 // Spawn a scene
 {
@@ -266,27 +236,19 @@ Watch triggers arrive in `spatial_delta` responses under `watch_triggers`. After
 // Recursive tree (depth 3 default)
 { "action": "subtree", "node": "enemies", "depth": 4 }
 
-// Find all nodes with a script
-{
-  "action": "find",
-  "find_by": "script",
-  "find_value": "res://enemies/scout_ai.gd"
-}
+// Find nodes by class
+{ "action": "find", "find_by": "class", "find_value": "CharacterBody3D" }
 
-// Find all CharacterBody3D nodes
-{
-  "action": "find",
-  "find_by": "class",
-  "find_value": "CharacterBody3D"
-}
+// Find nodes by script
+{ "action": "find", "find_by": "script", "find_value": "res://enemies/scout_ai.gd" }
 
-// Parent chain for a node
+// Parent chain
 { "action": "ancestors", "node": "enemies/scout_02/NavAgent" }
 ```
 
 ## spatial_config — Session Setup
 
-Call this at the start of a session to tune what Spectator tracks:
+Call at the start of a session to tune what Spectator tracks:
 
 ```jsonc
 {
@@ -301,61 +263,49 @@ Call this at the start of a session to tune what Spectator tracks:
 }
 ```
 
-`state_properties` controls which exported vars appear in snapshot `state` blocks. Without this, you see all exported vars — often noisy. Configure per-group or per-class.
+`state_properties` controls which exported vars appear in snapshot `state` blocks.
 
 ## clips — Mark, Save, Analyze
 
-Clips are captured automatically by the dashcam ring buffer. The human (or agent) marks an interesting moment; the dashcam saves the surrounding context as a clip. The agent then analyzes the clip.
+Clips are captured by the dashcam ring buffer. Mark a moment to save; analyze saved clips.
 
 ```jsonc
 // Check dashcam buffer state
 { "action": "status" }
 
-// Mark the current moment — triggers automatic clip save with pre/post window
+// Mark a moment — triggers automatic clip save
 { "action": "add_marker", "marker_label": "wall_clip_repro" }
 
-// Force-save the current buffer as a clip immediately (no marker required)
+// Force-save the current buffer
 { "action": "save", "marker_label": "manual save" }
 
 // List saved clips
 { "action": "list" }
 
-// See markers in a clip (F9 = human marker, system = auto-detected anomalies)
+// See markers in a clip
 { "action": "markers", "clip_id": "clip_001a2b3c" }
 
-// Spatial state at the marked frame (omit clip_id to use most recent clip)
+// Spatial state at a frame (omit clip_id for most recent)
 { "action": "snapshot_at", "at_frame": 4582, "detail": "standard" }
 
-// Find when enemy got within 0.5m of wall (across frame range)
+// Find when enemy got within 0.5m of wall
 {
   "action": "query_range",
-  "clip_id": "clip_001a2b3c",
-  "from_frame": 4570,
-  "to_frame": 4600,
+  "from_frame": 4570, "to_frame": 4600,
   "node": "enemies/guard_01",
   "condition": { "type": "proximity", "target": "walls/*", "threshold": 0.5 }
 }
 
-// Compare before/after the bug
+// Compare before/after
 { "action": "diff_frames", "frame_a": 4575, "frame_b": 4585 }
 
-// Search for specific events
+// Search for events
 {
   "action": "find_event",
-  "clip_id": "clip_001a2b3c",
-  "event_type": "signal",           // signal, property_change, collision, area_enter,
-                                    // area_exit, node_added, node_removed, marker, input
-  "event_filter": "health_changed", // substring match on event data (optional)
-  "node": "enemies/guard_01",       // filter by node path (optional)
-  "from_frame": 4500,               // optional frame range bounds
-  "to_frame": 5000
-}
-
-// Mark your findings for the human to review
-{
-  "action": "add_marker",
-  "marker_frame": 4578,
-  "marker_label": "Root cause: collision_mask 3 missing layer 4 (walls)"
+  "event_type": "signal",
+  "event_filter": "health_changed",
+  "node": "enemies/guard_01",
+  "from_frame": 4500, "to_frame": 5000
 }
 ```
 
@@ -365,74 +315,60 @@ Clips are captured automatically by the dashcam ring buffer. The human (or agent
 ```
 1. spatial_config(static_patterns: ["walls/*"])
 2. spatial_watch(node: "enemies/guard_01", track: ["position", "physics"])
-3. [human reproduces bug, presses F9 at clip moment]
+3. [human reproduces bug, presses F9]
 4. clips(action: "markers") → find the marked frame
 5. clips(action: "query_range", condition: { type: "proximity", target: "walls/*", threshold: 0.5 })
 6. spatial_inspect(node: "enemies/guard_01", include: ["physics"])
-   → check collision_layer / collision_mask for mismatch
 ```
 
 ### Pathfinding Issues
 ```
-1. spatial_query(query_type: "path_distance", from: "enemies/guard_01", to: "player")
-   → check nav_distance vs straight_distance, traversable
-2. spatial_inspect(node: "enemies/guard_01", include: ["children", "spatial_context"])
-   → NavigationAgent3D.distance_remaining, nearest_navmesh_edge_dist
-3. spatial_query(query_type: "relationship", from: "enemies/guard_01", to: "walls/segment_04")
-   → distance, bearing, line_of_sight
+1. spatial_query(query_type: "path_distance", from: "guard_01", to: "player")
+2. spatial_inspect(node: "guard_01", include: ["children", "spatial_context"])
+3. spatial_query(query_type: "relationship", from: "guard_01", to: "walls/segment_04")
 ```
 
 ### AI State Machine Debugging
 ```
 1. spatial_config(state_properties: { enemies: ["state", "alert_level", "current_target"] })
 2. spatial_snapshot(groups: ["enemies"], detail: "standard")
-   → see all enemies' state at once
-3. spatial_watch(node: "enemies/guard_01",
-     conditions: [{ property: "alert_level", operator: "changed" }])
-4. spatial_delta() → catch state transitions as they happen
-5. spatial_inspect(node: "enemies/guard_01", include: ["state", "signals"])
-   → exact exported vars + recent signal emissions
+3. spatial_watch(node: "guard_01", conditions: [{ property: "alert_level", operator: "changed" }])
+4. spatial_delta() → catch state transitions
+5. spatial_inspect(node: "guard_01", include: ["state", "signals"])
 ```
 
-### Physics Debugging
+### Physics Debugging (frame-by-frame)
 ```
 1. spatial_action(action: "pause", paused: true)
-2. spatial_inspect(node: "enemies/scout_02", include: ["physics"])
-   → velocity, on_floor, collision_layer, collision_mask, floor_normal
+2. spatial_inspect(node: "scout_02", include: ["physics"])
 3. spatial_action(action: "advance_frames", frames: 1)
-4. spatial_delta() → see exactly what changed in that one frame
-5. Repeat steps 3-4 to step frame-by-frame
+4. spatial_delta() → see exactly what changed
+5. Repeat 3-4
 ```
 
-## Reading the Spatial Output
+## Reading Spatial Output
 
-**Bearings** are relative to the perspective entity's facing direction:
-```
-ahead, ahead_left, ahead_right, left, right, behind, behind_left, behind_right
-```
+**Bearings** — relative to perspective entity's facing:
+`ahead`, `ahead_left`, `ahead_right`, `left`, `right`, `behind`, `behind_left`, `behind_right`
 
-**Elevation** (3D only): `level` (within ±2m), `above_5m`, `below_2m`
+**Elevation** (3D only): `level` (±2m), `above_5m`, `below_2m`
 
 **`relative` block** on each entity:
 ```jsonc
-{
-  "distance": 7.2,          // straight-line distance in world units
-  "bearing": "ahead_left",  // relative to perspective facing
-  "bearing_deg": 322,       // exact degrees (0 = ahead, clockwise)
-  "elevation": "level",
-  "occluded": false          // is camera view blocked?
-}
+{ "distance": 7.2, "bearing": "ahead_left", "bearing_deg": 322, "elevation": "level", "occluded": false }
 ```
 
-**`global_position`** is the world position (`[x, y, z]` in 3D, `[x, y]` in 2D).
+**`global_position`** — world position (`[x, y, z]` 3D, `[x, y]` 2D).
 
 ## Error Reference
 
 | Error | Meaning | Fix |
 |---|---|---|
-| `not_connected` | Game not running or addon not enabled | Start the game in Godot |
-| `scene_not_loaded` | Between scene transitions | Wait for scene to finish loading |
-| `node_not_found` | Path doesn't exist | Use `scene_tree(action: "find")` to locate the node |
-| `timeout` | Game frozen or at a breakpoint | Check if game is paused/broken |
-| `dashcam_disabled` | Dashcam not active | Check spatial_config dashcam settings |
-| `budget_exceeded` | Too many nodes, too large | Reduce radius, add group filter, or use summary detail |
+| `not_connected` / `connection_failed` | Game not running or addon not enabled | Start the game in Godot |
+| `unknown_tool` | Invalid tool name (CLI only) | Check `spectator --help` |
+| `invalid_json` | Bad JSON params (CLI only) | Fix JSON syntax |
+| `scene_not_loaded` | Between scene transitions | Wait for scene to load |
+| `node_not_found` | Path doesn't exist | Use `scene_tree(action: "find")` |
+| `timeout` | Game frozen or at breakpoint | Check if game is paused |
+| `dashcam_disabled` | Dashcam not active | Check spatial_config |
+| `budget_exceeded` | Too many nodes | Reduce radius, add filters, use summary |
