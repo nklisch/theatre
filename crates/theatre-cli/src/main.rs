@@ -7,6 +7,7 @@ mod init;
 mod install;
 mod paths;
 mod project;
+mod telemetry;
 
 #[derive(Parser)]
 #[command(name = "theatre", version, about = "Theatre — Godot AI agent toolkit")]

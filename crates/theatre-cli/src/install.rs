@@ -155,7 +155,10 @@ pub fn run(args: InstallArgs) -> Result<()> {
         eprintln!();
     }
 
-    // Step 10: Summary
+    // Step 10: Anonymous install telemetry (respects DO_NOT_TRACK, CI, etc.)
+    crate::telemetry::record_install();
+
+    // Step 11: Summary
     eprintln!("Install complete. Run `theatre init <project>` to set up a Godot project.");
 
     Ok(())

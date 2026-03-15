@@ -11,6 +11,8 @@ export default defineConfig({
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:url', content: 'https://godot-theatre.dev' }],
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
+    ['script', { async: '', src: 'https://www.googletagmanager.com/gtag/js?id=G-QDTG6Z9L05' }],
+    ['script', {}, "window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','G-QDTG6Z9L05')"],
   ],
 
   // Custom domain — CNAME file placed in site/public/CNAME
