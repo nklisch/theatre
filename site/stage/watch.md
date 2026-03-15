@@ -42,20 +42,20 @@ Do **not** set a watch on every node in your scene — watches add tracking over
 
 ## Track categories
 
-The `track` array uses these category values (default: `["All"]`):
+The `track` array uses these category values (default: `["all"]`):
 
 | Track value | What it includes |
 |---|---|
-| `"Position"` | `global_position` and related transform properties |
-| `"Physics"` | `velocity`, `linear_velocity`, collision flags, floor/wall state |
-| `"State"` | `visible`, class-specific state, exported script properties |
-| `"Signals"` | Signal emission events |
-| `"All"` | Everything above (default) |
+| `"position"` | `global_position` and related transform properties |
+| `"physics"` | `velocity`, `linear_velocity`, collision flags, floor/wall state |
+| `"state"` | `visible`, class-specific state, exported script properties |
+| `"signals"` | Signal emission events |
+| `"all"` | Everything above (default) |
 
 To track specific aspects without noise, combine categories explicitly:
 
 ```json
-{ "action": "add", "watch": { "node": "Player", "track": ["Position", "State"] } }
+{ "action": "add", "watch": { "node": "Player", "track": ["position", "state"] } }
 ```
 
 ## Response format
@@ -66,8 +66,7 @@ To track specific aspects without noise, combine categories explicitly:
 {
   "watch_id": "w_a1b2c3",
   "node": "Player",
-  "track": ["position", "velocity", "health"],
-  "active_watches": 2
+  "track": ["position", "velocity", "health"]
 }
 ```
 
@@ -81,14 +80,12 @@ The `watch_id` is used to delete or reference this specific watch. It is stable 
     {
       "watch_id": "w_a1b2c3",
       "node": "Player",
-      "track": ["position", "velocity", "health"],
-      "created_frame": 100
+      "track": ["position", "velocity", "health"]
     },
     {
       "watch_id": "w_d4e5f6",
       "node": "Enemy_0",
-      "track": ["position", "velocity"],
-      "created_frame": 150
+      "track": ["position", "velocity"]
     }
   ]
 }
@@ -112,9 +109,9 @@ The `watch_id` is used to delete or reference this specific watch. It is stable 
 You can create multiple watches — one per `spatial_watch` call:
 
 ```json
-{ "action": "add", "watch": { "node": "Player", "track": ["Position", "State"] } }
-{ "action": "add", "watch": { "node": "Boss", "track": ["Position", "Physics"] } }
-{ "action": "add", "watch": { "node": "Boss/HealthBar", "track": ["State"] } }
+{ "action": "add", "watch": { "node": "Player", "track": ["position", "state"] } }
+{ "action": "add", "watch": { "node": "Boss", "track": ["position", "physics"] } }
+{ "action": "add", "watch": { "node": "Boss/HealthBar", "track": ["state"] } }
 ```
 
 All watched nodes appear in subsequent `spatial_delta` responses whenever their tracked properties change.

@@ -42,11 +42,11 @@ The Watch & React workflow is for situations where you want to **monitor nodes o
 
 ```
 1. spatial_snapshot          — get current frame number
-2. spatial_watch (create)    — register nodes to monitor
+2. spatial_watch (add)       — register nodes to monitor
 3. [game runs, things happen]
 4. spatial_delta             — check what changed
 5. [repeat 3-4 as needed]
-6. spatial_watch (delete)    — clean up
+6. spatial_watch (remove)    — clean up
 ```
 
 ## Example: Monitoring player health during combat
@@ -78,10 +78,10 @@ You suspect enemies are teleporting slightly during patrol waypoint transitions.
 Set up watches on related nodes to catch interactions:
 
 ```json
-{ "action": "create", "node": "Player", "track": ["position", "health"] }
-{ "action": "create", "node": "Boss", "track": ["position", "velocity", "phase", "health"] }
-{ "action": "create", "node": "Boss/AttackHitbox", "track": ["monitoring"] }
-{ "action": "create", "node": "BossArena/HazardTiles", "track": ["monitoring"] }
+{ "action": "add", "watch": { "node": "Player", "track": ["position", "health"] } }
+{ "action": "add", "watch": { "node": "Boss", "track": ["position", "velocity", "phase", "health"] } }
+{ "action": "add", "watch": { "node": "Boss/AttackHitbox", "track": ["monitoring"] } }
+{ "action": "add", "watch": { "node": "BossArena/HazardTiles", "track": ["monitoring"] } }
 ```
 
 Now a single `spatial_delta` call shows changes across all four nodes — you can see the Boss switch `phase` at a certain health threshold, the `AttackHitbox` become active, and the `HazardTiles` respond, all in one response.
@@ -108,5 +108,5 @@ Always clear watches when moving to a new investigation. Stale watches from a pr
 Or delete a specific watch:
 
 ```json
-{ "action": "delete", "watch_id": "w_c8d9e0" }
+{ "action": "remove", "watch_id": "w_c8d9e0" }
 ```

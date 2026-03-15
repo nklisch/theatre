@@ -84,8 +84,8 @@ The agent will call:
 
 ```json
 {
-  "type": "radius",
-  "origin": "player",
+  "query_type": "radius",
+  "from": "player",
   "radius": 5.0
 }
 ```

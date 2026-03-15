@@ -69,7 +69,7 @@ Used with `action: "find"` to locate nodes by name, class, group, or script:
 ```json
 {
   "action": "find",
-  "find_by": "Class",
+  "find_by": "class",
   "find_value": "NavigationAgent3D"
 }
 ```
@@ -77,22 +77,22 @@ Used with `action: "find"` to locate nodes by name, class, group, or script:
 ```json
 {
   "action": "find",
-  "find_by": "Group",
+  "find_by": "group",
   "find_value": "enemies"
 }
 ```
 
 ### `include`
 
-Controls which metadata is included per node (default: `["Class", "Groups"]`):
+Controls which metadata is included per node (default: `["class", "groups"]`):
 
 | Value | Description |
 |---|---|
-| `"Class"` | Godot class name |
-| `"Groups"` | Godot groups the node belongs to |
-| `"Script"` | Attached script path |
-| `"Visible"` | Visibility state |
-| `"ProcessMode"` | Process mode setting |
+| `"class"` | Godot class name |
+| `"groups"` | Godot groups the node belongs to |
+| `"script"` | Attached script path |
+| `"visible"` | Visibility state |
+| `"process_mode"` | Process mode setting |
 
 ## Response format
 
@@ -128,14 +128,14 @@ Controls which metadata is included per node (default: `["Class", "Groups"]`):
 }
 ```
 
-### With `include: ["Class", "Groups", "Visible"]`
+### With `include: ["class", "groups", "visible"]`
 
 ```json
 {
   "action": "subtree",
   "node": "Enemies",
   "depth": 2,
-  "include": ["Class", "Groups", "Visible"]
+  "include": ["class", "groups", "visible"]
 }
 ```
 
@@ -189,6 +189,6 @@ Response includes the requested metadata inline:
 
 **Use `action: "find"` to locate nodes by class or group.** Finding all `NavigationAgent3D` nodes or all nodes in the `"enemies"` group is faster than scanning the whole tree manually.
 
-**Use `include: ["Visible"]` for quick visibility audits.** Checking visibility across many nodes is more efficient than calling `spatial_inspect` on each one.
+**Use `include: ["visible"]` for quick visibility audits.** Checking visibility across many nodes is more efficient than calling `spatial_inspect` on each one.
 
 **Scene tree paths use node names, not indices.** The path `"Enemies/Enemy_0"` refers to the node named `Enemy_0` inside `Enemies`, not the first child. If two nodes have the same name, Godot appends `@2` — this appears in the tree response.

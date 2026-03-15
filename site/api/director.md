@@ -20,7 +20,7 @@ Complete parameter schemas for all Director operations. All operations require `
   op: "scene_read"
   project_path: string
   scene_path: string
-  depth?: number                 // default: 10
+  depth?: number                 // optional; unlimited when omitted
   properties?: boolean           // include property values, default: true
 }
 ```
@@ -337,7 +337,7 @@ Animations are stored as `.tres` resources (AnimationLibrary or Animation). All 
   project_path: string
   resource_path: string          // path to save the .tres animation resource
   length: number                 // seconds
-  loop_mode?: "none" | "loop" | "ping_pong"  // default: "none"
+  loop_mode?: "none" | "linear" | "pingpong"  // default: "none"
   step?: number                  // keyframe step size in seconds
 }
 ```
@@ -409,7 +409,7 @@ Animations are stored as `.tres` resources (AnimationLibrary or Animation). All 
   nodes: Array<{
     node_id: number              // unique integer ID for this shader node
     type: string                 // VisualShader node type class name
-    shader_function?: string     // function/operation specifier
+    shader_function: string      // function/operation specifier
     position?: [number, number]  // position in the visual shader graph
     properties?: { [key: string]: any }
   }>
@@ -418,7 +418,7 @@ Animations are stored as `.tres` resources (AnimationLibrary or Animation). All 
     from_port: number
     to_node: number              // destination node_id
     to_port: number
-    shader_function?: string
+    shader_function: string
   }>
 }
 ```

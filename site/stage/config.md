@@ -60,18 +60,18 @@ This is how you expose custom exported variables (like `health`) in snapshot res
 
 Controls how nodes are grouped in snapshot responses:
 
-- `"Group"` — group by Godot groups
-- `"Class"` — group by Godot class
-- `"Proximity"` — cluster spatially nearby nodes
-- `"None"` — flat list (default)
+- `"group"` — group by Godot groups
+- `"class"` — group by Godot class
+- `"proximity"` — cluster spatially nearby nodes
+- `"none"` — flat list (default)
 
 ### `bearing_format`
 
 Controls how bearings are reported in relationship and spatial context results:
 
-- `"Cardinal"` — compass directions (N, NE, SW, etc.)
-- `"Degrees"` — numeric degrees (0–360)
-- `"Both"` — both formats together
+- `"cardinal"` — compass directions (N, NE, SW, etc.)
+- `"degrees"` — numeric degrees (0–360)
+- `"both"` — both formats together
 
 ### `token_hard_cap`
 
@@ -94,7 +94,7 @@ Sets a hard maximum on response token count. Unlike `token_budget` (which the ca
   "cluster_by": "None",
   "bearing_format": "Degrees",
   "expose_internals": false,
-  "poll_interval": 100,
+  "poll_interval": 1,
   "token_hard_cap": null
 }
 ```

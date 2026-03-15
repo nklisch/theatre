@@ -8,9 +8,9 @@ Get an instant picture of every tracked node in the running game.
 
 ```typescript
 {
-  perspective?: "Camera" | "Node" | "Point"  // default: "Camera"
-  focal_node?: string                         // node name or path; anchors perspective for "Node"
-  focal_point?: [number, number, number]      // world-space point; used for "Point" perspective
+  perspective?: "camera" | "node" | "point"  // default: "camera"
+  focal_node?: string                         // node name or path; anchors perspective for "node"
+  focal_point?: [number, number, number]      // world-space point; used for "point" perspective
   radius?: number                             // default: 50.0
   detail?: "summary" | "standard" | "full"   // default: "standard"
   groups?: string[]                           // filter to nodes belonging to these groups
@@ -56,7 +56,7 @@ Get only what changed since the last `spatial_snapshot` baseline.
 
 ```typescript
 {
-  perspective?: "Camera" | "Node" | "Point"  // default: "Camera"
+  perspective?: "camera" | "node" | "point"  // default: "camera"
   radius?: number                             // default: 50.0
   groups?: string[]                           // filter to nodes in these groups
   class_filter?: string[]
@@ -261,10 +261,10 @@ Monitor nodes continuously for changes.
     node: string
     conditions?: Array<{
       property: string
-      operator: "Lt" | "Gt" | "Eq" | "Changed"
+      operator: "lt" | "gt" | "eq" | "changed"
       value?: any
     }>              // default: []
-    track?: Array<"Position" | "State" | "Signals" | "Physics" | "All">
+    track?: Array<"position" | "state" | "signals" | "physics" | "all">
                     // default: ["All"]
   }
 }
@@ -292,7 +292,6 @@ Monitor nodes continuously for changes.
   watch_id: string
   node: string
   track: string[]
-  active_watches: number
 }
 ```
 
@@ -303,7 +302,6 @@ Monitor nodes continuously for changes.
     watch_id: string
     node: string
     track: string[]
-    created_frame: number
   }>
 }
 ```
@@ -326,8 +324,8 @@ Configure MCP behavior (clustering, bearing format, token limits, static pattern
 {
   static_patterns?: string[]               // node name patterns treated as static (not tracked)
   state_properties?: { [class: string]: string[] }  // extra properties to capture per class
-  cluster_by?: "Group" | "Class" | "Proximity" | "None"
-  bearing_format?: "Cardinal" | "Degrees" | "Both"
+  cluster_by?: "group" | "class" | "proximity" | "none"
+  bearing_format?: "cardinal" | "degrees" | "both"
   expose_internals?: boolean               // include internal/hidden nodes
   poll_interval?: number                   // polling interval in ms
   token_hard_cap?: number                  // hard cap on response tokens
@@ -465,9 +463,9 @@ Get scene tree structure without spatial data.
   action: "roots" | "children" | "subtree" | "ancestors" | "find"
   node?: string                            // required for children/subtree/ancestors
   depth?: number                           // default: 3
-  find_by?: "Name" | "Class" | "Group" | "Script"
+  find_by?: "name" | "class" | "group" | "script"
   find_value?: string                      // search term for find action
-  include?: Array<"Class" | "Groups" | "Script" | "Visible" | "ProcessMode">
+  include?: Array<"class" | "groups" | "script" | "visible" | "process_mode">
                                            // default: ["Class", "Groups"]
   token_budget?: number
 }

@@ -8,8 +8,8 @@ const animation_remove_track = data.params['animation_remove_track'] ?? []
 
 const messages0 = [
   { role: 'human', text: `Create a bounce animation on the coin: it should move up 2 meters and back over 0.6 seconds, looping.` },
-  { role: 'agent', text: `Animation created (0.6s, ping_pong loop). Adding the position track with keyframes.` },
-  { role: 'agent', text: `Done. The coin now has a float animation: position goes from [0,0,0] to [0,2,0] over 0.6 seconds, ping_pong looping. Assign this AnimationLibrary to an AnimationPlayer and enable autoplay to start it immediately.` },
+  { role: 'agent', text: `Animation created (0.6s, pingpong loop). Adding the position track with keyframes.` },
+  { role: 'agent', text: `Done. The coin now has a float animation: position goes from [0,0,0] to [0,2,0] over 0.6 seconds, pingpong looping. Assign this AnimationLibrary to an AnimationPlayer and enable autoplay to start it immediately.` },
 ]
 </script>
 
@@ -31,7 +31,7 @@ Create a new animation resource and save it to disk.
   "project_path": "/home/user/my-game",
   "resource_path": "animations/coin_float.tres",
   "length": 0.6,
-  "loop_mode": "ping_pong"
+  "loop_mode": "pingpong"
 }
 ```
 
@@ -43,7 +43,7 @@ Create a new animation resource and save it to disk.
   "op": "animation_create",
   "resource_path": "animations/coin_float.tres",
   "length": 0.6,
-  "loop_mode": "ping_pong",
+  "loop_mode": "pingpong",
   "result": "ok"
 }
 ```
@@ -157,7 +157,7 @@ Or remove all tracks for a node path:
 
 ## Complete example: Creating a bounce animation
 
-This creates an animation that moves a node from y=0 to y=2 and back, with ping_pong looping. All keyframes are passed directly in `animation_add_track`.
+This creates an animation that moves a node from y=0 to y=2 and back, with pingpong looping. All keyframes are passed directly in `animation_add_track`.
 
 <AgentConversation :messages="messages0" />
 
@@ -181,7 +181,7 @@ After assigning an animation resource to an `AnimationPlayer` via its library, s
 
 **Pass all keyframes in `animation_add_track`.** The `keyframes` array contains every keyframe for the track. There is no separate "set key" call — all timing and values are specified up front.
 
-**Use `ping_pong` for symmetric loops.** A bounce from 0→2 with `ping_pong` automatically returns 2→0. With `loop`, you need to manually include the return keyframe in the `keyframes` array.
+**Use `pingpong` for symmetric loops.** A bounce from 0→2 with `pingpong` automatically returns 2→0. With `linear`, you need to manually include the return keyframe in the `keyframes` array.
 
 **Use `animation_read` to inspect existing animations.** Before modifying keyframes, read the animation to get the exact `track_index` values and current keyframe times.
 

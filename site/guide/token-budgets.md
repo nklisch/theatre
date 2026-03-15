@@ -80,7 +80,7 @@ The server builds the response node by node, measuring token usage as it goes. W
   "node_count": 200,
   "included_nodes": 12,
   "truncated": true,
-  "summary": { ... 12 nodes ... }
+  "nodes": { ... 12 nodes ... }
 }
 ```
 
@@ -151,8 +151,8 @@ The `clips` tool's `query_range` action has its own budget parameter (`max_frame
 {
   "action": "query_range",
   "clip_id": "clip_01",
-  "start_frame": 300,
-  "end_frame": 325,
+  "from_frame": 300,
+  "to_frame": 325,
   "nodes": ["Player", "Enemy"],
   "detail": "summary"
 }
