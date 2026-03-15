@@ -189,6 +189,7 @@ pub struct TileMapSetCellsResponse {
 pub struct TileMapGetCellsResponse {
     pub cells: Vec<serde_json::Value>,
     pub cell_count: u32,
+
     pub used_rect: serde_json::Value,
 }
 
@@ -250,6 +251,7 @@ pub struct AnimationReadResponse {
     pub length: f64,
     pub loop_mode: String,
     pub step: f64,
+
     pub tracks: Vec<serde_json::Value>,
 }
 
@@ -335,8 +337,11 @@ pub struct BatchResponse {
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct SceneDiffResponse {
     pub added: Vec<serde_json::Value>,
+
     pub removed: Vec<serde_json::Value>,
+
     pub moved: Vec<serde_json::Value>,
+
     pub changed: Vec<serde_json::Value>,
 }
 

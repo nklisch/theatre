@@ -20,6 +20,20 @@ fn attach_output_schema<T: JsonSchema + 'static>(
     }
 }
 
+/// Post-process all tool schemas in the router, replacing bare `true` schema
+/// values with `{}` for MCP client compatibility.
+fn sanitize_schemas(router: &mut ToolRouter<StageServer>) {
+    for route in router.map.values_mut() {
+        if let Some(ref schema) = route.attr.output_schema {
+            let mut value = serde_json::Value::Object(schema.as_ref().clone());
+            stage_protocol::mcp_helpers::replace_bool_schemas(&mut value);
+            if let serde_json::Value::Object(map) = value {
+                route.attr.output_schema = Some(Arc::new(map));
+            }
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct StageServer {
     pub state: Arc<Mutex<SessionState>>,
@@ -35,6 +49,7 @@ impl StageServer {
         attach_output_schema::<DeltaResponse>(&mut router, "spatial_delta");
         attach_output_schema::<WatchAddResponse>(&mut router, "spatial_watch");
         attach_output_schema::<ConfigResponse>(&mut router, "spatial_config");
+        sanitize_schemas(&mut router);
         router
     }
 

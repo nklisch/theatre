@@ -69,8 +69,8 @@ pub fn run(args: McpArgs) -> Result<()> {
         port_opt,
     );
 
-    let written = write_mcp_json(&args.project, &mcp, overwrite)
-        .context("Failed to write .mcp.json")?;
+    let written =
+        write_mcp_json(&args.project, &mcp, overwrite).context("Failed to write .mcp.json")?;
 
     if written {
         eprintln!(

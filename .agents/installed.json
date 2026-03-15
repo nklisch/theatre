@@ -20,6 +20,29 @@
           "platform": "github"
         }
       }
+    },
+    {
+      "name": "schemars",
+      "description": "\"Research findings on the schemars Rust crate for JSON Schema generation.",
+      "repo": "https://github.com/nklisch/skills.git",
+      "ref": null,
+      "sha": "77b03c1935c60a327f5ba55fc7bdc52240aa5393",
+      "scope": "project",
+      "path": ".agents/skills/schemars",
+      "tap": "skills",
+      "also": [
+        "claude-code"
+      ],
+      "installedAt": "2026-03-15T14:31:50.662Z",
+      "updatedAt": "2026-03-15T14:31:50.662Z",
+      "trust": {
+        "tier": "publisher",
+        "publisher": {
+          "name": "nklisch",
+          "platform": "github"
+        },
+        "tap": "skills"
+      }
     }
   ]
 }

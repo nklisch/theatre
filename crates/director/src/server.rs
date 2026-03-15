@@ -35,6 +35,20 @@ fn attach_output_schema<T: JsonSchema + 'static>(
     }
 }
 
+/// Post-process all tool schemas in the router, replacing bare `true` schema
+/// values with `{}` for MCP client compatibility.
+fn sanitize_schemas(router: &mut ToolRouter<DirectorServer>) {
+    for route in router.map.values_mut() {
+        if let Some(ref schema) = route.attr.output_schema {
+            let mut value = serde_json::Value::Object(schema.as_ref().clone());
+            stage_protocol::mcp_helpers::replace_bool_schemas(&mut value);
+            if let serde_json::Value::Object(map) = value {
+                route.attr.output_schema = Some(Arc::new(map));
+            }
+        }
+    }
+}
+
 impl DirectorServer {
     pub fn new() -> Self {
         let mut router = Self::tool_router();
@@ -80,6 +94,8 @@ impl DirectorServer {
         attach_output_schema::<SignalConnectionResponse>(&mut router, "signal_connect");
         attach_output_schema::<SignalConnectionResponse>(&mut router, "signal_disconnect");
         attach_output_schema::<SignalListResponse>(&mut router, "signal_list");
+
+        sanitize_schemas(&mut router);
 
         Self {
             tool_router: router,

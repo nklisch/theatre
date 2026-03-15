@@ -38,3 +38,27 @@ pub fn serialize_response<T: Serialize>(response: &T) -> Result<String, McpError
     serde_json::to_string(response)
         .map_err(|e| McpError::internal_error(format!("Response serialization error: {e}"), None))
 }
+
+/// Replace bare `true` values in a JSON Schema tree with `{}`.
+///
+/// schemars v1 emits `true` for `serde_json::Value` fields (the JSON Schema
+/// "accept anything" shorthand). Some MCP clients (notably Claude Code) reject
+/// bare booleans during schema validation. `{}` is the equivalent object form.
+pub fn replace_bool_schemas(value: &mut serde_json::Value) {
+    match value {
+        serde_json::Value::Bool(true) => {
+            *value = serde_json::Value::Object(serde_json::Map::new());
+        }
+        serde_json::Value::Object(map) => {
+            for v in map.values_mut() {
+                replace_bool_schemas(v);
+            }
+        }
+        serde_json::Value::Array(arr) => {
+            for v in arr.iter_mut() {
+                replace_bool_schemas(v);
+            }
+        }
+        _ => {}
+    }
+}
