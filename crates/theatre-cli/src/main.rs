@@ -7,6 +7,7 @@ mod init;
 mod install;
 mod paths;
 mod project;
+mod rules;
 mod telemetry;
 
 #[derive(Parser)]
@@ -26,6 +27,8 @@ enum Command {
     Deploy(deploy::DeployArgs),
     /// Enable or disable Theatre plugins in a Godot project
     Enable(enable::EnableArgs),
+    /// Generate AI agent rules to prevent hand-editing Godot files
+    Rules(rules::RulesArgs),
 }
 
 fn main() -> Result<()> {
@@ -35,5 +38,6 @@ fn main() -> Result<()> {
         Command::Init(args) => init::run(args),
         Command::Deploy(args) => deploy::run(args),
         Command::Enable(args) => enable::run(args),
+        Command::Rules(args) => rules::run(args),
     }
 }

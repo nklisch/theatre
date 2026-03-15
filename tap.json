@@ -1,0 +1,24 @@
+{
+  "name": "theatre",
+  "description": "Agent skills for the Theatre Godot AI toolkit — spatial debugging and scene authoring via MCP.",
+  "skills": [
+    {
+      "name": "theatre-stage",
+      "description": "Spatial debugging skill for observing and interacting with a running Godot game. Teaches agents 9 MCP tools: snapshots, deltas, queries, watches, clips, and live property mutation. Use when debugging physics, pathfinding, collisions, AI state, or any spatial game bug.",
+      "repo": "nklisch/theatre",
+      "tags": ["godot", "mcp", "spatial", "debugging", "game-development"]
+    },
+    {
+      "name": "theatre-director",
+      "description": "Scene authoring skill for creating and modifying Godot scenes, nodes, resources, tilemaps, animations, and signals. Teaches agents 38 Director tools for programmatic Godot project editing without hand-editing .tscn files.",
+      "repo": "nklisch/theatre",
+      "tags": ["godot", "mcp", "scenes", "resources", "game-development"]
+    },
+    {
+      "name": "godot-gdscript-patterns",
+      "description": "Master Godot 4 GDScript patterns including signals, scenes, state machines, and optimization. Use when building Godot games, implementing game systems, or learning GDScript best practices.",
+      "repo": "nklisch/theatre",
+      "tags": ["godot", "gdscript", "patterns", "game-development"]
+    }
+  ]
+}

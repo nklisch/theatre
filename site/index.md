@@ -116,9 +116,7 @@ This copies addons, generates `.mcp.json`, and enables plugins — all interacti
 skilltap install nklisch/theatre
 ```
 
-Install skilltap from [skilltap.dev](https://skilltap.dev).
-
-Teaches your agent how to use Stage and Director effectively — tool selection, workflows, and pitfalls.
+Install [skilltap](https://skilltap.dev) to manage agent skills. Installs **theatre-stage** (spatial debugging) and **theatre-director** (scene authoring) skills that teach your agent tool selection, workflows, and pitfalls.
 
 ### 4. Run your game and ask
 

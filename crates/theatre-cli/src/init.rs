@@ -149,6 +149,9 @@ pub fn run(args: InitArgs) -> Result<()> {
         eprintln!("  {} Enabled Director in project.godot", style("✓").green());
     }
 
+    // Step 6d: Generate agent rules
+    crate::rules::run_from_init(&args.project, args.yes)?;
+
     eprintln!();
     eprintln!("Done. Open your project in Godot — plugins are active.");
 

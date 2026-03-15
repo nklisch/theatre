@@ -1,11 +1,14 @@
 ---
-name: theatre
+name: theatre-director
 description: >
-  Use Director to create and modify Godot scenes, nodes, resources, tilemaps,
-  animations, and signals via MCP tools or CLI. Invoke when the user asks to
-  build scenes, add nodes, set properties, create materials, configure physics
-  layers, edit animations, or perform any Godot project authoring task
-  programmatically.
+  Godot scene and resource authoring via Director MCP tools or CLI.
+  ACTIVATE when: user asks to create scenes, add/remove/reparent nodes,
+  set node properties, create materials or shapes, edit tilemaps or gridmaps,
+  create or modify animations, connect/disconnect signals, set collision
+  layers, attach scripts, diff scenes, or perform any Godot project file
+  editing task programmatically. Also activate for batch operations or
+  "build me a level/scene/UI". Do NOT activate for observing a running
+  game — use theatre-stage for that.
 ---
 
 # Director — Godot Scene & Resource Authoring

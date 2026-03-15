@@ -1,11 +1,15 @@
 ---
-name: stage
+name: theatre-stage
 description: >
-  Use Stage to spatially debug a running Godot game via MCP tools or CLI.
-  Invoke when the user asks about game state, node positions, spatial bugs,
-  physics, pathfinding, signals, or anything requiring understanding what's
-  happening in the running game world. Also invoke for clip analysis, watch
-  subscriptions, or game state manipulation.
+  Spatial debugging for running Godot games via Stage MCP tools or CLI.
+  ACTIVATE when: user mentions game state, node positions, spatial bugs,
+  physics issues, pathfinding problems, collision debugging, AI behavior,
+  signal tracing, "take a snapshot", "what's happening in the game",
+  clip/recording analysis, watch subscriptions, or any task that requires
+  observing or interacting with a live Godot game world. Also activate
+  for frame-by-frame debugging, teleporting nodes, pausing/advancing time,
+  or injecting input. Do NOT activate for editing .tscn files or creating
+  scenes — use theatre-director for that.
 ---
 
 # Stage — Spatial Debugging for Godot

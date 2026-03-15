@@ -206,19 +206,27 @@ Theatre ships agent skills that teach AI agents how to use Stage and Director ef
 
 ### Via skilltap (recommended)
 
-Install [skilltap](https://skilltap.dev) first, then:
+[skilltap](https://skilltap.dev) is a package manager for agent skills. Install it first, then add the Theatre tap and install skills:
 
 ```bash
-# Install both skills to the current project
+# Install all Theatre skills to the current project
 skilltap install nklisch/theatre
 
 # Or install globally (available to all projects)
 skilltap install nklisch/theatre --global
 ```
 
-This installs two skills:
-- **stage** — 9 spatial observation tools, debugging workflows, clip analysis
-- **theatre** — 31 Director scene/resource authoring tools with full parameter reference
+You can also add Theatre as a tap for browsing and discovery:
+
+```bash
+skilltap tap add theatre nklisch/theatre
+skilltap tap install   # interactive skill picker
+```
+
+Available skills:
+- **theatre-stage** — 9 spatial observation tools for debugging a running Godot game: snapshots, deltas, queries, watches, clips, and live property mutation
+- **theatre-director** — 38 Director tools for creating and modifying Godot scenes, nodes, resources, tilemaps, animations, and signals
+- **godot-gdscript-patterns** — Godot 4 GDScript patterns: signals, state machines, object pooling, component systems, and performance tips
 
 ### Manual installation
 
@@ -226,9 +234,38 @@ Copy the skill directories from the Theatre repo directly:
 
 ```bash
 # From within the theatre repo
-cp -r .agents/skills/stage <your-project>/.agents/skills/
-cp -r .agents/skills/theatre <your-project>/.agents/skills/
+cp -r .agents/skills/theatre-stage <your-project>/.agents/skills/
+cp -r .agents/skills/theatre-director <your-project>/.agents/skills/
 ```
+
+## Agent rules (recommended)
+
+AI agents will sometimes try to directly edit `.tscn` and `.tres` files instead of using Director. This breaks UIDs, resource references, and Godot's serialization format. Theatre can generate a rules file that prevents this.
+
+### Via the CLI
+
+`theatre init` prompts for this automatically. To add rules to an existing project:
+
+```bash
+theatre rules ~/path/to/your-godot-project
+```
+
+This gives you three options:
+- **`.claude/rules/godot.md`** — Claude Code auto-loads this (recommended for Claude Code users)
+- **`CLAUDE.md`** — appends rules to your project's CLAUDE.md
+- **`AGENTS.md`** — appends rules for non-Claude agents
+
+Use `--yes` to skip prompts and generate `.claude/rules/godot.md`:
+
+```bash
+theatre rules ~/path/to/your-godot-project --yes
+```
+
+### Manual snippet
+
+If you prefer to add the rules yourself, paste this into your project's `CLAUDE.md`, `AGENTS.md`, or `.claude/rules/godot.md`:
+
+<<< @/../rules-template.md
 
 ## Using the CLI (alternative to MCP)
 
