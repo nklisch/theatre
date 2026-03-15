@@ -477,10 +477,10 @@ fn execute_inject_mouse_button(
     event.set_button_index(button_index);
     event.set_pressed(pressed);
 
-    if let Some(pos) = position {
-        if pos.len() >= 2 {
-            event.set_position(Vector2::new(pos[0] as f32, pos[1] as f32));
-        }
+    if let Some(pos) = position
+        && pos.len() >= 2
+    {
+        event.set_position(Vector2::new(pos[0] as f32, pos[1] as f32));
     }
 
     let input_event: Gd<InputEvent> = event.upcast();

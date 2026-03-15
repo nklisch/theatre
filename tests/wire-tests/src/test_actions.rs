@@ -418,16 +418,12 @@ fn remove_node_removes_from_tree() {
 
     // Verify Ammo is gone from snapshot
     let snap_after = snapshot(&mut f);
-    let has_ammo = snap_after["entities"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|e| {
-            e["path"]
-                .as_str()
-                .map(|p| p.contains("Ammo"))
-                .unwrap_or(false)
-        });
+    let has_ammo = snap_after["entities"].as_array().unwrap().iter().any(|e| {
+        e["path"]
+            .as_str()
+            .map(|p| p.contains("Ammo"))
+            .unwrap_or(false)
+    });
     assert!(!has_ammo, "Ammo should be removed from the tree");
 }
 
@@ -740,7 +736,11 @@ fn teleport_non_spatial_node_returns_error() {
 
     assert_eq!(result["result"], "ok");
     let prev_pos = result["details"]["previous_position"].as_array().unwrap();
-    assert_eq!(prev_pos.len(), 3, "3D previous_position should have 3 components");
+    assert_eq!(
+        prev_pos.len(),
+        3,
+        "3D previous_position should have 3 components"
+    );
     let new_pos = result["details"]["new_position"].as_array().unwrap();
     assert_approx(new_pos[0].as_f64().unwrap(), 5.0);
     assert_approx(new_pos[1].as_f64().unwrap(), 1.0);
