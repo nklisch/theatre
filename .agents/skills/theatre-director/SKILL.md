@@ -5,7 +5,8 @@ description: >
   ACTIVATE when: user asks to create scenes, add/remove/reparent nodes,
   set node properties, create materials or shapes, edit tilemaps or gridmaps,
   create or modify animations, connect/disconnect signals, set collision
-  layers, attach scripts, diff scenes, or perform any Godot project file
+  layers, attach scripts, diff scenes, manage autoloads, set project settings,
+  check for script errors, see editor state, or perform any Godot project file
   editing task programmatically. Also activate for batch operations or
   "build me a level/scene/UI". Do NOT activate for observing a running
   game — use theatre-stage for that.
@@ -13,7 +14,7 @@ description: >
 
 # Director — Godot Scene & Resource Authoring
 
-Director is part of the **Theatre** toolkit (alongside Stage). It gives you 38 tools to create and modify Godot project files: scenes, nodes, resources, tilemaps, gridmaps, animations, physics, signals, and shaders.
+Director is part of the **Theatre** toolkit (alongside Stage). It gives you 43 tools to create and modify Godot project files: scenes, nodes, resources, tilemaps, gridmaps, animations, physics, signals, shaders, and project settings — plus diagnostics and editor state visibility.
 
 **Two interfaces, identical capabilities:**
 
@@ -101,13 +102,22 @@ All CLI output is JSON to stdout. Errors are JSON to stdout with exit codes: 0 s
 | `signal_disconnect` | Remove a signal connection |
 | `signal_list` | List all connections (optional node filter) |
 
+### Project Tools
+| Tool | Purpose |
+|---|---|
+| `autoload_add` | Register an autoload singleton in project.godot |
+| `autoload_remove` | Remove an autoload singleton |
+| `project_settings_set` | Set project.godot settings (main scene, window size, etc.) |
+| `project_reload` | Restart daemon + validate scripts — returns parse errors |
+| `editor_status` | Editor viewport: open scenes, active scene, game running, recent log, errors |
+| `uid_get` | Resolve a file's Godot UID |
+| `uid_update_project` | Scan and register missing UIDs |
+| `export_mesh_library` | Export MeshInstance3D nodes as MeshLibrary |
+
 ### Other Tools
 | Tool | Purpose |
 |---|---|
 | `visual_shader_create` | Create VisualShader with node graph |
-| `export_mesh_library` | Export MeshInstance3D nodes as MeshLibrary |
-| `uid_get` | Resolve a file's Godot UID |
-| `uid_update_project` | Scan and register missing UIDs |
 | `batch` | Execute multiple operations in one Godot invocation |
 
 ## Key Workflows
@@ -201,6 +211,47 @@ All CLI output is JSON to stdout. Errors are JSON to stdout with exit codes: 0 s
   "target_path": ".", "method_name": "_on_start_pressed" }
 ```
 
+### Create Scripts → Reload → Register Autoload → Build Scene
+
+```jsonc
+// 1. Write scripts with the Write tool (not Director)
+
+// 2. Reload project to validate scripts and restart daemon
+{ "project_path": "/home/user/game" }
+// → returns { errors: [...], warnings: [...], scripts_checked: 14, autoloads: {...} }
+// Fix any errors before proceeding!
+
+// 3. Register autoload
+{ "project_path": "/home/user/game", "name": "EventBus", "script_path": "autoload/event_bus.gd" }
+
+// 4. Now safe to build scenes that reference the script
+{ "project_path": "/home/user/game", "scene_path": "scenes/main.tscn", ... }
+```
+
+### Check Editor State
+
+```jsonc
+// See what's happening in the editor right now
+{ "project_path": "/home/user/game" }
+// → { editor_connected: true, active_scene: "scenes/player.tscn",
+//     open_scenes: [...], game_running: false, autoloads: {...},
+//     recent_log: [...], errors: [...], warnings: [...] }
+```
+
+### Set Project Settings
+
+```jsonc
+{
+  "project_path": "/home/user/game",
+  "settings": {
+    "application/run/main_scene": "res://scenes/main/main.tscn",
+    "application/config/name": "My Game",
+    "display/window/size/viewport_width": 1280,
+    "display/window/size/viewport_height": 720
+  }
+}
+```
+
 ### Scene Diffing
 
 ```jsonc
@@ -239,4 +290,4 @@ Director auto-converts string property values to Godot types:
 
 ## Full Parameter Reference
 
-See [references/director-tools.md](references/director-tools.md) for complete parameter specifications for all 38 tools.
+See [references/director-tools.md](references/director-tools.md) for complete parameter specifications for all 43 tools.

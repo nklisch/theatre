@@ -1,6 +1,6 @@
 # Director Tools — Full Parameter Reference
 
-All 38 tools require `project_path` (string, required) as the first parameter.
+All 43 tools require `project_path` (string, required) as the first parameter.
 
 ## Scene Tools
 
@@ -255,6 +255,38 @@ Resolve a file's Godot UID.
 ### uid_update_project
 Scan and register missing UIDs.
 - `directory` (string, optional) — Subdirectory to scan
+
+### autoload_add
+Register an autoload singleton in project.godot.
+- `name` (string, required) — Singleton name as used in code (e.g. "EventBus")
+- `script_path` (string, required) — Path relative to project root (e.g. "autoload/event_bus.gd")
+- `enabled` (bool, default true) — Whether the autoload is active
+
+### autoload_remove
+Remove an autoload singleton from project.godot.
+- `name` (string, required) — Autoload name to remove
+
+### project_settings_set
+Set one or more project.godot settings.
+- `settings` (object, required) — Map of "section/key" → value. Set value to null to erase.
+
+Common keys: `application/run/main_scene`, `application/config/name`, `display/window/size/viewport_width`, `display/window/size/viewport_height`.
+
+### project_reload
+Restart daemon, validate all scripts, return diagnostics.
+No additional params beyond `project_path`.
+
+Returns: `{ result, scripts_checked, autoloads, errors: [{file, line, severity, message}], warnings: [...] }`
+
+Call this after writing .gd files and before using them in scene operations.
+
+### editor_status
+Get editor state snapshot: open scenes, active scene, game running, autoloads, recent log with parsed errors.
+No additional params beyond `project_path`.
+
+Returns: `{ editor_connected, active_scene, open_scenes, game_running, autoloads, recent_log, errors, warnings }`
+
+Works in headless mode (returns `editor_connected: false` + autoloads + log).
 
 ### batch
 Execute multiple operations in one Godot invocation.

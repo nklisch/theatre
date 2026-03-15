@@ -1,5 +1,5 @@
 ---
-description: "Director provides 42 operations for building Godot scenes, nodes, resources, tilemaps, animations, and project settings via MCP."
+description: "Director provides 43 operations for building Godot scenes, nodes, resources, tilemaps, animations, and project settings via MCP."
 ---
 
 # Director
@@ -19,7 +19,7 @@ An AI agent that edits `.tscn` files directly will produce scenes that load with
 
 ## Operations by domain
 
-Director supports 42 operations across 9 domains:
+Director supports 43 operations across 9 domains:
 
 | Domain | Operations |
 |---|---|
@@ -31,7 +31,7 @@ Director supports 42 operations across 9 domains:
 | **Shaders** | Create visual shader, set shader code, get/set shader parameters |
 | **Physics layers** | Set layer/mask names, set layer/mask bits |
 | **Wiring** | Connect signals, disconnect signals, list signals, set export values |
-| **Project** | Add/remove autoloads, set project settings, filesystem scan |
+| **Project** | Add/remove autoloads, set project settings, reload & validate, editor status |
 
 All operations accept `project_path` as the first parameter — the absolute path to your Godot project directory.
 

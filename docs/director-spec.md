@@ -714,6 +714,49 @@ Params: project_path, scene_path, output_path, items?: string[]
 Returns: { path, items_exported }
 ```
 
+#### `autoload_add`
+
+```
+Params: project_path, name, script_path, enabled? (default: true)
+Returns: { name, script_path, enabled }
+```
+
+#### `autoload_remove`
+
+```
+Params: project_path, name
+Returns: { name }
+```
+
+#### `project_settings_set`
+
+```
+Params: project_path, settings: Record<string, any>
+Returns: { keys_set: string[] }
+```
+
+Keys use `"section/key"` format matching `project.godot` structure. Set a value to `null` to erase.
+
+#### `project_reload`
+
+Reload the project, restart the daemon, and validate all scripts. Returns structured diagnostics from Godot's stderr (parse errors, missing identifiers, broken references).
+
+```
+Params: project_path
+Returns: { result, scripts_checked, autoloads, errors: Diagnostic[], warnings: Diagnostic[] }
+```
+
+Each diagnostic: `{ file, line, severity, message }`.
+
+#### `editor_status`
+
+Snapshot of the Godot editor's current state. When the editor is connected, returns open scenes, active scene, game running state, autoloads, and recent log output with parsed diagnostics. When headless, returns autoloads and log only.
+
+```
+Params: project_path
+Returns: { editor_connected, active_scene, open_scenes, game_running, autoloads, recent_log, errors, warnings }
+```
+
 ## Implementation Order
 
 Build these in the order you need them.

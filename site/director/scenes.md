@@ -17,6 +17,7 @@ const autoload_add = data.params['autoload_add'] ?? []
 const autoload_remove = data.params['autoload_remove'] ?? []
 const project_settings_set = data.params['project_settings_set'] ?? []
 const project_reload = data.params['project_reload'] ?? []
+const editor_status = data.params['editor_status'] ?? []
 
 const messages0 = [
   { role: 'human', text: `Create a new player scene with a CharacterBody3D root, and add a CapsuleShape3D collision shape.` },
@@ -318,6 +319,56 @@ Write tool: write autoload/event_bus.gd
 → autoload_add             (registers EventBus in project.godot)
 → scene_create + node_set_script  (safe to reference the script)
 ```
+
+### `editor_status`
+
+Get a snapshot of the Godot editor's current state. Returns which scenes are open, which is active, whether the game is running, registered autoloads, and recent log output from `godot.log` (errors, warnings, print statements). Works in headless mode too — returns autoloads and log with `editor_connected: false`.
+
+```json
+{
+  "op": "editor_status",
+  "project_path": "/home/user/my-game"
+}
+```
+
+<ParamTable :params="editor_status" />
+
+**Response (editor running):**
+```json
+{
+  "editor_connected": true,
+  "active_scene": "scenes/player.tscn",
+  "open_scenes": ["scenes/main.tscn", "scenes/player.tscn"],
+  "game_running": false,
+  "autoloads": { "EventBus": "autoload/event_bus.gd" },
+  "recent_log": [
+    "Godot Engine v4.6.1.stable.official",
+    "[Director] Editor plugin listening on port 6551",
+    "ERROR: res://debug/test_grid.gd:20 - Parse Error: Identifier \"EventBus\" not declared"
+  ],
+  "errors": [
+    { "file": "debug/test_grid.gd", "line": 20, "severity": "error",
+      "message": "Parse Error: Identifier \"EventBus\" not declared in the current scope." }
+  ],
+  "warnings": []
+}
+```
+
+**Response (headless / editor not running):**
+```json
+{
+  "editor_connected": false,
+  "active_scene": "",
+  "open_scenes": [],
+  "game_running": false,
+  "autoloads": { "EventBus": "autoload/event_bus.gd" },
+  "recent_log": ["..."],
+  "errors": [],
+  "warnings": []
+}
+```
+
+Use `editor_status` to orient yourself before making changes, to check whether the editor is connected, or to see what errors currently exist in the project.
 
 ## Example conversation
 

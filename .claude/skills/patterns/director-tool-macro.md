@@ -4,7 +4,7 @@ Every Director MCP tool handler is a one-liner using the `director_tool!` macro,
 
 ## Rationale
 
-Director has 42 tools that all follow the same dispatch path: serialize params to JSON, route through the backend (editor/daemon/one-shot), unwrap the result, serialize to string. The macro collapses this to a single call per tool, keeping boilerplate in one place.
+Director has 43 tools that all follow the same dispatch path: serialize params to JSON, route through the backend (editor/daemon/one-shot), unwrap the result, serialize to string. The macro collapses this to a single call per tool, keeping boilerplate in one place.
 
 Unlike Stage tools, Director tools:
 - Have no activity logging (no addon-side instrumentation)
