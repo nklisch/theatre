@@ -1,7 +1,7 @@
 # Theatre
 
 A toolkit giving AI agents the ability to build and debug Godot games. Two tools
-— **Director** (build) and **Spectator** (observe) — available via MCP servers
+— **Director** (build) and **Stage** (observe & interact) — available via MCP servers
 or standalone CLI, working together or independently.
 
 **Documentation**: [godot-theatre.dev](https://godot-theatre.dev)
