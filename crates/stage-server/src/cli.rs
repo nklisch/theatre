@@ -107,6 +107,7 @@ pub async fn run(tool: &str, json_arg: Option<&str>) -> Result<()> {
     // 6. Create session state
     let state = Arc::new(Mutex::new(tcp::SessionState {
         config: base_config,
+        project_dir: project_dir.clone(),
         ..Default::default()
     }));
 

@@ -6,6 +6,7 @@ mod support;
 
 use serde_json::json;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 use support::{
     fixtures::{mock_scene_2d, mock_scene_3d},
@@ -915,19 +916,24 @@ async fn test_recording_list() {
 
 #[tokio::test]
 async fn test_recording_delete() {
-    let handler: QueryHandler = Arc::new(|method, params| match method {
-        "recording_delete" => {
-            let id = params.get("clip_id").and_then(|v| v.as_str()).unwrap_or("");
-            if id == "clip_001" {
-                Ok(json!({ "result": "ok", "clip_id": "clip_001" }))
-            } else {
-                Err(("not_found".into(), format!("clip {id} not found")))
-            }
-        }
+    let handler: QueryHandler = Arc::new(|method, _| match method {
         _ => Err(("unknown_method".into(), method.to_string())),
     });
 
     let harness = TestHarness::new(handler).await;
+
+    // Create a temp directory with a fake clip SQLite file
+    let tmp = tempfile::TempDir::new().unwrap();
+    let clip_path = tmp.path().join("clip_001.sqlite");
+    // Create a minimal valid SQLite DB so delete can find it
+    std::fs::write(&clip_path, "fake").unwrap();
+
+    // Pre-set clip_storage_path in state so resolve doesn't need TCP
+    {
+        let mut s = harness.state.lock().await;
+        s.clip_storage_path = Some(tmp.path().to_str().unwrap().to_string());
+    }
+
     let result = harness
         .call_tool(
             "clips",
@@ -936,11 +942,17 @@ async fn test_recording_delete() {
         .await
         .unwrap();
 
-    assert!(
-        result.get("result").and_then(|v| v.as_str()) == Some("ok")
-            || result.get("clip_id").is_some(),
+    assert_eq!(
+        result.get("result").and_then(|v| v.as_str()),
+        Some("ok"),
         "delete result: {result}"
     );
+    assert_eq!(
+        result.get("clip_id").and_then(|v| v.as_str()),
+        Some("clip_001"),
+        "delete should echo clip_id: {result}"
+    );
+    assert!(!clip_path.exists(), "clip file should be deleted from disk");
 }
 
 // ---------------------------------------------------------------------------
@@ -1273,5 +1285,363 @@ async fn test_addon_error_response_maps_to_mcp_error() {
     assert!(
         err.code == rmcp::model::ErrorCode(-32603) || !err.message.is_empty(),
         "expected internal_error, got: {err:?}"
+    );
+}
+
+// ---------------------------------------------------------------------------
+// Offline clip access tests — no TCP connection, clips read from disk
+// ---------------------------------------------------------------------------
+
+/// Schema matching production (includes created_at_unix_ms).
+const CLIP_SCHEMA_SQL: &str = "
+CREATE TABLE IF NOT EXISTS recording (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    started_at_frame INTEGER NOT NULL,
+    ended_at_frame INTEGER,
+    started_at_ms INTEGER NOT NULL,
+    ended_at_ms INTEGER,
+    scene_dimensions INTEGER,
+    physics_ticks_per_sec INTEGER,
+    capture_config TEXT,
+    created_at_unix_ms INTEGER
+);
+CREATE TABLE IF NOT EXISTS frames (
+    frame INTEGER PRIMARY KEY,
+    timestamp_ms INTEGER NOT NULL,
+    data BLOB NOT NULL
+);
+CREATE TABLE IF NOT EXISTS markers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    frame INTEGER NOT NULL,
+    timestamp_ms INTEGER NOT NULL,
+    source TEXT NOT NULL,
+    label TEXT NOT NULL,
+    FOREIGN KEY (frame) REFERENCES frames(frame)
+);
+CREATE TABLE IF NOT EXISTS screenshots (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    frame INTEGER NOT NULL,
+    timestamp_ms INTEGER NOT NULL,
+    jpeg_data BLOB NOT NULL,
+    width INTEGER NOT NULL,
+    height INTEGER NOT NULL,
+    FOREIGN KEY (frame) REFERENCES frames(frame)
+);
+CREATE INDEX IF NOT EXISTS idx_frames_ts ON frames(timestamp_ms);
+CREATE INDEX IF NOT EXISTS idx_markers_frame ON markers(frame);
+";
+
+/// Create a clip SQLite file with frames and optional markers.
+fn create_test_clip(dir: &std::path::Path, clip_id: &str, created_ms: i64) {
+    use rusqlite::Connection;
+    use stage_protocol::recording::FrameEntityData;
+
+    let db = Connection::open(dir.join(format!("{clip_id}.sqlite"))).unwrap();
+    db.execute_batch(CLIP_SCHEMA_SQL).unwrap();
+
+    let capture = json!({ "dashcam": true, "tier": "deliberate" });
+    db.execute(
+        "INSERT INTO recording (id, name, started_at_frame, ended_at_frame, \
+         started_at_ms, ended_at_ms, scene_dimensions, physics_ticks_per_sec, \
+         capture_config, created_at_unix_ms) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+        rusqlite::params![
+            clip_id,
+            format!("dashcam_{clip_id}"),
+            100,
+            200,
+            created_ms,
+            created_ms + 5000,
+            3,
+            60,
+            capture.to_string(),
+            created_ms,
+        ],
+    )
+    .unwrap();
+
+    for f in [100u64, 150, 200] {
+        let entities = vec![FrameEntityData {
+            path: "player".into(),
+            class: "CharacterBody3D".into(),
+            position: vec![f as f64 * 0.1, 0.0, 0.0],
+            rotation_deg: vec![0.0, 0.0, 0.0],
+            velocity: vec![1.0, 0.0, 0.0],
+            groups: vec![],
+            visible: true,
+            state: serde_json::Map::new(),
+        }];
+        let data = rmp_serde::to_vec(&entities).unwrap();
+        db.execute(
+            "INSERT INTO frames (frame, timestamp_ms, data) VALUES (?1, ?2, ?3)",
+            rusqlite::params![f, created_ms + (f - 100) as i64 * 50, &data],
+        )
+        .unwrap();
+    }
+}
+
+fn add_test_marker(dir: &std::path::Path, clip_id: &str, frame: i64, label: &str) {
+    let db = rusqlite::Connection::open(dir.join(format!("{clip_id}.sqlite"))).unwrap();
+    db.execute(
+        "INSERT INTO markers (frame, timestamp_ms, source, label) VALUES (?1, ?2, ?3, ?4)",
+        rusqlite::params![frame, frame * 16, "agent", label],
+    )
+    .unwrap();
+}
+
+/// Create a StageServer with pre-populated clip_storage_path but no TCP connection.
+fn offline_server(
+    storage_path: &str,
+) -> (
+    stage_server::server::StageServer,
+    Arc<Mutex<stage_server::tcp::SessionState>>,
+) {
+    let state = Arc::new(Mutex::new(stage_server::tcp::SessionState {
+        clip_storage_path: Some(storage_path.to_string()),
+        ..Default::default()
+    }));
+    let server = stage_server::server::StageServer::new(state.clone());
+    (server, state)
+}
+
+#[tokio::test]
+async fn test_offline_clips_list() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    create_test_clip(tmp.path(), "clip_001", 1710000000000);
+    create_test_clip(tmp.path(), "clip_002", 1710001000000);
+    add_test_marker(tmp.path(), "clip_001", 150, "bug here");
+
+    let (server, _state) = offline_server(tmp.path().to_str().unwrap());
+    let result = support::dispatch_tool(&server, "clips", json!({ "action": "list" }))
+        .await
+        .unwrap();
+
+    let clips = result["clips"].as_array().unwrap();
+    assert_eq!(clips.len(), 2, "should list both clips: {result}");
+    // Newest first
+    assert_eq!(clips[0]["clip_id"].as_str().unwrap(), "clip_002");
+    assert_eq!(clips[1]["clip_id"].as_str().unwrap(), "clip_001");
+    // Metadata present
+    assert!(clips[0]["frames_captured"].as_u64().unwrap() > 0);
+    assert!(clips[0]["created_at"].as_str().unwrap().contains("T"));
+}
+
+#[tokio::test]
+async fn test_offline_clips_list_empty() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let (server, _state) = offline_server(tmp.path().to_str().unwrap());
+
+    let result = support::dispatch_tool(&server, "clips", json!({ "action": "list" }))
+        .await
+        .unwrap();
+
+    let clips = result["clips"].as_array().unwrap();
+    assert!(clips.is_empty());
+}
+
+#[tokio::test]
+async fn test_offline_clips_markers() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    create_test_clip(tmp.path(), "clip_001", 1710000000000);
+    add_test_marker(tmp.path(), "clip_001", 150, "checkpoint");
+    add_test_marker(tmp.path(), "clip_001", 100, "start");
+
+    let (server, _state) = offline_server(tmp.path().to_str().unwrap());
+    let result = support::dispatch_tool(
+        &server,
+        "clips",
+        json!({ "action": "markers", "clip_id": "clip_001" }),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(result["clip_id"].as_str().unwrap(), "clip_001");
+    let markers = result["markers"].as_array().unwrap();
+    assert_eq!(markers.len(), 2);
+    // Sorted by frame
+    assert_eq!(markers[0]["frame"].as_i64().unwrap(), 100);
+    assert_eq!(markers[1]["frame"].as_i64().unwrap(), 150);
+    assert_eq!(markers[1]["label"].as_str().unwrap(), "checkpoint");
+}
+
+#[tokio::test]
+async fn test_offline_clips_delete() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    create_test_clip(tmp.path(), "clip_del", 1710000000000);
+
+    let (server, _state) = offline_server(tmp.path().to_str().unwrap());
+    let result = support::dispatch_tool(
+        &server,
+        "clips",
+        json!({ "action": "delete", "clip_id": "clip_del" }),
+    )
+    .await
+    .unwrap();
+
+    assert_eq!(result["result"].as_str().unwrap(), "ok");
+    assert_eq!(result["clip_id"].as_str().unwrap(), "clip_del");
+    assert!(
+        !tmp.path().join("clip_del.sqlite").exists(),
+        "file should be gone"
+    );
+}
+
+#[tokio::test]
+async fn test_offline_clips_delete_missing_returns_error() {
+    let tmp = tempfile::TempDir::new().unwrap();
+
+    let (server, _state) = offline_server(tmp.path().to_str().unwrap());
+    let err = support::dispatch_tool(
+        &server,
+        "clips",
+        json!({ "action": "delete", "clip_id": "clip_nope" }),
+    )
+    .await
+    .unwrap_err();
+
+    assert!(
+        err.message.contains("not found"),
+        "should report not found: {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_offline_clips_snapshot_at() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    create_test_clip(tmp.path(), "clip_snap", 1710000000000);
+
+    let (server, _state) = offline_server(tmp.path().to_str().unwrap());
+    let result = support::dispatch_tool(
+        &server,
+        "clips",
+        json!({
+            "action": "snapshot_at",
+            "clip_id": "clip_snap",
+            "at_frame": 150,
+        }),
+    )
+    .await
+    .unwrap();
+
+    assert!(
+        result.get("entities").is_some(),
+        "snapshot_at should return entities: {result}"
+    );
+    assert!(
+        result.get("clip_context").is_some(),
+        "should include clip_context: {result}"
+    );
+}
+
+#[tokio::test]
+async fn test_offline_clips_trajectory() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    create_test_clip(tmp.path(), "clip_traj", 1710000000000);
+
+    let (server, _state) = offline_server(tmp.path().to_str().unwrap());
+    let result = support::dispatch_tool(
+        &server,
+        "clips",
+        json!({
+            "action": "trajectory",
+            "clip_id": "clip_traj",
+            "node": "player",
+            "from_frame": 100,
+            "to_frame": 200,
+        }),
+    )
+    .await
+    .unwrap();
+
+    assert!(
+        result.get("samples").is_some() || result.get("node").is_some(),
+        "trajectory should return samples: {result}"
+    );
+}
+
+#[tokio::test]
+async fn test_offline_clips_diff_frames() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    create_test_clip(tmp.path(), "clip_diff", 1710000000000);
+
+    let (server, _state) = offline_server(tmp.path().to_str().unwrap());
+    let result = support::dispatch_tool(
+        &server,
+        "clips",
+        json!({
+            "action": "diff_frames",
+            "clip_id": "clip_diff",
+            "frame_a": 100,
+            "frame_b": 200,
+        }),
+    )
+    .await
+    .unwrap();
+
+    assert!(
+        result.get("changes").is_some() || result.get("clip_context").is_some(),
+        "diff_frames should return changes: {result}"
+    );
+}
+
+#[tokio::test]
+async fn test_offline_add_marker_requires_live_connection() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let (server, _state) = offline_server(tmp.path().to_str().unwrap());
+
+    let err = support::dispatch_tool(
+        &server,
+        "clips",
+        json!({ "action": "add_marker", "marker_label": "test" }),
+    )
+    .await
+    .unwrap_err();
+
+    assert!(
+        err.message.contains("Not connected") || err.message.contains("not connected"),
+        "add_marker should fail when offline: {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_offline_status_requires_live_connection() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    let (server, _state) = offline_server(tmp.path().to_str().unwrap());
+
+    let err = support::dispatch_tool(&server, "clips", json!({ "action": "status" }))
+        .await
+        .unwrap_err();
+
+    assert!(
+        err.message.contains("Not connected") || err.message.contains("not connected"),
+        "status should fail when offline: {err:?}"
+    );
+}
+
+#[tokio::test]
+async fn test_online_list_prefers_addon_then_falls_back() {
+    // When addon IS connected, list should use addon response (which may include live info)
+    let handler: QueryHandler = Arc::new(|method, _| match method {
+        "recording_list" => Ok(json!({
+            "clips": [
+                { "clip_id": "clip_live", "name": "live_clip", "frames_captured": 50 }
+            ]
+        })),
+        _ => Err(("unknown_method".into(), method.to_string())),
+    });
+
+    let harness = TestHarness::new(handler).await;
+    let result = harness
+        .call_tool("clips", json!({ "action": "list" }))
+        .await
+        .unwrap();
+
+    let clips = result["clips"].as_array().unwrap();
+    assert_eq!(clips.len(), 1);
+    assert_eq!(
+        clips[0]["clip_id"].as_str().unwrap(),
+        "clip_live",
+        "should use addon response when connected"
     );
 }

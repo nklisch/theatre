@@ -74,6 +74,7 @@ async fn serve() -> Result<()> {
     // Shared state between MCP handlers and TCP client
     let state = Arc::new(Mutex::new(tcp::SessionState {
         config: base_config,
+        project_dir: project_dir.clone(),
         ..Default::default()
     }));
 

@@ -15,27 +15,259 @@ use crate::tcp::{SessionState, query_addon};
 // Storage path resolution
 // ---------------------------------------------------------------------------
 
-/// Resolve the recording storage path, caching the result in SessionState.
-/// Queries the addon once via TCP, then uses the cached value.
+/// Resolve the recording storage path with offline fallback.
+///
+/// Resolution order: memory cache → disk cache → TCP addon → error.
+/// On successful resolution (from any source), the path is cached in memory
+/// and persisted to disk so it survives server restarts.
 pub async fn resolve_clip_storage_path(
     state: &Arc<Mutex<SessionState>>,
 ) -> Result<String, McpError> {
+    // 1. Memory cache
     {
         let s = state.lock().await;
         if let Some(ref path) = s.clip_storage_path {
             return Ok(path.clone());
         }
     }
-    let data = query_addon(state, "recording_resolve_path", json!({})).await?;
-    let path = data["path"]
-        .as_str()
-        .ok_or_else(|| McpError::internal_error("Invalid storage path response".to_string(), None))?
-        .to_string();
+
+    // 2. Disk cache
+    let cache_path = {
+        let s = state.lock().await;
+        s.project_dir.join(".stage").join("clip_storage_path")
+    };
+    if let Ok(cached) = std::fs::read_to_string(&cache_path) {
+        let path = cached.trim().to_string();
+        if !path.is_empty() && std::path::Path::new(&path).is_dir() {
+            let mut s = state.lock().await;
+            s.clip_storage_path = Some(path.clone());
+            return Ok(path);
+        }
+    }
+
+    // 3. TCP addon
+    let tcp_result = query_addon(state, "recording_resolve_path", json!({})).await;
+    match tcp_result {
+        Ok(data) => {
+            let path = data["path"]
+                .as_str()
+                .ok_or_else(|| {
+                    McpError::internal_error(
+                        "Invalid storage path response".to_string(),
+                        None,
+                    )
+                })?
+                .to_string();
+            // Cache to memory + disk
+            persist_clip_storage_path(state, &cache_path, &path).await;
+            Ok(path)
+        }
+        Err(e) => Err(McpError::internal_error(
+            format!(
+                "Cannot resolve clip storage path. No cached path and addon is not connected: {e}"
+            ),
+            None,
+        )),
+    }
+}
+
+/// Cache the storage path in memory and persist to disk.
+async fn persist_clip_storage_path(
+    state: &Arc<Mutex<SessionState>>,
+    cache_path: &std::path::Path,
+    path: &str,
+) {
     {
         let mut s = state.lock().await;
-        s.clip_storage_path = Some(path.clone());
+        s.clip_storage_path = Some(path.to_string());
     }
-    Ok(path)
+    if let Some(parent) = cache_path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::write(cache_path, path);
+}
+
+/// List clips directly from SQLite files on disk (no addon required).
+pub fn list_clips_from_disk(storage_path: &str) -> Result<serde_json::Value, McpError> {
+    let entries = std::fs::read_dir(storage_path).map_err(|e| {
+        McpError::internal_error(format!("Cannot read clip storage directory: {e}"), None)
+    })?;
+
+    let mut clips = Vec::new();
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.extension().and_then(|e| e.to_str()) != Some("sqlite") {
+            continue;
+        }
+        let clip_id = match path.file_stem().and_then(|s| s.to_str()) {
+            Some(s) => s.to_string(),
+            None => continue,
+        };
+        let size_kb = entry.metadata().map(|m| m.len() / 1024).unwrap_or(0);
+
+        // Open read-only and extract metadata
+        let db = match Connection::open_with_flags(&path, OpenFlags::SQLITE_OPEN_READ_ONLY) {
+            Ok(db) => db,
+            Err(_) => continue,
+        };
+
+        let meta = match read_recording_meta(&db) {
+            Ok(m) => m,
+            Err(_) => continue,
+        };
+
+        let frames_captured: u32 = db
+            .query_row("SELECT COUNT(*) FROM frames", [], |row| row.get(0))
+            .unwrap_or(0);
+        let markers_count: u32 = db
+            .query_row("SELECT COUNT(*) FROM markers", [], |row| row.get(0))
+            .unwrap_or(0);
+
+        let duration_ms = meta.ended_at_ms.unwrap_or(meta.started_at_ms) - meta.started_at_ms;
+        let created_at_unix_ms: i64 = db
+            .query_row(
+                "SELECT created_at_unix_ms FROM recording LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap_or(meta.started_at_ms);
+        let created_at = unix_ms_to_iso8601(created_at_unix_ms);
+
+        // Try to extract dashcam info from capture_config
+        let capture_json: Option<String> = db
+            .query_row(
+                "SELECT capture_config FROM recording LIMIT 1",
+                [],
+                |row| row.get(0),
+            )
+            .ok();
+        let capture: Option<serde_json::Value> =
+            capture_json.and_then(|s| serde_json::from_str(&s).ok());
+        let dashcam = capture
+            .as_ref()
+            .and_then(|c| c.get("dashcam").and_then(|v| v.as_bool()))
+            .unwrap_or(false);
+        let tier = capture
+            .as_ref()
+            .and_then(|c| c.get("tier").and_then(|v| v.as_str()))
+            .unwrap_or("")
+            .to_string();
+
+        let mut entry = json!({
+            "clip_id": clip_id,
+            "name": meta.name,
+            "frames_captured": frames_captured,
+            "duration_ms": duration_ms,
+            "frame_range": [meta.started_at_frame, meta.ended_at_frame],
+            "markers_count": markers_count,
+            "size_kb": size_kb,
+            "created_at": created_at,
+            "dashcam": dashcam,
+            "tier": tier,
+        });
+
+        if let Some(cap) = capture {
+            entry["capture"] = cap;
+        }
+
+        clips.push(entry);
+    }
+
+    // Sort by created_at descending (newest first)
+    clips.sort_by(|a, b| {
+        let a_time = a["created_at"].as_str().unwrap_or("");
+        let b_time = b["created_at"].as_str().unwrap_or("");
+        b_time.cmp(a_time)
+    });
+
+    Ok(json!({ "clips": clips }))
+}
+
+/// List markers for a clip directly from SQLite (no addon required).
+pub fn list_markers_from_disk(
+    storage_path: &str,
+    clip_id: &str,
+) -> Result<serde_json::Value, McpError> {
+    let db = open_clip_db(storage_path, clip_id)?;
+    let mut stmt = db
+        .prepare("SELECT frame, timestamp_ms, source, label FROM markers ORDER BY frame")
+        .map_err(sqlite_err)?;
+    let markers: Vec<serde_json::Value> = stmt
+        .query_map([], |row| {
+            Ok(json!({
+                "frame": row.get::<_, i64>(0)?,
+                "timestamp_ms": row.get::<_, i64>(1)?,
+                "source": row.get::<_, String>(2).unwrap_or_default(),
+                "label": row.get::<_, String>(3).unwrap_or_default(),
+            }))
+        })
+        .map_err(sqlite_err)?
+        .filter_map(|r| r.ok())
+        .collect();
+
+    Ok(json!({ "clip_id": clip_id, "markers": markers }))
+}
+
+/// Delete a clip's SQLite file from disk (no addon required).
+pub fn delete_clip_from_disk(
+    storage_path: &str,
+    clip_id: &str,
+) -> Result<serde_json::Value, McpError> {
+    let db_path = format!("{}/{}.sqlite", storage_path, clip_id);
+    if !std::path::Path::new(&db_path).exists() {
+        return Err(McpError::invalid_params(
+            format!("Clip '{clip_id}' not found"),
+            None,
+        ));
+    }
+    std::fs::remove_file(&db_path).map_err(|e| {
+        McpError::internal_error(format!("Failed to delete clip '{clip_id}': {e}"), None)
+    })?;
+    Ok(json!({ "result": "ok", "clip_id": clip_id }))
+}
+
+fn unix_ms_to_iso8601(ms: i64) -> String {
+    if ms <= 0 {
+        return String::new();
+    }
+    let secs = ms / 1000;
+    let days_since_epoch = secs / 86400;
+    let time_of_day = secs % 86400;
+    let h = time_of_day / 3600;
+    let m = (time_of_day % 3600) / 60;
+    let s = time_of_day % 60;
+
+    let mut days = days_since_epoch;
+    let mut year = 1970i64;
+    loop {
+        let days_in_year = if year % 4 == 0 && (year % 100 != 0 || year % 400 == 0) {
+            366
+        } else {
+            365
+        };
+        if days < days_in_year {
+            break;
+        }
+        days -= days_in_year;
+        year += 1;
+    }
+    let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
+    let month_days: [i64; 12] = if leap {
+        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    } else {
+        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    };
+    let mut month = 1i64;
+    for &md in &month_days {
+        if days < md {
+            break;
+        }
+        days -= md;
+        month += 1;
+    }
+    let day = days + 1;
+
+    format!("{year:04}-{month:02}-{day:02}T{h:02}:{m:02}:{s:02}Z")
 }
 
 /// Open a recording's SQLite database read-only.
@@ -206,6 +438,11 @@ impl ClipSession {
 }
 
 /// Find the most recently modified .sqlite file in the storage directory.
+/// Public alias for use in handler code that resolves "most recent" clip.
+pub fn most_recent_clip_id(storage_path: &str) -> Option<String> {
+    most_recent_clip(storage_path)
+}
+
 fn most_recent_clip(storage_path: &str) -> Option<String> {
     let entries = std::fs::read_dir(storage_path).ok()?;
     let mut newest: Option<(std::time::SystemTime, String)> = None;
@@ -2109,5 +2346,349 @@ CREATE INDEX IF NOT EXISTS idx_markers_frame ON markers(frame);
 
         let list = list_screenshots(&db).unwrap();
         assert!(list.is_empty());
+    }
+
+    // -----------------------------------------------------------------------
+    // Offline persistence tests
+    // -----------------------------------------------------------------------
+
+    /// Extended schema matching production (includes created_at_unix_ms).
+    const FULL_SCHEMA_SQL: &str = "
+CREATE TABLE IF NOT EXISTS recording (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    started_at_frame INTEGER NOT NULL,
+    ended_at_frame INTEGER,
+    started_at_ms INTEGER NOT NULL,
+    ended_at_ms INTEGER,
+    scene_dimensions INTEGER,
+    physics_ticks_per_sec INTEGER,
+    capture_config TEXT,
+    created_at_unix_ms INTEGER
+);
+CREATE TABLE IF NOT EXISTS frames (
+    frame INTEGER PRIMARY KEY,
+    timestamp_ms INTEGER NOT NULL,
+    data BLOB NOT NULL
+);
+CREATE TABLE IF NOT EXISTS markers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    frame INTEGER NOT NULL,
+    timestamp_ms INTEGER NOT NULL,
+    source TEXT NOT NULL,
+    label TEXT NOT NULL,
+    FOREIGN KEY (frame) REFERENCES frames(frame)
+);
+CREATE INDEX IF NOT EXISTS idx_frames_ts ON frames(timestamp_ms);
+CREATE INDEX IF NOT EXISTS idx_markers_frame ON markers(frame);
+";
+
+    /// Create a real SQLite clip file on disk for offline tests.
+    fn create_clip_on_disk(dir: &std::path::Path, clip_id: &str, created_at_ms: i64) {
+        let db_path = dir.join(format!("{clip_id}.sqlite"));
+        let db = Connection::open(&db_path).unwrap();
+        db.execute_batch(FULL_SCHEMA_SQL).unwrap();
+
+        let capture_config = serde_json::json!({
+            "dashcam": true,
+            "tier": "deliberate",
+        });
+        db.execute(
+            "INSERT INTO recording (id, name, started_at_frame, ended_at_frame, \
+             started_at_ms, ended_at_ms, scene_dimensions, physics_ticks_per_sec, \
+             capture_config, created_at_unix_ms) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            rusqlite::params![
+                clip_id,
+                format!("dashcam_{clip_id}"),
+                100,
+                200,
+                created_at_ms,
+                created_at_ms + 5000,
+                3,
+                60,
+                capture_config.to_string(),
+                created_at_ms,
+            ],
+        )
+        .unwrap();
+
+        // Insert a few frames
+        for f in [100u64, 150, 200] {
+            let entities = vec![test_entity("player", [1.0, 0.0, 0.0])];
+            let data = rmp_serde::to_vec(&entities).unwrap();
+            db.execute(
+                "INSERT INTO frames (frame, timestamp_ms, data) VALUES (?1, ?2, ?3)",
+                rusqlite::params![f, created_at_ms + (f - 100) as i64 * 50, &data],
+            )
+            .unwrap();
+        }
+    }
+
+    fn add_marker_on_disk(dir: &std::path::Path, clip_id: &str, frame: i64, label: &str) {
+        let db_path = dir.join(format!("{clip_id}.sqlite"));
+        let db = Connection::open(&db_path).unwrap();
+        db.execute(
+            "INSERT INTO markers (frame, timestamp_ms, source, label) VALUES (?1, ?2, ?3, ?4)",
+            rusqlite::params![frame, frame * 16, "agent", label],
+        )
+        .unwrap();
+    }
+
+    // --- list_clips_from_disk ---
+
+    #[test]
+    fn list_clips_from_disk_returns_clips_with_metadata() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        create_clip_on_disk(tmp.path(), "clip_aaa", 1710000000000);
+        add_marker_on_disk(tmp.path(), "clip_aaa", 150, "bug here");
+
+        let result = list_clips_from_disk(tmp.path().to_str().unwrap()).unwrap();
+        let clips = result["clips"].as_array().unwrap();
+        assert_eq!(clips.len(), 1);
+
+        let clip = &clips[0];
+        assert_eq!(clip["clip_id"].as_str().unwrap(), "clip_aaa");
+        assert_eq!(clip["frames_captured"].as_u64().unwrap(), 3);
+        assert_eq!(clip["markers_count"].as_u64().unwrap(), 1);
+        assert_eq!(clip["dashcam"].as_bool().unwrap(), true);
+        assert_eq!(clip["tier"].as_str().unwrap(), "deliberate");
+        assert!(clip["frame_range"].is_array());
+        assert!(clip["duration_ms"].as_i64().unwrap() > 0);
+        assert!(clip["created_at"].as_str().unwrap().contains("T"));
+    }
+
+    #[test]
+    fn list_clips_from_disk_empty_directory() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let result = list_clips_from_disk(tmp.path().to_str().unwrap()).unwrap();
+        let clips = result["clips"].as_array().unwrap();
+        assert!(clips.is_empty());
+    }
+
+    #[test]
+    fn list_clips_from_disk_skips_non_sqlite_files() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        create_clip_on_disk(tmp.path(), "clip_good", 1710000000000);
+        // Create a non-sqlite file that should be ignored
+        std::fs::write(tmp.path().join("notes.txt"), "not a clip").unwrap();
+        // Create a corrupt sqlite file that should be skipped gracefully
+        std::fs::write(tmp.path().join("clip_bad.sqlite"), "not valid sqlite").unwrap();
+
+        let result = list_clips_from_disk(tmp.path().to_str().unwrap()).unwrap();
+        let clips = result["clips"].as_array().unwrap();
+        // Only the valid clip should appear
+        assert_eq!(clips.len(), 1);
+        assert_eq!(clips[0]["clip_id"].as_str().unwrap(), "clip_good");
+    }
+
+    #[test]
+    fn list_clips_from_disk_sorted_newest_first() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        create_clip_on_disk(tmp.path(), "clip_old", 1700000000000);
+        create_clip_on_disk(tmp.path(), "clip_new", 1710000000000);
+
+        let result = list_clips_from_disk(tmp.path().to_str().unwrap()).unwrap();
+        let clips = result["clips"].as_array().unwrap();
+        assert_eq!(clips.len(), 2);
+        // Newest first
+        assert_eq!(clips[0]["clip_id"].as_str().unwrap(), "clip_new");
+        assert_eq!(clips[1]["clip_id"].as_str().unwrap(), "clip_old");
+    }
+
+    #[test]
+    fn list_clips_from_disk_nonexistent_directory() {
+        let result = list_clips_from_disk("/nonexistent/path/to/clips");
+        assert!(result.is_err());
+    }
+
+    // --- list_markers_from_disk ---
+
+    #[test]
+    fn list_markers_from_disk_returns_markers_sorted_by_frame() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        create_clip_on_disk(tmp.path(), "clip_001", 1710000000000);
+        add_marker_on_disk(tmp.path(), "clip_001", 200, "end");
+        add_marker_on_disk(tmp.path(), "clip_001", 100, "start");
+        add_marker_on_disk(tmp.path(), "clip_001", 150, "middle");
+
+        let result =
+            list_markers_from_disk(tmp.path().to_str().unwrap(), "clip_001").unwrap();
+        assert_eq!(result["clip_id"].as_str().unwrap(), "clip_001");
+
+        let markers = result["markers"].as_array().unwrap();
+        assert_eq!(markers.len(), 3);
+        // Sorted by frame ascending
+        assert_eq!(markers[0]["frame"].as_i64().unwrap(), 100);
+        assert_eq!(markers[0]["label"].as_str().unwrap(), "start");
+        assert_eq!(markers[1]["frame"].as_i64().unwrap(), 150);
+        assert_eq!(markers[2]["frame"].as_i64().unwrap(), 200);
+    }
+
+    #[test]
+    fn list_markers_from_disk_empty_markers() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        create_clip_on_disk(tmp.path(), "clip_001", 1710000000000);
+
+        let result =
+            list_markers_from_disk(tmp.path().to_str().unwrap(), "clip_001").unwrap();
+        let markers = result["markers"].as_array().unwrap();
+        assert!(markers.is_empty());
+    }
+
+    #[test]
+    fn list_markers_from_disk_missing_clip_returns_error() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let result = list_markers_from_disk(tmp.path().to_str().unwrap(), "clip_nope");
+        assert!(result.is_err());
+    }
+
+    // --- delete_clip_from_disk ---
+
+    #[test]
+    fn delete_clip_from_disk_removes_file() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        create_clip_on_disk(tmp.path(), "clip_del", 1710000000000);
+
+        let db_path = tmp.path().join("clip_del.sqlite");
+        assert!(db_path.exists());
+
+        let result =
+            delete_clip_from_disk(tmp.path().to_str().unwrap(), "clip_del").unwrap();
+        assert_eq!(result["result"].as_str().unwrap(), "ok");
+        assert_eq!(result["clip_id"].as_str().unwrap(), "clip_del");
+        assert!(!db_path.exists());
+    }
+
+    #[test]
+    fn delete_clip_from_disk_missing_returns_error() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let result = delete_clip_from_disk(tmp.path().to_str().unwrap(), "clip_nope");
+        assert!(result.is_err());
+    }
+
+    // --- most_recent_clip_id ---
+
+    #[test]
+    fn most_recent_clip_id_selects_newest_by_mtime() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        create_clip_on_disk(tmp.path(), "clip_older", 1700000000000);
+        // Brief sleep to ensure different mtime
+        std::thread::sleep(std::time::Duration::from_millis(50));
+        create_clip_on_disk(tmp.path(), "clip_newer", 1710000000000);
+
+        let result = most_recent_clip_id(tmp.path().to_str().unwrap());
+        assert_eq!(result.as_deref(), Some("clip_newer"));
+    }
+
+    #[test]
+    fn most_recent_clip_id_empty_directory_returns_none() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let result = most_recent_clip_id(tmp.path().to_str().unwrap());
+        assert!(result.is_none());
+    }
+
+    // --- resolve_clip_storage_path (offline fallback chain) ---
+
+    #[tokio::test]
+    async fn resolve_clip_storage_path_returns_memory_cache() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let cached_path = tmp.path().to_str().unwrap().to_string();
+
+        let state = Arc::new(Mutex::new(SessionState {
+            clip_storage_path: Some(cached_path.clone()),
+            ..Default::default()
+        }));
+
+        let result = resolve_clip_storage_path(&state).await.unwrap();
+        assert_eq!(result, cached_path);
+    }
+
+    #[tokio::test]
+    async fn resolve_clip_storage_path_reads_disk_cache_when_tcp_down() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let storage_dir = tmp.path().join("recordings");
+        std::fs::create_dir_all(&storage_dir).unwrap();
+
+        // Write the disk cache file
+        let cache_dir = tmp.path().join("project").join(".stage");
+        std::fs::create_dir_all(&cache_dir).unwrap();
+        std::fs::write(
+            cache_dir.join("clip_storage_path"),
+            storage_dir.to_str().unwrap(),
+        )
+        .unwrap();
+
+        let state = Arc::new(Mutex::new(SessionState {
+            clip_storage_path: None, // memory cache empty
+            project_dir: tmp.path().join("project"),
+            ..Default::default()
+        }));
+
+        let result = resolve_clip_storage_path(&state).await.unwrap();
+        assert_eq!(result, storage_dir.to_str().unwrap());
+
+        // Should also cache in memory now
+        let s = state.lock().await;
+        assert_eq!(s.clip_storage_path.as_deref(), Some(storage_dir.to_str().unwrap()));
+    }
+
+    #[tokio::test]
+    async fn resolve_clip_storage_path_ignores_invalid_disk_cache() {
+        let tmp = tempfile::TempDir::new().unwrap();
+
+        // Write a disk cache pointing to a nonexistent directory
+        let cache_dir = tmp.path().join(".stage");
+        std::fs::create_dir_all(&cache_dir).unwrap();
+        std::fs::write(
+            cache_dir.join("clip_storage_path"),
+            "/nonexistent/invalid/path",
+        )
+        .unwrap();
+
+        let state = Arc::new(Mutex::new(SessionState {
+            clip_storage_path: None,
+            project_dir: tmp.path().to_path_buf(),
+            ..Default::default()
+        }));
+
+        // No TCP either → should fail
+        let result = resolve_clip_storage_path(&state).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn resolve_clip_storage_path_fails_when_all_sources_unavailable() {
+        let tmp = tempfile::TempDir::new().unwrap();
+
+        let state = Arc::new(Mutex::new(SessionState {
+            clip_storage_path: None,
+            project_dir: tmp.path().to_path_buf(),
+            ..Default::default()
+        }));
+
+        // No memory cache, no disk cache, no TCP → error
+        let result = resolve_clip_storage_path(&state).await;
+        assert!(result.is_err());
+        let err_msg = format!("{:?}", result.unwrap_err());
+        assert!(
+            err_msg.contains("Cannot resolve clip storage path"),
+            "error should explain the failure: {err_msg}"
+        );
+    }
+
+    // --- unix_ms_to_iso8601 ---
+
+    #[test]
+    fn unix_ms_to_iso8601_converts_correctly() {
+        // 2024-03-10T00:00:00Z = 1710028800000 ms
+        let result = unix_ms_to_iso8601(1710028800000);
+        assert_eq!(result, "2024-03-10T00:00:00Z");
+    }
+
+    #[test]
+    fn unix_ms_to_iso8601_zero_returns_empty() {
+        assert_eq!(unix_ms_to_iso8601(0), "");
+        assert_eq!(unix_ms_to_iso8601(-1), "");
     }
 }

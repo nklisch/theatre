@@ -145,8 +145,7 @@ pub async fn handle_clips(
             Ok(text_result(s))
         }
         ClipAction::List => {
-            let s = query_and_finalize(state, "recording_list", json!({}), budget_limit, hard_cap)
-                .await?;
+            let s = handle_list(state, budget_limit, hard_cap).await?;
             Ok(text_result(s))
         }
         ClipAction::Delete => {
@@ -205,6 +204,22 @@ async fn query_and_finalize(
     finalize_response(&mut data, budget_limit, hard_cap)
 }
 
+async fn handle_list(
+    state: &Arc<Mutex<SessionState>>,
+    budget_limit: u32,
+    hard_cap: u32,
+) -> Result<String, McpError> {
+    // Try live addon first (includes currently-recording info), fall back to disk
+    match query_and_finalize(state, "recording_list", json!({}), budget_limit, hard_cap).await {
+        Ok(s) => Ok(s),
+        Err(_) => {
+            let storage_path = clip_analysis::resolve_clip_storage_path(state).await?;
+            let mut data = clip_analysis::list_clips_from_disk(&storage_path)?;
+            finalize_response(&mut data, budget_limit, hard_cap)
+        }
+    }
+}
+
 async fn handle_add_marker(
     params: &ClipsParams,
     state: &Arc<Mutex<SessionState>>,
@@ -240,14 +255,9 @@ async fn handle_delete(
     hard_cap: u32,
 ) -> Result<String, McpError> {
     let id = require_param!(params.clip_id.as_deref(), "clip_id is required for delete");
-    query_and_finalize(
-        state,
-        "recording_delete",
-        json!({ "clip_id": id }),
-        budget_limit,
-        hard_cap,
-    )
-    .await
+    let storage_path = clip_analysis::resolve_clip_storage_path(state).await?;
+    let mut data = clip_analysis::delete_clip_from_disk(&storage_path, id)?;
+    finalize_response(&mut data, budget_limit, hard_cap)
 }
 
 async fn handle_markers(
@@ -256,15 +266,15 @@ async fn handle_markers(
     budget_limit: u32,
     hard_cap: u32,
 ) -> Result<String, McpError> {
-    let id = require_param!(params.clip_id.as_deref(), "clip_id is required for markers");
-    query_and_finalize(
-        state,
-        "recording_markers",
-        json!({ "clip_id": id }),
-        budget_limit,
-        hard_cap,
-    )
-    .await
+    let storage_path = clip_analysis::resolve_clip_storage_path(state).await?;
+    let clip_id = match params.clip_id.as_deref() {
+        Some(id) => id.to_string(),
+        None => clip_analysis::most_recent_clip_id(&storage_path).ok_or_else(|| {
+            McpError::invalid_params("clip_id is required for markers", None)
+        })?,
+    };
+    let mut data = clip_analysis::list_markers_from_disk(&storage_path, &clip_id)?;
+    finalize_response(&mut data, budget_limit, hard_cap)
 }
 
 // ---------------------------------------------------------------------------

@@ -14,6 +14,7 @@ use stage_protocol::{
     messages::Message,
 };
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::io::WriteHalf;
 use tokio::net::TcpStream;
@@ -56,10 +57,12 @@ pub struct SessionState {
     pub watch_engine: WatchEngine,
     /// Active session configuration (merged from TOML defaults + spatial_config overrides).
     pub config: SessionConfig,
-    /// Cached filesystem path to clip storage (resolved from addon).
+    /// Cached filesystem path to clip storage (resolved from addon or disk cache).
     pub clip_storage_path: Option<String>,
     /// Scene dimensions from handshake.
     pub scene_dimensions: SceneDimensions,
+    /// Project directory (for stage.toml, disk cache, etc.).
+    pub project_dir: PathBuf,
 }
 
 impl Default for SessionState {
@@ -76,6 +79,7 @@ impl Default for SessionState {
             config: SessionConfig::default(),
             clip_storage_path: None,
             scene_dimensions: SceneDimensions::Three,
+            project_dir: PathBuf::new(),
         }
     }
 }
