@@ -112,6 +112,11 @@ func _dispatch(operation: String, params: Dictionary) -> Dictionary:
 		"animation_add_track": return AnimationOps.op_animation_add_track(params)
 		"animation_read": return AnimationOps.op_animation_read(params)
 		"animation_remove_track": return AnimationOps.op_animation_remove_track(params)
+		"autoload_add": return ProjectOps.op_autoload_add(params)
+		"autoload_remove": return ProjectOps.op_autoload_remove(params)
+		"project_settings_set": return ProjectOps.op_project_settings_set(params)
+		"project_reload": return ProjectOps.op_project_reload(params)
+		"editor_status": return ProjectOps.op_editor_status(params)
 		"ping":
 			return {"success": true, "data": {"status": "ok", "backend": "editor"}, "operation": "ping"}
 		_:

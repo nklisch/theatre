@@ -1,5 +1,6 @@
 pub mod backend;
 pub mod daemon;
+pub mod diagnostics;
 pub mod editor;
 pub mod error;
 pub mod mcp;

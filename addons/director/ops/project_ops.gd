@@ -3,6 +3,211 @@ class_name ProjectOps
 const OpsUtil = preload("res://addons/director/ops/ops_util.gd")
 
 
+static func op_autoload_add(params: Dictionary) -> Dictionary:
+	## Add or update an autoload singleton in project.godot.
+	##
+	## Params: name (String), script_path (String relative to project),
+	##         enabled (bool, default true)
+	## Returns: { success, data: { name, script_path, enabled } }
+	var name: String = params.get("name", "")
+	var script_path: String = params.get("script_path", "")
+	var enabled: bool = params.get("enabled", true)
+
+	if name == "":
+		return OpsUtil._error("name is required", "autoload_add", params)
+	if script_path == "":
+		return OpsUtil._error("script_path is required", "autoload_add", params)
+
+	var project_file := "res://project.godot"
+	var cfg := ConfigFile.new()
+	var err := cfg.load(project_file)
+	if err != OK:
+		return OpsUtil._error("Failed to load project.godot: " + str(err),
+			"autoload_add", params)
+
+	var value := ("*" if enabled else "") + "res://" + script_path
+	cfg.set_value("autoload", name, value)
+
+	err = cfg.save(project_file)
+	if err != OK:
+		return OpsUtil._error("Failed to save project.godot: " + str(err),
+			"autoload_add", params)
+
+	return {"success": true, "data": {
+		"name": name,
+		"script_path": script_path,
+		"enabled": enabled,
+	}}
+
+
+static func op_autoload_remove(params: Dictionary) -> Dictionary:
+	## Remove an autoload singleton from project.godot.
+	##
+	## Params: name (String)
+	## Returns: { success, data: { name } }
+	var name: String = params.get("name", "")
+	if name == "":
+		return OpsUtil._error("name is required", "autoload_remove", params)
+
+	var project_file := "res://project.godot"
+	var cfg := ConfigFile.new()
+	var err := cfg.load(project_file)
+	if err != OK:
+		return OpsUtil._error("Failed to load project.godot: " + str(err),
+			"autoload_remove", params)
+
+	if not cfg.has_section_key("autoload", name):
+		return OpsUtil._error("Autoload not found: " + name,
+			"autoload_remove", {"name": name})
+
+	cfg.erase_section_key("autoload", name)
+
+	err = cfg.save(project_file)
+	if err != OK:
+		return OpsUtil._error("Failed to save project.godot: " + str(err),
+			"autoload_remove", params)
+
+	return {"success": true, "data": {"name": name}}
+
+
+static func op_project_settings_set(params: Dictionary) -> Dictionary:
+	## Set one or more project settings in project.godot.
+	##
+	## Keys use the format "section/key", e.g.:
+	##   "application/run/main_scene" → [application] run/main_scene
+	##   "application/config/name"    → [application] config/name
+	## Set a value to null to erase the key.
+	##
+	## Params: settings (Dictionary[String, Variant])
+	## Returns: { success, data: { keys_set } }
+	var settings: Dictionary = params.get("settings", {})
+	if settings.is_empty():
+		return OpsUtil._error(
+			"settings is required and must not be empty",
+			"project_settings_set", params)
+
+	var project_file := "res://project.godot"
+	var cfg := ConfigFile.new()
+	var err := cfg.load(project_file)
+	if err != OK:
+		return OpsUtil._error("Failed to load project.godot: " + str(err),
+			"project_settings_set", params)
+
+	var keys_set: Array[String] = []
+	for full_key: String in settings:
+		var slash := full_key.find("/")
+		if slash == -1:
+			return OpsUtil._error(
+				"Invalid key format — expected 'section/key', got: " + full_key,
+				"project_settings_set", params)
+		var section := full_key.substr(0, slash)
+		var key := full_key.substr(slash + 1)
+		var value = settings[full_key]
+		if value == null:
+			if cfg.has_section_key(section, key):
+				cfg.erase_section_key(section, key)
+		else:
+			cfg.set_value(section, key, value)
+		keys_set.append(full_key)
+
+	err = cfg.save(project_file)
+	if err != OK:
+		return OpsUtil._error("Failed to save project.godot: " + str(err),
+			"project_settings_set", params)
+
+	return {"success": true, "data": {"keys_set": keys_set}}
+
+
+static func op_project_reload(_params: Dictionary) -> Dictionary:
+	## Reload the project and report basic stats.
+	##
+	## The real diagnostics come from stderr (captured by the Rust side).
+	## This GDScript op provides supplementary data: script count and
+	## registered autoloads.
+	##
+	## Returns: { success, data: { scripts_checked, autoloads } }
+
+	var scripts: Array = []
+	_collect_gd_files("res://", scripts)
+
+	var autoloads: Dictionary = {}
+	var cfg := ConfigFile.new()
+	if cfg.load("res://project.godot") == OK:
+		if cfg.has_section("autoload"):
+			for key in cfg.get_section_keys("autoload"):
+				var value: String = str(cfg.get_value("autoload", key, ""))
+				# Strip "*" prefix (enabled marker) and "res://" prefix
+				autoloads[key] = value.trim_prefix("*").trim_prefix("res://")
+
+	return {"success": true, "data": {
+		"scripts_checked": scripts.size(),
+		"autoloads": autoloads,
+	}}
+
+
+static func op_editor_status(_params: Dictionary) -> Dictionary:
+	## Return a snapshot of editor state (or basic project state in headless).
+	##
+	## In editor context (dispatched via editor_ops.gd), this is augmented
+	## by _editor_status which adds open scenes, active scene, etc.
+	##
+	## In headless context, returns autoloads and editor_connected=false.
+	##
+	## Returns: { success, data: { editor_connected, active_scene,
+	##   open_scenes, game_running, autoloads, recent_log } }
+
+	var autoloads: Dictionary = {}
+	var cfg := ConfigFile.new()
+	if cfg.load("res://project.godot") == OK:
+		if cfg.has_section("autoload"):
+			for key in cfg.get_section_keys("autoload"):
+				var value: String = str(cfg.get_value("autoload", key, ""))
+				autoloads[key] = value.trim_prefix("*").trim_prefix("res://")
+
+	# Read recent log (works in headless too — same log file)
+	var recent_log: Array[String] = []
+	var log_path := OS.get_user_data_dir() + "/logs/godot.log"
+	if FileAccess.file_exists(log_path):
+		var file := FileAccess.open(log_path, FileAccess.READ)
+		if file != null:
+			var content := file.get_as_text()
+			var lines := content.split("\n")
+			var start := maxi(0, lines.size() - 50)
+			for i in range(start, lines.size()):
+				var line := lines[i].strip_edges()
+				if line != "":
+					recent_log.append(lines[i])
+
+	return {"success": true, "data": {
+		"editor_connected": false,
+		"active_scene": "",
+		"open_scenes": [],
+		"game_running": false,
+		"autoloads": autoloads,
+		"recent_log": recent_log,
+	}}
+
+
+static func _collect_gd_files(dir_path: String, result: Array) -> void:
+	## Recursively collect .gd files.
+	var dir = DirAccess.open(dir_path)
+	if dir == null:
+		return
+	dir.list_dir_begin()
+	var file_name = dir.get_next()
+	while file_name != "":
+		if file_name != "." and file_name != ".." \
+				and not file_name.begins_with("."):
+			var full = dir_path.trim_suffix("/") + "/" + file_name
+			if dir.current_is_dir():
+				if file_name != ".godot":
+					_collect_gd_files(full, result)
+			elif file_name.get_extension() == "gd":
+				result.append(full)
+		file_name = dir.get_next()
+	dir.list_dir_end()
+
+
 static func op_uid_get(params: Dictionary) -> Dictionary:
 	## Resolve the Godot UID for a file path.
 	##

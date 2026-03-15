@@ -13,6 +13,10 @@ const scene_diff = data.params['scene_diff'] ?? []
 const uid_get = data.params['uid_get'] ?? []
 const uid_update_project = data.params['uid_update_project'] ?? []
 const export_mesh_library = data.params['export_mesh_library'] ?? []
+const autoload_add = data.params['autoload_add'] ?? []
+const autoload_remove = data.params['autoload_remove'] ?? []
+const project_settings_set = data.params['project_settings_set'] ?? []
+const project_reload = data.params['project_reload'] ?? []
 
 const messages0 = [
   { role: 'human', text: `Create a new player scene with a CharacterBody3D root, and add a CapsuleShape3D collision shape.` },
@@ -225,6 +229,95 @@ Export meshes from a scene into a MeshLibrary resource for use with GridMap.
 ```
 
 <ParamTable :params="export_mesh_library" />
+
+## Project settings
+
+These operations modify `project.godot` directly through Godot's `ConfigFile` API. Use them instead of hand-editing the file — they guarantee correct INI formatting and work in headless mode.
+
+### `autoload_add`
+
+Register an autoload singleton so it is globally accessible by name in all GDScript files (e.g. `EventBus`, `GameState`). Call this after creating the script file and after `project_reload`.
+
+```json
+{
+  "op": "autoload_add",
+  "project_path": "/home/user/my-game",
+  "name": "EventBus",
+  "script_path": "autoload/event_bus.gd"
+}
+```
+
+<ParamTable :params="autoload_add" />
+
+**Response:**
+```json
+{ "name": "EventBus", "script_path": "autoload/event_bus.gd", "enabled": true }
+```
+
+### `autoload_remove`
+
+Remove an autoload registration. The script file itself is not deleted.
+
+```json
+{
+  "op": "autoload_remove",
+  "project_path": "/home/user/my-game",
+  "name": "EventBus"
+}
+```
+
+<ParamTable :params="autoload_remove" />
+
+### `project_settings_set`
+
+Set one or more project settings. Keys use `"section/key"` format matching `project.godot`. Set a value to `null` to erase the key.
+
+```json
+{
+  "op": "project_settings_set",
+  "project_path": "/home/user/my-game",
+  "settings": {
+    "application/run/main_scene": "res://scenes/main/main.tscn",
+    "application/config/name": "My Game",
+    "display/window/size/viewport_width": 1920,
+    "display/window/size/viewport_height": 1080
+  }
+}
+```
+
+<ParamTable :params="project_settings_set" />
+
+### `project_reload`
+
+Reload the project and validate all scripts. Call this after writing `.gd` files with the Write tool. Returns structured diagnostics (parse errors, missing identifiers, broken references) so you can fix issues before they cause failures in scene operations. Also restarts the daemon so the next operation sees new GDScript class names.
+
+```json
+{
+  "op": "project_reload",
+  "project_path": "/home/user/my-game"
+}
+```
+
+<ParamTable :params="project_reload" />
+
+**Response:**
+```json
+{
+  "result": "ok",
+  "scripts_checked": 12,
+  "autoloads": { "EventBus": "autoload/event_bus.gd" },
+  "errors": [],
+  "warnings": []
+}
+```
+
+**Typical workflow when creating scripts:**
+```
+Write tool: write autoload/event_bus.gd
+→ project_reload           (daemon restarts fresh, validates scripts)
+→ autoload_add             (registers EventBus in project.godot)
+→ scene_create + node_set_script  (safe to reference the script)
+```
 
 ## Example conversation
 

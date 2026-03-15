@@ -37,6 +37,10 @@ static func dispatch(operation: String, params: Dictionary) -> Dictionary:
 	## Main entry point. Called by plugin.gd for every incoming operation.
 	var scene_path: String = params.get("scene_path", "")
 
+	# Editor-global operations that need EditorInterface but not a specific scene.
+	if operation == "editor_status":
+		return _editor_status()
+
 	# For scene-targeting operations, check if the scene is the active tab.
 	if scene_path != "" and operation in SCENE_OPS:
 		var active_root := _get_active_scene_root(scene_path)
@@ -46,6 +50,62 @@ static func dispatch(operation: String, params: Dictionary) -> Dictionary:
 	# All other cases: delegate to headless ops + editor sync.
 	var result := _dispatch_headless(operation, params)
 	_post_operation_sync(operation, params, result)
+	return result
+
+
+static func _editor_status() -> Dictionary:
+	## Return a live snapshot of the Godot editor's state.
+	var open_scenes := EditorInterface.get_open_scenes()
+	var active_root := EditorInterface.get_edited_scene_root()
+	var active_scene := ""
+	if active_root != null:
+		active_scene = active_root.scene_file_path.trim_prefix("res://")
+
+	var playing := EditorInterface.is_playing_scene()
+
+	# Read autoloads from project.godot
+	var autoloads: Dictionary = {}
+	var cfg := ConfigFile.new()
+	if cfg.load("res://project.godot") == OK:
+		if cfg.has_section("autoload"):
+			for key in cfg.get_section_keys("autoload"):
+				var value: String = str(cfg.get_value("autoload", key, ""))
+				autoloads[key] = value.trim_prefix("*").trim_prefix("res://")
+
+	# Clean up open_scenes paths
+	var cleaned_scenes: Array[String] = []
+	for s in open_scenes:
+		cleaned_scenes.append(s.trim_prefix("res://"))
+
+	# Read recent log
+	var recent_log: Array[String] = _read_recent_log()
+
+	return {"success": true, "data": {
+		"editor_connected": true,
+		"active_scene": active_scene,
+		"open_scenes": cleaned_scenes,
+		"game_running": playing,
+		"autoloads": autoloads,
+		"recent_log": recent_log,
+	}}
+
+
+static func _read_recent_log() -> Array[String]:
+	## Read the last 50 non-empty lines from godot.log.
+	var log_path := OS.get_user_data_dir() + "/logs/godot.log"
+	var result: Array[String] = []
+	if not FileAccess.file_exists(log_path):
+		return result
+	var file := FileAccess.open(log_path, FileAccess.READ)
+	if file == null:
+		return result
+	var content := file.get_as_text()
+	var lines := content.split("\n")
+	var start := maxi(0, lines.size() - 50)
+	for i in range(start, lines.size()):
+		var line := lines[i].strip_edges()
+		if line != "":
+			result.append(lines[i])
 	return result
 
 
@@ -616,6 +676,11 @@ static func _dispatch_headless(operation: String, params: Dictionary) -> Diction
 		"visual_shader_create": return ShaderOps.op_visual_shader_create(params)
 		"batch": return MetaOps.op_batch(params)
 		"scene_diff": return MetaOps.op_scene_diff(params)
+		"autoload_add": return ProjectOps.op_autoload_add(params)
+		"autoload_remove": return ProjectOps.op_autoload_remove(params)
+		"project_settings_set": return ProjectOps.op_project_settings_set(params)
+		"project_reload": return ProjectOps.op_project_reload(params)
+		"editor_status": return ProjectOps.op_editor_status(params)
 		"uid_get": return ProjectOps.op_uid_get(params)
 		"uid_update_project": return ProjectOps.op_uid_update_project(params)
 		"export_mesh_library": return ProjectOps.op_export_mesh_library(params)

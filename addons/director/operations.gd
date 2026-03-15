@@ -81,6 +81,16 @@ func _init():
 			result = MetaOps.op_batch(args.params)
 		"scene_diff":
 			result = MetaOps.op_scene_diff(args.params)
+		"autoload_add":
+			result = ProjectOps.op_autoload_add(args.params)
+		"autoload_remove":
+			result = ProjectOps.op_autoload_remove(args.params)
+		"project_settings_set":
+			result = ProjectOps.op_project_settings_set(args.params)
+		"project_reload":
+			result = ProjectOps.op_project_reload(args.params)
+		"editor_status":
+			result = ProjectOps.op_editor_status(args.params)
 		"uid_get":
 			result = ProjectOps.op_uid_get(args.params)
 		"uid_update_project":

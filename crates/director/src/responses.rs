@@ -349,6 +349,75 @@ pub struct SceneDiffResponse {
 // Project operations
 // ---------------------------------------------------------------------------
 
+/// Response for autoload_add.
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct AutoloadAddResponse {
+    pub name: String,
+    pub script_path: String,
+    pub enabled: bool,
+}
+
+/// Response for autoload_remove.
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct AutoloadRemoveResponse {
+    pub name: String,
+}
+
+/// Response for project_settings_set.
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ProjectSettingsSetResponse {
+    pub keys_set: Vec<String>,
+}
+
+/// Response for project_reload.
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct ProjectReloadResponse {
+    pub result: String,
+    pub scripts_checked: u32,
+    pub autoloads: serde_json::Value,
+    pub errors: Vec<crate::diagnostics::GodotDiagnostic>,
+    pub warnings: Vec<crate::diagnostics::GodotDiagnostic>,
+}
+
+/// Response for editor_status.
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct EditorStatusResponse {
+    /// Whether the Godot editor is running and connected.
+    pub editor_connected: bool,
+
+    /// Currently active scene in the editor (project-relative path, empty if none).
+    pub active_scene: String,
+
+    /// All scenes currently open in editor tabs.
+    pub open_scenes: Vec<String>,
+
+    /// Whether the game is currently running (F5 pressed).
+    pub game_running: bool,
+
+    /// Registered autoload singletons (name → script path).
+    pub autoloads: serde_json::Value,
+
+    /// Recent lines from godot.log (last 50 lines, includes errors/warnings/print output).
+    pub recent_log: Vec<String>,
+
+    /// Structured errors parsed from the log.
+    pub errors: Vec<crate::diagnostics::GodotDiagnostic>,
+
+    /// Structured warnings parsed from the log.
+    pub warnings: Vec<crate::diagnostics::GodotDiagnostic>,
+}
+
+/// Raw GDScript response for editor_status — before Rust-side log parsing.
+#[derive(Debug, serde::Deserialize)]
+pub(crate) struct EditorStatusRawResponse {
+    pub editor_connected: bool,
+    pub active_scene: String,
+    pub open_scenes: Vec<String>,
+    pub game_running: bool,
+    pub autoloads: serde_json::Value,
+    pub recent_log: Vec<String>,
+}
+
 /// Response for uid_get.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct UidGetResponse {

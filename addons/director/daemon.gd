@@ -172,6 +172,16 @@ func _dispatch(operation: String, params: Dictionary) -> Dictionary:
 			return MetaOps.op_batch(params)
 		"scene_diff":
 			return MetaOps.op_scene_diff(params)
+		"autoload_add":
+			return ProjectOps.op_autoload_add(params)
+		"autoload_remove":
+			return ProjectOps.op_autoload_remove(params)
+		"project_settings_set":
+			return ProjectOps.op_project_settings_set(params)
+		"project_reload":
+			return ProjectOps.op_project_reload(params)
+		"editor_status":
+			return ProjectOps.op_editor_status(params)
 		"uid_get":
 			return ProjectOps.op_uid_get(params)
 		"uid_update_project":

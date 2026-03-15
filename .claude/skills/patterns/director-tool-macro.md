@@ -4,7 +4,7 @@ Every Director MCP tool handler is a one-liner using the `director_tool!` macro,
 
 ## Rationale
 
-Director has 38+ tools that all follow the same dispatch path: serialize params to JSON, route through the backend (editor/daemon/one-shot), unwrap the result, serialize to string. The macro collapses this to a single call per tool, keeping boilerplate in one place.
+Director has 42 tools that all follow the same dispatch path: serialize params to JSON, route through the backend (editor/daemon/one-shot), unwrap the result, serialize to string. The macro collapses this to a single call per tool, keeping boilerplate in one place.
 
 Unlike Stage tools, Director tools:
 - Have no activity logging (no addon-side instrumentation)
@@ -39,8 +39,13 @@ macro_rules! director_tool {
 ```
 
 ### Example 3: Typical params struct layout
-**File**: `crates/director/src/mcp/node.rs:5-16`
+**File**: `crates/director/src/mcp/node.rs`
 ```rust
+// Structs with Option fields MUST have #[serde_with::skip_serializing_none].
+// Without it, None serializes as null in JSON, and GDScript's
+// Dictionary.get(key, default) ignores the default when the key is
+// present — causing "Nil assigned to typed variable" runtime errors.
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct NodeAddParams {
     /// Absolute path to the Godot project directory.
@@ -56,6 +61,8 @@ pub struct NodeAddParams {
 }
 ```
 
+The `serde_with` crate is in workspace dependencies. Every params struct that has at least one `Option` field needs the `#[serde_with::skip_serializing_none]` attribute. Structs with no `Option` fields do not need it.
+
 ## When to Use
 - Every new Director MCP tool: place the handler body as `director_tool!(self, params, "op_name", ResponseType)`
 - The operation name string (`"op_name"`) must match the GDScript `match` arm in `operations.gd`
@@ -63,7 +70,7 @@ pub struct NodeAddParams {
 
 ## When NOT to Use
 - Stage tools — they use `query_addon` + `finalize_response` + `log_activity` instead
-- Any tool that needs custom response transformation before returning — extract the logic into a helper and call `director_tool!` inside it, or skip the macro
+- Any tool that needs side effects beyond the normal dispatch path — e.g. `project_reload` kills the daemon and captures stderr for diagnostics, so it writes the handler body manually instead of using the macro; similarly `editor_status` post-processes `recent_log` through `parse_godot_stderr` to produce structured diagnostics
 
 ## Common Violations
 - Adding activity logging to Director tools (Director has no addon-side logging)

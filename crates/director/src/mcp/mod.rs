@@ -30,7 +30,10 @@ use node::{
     NodeSetMetaParams, NodeSetPropertiesParams, NodeSetScriptParams,
 };
 use physics::{PhysicsSetLayerNamesParams, PhysicsSetLayersParams};
-use project::{ExportMeshLibraryParams, UidGetParams, UidUpdateProjectParams};
+use project::{
+    AutoloadAddParams, AutoloadRemoveParams, EditorStatusParams, ExportMeshLibraryParams,
+    ProjectReloadParams, ProjectSettingsSetParams, UidGetParams, UidUpdateProjectParams,
+};
 use resource::{
     MaterialCreateParams, ResourceDuplicateParams, ResourceReadParams, ShapeCreateParams,
     StyleBoxCreateParams,
@@ -44,15 +47,17 @@ use stage_protocol::mcp_helpers::{deserialize_response, serialize_params, serial
 
 use crate::responses::{
     AnimationAddTrackResponse, AnimationCreateResponse, AnimationReadResponse,
-    AnimationRemoveTrackResponse, BatchResponse, ExportMeshLibraryResponse, GridMapClearResponse,
+    AnimationRemoveTrackResponse, AutoloadAddResponse, AutoloadRemoveResponse, BatchResponse,
+    EditorStatusRawResponse, EditorStatusResponse, ExportMeshLibraryResponse, GridMapClearResponse,
     GridMapGetCellsResponse, GridMapSetCellsResponse, NodeAddResponse, NodeFindResponse,
     NodeRemoveResponse, NodeReparentResponse, NodeSetGroupsResponse, NodeSetMetaResponse,
     NodeSetPropertiesResponse, NodeSetScriptResponse, PhysicsSetLayerNamesResponse,
-    PhysicsSetLayersResponse, ResourceCreateResponse, ResourceDuplicateResponse,
-    ResourceReadResponse, SceneAddInstanceResponse, SceneCreateResponse, SceneDiffResponse,
-    SceneListResponse, SceneReadResponse, ShapeCreateResponse, SignalConnectionResponse,
-    SignalListResponse, TileMapClearResponse, TileMapGetCellsResponse, TileMapSetCellsResponse,
-    UidGetResponse, UidUpdateProjectResponse, VisualShaderCreateResponse,
+    PhysicsSetLayersResponse, ProjectReloadResponse, ProjectSettingsSetResponse,
+    ResourceCreateResponse, ResourceDuplicateResponse, ResourceReadResponse,
+    SceneAddInstanceResponse, SceneCreateResponse, SceneDiffResponse, SceneListResponse,
+    SceneReadResponse, ShapeCreateResponse, SignalConnectionResponse, SignalListResponse,
+    TileMapClearResponse, TileMapGetCellsResponse, TileMapSetCellsResponse, UidGetResponse,
+    UidUpdateProjectResponse, VisualShaderCreateResponse,
 };
 
 // ---------------------------------------------------------------------------
@@ -491,6 +496,158 @@ impl DirectorServer {
     }
 
     #[tool(
+        name = "autoload_add",
+        description = "Add or update an autoload singleton in project.godot. Autoloads are \
+            globally accessible singletons available in all GDScript files by name \
+            (e.g. EventBus, GameState). Call this instead of hand-editing project.godot. \
+            Use project_reload after creating the script file and before calling this."
+    )]
+    pub async fn autoload_add(
+        &self,
+        Parameters(params): Parameters<AutoloadAddParams>,
+    ) -> Result<String, McpError> {
+        director_tool!(self, params, "autoload_add", AutoloadAddResponse)
+    }
+
+    #[tool(
+        name = "autoload_remove",
+        description = "Remove an autoload singleton from project.godot. The script file itself \
+            is not deleted — only the autoload registration is removed."
+    )]
+    pub async fn autoload_remove(
+        &self,
+        Parameters(params): Parameters<AutoloadRemoveParams>,
+    ) -> Result<String, McpError> {
+        director_tool!(self, params, "autoload_remove", AutoloadRemoveResponse)
+    }
+
+    #[tool(
+        name = "project_settings_set",
+        description = "Set one or more project settings in project.godot. Keys use the format \
+            \"section/key\" matching the .godot file structure. Common keys: \
+            \"application/run/main_scene\" (main scene path), \
+            \"application/config/name\" (project name), \
+            \"display/window/size/viewport_width\", \
+            \"display/window/size/viewport_height\". \
+            Set a value to null to erase the key. \
+            Use this instead of hand-editing project.godot."
+    )]
+    pub async fn project_settings_set(
+        &self,
+        Parameters(params): Parameters<ProjectSettingsSetParams>,
+    ) -> Result<String, McpError> {
+        director_tool!(self, params, "project_settings_set", ProjectSettingsSetResponse)
+    }
+
+    #[tool(
+        name = "project_reload",
+        description = "Reload the project and validate all scripts. Call this after creating or \
+            modifying .gd script files outside of Director (e.g. via Write tool). Returns \
+            structured diagnostics — script parse errors, missing identifiers, broken \
+            references — so you can fix issues before they cause failures in scene operations. \
+            In headless mode this restarts the daemon; in editor mode it triggers a filesystem \
+            rescan. Replaces the old filesystem_scan tool."
+    )]
+    pub async fn project_reload(
+        &self,
+        Parameters(params): Parameters<ProjectReloadParams>,
+    ) -> Result<String, McpError> {
+        use crate::diagnostics::parse_godot_stderr;
+        use crate::oneshot::run_validation;
+
+        let godot = resolve_godot_bin().map_err(McpError::from)?;
+        let project = std::path::Path::new(&params.project_path);
+        validate_project_path(project).map_err(McpError::from)?;
+
+        // Kill stale daemon so next operation spawns fresh.
+        self.backend.kill_daemon().await;
+
+        // Run validation via one-shot (captures stderr).
+        let op_params = serialize_params(&params)?;
+        let validation = run_validation(&godot, project, "project_reload", &op_params)
+            .await
+            .map_err(McpError::from)?;
+
+        // Parse stderr for Godot diagnostics.
+        let diagnostics = parse_godot_stderr(&validation.stderr);
+        let errors: Vec<_> = diagnostics
+            .iter()
+            .filter(|d| d.severity == "error")
+            .cloned()
+            .collect();
+        let warnings: Vec<_> = diagnostics
+            .iter()
+            .filter(|d| d.severity == "warning")
+            .cloned()
+            .collect();
+
+        // Extract GDScript data.
+        let data = validation.result.into_data().map_err(McpError::from)?;
+        let scripts_checked = data
+            .get("scripts_checked")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0) as u32;
+        let autoloads = data
+            .get("autoloads")
+            .cloned()
+            .unwrap_or(serde_json::Value::Object(Default::default()));
+
+        serialize_response(&ProjectReloadResponse {
+            result: "ok".to_string(),
+            scripts_checked,
+            autoloads,
+            errors,
+            warnings,
+        })
+    }
+
+    #[tool(
+        name = "editor_status",
+        description = "Get a snapshot of the Godot editor's current state — which scenes are \
+            open, which is active, whether the game is running, registered autoloads, and \
+            recent log output (errors, warnings, print statements from godot.log). \
+            Use this to orient yourself before making changes, to check whether the editor \
+            is running, or to see what errors exist. Works in headless mode too."
+    )]
+    pub async fn editor_status(
+        &self,
+        Parameters(params): Parameters<EditorStatusParams>,
+    ) -> Result<String, McpError> {
+        let op_params = serialize_params(&params)?;
+        let data =
+            run_operation(&self.backend, &params.project_path, "editor_status", &op_params)
+                .await?;
+
+        // Deserialize the GDScript response.
+        let raw: EditorStatusRawResponse = deserialize_response(data)?;
+
+        // Parse recent_log lines into structured diagnostics.
+        let log_text = raw.recent_log.join("\n");
+        let diagnostics = crate::diagnostics::parse_godot_stderr(&log_text);
+        let errors: Vec<_> = diagnostics
+            .iter()
+            .filter(|d| d.severity == "error")
+            .cloned()
+            .collect();
+        let warnings: Vec<_> = diagnostics
+            .iter()
+            .filter(|d| d.severity == "warning")
+            .cloned()
+            .collect();
+
+        serialize_response(&EditorStatusResponse {
+            editor_connected: raw.editor_connected,
+            active_scene: raw.active_scene,
+            open_scenes: raw.open_scenes,
+            game_running: raw.game_running,
+            autoloads: raw.autoloads,
+            recent_log: raw.recent_log,
+            errors,
+            warnings,
+        })
+    }
+
+    #[tool(
         name = "uid_get",
         description = "Resolve the Godot UID for a file path. UIDs are stable identifiers \
             that persist across file renames and are used internally by Godot for resource \
@@ -627,5 +784,138 @@ impl DirectorServer {
         Parameters(params): Parameters<NodeFindParams>,
     ) -> Result<String, McpError> {
         director_tool!(self, params, "node_find", NodeFindResponse)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    /// Assert that serializing a params struct with all optional fields absent
+    /// produces no `null` values in the JSON. A `null` in the wire format breaks
+    /// GDScript's `Dictionary.get(key, default)` — the key is present so the
+    /// default is ignored and the typed assignment gets `Nil` instead.
+    fn assert_no_nulls(json: &serde_json::Value) {
+        match json {
+            serde_json::Value::Null => panic!("unexpected null in serialized params"),
+            serde_json::Value::Object(map) => {
+                for (k, v) in map {
+                    if v.is_null() {
+                        panic!("null value for key '{k}' in serialized params");
+                    }
+                    assert_no_nulls(v);
+                }
+            }
+            serde_json::Value::Array(arr) => {
+                for v in arr {
+                    assert_no_nulls(v);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    use super::*;
+
+    #[test]
+    fn scene_read_params_no_nulls_when_optional_absent() {
+        let params = SceneReadParams {
+            project_path: "/proj".into(),
+            scene_path: "scenes/main.tscn".into(),
+            depth: None,
+            properties: true,
+        };
+        let json = serde_json::to_value(&params).unwrap();
+        assert_no_nulls(&json);
+        assert!(!json.as_object().unwrap().contains_key("depth"));
+    }
+
+    #[test]
+    fn scene_list_params_no_nulls_when_optional_absent() {
+        let params = SceneListParams {
+            project_path: "/proj".into(),
+            directory: None,
+            pattern: None,
+        };
+        let json = serde_json::to_value(&params).unwrap();
+        assert_no_nulls(&json);
+    }
+
+    #[test]
+    fn node_add_params_no_nulls_when_optional_absent() {
+        let params = NodeAddParams {
+            project_path: "/proj".into(),
+            scene_path: "s.tscn".into(),
+            parent_path: ".".into(),
+            node_type: "Node2D".into(),
+            node_name: "Foo".into(),
+            properties: None,
+        };
+        let json = serde_json::to_value(&params).unwrap();
+        assert_no_nulls(&json);
+    }
+
+    #[test]
+    fn node_find_params_no_nulls_when_optional_absent() {
+        let params = NodeFindParams {
+            project_path: "/proj".into(),
+            scene_path: "s.tscn".into(),
+            class_name: None,
+            group: None,
+            name_pattern: None,
+            property: None,
+            property_value: None,
+            limit: 100,
+        };
+        let json = serde_json::to_value(&params).unwrap();
+        assert_no_nulls(&json);
+    }
+
+    #[test]
+    fn physics_set_layers_params_no_nulls_when_optional_absent() {
+        let params = PhysicsSetLayersParams {
+            project_path: "/proj".into(),
+            scene_path: "s.tscn".into(),
+            node_path: "Body".into(),
+            collision_layer: None,
+            collision_mask: None,
+        };
+        let json = serde_json::to_value(&params).unwrap();
+        assert_no_nulls(&json);
+    }
+
+    #[test]
+    fn project_reload_params_no_nulls() {
+        let params = ProjectReloadParams {
+            project_path: "/proj".into(),
+        };
+        let json = serde_json::to_value(&params).unwrap();
+        assert_no_nulls(&json);
+    }
+
+    #[test]
+    fn editor_status_params_no_nulls() {
+        let params = EditorStatusParams {
+            project_path: "/proj".into(),
+        };
+        let json = serde_json::to_value(&params).unwrap();
+        assert_no_nulls(&json);
+    }
+
+    #[test]
+    fn animation_add_track_params_no_nulls_when_optional_absent() {
+        let params = AnimationAddTrackParams {
+            project_path: "/proj".into(),
+            resource_path: "anim.tres".into(),
+            track_type: "value".into(),
+            node_path: "Sprite2D:position".into(),
+            keyframes: vec![],
+            interpolation: None,
+            update_mode: None,
+        };
+        let json = serde_json::to_value(&params).unwrap();
+        assert_no_nulls(&json);
     }
 }

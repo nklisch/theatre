@@ -162,6 +162,20 @@ impl Backend {
         oneshot::run_oneshot(godot_bin, project_path, operation, params).await
     }
 
+    /// Kill the daemon without shutting down the editor connection.
+    ///
+    /// Used by `project_reload` to force a fresh daemon respawn on the next
+    /// operation, ensuring newly-written `.gd` files and their class names are
+    /// visible to Godot's resource loader.
+    pub async fn kill_daemon(&self) {
+        let mut guard = self.daemon.lock().await;
+        if let Some(handle) = guard.take()
+            && let Err(e) = handle.shutdown().await
+        {
+            tracing::warn!("daemon kill error: {e}");
+        }
+    }
+
     /// Shut down any running editor connection and daemon.
     pub async fn shutdown(&self) {
         // Disconnect editor (drop the handle — no process to kill).

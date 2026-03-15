@@ -9,15 +9,17 @@ use schemars::JsonSchema;
 use crate::backend::Backend;
 use crate::responses::{
     AnimationAddTrackResponse, AnimationCreateResponse, AnimationReadResponse,
-    AnimationRemoveTrackResponse, BatchResponse, ExportMeshLibraryResponse, GridMapClearResponse,
+    AnimationRemoveTrackResponse, AutoloadAddResponse, AutoloadRemoveResponse, BatchResponse,
+    EditorStatusResponse, ExportMeshLibraryResponse, GridMapClearResponse,
     GridMapGetCellsResponse, GridMapSetCellsResponse, NodeAddResponse, NodeFindResponse,
     NodeRemoveResponse, NodeReparentResponse, NodeSetGroupsResponse, NodeSetMetaResponse,
     NodeSetPropertiesResponse, NodeSetScriptResponse, PhysicsSetLayerNamesResponse,
-    PhysicsSetLayersResponse, ResourceCreateResponse, ResourceDuplicateResponse,
-    ResourceReadResponse, SceneAddInstanceResponse, SceneCreateResponse, SceneDiffResponse,
-    SceneListResponse, SceneReadResponse, ShapeCreateResponse, SignalConnectionResponse,
-    SignalListResponse, TileMapClearResponse, TileMapGetCellsResponse, TileMapSetCellsResponse,
-    UidGetResponse, UidUpdateProjectResponse, VisualShaderCreateResponse,
+    PhysicsSetLayersResponse, ProjectReloadResponse, ProjectSettingsSetResponse,
+    ResourceCreateResponse, ResourceDuplicateResponse, ResourceReadResponse,
+    SceneAddInstanceResponse, SceneCreateResponse, SceneDiffResponse, SceneListResponse,
+    SceneReadResponse, ShapeCreateResponse, SignalConnectionResponse, SignalListResponse,
+    TileMapClearResponse, TileMapGetCellsResponse, TileMapSetCellsResponse, UidGetResponse,
+    UidUpdateProjectResponse, VisualShaderCreateResponse,
 };
 
 #[derive(Clone)]
@@ -91,6 +93,11 @@ impl DirectorServer {
         attach_output_schema::<UidGetResponse>(&mut router, "uid_get");
         attach_output_schema::<UidUpdateProjectResponse>(&mut router, "uid_update_project");
         attach_output_schema::<ExportMeshLibraryResponse>(&mut router, "export_mesh_library");
+        attach_output_schema::<AutoloadAddResponse>(&mut router, "autoload_add");
+        attach_output_schema::<AutoloadRemoveResponse>(&mut router, "autoload_remove");
+        attach_output_schema::<ProjectSettingsSetResponse>(&mut router, "project_settings_set");
+        attach_output_schema::<ProjectReloadResponse>(&mut router, "project_reload");
+        attach_output_schema::<EditorStatusResponse>(&mut router, "editor_status");
         attach_output_schema::<SignalConnectionResponse>(&mut router, "signal_connect");
         attach_output_schema::<SignalConnectionResponse>(&mut router, "signal_disconnect");
         attach_output_schema::<SignalListResponse>(&mut router, "signal_list");

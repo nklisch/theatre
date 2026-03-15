@@ -59,18 +59,20 @@ pub enum OperationError {
 
 const TIMEOUT: Duration = Duration::from_secs(30);
 
-/// Run a Director operation via headless Godot one-shot.
-///
-/// Spawns: `godot --headless --path <project_path> --script
-/// addons/director/operations.gd -- <operation> '<params_json>'`
-///
-/// Parses the last line of stdout as JSON `OperationResult`.
-pub async fn run_oneshot(
+/// Output of a validation run — parsed result plus raw stderr.
+pub struct ValidationOutput {
+    pub result: OperationResult,
+    pub stderr: String,
+}
+
+/// Spawn the headless Godot subprocess and wait for it to finish.
+/// Returns `(stdout, stderr, exit_status)`.
+async fn run_subprocess(
     godot_bin: &Path,
     project_path: &Path,
     operation: &str,
     params: &serde_json::Value,
-) -> Result<OperationResult, OperationError> {
+) -> Result<(String, String, std::process::ExitStatus), OperationError> {
     let params_json = params.to_string();
 
     let mut cmd = tokio::process::Command::new(godot_bin);
@@ -97,6 +99,11 @@ pub async fn run_oneshot(
     let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
     let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
 
+    Ok((stdout, stderr, output.status))
+}
+
+/// Parse the last JSON-like line from stdout into an `OperationResult`.
+fn parse_stdout(stdout: &str, stderr: &str, status: &std::process::ExitStatus) -> Result<OperationResult, OperationError> {
     // Parse the last JSON-like line of stdout (starts with '{').
     // Non-JSON lines like "[Stage] TCP server stopped" may appear after
     // the result when the GDExtension prints during Godot's shutdown.
@@ -105,12 +112,43 @@ pub async fn run_oneshot(
         .rev()
         .find(|line| line.trim().starts_with('{'))
         .ok_or_else(|| OperationError::ProcessFailed {
-            status: output.status.code().unwrap_or(-1),
-            stderr: stderr.clone(),
+            status: status.code().unwrap_or(-1),
+            stderr: stderr.to_owned(),
         })?;
 
     serde_json::from_str(json_line).map_err(|source| OperationError::ParseFailed {
         source,
-        stdout: stdout.clone(),
+        stdout: stdout.to_owned(),
     })
+}
+
+/// Run a Director operation via headless Godot one-shot.
+///
+/// Spawns: `godot --headless --path <project_path> --script
+/// addons/director/operations.gd -- <operation> '<params_json>'`
+///
+/// Parses the last line of stdout as JSON `OperationResult`.
+pub async fn run_oneshot(
+    godot_bin: &Path,
+    project_path: &Path,
+    operation: &str,
+    params: &serde_json::Value,
+) -> Result<OperationResult, OperationError> {
+    let (stdout, stderr, status) = run_subprocess(godot_bin, project_path, operation, params).await?;
+    parse_stdout(&stdout, &stderr, &status)
+}
+
+/// Run a Director operation via headless one-shot, returning stderr alongside the result.
+///
+/// Identical to `run_oneshot` but always returns stderr (even on success).
+/// Used by `project_reload` to capture Godot's parse error output.
+pub async fn run_validation(
+    godot_bin: &Path,
+    project_path: &Path,
+    operation: &str,
+    params: &serde_json::Value,
+) -> Result<ValidationOutput, OperationError> {
+    let (stdout, stderr, status) = run_subprocess(godot_bin, project_path, operation, params).await?;
+    let result = parse_stdout(&stdout, &stderr, &status)?;
+    Ok(ValidationOutput { result, stderr })
 }
