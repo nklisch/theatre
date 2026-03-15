@@ -395,4 +395,227 @@ mod tests {
             matches!(req, ActionRequest::InjectMouseButton { button, pressed: true, .. } if button == "left")
         );
     }
+
+    // --- Missing required param validation tests ---
+
+    #[test]
+    fn build_action_request_pause_missing_paused() {
+        let p = base_params(ActionType::Pause);
+        assert!(build_action_request(&p).is_err());
+    }
+
+    #[test]
+    fn build_action_request_advance_frames_missing_frames() {
+        let p = base_params(ActionType::AdvanceFrames);
+        assert!(build_action_request(&p).is_err());
+    }
+
+    #[test]
+    fn build_action_request_advance_time_missing_seconds() {
+        let p = base_params(ActionType::AdvanceTime);
+        assert!(build_action_request(&p).is_err());
+    }
+
+    #[test]
+    fn build_action_request_teleport_missing_position() {
+        let mut p = base_params(ActionType::Teleport);
+        p.node = Some("player".into());
+        // position is None — should error
+        assert!(build_action_request(&p).is_err());
+    }
+
+    #[test]
+    fn build_action_request_set_property_missing_property() {
+        let mut p = base_params(ActionType::SetProperty);
+        p.node = Some("player".into());
+        p.value = Some(serde_json::json!(42));
+        // property is None — should error
+        assert!(build_action_request(&p).is_err());
+    }
+
+    #[test]
+    fn build_action_request_set_property_missing_value() {
+        let mut p = base_params(ActionType::SetProperty);
+        p.node = Some("player".into());
+        p.property = Some("health".into());
+        // value is None — should error
+        assert!(build_action_request(&p).is_err());
+    }
+
+    #[test]
+    fn build_action_request_set_property_missing_node() {
+        let mut p = base_params(ActionType::SetProperty);
+        p.property = Some("health".into());
+        p.value = Some(serde_json::json!(42));
+        assert!(build_action_request(&p).is_err());
+    }
+
+    #[test]
+    fn build_action_request_call_method_missing_method() {
+        let mut p = base_params(ActionType::CallMethod);
+        p.node = Some("player".into());
+        assert!(build_action_request(&p).is_err());
+    }
+
+    #[test]
+    fn build_action_request_call_method_missing_node() {
+        let mut p = base_params(ActionType::CallMethod);
+        p.method = Some("ping".into());
+        assert!(build_action_request(&p).is_err());
+    }
+
+    #[test]
+    fn build_action_request_call_method_no_args_defaults_empty() {
+        let mut p = base_params(ActionType::CallMethod);
+        p.node = Some("player".into());
+        p.method = Some("ping".into());
+        // args is None — should default to empty vec
+        let req = build_action_request(&p).unwrap();
+        assert!(matches!(req, ActionRequest::CallMethod { args, .. } if args.is_empty()));
+    }
+
+    #[test]
+    fn build_action_request_emit_signal_missing_node() {
+        let mut p = base_params(ActionType::EmitSignal);
+        p.signal = Some("health_changed".into());
+        assert!(build_action_request(&p).is_err());
+    }
+
+    #[test]
+    fn build_action_request_emit_signal_missing_signal() {
+        let mut p = base_params(ActionType::EmitSignal);
+        p.node = Some("player".into());
+        assert!(build_action_request(&p).is_err());
+    }
+
+    #[test]
+    fn build_action_request_emit_signal_no_args_defaults_empty() {
+        let mut p = base_params(ActionType::EmitSignal);
+        p.node = Some("player".into());
+        p.signal = Some("ready".into());
+        let req = build_action_request(&p).unwrap();
+        assert!(matches!(req, ActionRequest::EmitSignal { args, .. } if args.is_empty()));
+    }
+
+    #[test]
+    fn build_action_request_emit_signal_with_args() {
+        let mut p = base_params(ActionType::EmitSignal);
+        p.node = Some("player".into());
+        p.signal = Some("health_changed".into());
+        p.args = Some(vec![serde_json::json!(50)]);
+        let req = build_action_request(&p).unwrap();
+        assert!(matches!(req, ActionRequest::EmitSignal { args, .. } if args.len() == 1));
+    }
+
+    #[test]
+    fn build_action_request_spawn_node_missing_scene_path() {
+        let mut p = base_params(ActionType::SpawnNode);
+        p.parent = Some("Enemies".into());
+        assert!(build_action_request(&p).is_err());
+    }
+
+    #[test]
+    fn build_action_request_spawn_node_missing_parent() {
+        let mut p = base_params(ActionType::SpawnNode);
+        p.scene_path = Some("res://enemy.tscn".into());
+        assert!(build_action_request(&p).is_err());
+    }
+
+    #[test]
+    fn build_action_request_spawn_node_with_optional_fields() {
+        let mut p = base_params(ActionType::SpawnNode);
+        p.scene_path = Some("res://enemy.tscn".into());
+        p.parent = Some("Enemies".into());
+        p.name = Some("TestEnemy".into());
+        p.position = Some(vec![5.0, 0.0, -3.0]);
+        let req = build_action_request(&p).unwrap();
+        assert!(
+            matches!(req, ActionRequest::SpawnNode { name: Some(n), position: Some(pos), .. } if n == "TestEnemy" && pos.len() == 3)
+        );
+    }
+
+    #[test]
+    fn build_action_request_remove_node_missing_node() {
+        let p = base_params(ActionType::RemoveNode);
+        assert!(build_action_request(&p).is_err());
+    }
+
+    #[test]
+    fn build_action_request_remove_node_valid() {
+        let mut p = base_params(ActionType::RemoveNode);
+        p.node = Some("Enemies/Scout".into());
+        let req = build_action_request(&p).unwrap();
+        assert!(matches!(req, ActionRequest::RemoveNode { path } if path == "Enemies/Scout"));
+    }
+
+    #[test]
+    fn build_action_request_action_release_missing_input_action() {
+        let p = base_params(ActionType::ActionRelease);
+        assert!(build_action_request(&p).is_err());
+    }
+
+    #[test]
+    fn build_action_request_action_release_valid() {
+        let mut p = base_params(ActionType::ActionRelease);
+        p.input_action = Some("jump".into());
+        let req = build_action_request(&p).unwrap();
+        assert!(
+            matches!(req, ActionRequest::ActionRelease { action_name } if action_name == "jump")
+        );
+    }
+
+    #[test]
+    fn build_action_request_inject_key_missing_keycode() {
+        let mut p = base_params(ActionType::InjectKey);
+        p.pressed = Some(true);
+        assert!(build_action_request(&p).is_err());
+    }
+
+    #[test]
+    fn build_action_request_inject_mouse_button_missing_button() {
+        let mut p = base_params(ActionType::InjectMouseButton);
+        p.pressed = Some(true);
+        assert!(build_action_request(&p).is_err());
+    }
+
+    #[test]
+    fn build_action_request_inject_mouse_button_missing_pressed() {
+        let mut p = base_params(ActionType::InjectMouseButton);
+        p.button = Some("left".into());
+        assert!(build_action_request(&p).is_err());
+    }
+
+    #[test]
+    fn build_action_request_action_press_custom_strength() {
+        let mut p = base_params(ActionType::ActionPress);
+        p.input_action = Some("fire".into());
+        p.strength = Some(0.5);
+        let req = build_action_request(&p).unwrap();
+        assert!(
+            matches!(req, ActionRequest::ActionPress { action_name, strength } if action_name == "fire" && (strength - 0.5).abs() < 0.01)
+        );
+    }
+
+    #[test]
+    fn build_action_request_inject_key_with_echo() {
+        let mut p = base_params(ActionType::InjectKey);
+        p.keycode = Some("A".into());
+        p.pressed = Some(true);
+        p.echo = true;
+        let req = build_action_request(&p).unwrap();
+        assert!(
+            matches!(req, ActionRequest::InjectKey { keycode, pressed: true, echo: true } if keycode == "A")
+        );
+    }
+
+    #[test]
+    fn build_action_request_inject_mouse_button_without_position() {
+        let mut p = base_params(ActionType::InjectMouseButton);
+        p.button = Some("right".into());
+        p.pressed = Some(false);
+        let req = build_action_request(&p).unwrap();
+        assert!(
+            matches!(req, ActionRequest::InjectMouseButton { button, pressed: false, position: None } if button == "right")
+        );
+    }
 }

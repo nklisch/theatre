@@ -11,3 +11,8 @@ func _ready() -> void:
 ## Returns "pong". Used by test_actions.rs call_method test.
 func ping() -> String:
 	return "pong"
+
+
+## Adds two numbers. Used by test_actions.rs call_method_with_args test.
+func add(a: int, b: int) -> int:
+	return a + b
