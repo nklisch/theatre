@@ -10,6 +10,7 @@ members = [
     "crates/theatre-cli",
     "tests/wire-tests",
     "tests/director-tests",
+    "tests/live-tests",
 ]
 
 # Exclude wire-tests and director-tests from `cargo build --workspace` (they need Godot at runtime).
