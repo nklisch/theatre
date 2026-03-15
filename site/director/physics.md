@@ -37,24 +37,44 @@ Player detects Enemies (player mask has layer 2 set) and Walls (player mask has 
 
 ## Operations
 
-### `physics_set_layer_names`
+### `physics_set_layers`
 
-Get or set the display names for collision layers. Names appear in the Godot editor's layer picker.
+Set `collision_layer` and/or `collision_mask` bitmasks on a node.
 
-**Get all names:**
 ```json
 {
-  "op": "physics_set_layer_names",
-  "project_path": "/home/user/my-game"
+  "op": "physics_set_layers",
+  "project_path": "/home/user/my-game",
+  "scene_path": "scenes/player.tscn",
+  "node_path": "Player",
+  "collision_layer": 1,
+  "collision_mask": 6
 }
 ```
 
-<ParamTable :params="physics_set_layer_names" />
+<ParamTable :params="physics_set_layers" />
 
 **Response:**
 ```json
 {
-  "layer_names": {
+  "op": "physics_set_layers",
+  "node_path": "Player",
+  "collision_layer": 1,
+  "collision_mask": 6,
+  "result": "ok"
+}
+```
+
+### `physics_set_layer_names`
+
+Set the display names for a layer type. Names appear in the Godot editor's layer picker.
+
+```json
+{
+  "op": "physics_set_layer_names",
+  "project_path": "/home/user/my-game",
+  "layer_type": "3d_physics",
+  "layers": {
     "1": "Player",
     "2": "Enemies",
     "3": "World",
@@ -65,31 +85,9 @@ Get or set the display names for collision layers. Names appear in the Godot edi
 }
 ```
 
-### `physics_set_layers`
+`layer_type` values: `"2d_physics"`, `"3d_physics"`, `"2d_render"`, `"3d_render"`, `"2d_navigation"`, `"3d_navigation"`, `"avoidance"`.
 
-Set collision layer and mask configuration on nodes.
-
-```json
-{
-  "op": "physics_set_layers",
-  "project_path": "/home/user/my-game",
-  "scene": "scenes/player.tscn",
-  "node": "Player",
-  "layers": [1]
-}
-```
-
-<ParamTable :params="physics_set_layers" />
-
-**Response:**
-```json
-{
-  "op": "physics_set_layers",
-  "node": "Enemy",
-  "collision_layer": 2,
-  "result": "ok"
-}
-```
+<ParamTable :params="physics_set_layer_names" />
 
 ## Layer number to bitmask conversion
 
@@ -116,7 +114,7 @@ Director accepts both bitmask integers and layer number arrays — use whichever
 
 **Name your layers before assigning them.** Use `physics_set_layer_names` to set up a consistent naming scheme (Player, Enemies, World, Projectiles, Triggers). This makes layer assignments readable — "layer 2" means nothing; "Enemies" is clear.
 
-**Use the layer list format for readability.** `"masks": [1, 3]` is clearer than `"collision_mask": 5`. Both work; use whichever is less error-prone.
+**Use the bitmask directly.** Pass `"collision_layer": 5` (layers 1+3) rather than computing it separately. The formula is: sum of (2^(layer_number - 1)) for each active layer.
 
 **Layers are 1-indexed in Director, but 0-indexed internally in Godot.** When reading collision_layer bitmasks in Godot's GDScript, bit 0 = layer 1. Director uses 1-indexed layer numbers to avoid off-by-one confusion.
 

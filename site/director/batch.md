@@ -39,18 +39,17 @@ Run a list of operations atomically in sequence.
     {
       "operation": "scene_create",
       "params": {
-        "path": "scenes/room_b.tscn",
-        "root_class": "Node3D",
-        "root_name": "RoomB"
+        "scene_path": "scenes/room_b.tscn",
+        "root_type": "Node3D"
       }
     },
     {
       "operation": "node_add",
       "params": {
-        "scene": "scenes/room_b.tscn",
-        "parent": "RoomB",
-        "name": "Floor",
-        "class": "StaticBody3D"
+        "scene_path": "scenes/room_b.tscn",
+        "parent_path": "RoomB",
+        "node_type": "StaticBody3D",
+        "node_name": "Floor"
       }
     }
   ]

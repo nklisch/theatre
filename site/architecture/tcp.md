@@ -128,7 +128,7 @@ Director uses a simpler connection model — one connection per operation (not p
 
 ```
 [Tool call]
-  → director binary connects to port 6550 (or 6551)
+  → director binary connects to port 6551 (editor) or 6550 (daemon)
   → sends operation JSON
   → reads response JSON
   → closes connection

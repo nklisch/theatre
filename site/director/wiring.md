@@ -31,11 +31,11 @@ Connect a signal from one node to a method on another.
 {
   "op": "signal_connect",
   "project_path": "/home/user/my-game",
-  "scene": "scenes/level_01.tscn",
-  "from_node": "Level/Enemy_0/DetectionZone",
-  "signal": "body_entered",
-  "to_node": "Level/Enemy_0",
-  "method": "_on_detection_zone_body_entered"
+  "scene_path": "scenes/level_01.tscn",
+  "source_path": "Level/Enemy_0/DetectionZone",
+  "signal_name": "body_entered",
+  "target_path": "Level/Enemy_0",
+  "method_name": "_on_detection_zone_body_entered"
 }
 ```
 
@@ -45,10 +45,10 @@ Connect a signal from one node to a method on another.
 ```json
 {
   "op": "signal_connect",
-  "from_node": "Level/Enemy_0/DetectionZone",
-  "signal": "body_entered",
-  "to_node": "Level/Enemy_0",
-  "method": "_on_detection_zone_body_entered",
+  "source_path": "Level/Enemy_0/DetectionZone",
+  "signal_name": "body_entered",
+  "target_path": "Level/Enemy_0",
+  "method_name": "_on_detection_zone_body_entered",
   "result": "ok"
 }
 ```
@@ -61,11 +61,11 @@ Remove a signal connection.
 {
   "op": "signal_disconnect",
   "project_path": "/home/user/my-game",
-  "scene": "scenes/level_01.tscn",
-  "from_node": "Level/Enemy_0/DetectionZone",
-  "signal": "body_entered",
-  "to_node": "Level/Enemy_0",
-  "method": "_on_detection_zone_body_entered"
+  "scene_path": "scenes/level_01.tscn",
+  "source_path": "Level/Enemy_0/DetectionZone",
+  "signal_name": "body_entered",
+  "target_path": "Level/Enemy_0",
+  "method_name": "_on_detection_zone_body_entered"
 }
 ```
 
@@ -75,24 +75,26 @@ Remove a signal connection.
 ```json
 {
   "op": "signal_disconnect",
-  "from_node": "Level/Enemy_0/DetectionZone",
-  "signal": "body_entered",
+  "source_path": "Level/Enemy_0/DetectionZone",
+  "signal_name": "body_entered",
   "result": "ok"
 }
 ```
 
 ### `signal_list`
 
-List all signal connections on a node.
+List all signal connections in a scene, optionally filtered to a specific node.
 
 ```json
 {
   "op": "signal_list",
   "project_path": "/home/user/my-game",
-  "scene": "scenes/level_01.tscn",
-  "node": "Level/Enemy_0/DetectionZone"
+  "scene_path": "scenes/level_01.tscn",
+  "node_path": "Level/Enemy_0/DetectionZone"
 }
 ```
+
+Omit `node_path` to list signals for all nodes in the scene.
 
 <ParamTable :params="signal_list" />
 
@@ -101,9 +103,10 @@ List all signal connections on a node.
 {
   "signals": [
     {
-      "signal": "body_entered",
-      "to_node": "Level/Enemy_0",
-      "method": "_on_detection_zone_body_entered",
+      "signal_name": "body_entered",
+      "source_path": "Level/Enemy_0/DetectionZone",
+      "target_path": "Level/Enemy_0",
+      "method_name": "_on_detection_zone_body_entered",
       "flags": 0
     }
   ]
@@ -118,8 +121,8 @@ List all signal connections on a node.
 {
   "op": "node_set_properties",
   "project_path": "/home/user/my-game",
-  "scene": "scenes/enemy.tscn",
-  "node": "Enemy",
+  "scene_path": "scenes/enemy.tscn",
+  "node_path": "Enemy",
   "properties": {
     "patrol_speed": 3.5,
     "alert_speed": 8.0,
@@ -139,40 +142,40 @@ List all signal connections on a node.
 ### Area3D detection
 ```json
 {
-  "from_node": "Enemy/DetectionZone",
-  "signal": "body_entered",
-  "to_node": "Enemy",
-  "method": "_on_body_entered"
+  "source_path": "Enemy/DetectionZone",
+  "signal_name": "body_entered",
+  "target_path": "Enemy",
+  "method_name": "_on_body_entered"
 }
 ```
 
 ### Button press
 ```json
 {
-  "from_node": "UI/HUD/AttackButton",
-  "signal": "pressed",
-  "to_node": "Player",
-  "method": "_on_attack_button_pressed"
+  "source_path": "UI/HUD/AttackButton",
+  "signal_name": "pressed",
+  "target_path": "Player",
+  "method_name": "_on_attack_button_pressed"
 }
 ```
 
 ### Timer timeout
 ```json
 {
-  "from_node": "Enemy/AttackCooldownTimer",
-  "signal": "timeout",
-  "to_node": "Enemy",
-  "method": "_on_attack_cooldown_timeout"
+  "source_path": "Enemy/AttackCooldownTimer",
+  "signal_name": "timeout",
+  "target_path": "Enemy",
+  "method_name": "_on_attack_cooldown_timeout"
 }
 ```
 
 ### AnimationPlayer finished
 ```json
 {
-  "from_node": "Player/AnimationPlayer",
-  "signal": "animation_finished",
-  "to_node": "Player",
-  "method": "_on_animation_finished"
+  "source_path": "Player/AnimationPlayer",
+  "signal_name": "animation_finished",
+  "target_path": "Player",
+  "method_name": "_on_animation_finished"
 }
 ```
 
@@ -180,7 +183,7 @@ List all signal connections on a node.
 
 **Check existing connections before adding new ones.** Use `signal_list` to avoid creating duplicate connections — Godot will error or double-fire if the same connection is added twice.
 
-**The `to_node` method must exist.** Director validates that the `to_node` has a script, but not that the method exists in that script. A missing method will cause a runtime error when the signal fires. Double-check method names.
+**The `target_path` method must exist.** Director validates that the `target_path` has a script, but not that the method exists in that script. A missing method will cause a runtime error when the signal fires. Double-check method names.
 
 **Use `spatial_inspect` with `include: ["signals"]`** to see connections in the running game. This is the fastest way to verify that wiring applied correctly.
 

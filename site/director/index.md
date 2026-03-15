@@ -64,10 +64,10 @@ Every Director operation requires `project_path` — the absolute path to your G
 {
   "op": "node_add",
   "project_path": "/home/user/my-game",
-  "scene": "scenes/level_01.tscn",
-  "parent": "Level",
-  "name": "Platform_5",
-  "class": "StaticBody3D"
+  "scene_path": "scenes/level_01.tscn",
+  "parent_path": "Level",
+  "node_type": "StaticBody3D",
+  "node_name": "Platform_5"
 }
 ```
 

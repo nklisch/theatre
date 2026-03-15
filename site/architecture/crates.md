@@ -103,8 +103,8 @@ The director crate implements the Director MCP tools. It communicates with the G
 - No dependency on any stage crate
 
 **Backend routing** (`backend.rs`):
-1. Try TCP connect to port 6550 (editor plugin)
-2. Try TCP connect to port 6551 (daemon)
+1. Try TCP connect to port 6551 (editor plugin)
+2. Try TCP connect to port 6550 (daemon)
 3. Fall back to spawning `godot --headless` one-shot
 
 Each backend implements the same `Backend` trait, so tool handlers are backend-agnostic.

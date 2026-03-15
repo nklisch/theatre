@@ -20,8 +20,11 @@ Create a new VisualShader resource (node-graph based shader).
 {
   "op": "visual_shader_create",
   "project_path": "/home/user/my-game",
-  "save_path": "assets/shaders/lava_effect.tres",
-  "shader_mode": "spatial"
+  "resource_path": "assets/shaders/lava_effect.tres",
+  "shader_mode": "spatial",
+  "nodes": [
+    { "node_id": 0, "type": "VisualShaderNodeOutput" }
+  ]
 }
 ```
 
@@ -31,7 +34,7 @@ Create a new VisualShader resource (node-graph based shader).
 ```json
 {
   "op": "visual_shader_create",
-  "save_path": "assets/shaders/lava_effect.tres",
+  "resource_path": "assets/shaders/lava_effect.tres",
   "result": "ok"
 }
 ```
@@ -46,8 +49,8 @@ To set uniform values on a `ShaderMaterial` node, use `node_set_properties` with
 {
   "op": "node_set_properties",
   "project_path": "/home/user/my-game",
-  "scene": "scenes/level_01.tscn",
-  "node": "World/LavaMesh",
+  "scene_path": "scenes/level_01.tscn",
+  "node_path": "World/LavaMesh",
   "properties": {
     "shader_parameters": {
       "glow_intensity": 1.2,

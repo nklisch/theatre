@@ -21,7 +21,7 @@ Modify tile-based layouts for 2D and 3D worlds.
 
 ## TileMap (2D)
 
-`TileMap` is Godot's 2D tile system. Director can set, get, and fill tiles using tile coordinates (column, row).
+`TileMap` is Godot's 2D tile system. Director can set, get, and clear tiles using tile coordinates (column, row).
 
 ### `tilemap_set_cells`
 
@@ -31,11 +31,11 @@ Set one or more specific tiles.
 {
   "op": "tilemap_set_cells",
   "project_path": "/home/user/my-game",
-  "scene": "scenes/level_01.tscn",
-  "node": "World/TileMap",
+  "scene_path": "scenes/level_01.tscn",
+  "node_path": "World/TileMap",
   "cells": [
-    { "position": [0, 0], "source_id": 0, "atlas_coords": [0, 0], "layer": 0 },
-    { "position": [1, 0], "source_id": 0, "atlas_coords": [0, 0], "layer": 0 }
+    { "coords": [0, 0], "source_id": 0, "atlas_coords": [0, 0] },
+    { "coords": [1, 0], "source_id": 0, "atlas_coords": [0, 0] }
   ]
 }
 ```
@@ -43,6 +43,12 @@ Set one or more specific tiles.
 <ParamTable :params="tilemap_set_cells" />
 
 To erase a tile, set `atlas_coords` to `[-1, -1]`.
+
+To set an alternative tile variant, provide `alternative_tile`:
+
+```json
+{ "coords": [5, 0], "source_id": 0, "atlas_coords": [2, 0], "alternative_tile": 1 }
+```
 
 **Response:**
 ```json
@@ -61,10 +67,9 @@ Read tile data from a region.
 {
   "op": "tilemap_get_cells",
   "project_path": "/home/user/my-game",
-  "scene": "scenes/level_01.tscn",
-  "node": "World/TileMap",
-  "region": { "min": [0, -5], "max": [20, 5] },
-  "layer": 0
+  "scene_path": "scenes/level_01.tscn",
+  "node_path": "World/TileMap",
+  "region": { "position": [0, -5], "size": [20, 10] }
 }
 ```
 
@@ -74,9 +79,9 @@ Read tile data from a region.
 ```json
 {
   "op": "tilemap_get_cells",
-  "region": { "min": [0, -5], "max": [20, 5] },
+  "region": { "position": [0, -5], "size": [20, 10] },
   "cells": [
-    { "position": [0, 0], "source_id": 0, "atlas_coords": [0, 0] }
+    { "coords": [0, 0], "source_id": 0, "atlas_coords": [0, 0], "alternative_tile": 0 }
   ]
 }
 ```
@@ -85,15 +90,26 @@ Only non-empty tiles are returned.
 
 ### `tilemap_clear`
 
-Remove all tiles from a layer.
+Remove tiles from the TileMap, optionally limited to a region.
 
 ```json
 {
   "op": "tilemap_clear",
   "project_path": "/home/user/my-game",
-  "scene": "scenes/level_01.tscn",
-  "node": "World/TileMap",
-  "layer": 0
+  "scene_path": "scenes/level_01.tscn",
+  "node_path": "World/TileMap"
+}
+```
+
+To clear only a region:
+
+```json
+{
+  "op": "tilemap_clear",
+  "project_path": "/home/user/my-game",
+  "scene_path": "scenes/level_01.tscn",
+  "node_path": "World/TileMap",
+  "region": { "position": [0, -5], "size": [20, 10] }
 }
 ```
 
@@ -111,8 +127,8 @@ Set one or more cells in a GridMap.
 {
   "op": "gridmap_set_cells",
   "project_path": "/home/user/my-game",
-  "scene": "scenes/dungeon.tscn",
-  "node": "World/GridMap",
+  "scene_path": "scenes/dungeon.tscn",
+  "node_path": "World/GridMap",
   "cells": [
     { "position": [0, 0, 0], "item": 0, "orientation": 0 },
     { "position": [1, 0, 0], "item": 0, "orientation": 0 }
@@ -135,15 +151,15 @@ Set one or more cells in a GridMap.
 
 ### `gridmap_get_cells`
 
-Read cells in a region.
+Read cells in a bounding region. Optionally filter by item index.
 
 ```json
 {
   "op": "gridmap_get_cells",
   "project_path": "/home/user/my-game",
-  "scene": "scenes/dungeon.tscn",
-  "node": "World/GridMap",
-  "region": { "min": [-5, 0, -5], "max": [5, 2, 5] }
+  "scene_path": "scenes/dungeon.tscn",
+  "node_path": "World/GridMap",
+  "bounds": { "min": [-5, 0, -5], "max": [5, 2, 5] }
 }
 ```
 
@@ -151,14 +167,14 @@ Read cells in a region.
 
 ### `gridmap_clear`
 
-Remove all cells from the GridMap.
+Remove all cells from the GridMap, optionally limited to a bounding region.
 
 ```json
 {
   "op": "gridmap_clear",
   "project_path": "/home/user/my-game",
-  "scene": "scenes/dungeon.tscn",
-  "node": "World/GridMap"
+  "scene_path": "scenes/dungeon.tscn",
+  "node_path": "World/GridMap"
 }
 ```
 

@@ -34,10 +34,10 @@ Add a new node to a scene.
 {
   "op": "node_add",
   "project_path": "/home/user/my-game",
-  "scene": "scenes/level_01.tscn",
-  "parent": "Level/Platforms",
-  "name": "Platform_5",
-  "class": "StaticBody3D"
+  "scene_path": "scenes/level_01.tscn",
+  "parent_path": "Level/Platforms",
+  "node_type": "StaticBody3D",
+  "node_name": "Platform_5"
 }
 ```
 
@@ -47,8 +47,8 @@ Add a new node to a scene.
 ```json
 {
   "op": "node_add",
-  "name": "Platform_5",
-  "class": "StaticBody3D",
+  "node_name": "Platform_5",
+  "node_type": "StaticBody3D",
   "path": "Level/Platforms/Platform_5",
   "result": "ok"
 }
@@ -64,8 +64,8 @@ Remove a node and all its children.
 {
   "op": "node_remove",
   "project_path": "/home/user/my-game",
-  "scene": "scenes/level_01.tscn",
-  "node": "Level/Platforms/Platform_Old"
+  "scene_path": "scenes/level_01.tscn",
+  "node_path": "Level/Platforms/Platform_Old"
 }
 ```
 
@@ -75,7 +75,7 @@ Remove a node and all its children.
 ```json
 {
   "op": "node_remove",
-  "node": "Level/Platforms/Platform_Old",
+  "node_path": "Level/Platforms/Platform_Old",
   "result": "ok"
 }
 ```
@@ -88,8 +88,8 @@ Set one or more properties on a node.
 {
   "op": "node_set_properties",
   "project_path": "/home/user/my-game",
-  "scene": "scenes/level_01.tscn",
-  "node": "Level/Enemy_0",
+  "scene_path": "scenes/level_01.tscn",
+  "node_path": "Level/Enemy_0",
   "properties": {
     "collision_layer": 2
   }
@@ -104,8 +104,8 @@ To set multiple properties at once, pass more keys in `properties`:
 {
   "op": "node_set_properties",
   "project_path": "/home/user/my-game",
-  "scene": "scenes/enemy.tscn",
-  "node": "Enemy",
+  "scene_path": "scenes/enemy.tscn",
+  "node_path": "Enemy",
   "properties": {
     "collision_layer": 2,
     "collision_mask": 1,
@@ -119,7 +119,7 @@ To set multiple properties at once, pass more keys in `properties`:
 ```json
 {
   "op": "node_set_properties",
-  "node": "Level/Enemy_0",
+  "node_path": "Level/Enemy_0",
   "properties_set": ["collision_layer"],
   "result": "ok"
 }
@@ -133,9 +133,9 @@ Change a node's parent or rename it in place.
 {
   "op": "node_reparent",
   "project_path": "/home/user/my-game",
-  "scene": "scenes/level_01.tscn",
-  "node": "Level/Pickups/Coin_0",
-  "new_parent": "Level/Room2/Pickups"
+  "scene_path": "scenes/level_01.tscn",
+  "node_path": "Level/Pickups/Coin_0",
+  "new_parent_path": "Level/Room2/Pickups"
 }
 ```
 
@@ -145,7 +145,7 @@ Change a node's parent or rename it in place.
 ```json
 {
   "op": "node_reparent",
-  "node": "Level/Pickups/Coin_0",
+  "node_path": "Level/Pickups/Coin_0",
   "new_path": "Level/Room2/Pickups/Coin_0",
   "result": "ok"
 }
@@ -159,10 +159,11 @@ Search nodes by class, group, name pattern, or property value.
 {
   "op": "node_find",
   "project_path": "/home/user/my-game",
-  "scene": "scenes/level_01.tscn",
-  "class": "CharacterBody3D",
+  "scene_path": "scenes/level_01.tscn",
+  "class_name": "CharacterBody3D",
   "group": "enemies",
-  "name_pattern": "Enemy_*"
+  "name_pattern": "Enemy_*",
+  "limit": 50
 }
 ```
 
@@ -188,8 +189,8 @@ Add or remove a node from groups.
 {
   "op": "node_set_groups",
   "project_path": "/home/user/my-game",
-  "scene": "scenes/level_01.tscn",
-  "node": "Level/Enemy_0",
+  "scene_path": "scenes/level_01.tscn",
+  "node_path": "Level/Enemy_0",
   "add": ["enemies", "patrol_units"],
   "remove": ["idle"]
 }
@@ -199,15 +200,15 @@ Add or remove a node from groups.
 
 ### `node_set_script`
 
-Attach a GDScript to a node.
+Attach a GDScript to a node. Omit `script_path` to detach the current script.
 
 ```json
 {
   "op": "node_set_script",
   "project_path": "/home/user/my-game",
-  "scene": "scenes/level_01.tscn",
-  "node": "Level/Enemy_0",
-  "script": "scripts/enemy_ai.gd"
+  "scene_path": "scenes/level_01.tscn",
+  "node_path": "Level/Enemy_0",
+  "script_path": "scripts/enemy_ai.gd"
 }
 ```
 
@@ -221,8 +222,8 @@ Set metadata on a node.
 {
   "op": "node_set_meta",
   "project_path": "/home/user/my-game",
-  "scene": "scenes/level_01.tscn",
-  "node": "Level/Enemy_0",
+  "scene_path": "scenes/level_01.tscn",
+  "node_path": "Level/Enemy_0",
   "meta": {
     "spawn_group": "wave_1",
     "difficulty": 2
@@ -268,5 +269,3 @@ For ambiguous cases (e.g., a 4-element array that could be a `Quaternion` or `Co
 **Node paths are relative to the scene root.** The root node itself is `"."`. A child named `Player` is `"Player"`. A grandchild is `"Player/Camera3D"`. Use `scene_read` to confirm paths.
 
 **`node_remove` is permanent.** There is no undo within Director. If you are making destructive changes, use `scene_diff` or git to review before removing.
-
-**Position is a shortcut.** The `position` parameter in `node_add` sets `Node3D.position` (local position). For global position, use `node_set_properties` with `"properties": {"position": [...]}` after adding.

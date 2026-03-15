@@ -31,9 +31,8 @@ Create a new empty scene with a root node.
 {
   "op": "scene_create",
   "project_path": "/home/user/my-game",
-  "path": "scenes/player.tscn",
-  "root_class": "CharacterBody3D",
-  "root_name": "Player"
+  "scene_path": "scenes/player.tscn",
+  "root_type": "CharacterBody3D"
 }
 ```
 
@@ -43,9 +42,8 @@ Create a new empty scene with a root node.
 ```json
 {
   "op": "scene_create",
-  "path": "scenes/player.tscn",
-  "root_name": "Player",
-  "root_class": "CharacterBody3D",
+  "scene_path": "scenes/player.tscn",
+  "root_type": "CharacterBody3D",
   "result": "ok"
 }
 ```
@@ -58,8 +56,8 @@ Read the structure of an existing scene — all nodes, their classes, properties
 {
   "op": "scene_read",
   "project_path": "/home/user/my-game",
-  "path": "scenes/player.tscn",
-  "max_depth": 4
+  "scene_path": "scenes/player.tscn",
+  "depth": 4
 }
 ```
 
@@ -69,7 +67,7 @@ Read the structure of an existing scene — all nodes, their classes, properties
 ```json
 {
   "op": "scene_read",
-  "path": "scenes/player.tscn",
+  "scene_path": "scenes/player.tscn",
   "nodes": [
     {
       "name": "Player",
@@ -118,11 +116,10 @@ Add an instance of another scene as a child node.
 {
   "op": "scene_add_instance",
   "project_path": "/home/user/my-game",
-  "scene": "scenes/level_01.tscn",
-  "parent": "Level/Enemies",
-  "source_scene": "scenes/enemies/basic_enemy.tscn",
-  "name": "Enemy_4",
-  "position": [10.0, 0.0, -5.0]
+  "scene_path": "scenes/level_01.tscn",
+  "instance_scene": "scenes/enemies/basic_enemy.tscn",
+  "parent_path": "Level/Enemies",
+  "node_name": "Enemy_4"
 }
 ```
 
@@ -132,15 +129,15 @@ Add an instance of another scene as a child node.
 ```json
 {
   "op": "scene_add_instance",
-  "name": "Enemy_4",
-  "source_scene": "scenes/enemies/basic_enemy.tscn",
+  "node_name": "Enemy_4",
+  "instance_scene": "scenes/enemies/basic_enemy.tscn",
   "result": "ok"
 }
 ```
 
 ### `scene_diff`
 
-Compare two scenes and return a list of differences.
+Compare two scenes and return a list of differences. Supports git refs.
 
 ```json
 {
@@ -182,7 +179,7 @@ Look up the UID for a resource path.
 {
   "op": "uid_get",
   "project_path": "/home/user/my-game",
-  "path": "scenes/enemies/basic_enemy.tscn"
+  "file_path": "scenes/enemies/basic_enemy.tscn"
 }
 ```
 
@@ -192,7 +189,7 @@ Look up the UID for a resource path.
 ```json
 {
   "op": "uid_get",
-  "path": "scenes/enemies/basic_enemy.tscn",
+  "file_path": "scenes/enemies/basic_enemy.tscn",
   "uid": "uid://abc123xyz"
 }
 ```
@@ -218,8 +215,8 @@ Export meshes from a scene into a MeshLibrary resource for use with GridMap.
 {
   "op": "export_mesh_library",
   "project_path": "/home/user/my-game",
-  "scene": "scenes/dungeon_tiles.tscn",
-  "save_path": "assets/dungeon_tiles.meshlib"
+  "scene_path": "scenes/dungeon_tiles.tscn",
+  "output_path": "assets/dungeon_tiles.meshlib"
 }
 ```
 

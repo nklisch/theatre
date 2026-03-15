@@ -9,9 +9,8 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "scene_create"
   project_path: string
-  path: string                   // relative to project root, e.g. "scenes/player.tscn"
-  root_class: string             // Godot class for root node
-  root_name?: string             // default: root_class
+  scene_path: string             // relative to project root, e.g. "scenes/player.tscn"
+  root_type: string              // Godot class for root node
 }
 ```
 
@@ -20,8 +19,9 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "scene_read"
   project_path: string
-  path: string
-  max_depth?: number             // default: 10
+  scene_path: string
+  depth?: number                 // default: 10
+  properties?: boolean           // include property values, default: true
 }
 ```
 
@@ -31,6 +31,7 @@ Complete parameter schemas for all Director operations. All operations require `
   op: "scene_list"
   project_path: string
   directory?: string             // default: "" (all scenes)
+  pattern?: string               // glob pattern to filter scene paths
 }
 ```
 
@@ -39,11 +40,10 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "scene_add_instance"
   project_path: string
-  scene: string                  // target scene to add instance to
-  parent: string                 // node path within scene
-  source_scene: string           // scene to instantiate
-  name: string
-  position?: [number, number, number]
+  scene_path: string             // target scene to add instance to
+  instance_scene: string         // scene to instantiate
+  parent_path?: string           // node path within scene, default: "."
+  node_name?: string             // name for the new instance node
 }
 ```
 
@@ -52,7 +52,7 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "scene_diff"
   project_path: string
-  scene_a: string
+  scene_a: string                // supports git refs, e.g. "HEAD:scenes/level.tscn"
   scene_b: string
 }
 ```
@@ -66,11 +66,10 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "node_add"
   project_path: string
-  scene: string
-  parent: string                 // "." for root
-  name: string
-  class: string
-  position?: [number, number, number]
+  scene_path: string
+  parent_path?: string           // "." for root (default: ".")
+  node_type: string              // Godot class name
+  node_name: string
   properties?: { [key: string]: any }
 }
 ```
@@ -80,8 +79,8 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "node_remove"
   project_path: string
-  scene: string
-  node: string                   // scene-relative path
+  scene_path: string
+  node_path: string              // scene-relative path
 }
 ```
 
@@ -90,8 +89,8 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "node_set_properties"
   project_path: string
-  scene: string
-  node: string
+  scene_path: string
+  node_path: string
   properties: { [key: string]: any }
 }
 ```
@@ -101,12 +100,13 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "node_find"
   project_path: string
-  scene: string
-  class?: string                 // filter by Godot class
+  scene_path: string
+  class_name?: string            // filter by Godot class
   group?: string                 // filter by group membership
   name_pattern?: string          // glob pattern, e.g. "Enemy_*"
   property?: string              // filter by property name
   property_value?: any           // filter by property value
+  limit?: number                 // max results, default: 100
 }
 ```
 
@@ -115,8 +115,8 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "node_set_groups"
   project_path: string
-  scene: string
-  node: string
+  scene_path: string
+  node_path: string
   add?: string[]                 // groups to add
   remove?: string[]              // groups to remove
 }
@@ -127,9 +127,9 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "node_set_script"
   project_path: string
-  scene: string
-  node: string
-  script: string                 // path to .gd file (relative to project)
+  scene_path: string
+  node_path: string
+  script_path?: string           // path to .gd file (relative to project); omit to detach
 }
 ```
 
@@ -138,8 +138,8 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "node_set_meta"
   project_path: string
-  scene: string
-  node: string
+  scene_path: string
+  node_path: string
   meta: { [key: string]: any }
 }
 ```
@@ -149,9 +149,9 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "node_reparent"
   project_path: string
-  scene: string
-  node: string
-  new_parent: string
+  scene_path: string
+  node_path: string
+  new_parent_path: string
   new_name?: string              // also rename the node in place
 }
 ```
@@ -165,8 +165,8 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "resource_read"
   project_path: string
-  path: string                   // .tres file path
-  properties?: string[]          // specific properties to read (all if omitted)
+  resource_path: string          // .tres file path
+  depth?: number                 // depth for sub-resources, default: 1
 }
 ```
 
@@ -174,7 +174,7 @@ Complete parameter schemas for all Director operations. All operations require `
 ```typescript
 {
   op: "resource_read"
-  path: string
+  resource_path: string
   properties: { [key: string]: any }
 }
 ```
@@ -184,9 +184,10 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "material_create"
   project_path: string
+  resource_path: string          // where to save the .tres
   material_type: string          // e.g. "StandardMaterial3D", "ShaderMaterial"
   properties?: { [key: string]: any }
-  save_path: string              // where to save the .tres
+  shader_path?: string           // required when material_type is "ShaderMaterial"
 }
 ```
 
@@ -196,8 +197,10 @@ Complete parameter schemas for all Director operations. All operations require `
   op: "shape_create"
   project_path: string
   shape_type: string             // e.g. "BoxShape3D", "CapsuleShape3D", "SphereShape3D"
-  properties?: { [key: string]: any }
-  save_path: string
+  shape_params?: { [key: string]: any }
+  save_path?: string             // if provided, saves the shape resource to disk
+  scene_path?: string            // if provided, assigns shape to a node in this scene
+  node_path?: string             // node path within scene_path to assign the shape to
 }
 ```
 
@@ -206,9 +209,9 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "style_box_create"
   project_path: string
+  resource_path: string          // where to save the .tres
   style_type: string             // e.g. "StyleBoxFlat", "StyleBoxTexture"
   properties?: { [key: string]: any }
-  save_path: string
 }
 ```
 
@@ -219,6 +222,8 @@ Complete parameter schemas for all Director operations. All operations require `
   project_path: string
   source_path: string
   dest_path: string
+  property_overrides?: { [key: string]: any }  // properties to change on the copy
+  deep_copy?: boolean            // duplicate sub-resources, default: false
 }
 ```
 
@@ -231,13 +236,13 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "tilemap_set_cells"
   project_path: string
-  scene: string
-  node: string
-  layer?: number                 // default: 0
+  scene_path: string
+  node_path: string
   cells: Array<{
-    position: [number, number]   // [col, row]
+    coords: [number, number]          // [col, row]
     source_id: number
-    atlas_coords: [number, number]  // [-1,-1] to erase
+    atlas_coords: [number, number]    // [-1,-1] to erase
+    alternative_tile?: number         // default: 0
   }>
 }
 ```
@@ -247,10 +252,13 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "tilemap_get_cells"
   project_path: string
-  scene: string
-  node: string
-  region: { min: [number, number], max: [number, number] }
-  layer?: number                 // default: 0
+  scene_path: string
+  node_path: string
+  region?: {
+    position: [number, number]
+    size: [number, number]
+  }
+  source_id?: number             // filter by source
 }
 ```
 
@@ -259,9 +267,12 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "tilemap_clear"
   project_path: string
-  scene: string
-  node: string
-  layer?: number                 // default: all layers
+  scene_path: string
+  node_path: string
+  region?: {
+    position: [number, number]
+    size: [number, number]
+  }
 }
 ```
 
@@ -274,8 +285,8 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "gridmap_set_cells"
   project_path: string
-  scene: string
-  node: string
+  scene_path: string
+  node_path: string
   cells: Array<{
     position: [number, number, number]
     item: number                 // MeshLibrary item index, -1 to erase
@@ -289,9 +300,13 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "gridmap_get_cells"
   project_path: string
-  scene: string
-  node: string
-  region: { min: [number, number, number], max: [number, number, number] }
+  scene_path: string
+  node_path: string
+  bounds?: {
+    min: [number, number, number]
+    max: [number, number, number]
+  }
+  item?: number                  // filter by item index
 }
 ```
 
@@ -300,8 +315,12 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "gridmap_clear"
   project_path: string
-  scene: string
-  node: string
+  scene_path: string
+  node_path: string
+  bounds?: {
+    min: [number, number, number]
+    max: [number, number, number]
+  }
 }
 ```
 
@@ -309,16 +328,17 @@ Complete parameter schemas for all Director operations. All operations require `
 
 ## Animation Operations
 
+Animations are stored as `.tres` resources (AnimationLibrary or Animation). All animation operations use `resource_path` to target the animation resource directly — not a scene node.
+
 ### `animation_create`
 ```typescript
 {
   op: "animation_create"
   project_path: string
-  scene: string
-  node: string                   // AnimationPlayer path
-  animation_name: string
+  resource_path: string          // path to save the .tres animation resource
   length: number                 // seconds
   loop_mode?: "none" | "loop" | "ping_pong"  // default: "none"
+  step?: number                  // keyframe step size in seconds
 }
 ```
 
@@ -327,30 +347,51 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "animation_add_track"
   project_path: string
-  scene: string
-  node: string                   // AnimationPlayer path
-  animation_name: string
-  track_path: string             // "NodePath:property"
-  track_type?: "property" | "method" | "audio" | "animation"  // default: "property"
+  resource_path: string          // animation resource to add track to
+  track_type: "value" | "position_3d" | "rotation_3d" | "scale_3d" | "blend_shape" | "method" | "bezier"
+  node_path: string              // "NodePath:property" for value tracks; NodePath for transform tracks
   keyframes: Array<{
     time: number                 // seconds within animation
-    value: any                   // keyframe value
-    easing?: "linear" | "ease_in" | "ease_out" | "ease_in_out"
+    value?: any                  // keyframe value (value/blend_shape/bezier tracks)
+    transition?: number          // easing value, default: 1.0
+    method?: string              // method name (method tracks)
+    args?: any[]                 // method arguments (method tracks)
+    in_handle?: [number, number] // bezier in handle
+    out_handle?: [number, number]// bezier out handle
   }>
+  interpolation?: "nearest" | "linear" | "cubic" | "linear_angle" | "cubic_angle"
+  update_mode?: "continuous" | "discrete" | "trigger" | "capture"
 }
 ```
-
-**Keyframes are included in `animation_add_track`. There is no separate set-key call.**
 
 **Response:**
 ```typescript
 {
   op: "animation_add_track"
-  animation_name: string
-  track_path: string
+  resource_path: string
   track_index: number
   keyframes_set: number
   result: "ok"
+}
+```
+
+### `animation_read`
+```typescript
+{
+  op: "animation_read"
+  project_path: string
+  resource_path: string          // animation resource path
+}
+```
+
+### `animation_remove_track`
+```typescript
+{
+  op: "animation_remove_track"
+  project_path: string
+  resource_path: string          // animation resource path
+  track_index?: number           // remove by index
+  node_path?: string             // remove by node path (removes all matching tracks)
 }
 ```
 
@@ -363,46 +404,48 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "visual_shader_create"
   project_path: string
-  save_path: string              // where to save the .tres VisualShader
-  shader_mode?: "spatial" | "canvas_item" | "particles"  // default: "spatial"
+  resource_path: string          // where to save the .tres VisualShader
+  shader_mode: "spatial" | "canvas_item" | "particles"
+  nodes: Array<{
+    node_id: number              // unique integer ID for this shader node
+    type: string                 // VisualShader node type class name
+    shader_function?: string     // function/operation specifier
+    position?: [number, number]  // position in the visual shader graph
+    properties?: { [key: string]: any }
+  }>
+  connections?: Array<{
+    from_node: number            // source node_id
+    from_port: number
+    to_node: number              // destination node_id
+    to_port: number
+    shader_function?: string
+  }>
 }
 ```
-
 
 ---
 
 ## Physics Layer Operations
 
-### `physics_layer_names`
+### `physics_set_layers`
 ```typescript
 {
-  op: "physics_layer_names"
+  op: "physics_set_layers"
   project_path: string
-  set?: { [layer_number: string]: string }  // omit to get current names
+  scene_path: string
+  node_path: string
+  collision_layer?: number       // bitmask
+  collision_mask?: number        // bitmask
 }
 ```
 
-### `physics_layer_set`
+### `physics_set_layer_names`
 ```typescript
 {
-  op: "physics_layer_set"
+  op: "physics_set_layer_names"
   project_path: string
-  scene: string
-  node: string
-  layers?: number[]              // layer numbers (1-indexed)
-  collision_layer?: number       // bitmask (alternative to layers)
-}
-```
-
-### `physics_mask_set`
-```typescript
-{
-  op: "physics_mask_set"
-  project_path: string
-  scene: string
-  node: string
-  masks?: number[]               // layer numbers to detect
-  collision_mask?: number        // bitmask (alternative to masks)
+  layer_type: "2d_physics" | "3d_physics" | "2d_render" | "3d_render" | "2d_navigation" | "3d_navigation" | "avoidance"
+  layers: { [layer_number: string]: string }  // e.g. { "1": "Player", "2": "Enemies" }
 }
 ```
 
@@ -415,13 +458,13 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "signal_connect"
   project_path: string
-  scene: string
-  from_node: string
-  signal: string
-  to_node: string
-  method: string
+  scene_path: string
+  source_path: string            // path to node that emits the signal
+  signal_name: string
+  target_path: string            // path to node with the handler method
+  method_name: string
+  binds?: any[]                  // additional arguments passed to the method
   flags?: number                 // default: 0
-  binds?: any[]                  // additional arguments
 }
 ```
 
@@ -430,11 +473,11 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "signal_disconnect"
   project_path: string
-  scene: string
-  from_node: string
-  signal: string
-  to_node: string
-  method: string
+  scene_path: string
+  source_path: string
+  signal_name: string
+  target_path: string
+  method_name: string
 }
 ```
 
@@ -443,8 +486,8 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "signal_list"
   project_path: string
-  scene: string
-  node: string
+  scene_path: string
+  node_path?: string             // if omitted, lists signals for all nodes in scene
 }
 ```
 
@@ -457,11 +500,11 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "batch"
   project_path: string           // inherited by all operations
-  stop_on_error?: boolean        // default: true
   operations: Array<{
     operation: string            // any director op name (no project_path needed)
     params: { [key: string]: any }  // parameters for the operation
   }>
+  stop_on_error?: boolean        // default: true
 }
 ```
 
@@ -491,7 +534,7 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "uid_get"
   project_path: string
-  path: string                   // resource path to look up UID for
+  file_path: string              // resource path to look up UID for
 }
 ```
 
@@ -499,7 +542,7 @@ Complete parameter schemas for all Director operations. All operations require `
 ```typescript
 {
   op: "uid_get"
-  path: string
+  file_path: string
   uid: string                    // "uid://..." format
 }
 ```
@@ -509,6 +552,7 @@ Complete parameter schemas for all Director operations. All operations require `
 {
   op: "uid_update_project"
   project_path: string
+  directory?: string             // limit rescan to this subdirectory
 }
 ```
 
@@ -523,8 +567,9 @@ Rescans all resources and updates the project's UID cache. Run after adding or m
 {
   op: "export_mesh_library"
   project_path: string
-  scene: string                  // scene containing the MeshLibrary items
-  save_path: string              // output .meshlib path
+  scene_path: string             // scene containing the MeshLibrary items
+  output_path: string            // output .meshlib path
+  items?: string[]               // specific item names to export (all if omitted)
 }
 ```
 

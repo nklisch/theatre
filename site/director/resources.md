@@ -30,8 +30,8 @@ Read properties from an existing saved resource.
 {
   "op": "resource_read",
   "project_path": "/home/user/my-game",
-  "path": "assets/materials/enemy_red.tres",
-  "properties": ["albedo_color", "roughness", "metallic"]
+  "resource_path": "assets/materials/enemy_red.tres",
+  "depth": 1
 }
 ```
 
@@ -41,7 +41,7 @@ Read properties from an existing saved resource.
 ```json
 {
   "op": "resource_read",
-  "path": "assets/materials/enemy_red.tres",
+  "resource_path": "assets/materials/enemy_red.tres",
   "properties": {
     "albedo_color": [1.0, 0.0, 0.0, 1.0],
     "roughness": 0.7,
@@ -58,13 +58,28 @@ Create a new material resource and save it to disk.
 {
   "op": "material_create",
   "project_path": "/home/user/my-game",
+  "resource_path": "assets/materials/enemy_red.tres",
   "material_type": "StandardMaterial3D",
   "properties": {
     "albedo_color": [0.8, 0.2, 0.2, 1.0],
     "roughness": 0.7,
     "metallic": 0.0
-  },
-  "save_path": "assets/materials/enemy_red.tres"
+  }
+}
+```
+
+For a `ShaderMaterial`, provide the `shader_path`:
+
+```json
+{
+  "op": "material_create",
+  "project_path": "/home/user/my-game",
+  "resource_path": "assets/materials/glow.tres",
+  "material_type": "ShaderMaterial",
+  "shader_path": "shaders/glow.gdshader",
+  "properties": {
+    "shader_parameter/glow_color": [1.0, 0.8, 0.2, 1.0]
+  }
 }
 ```
 
@@ -74,21 +89,21 @@ Create a new material resource and save it to disk.
 ```json
 {
   "op": "material_create",
-  "save_path": "assets/materials/enemy_red.tres",
+  "resource_path": "assets/materials/enemy_red.tres",
   "result": "ok"
 }
 ```
 
 ### `shape_create`
 
-Create a collision shape resource.
+Create a collision shape resource. Can optionally save to disk and/or assign to a node.
 
 ```json
 {
   "op": "shape_create",
   "project_path": "/home/user/my-game",
   "shape_type": "BoxShape3D",
-  "properties": {
+  "shape_params": {
     "size": [2.0, 1.0, 2.0]
   },
   "save_path": "assets/shapes/platform_box.tres"
@@ -105,13 +120,13 @@ Create a StyleBox resource (used by UI controls).
 {
   "op": "style_box_create",
   "project_path": "/home/user/my-game",
+  "resource_path": "assets/ui/panel_style.tres",
   "style_type": "StyleBoxFlat",
   "properties": {
     "bg_color": [0.1, 0.1, 0.2, 1.0],
     "border_width_top": 2,
     "border_color": [0.5, 0.5, 1.0, 1.0]
-  },
-  "save_path": "assets/ui/panel_style.tres"
+  }
 }
 ```
 
@@ -119,14 +134,18 @@ Create a StyleBox resource (used by UI controls).
 
 ### `resource_duplicate`
 
-Duplicate an existing resource file.
+Duplicate an existing resource file. Optionally override properties on the copy and perform a deep copy of sub-resources.
 
 ```json
 {
   "op": "resource_duplicate",
   "project_path": "/home/user/my-game",
   "source_path": "assets/materials/enemy_red.tres",
-  "dest_path": "assets/materials/enemy_blue.tres"
+  "dest_path": "assets/materials/enemy_blue.tres",
+  "property_overrides": {
+    "albedo_color": [0.2, 0.2, 0.8, 1.0]
+  },
+  "deep_copy": false
 }
 ```
 
@@ -149,10 +168,10 @@ Duplicate an existing resource file.
 Used by `CollisionShape3D` and `CollisionPolygon3D`:
 
 ```json
-{ "type": "BoxShape3D", "properties": { "size": [2.0, 1.0, 2.0] } }
-{ "type": "SphereShape3D", "properties": { "radius": 0.5 } }
-{ "type": "CapsuleShape3D", "properties": { "radius": 0.4, "height": 1.8 } }
-{ "type": "CylinderShape3D", "properties": { "radius": 0.5, "height": 2.0 } }
+{ "shape_type": "BoxShape3D", "shape_params": { "size": [2.0, 1.0, 2.0] } }
+{ "shape_type": "SphereShape3D", "shape_params": { "radius": 0.5 } }
+{ "shape_type": "CapsuleShape3D", "shape_params": { "radius": 0.4, "height": 1.8 } }
+{ "shape_type": "CylinderShape3D", "shape_params": { "radius": 0.5, "height": 2.0 } }
 ```
 
 ### Physics materials
@@ -161,7 +180,7 @@ Used by `PhysicsBody3D` for surface friction/bounce:
 
 ```json
 {
-  "type": "PhysicsMaterial",
+  "material_type": "PhysicsMaterial",
   "properties": {
     "friction": 0.8,
     "rough": true,
@@ -177,7 +196,7 @@ Used by `MeshInstance3D.material_override` or surface materials:
 
 ```json
 {
-  "type": "StandardMaterial3D",
+  "material_type": "StandardMaterial3D",
   "properties": {
     "albedo_color": [0.2, 0.4, 0.8, 1.0],
     "roughness": 0.5,
@@ -197,4 +216,4 @@ Used by `MeshInstance3D.material_override` or surface materials:
 
 **Read before modifying.** Use `resource_read` to check current property values before creating or duplicating resources.
 
-**Use `resource_duplicate` to create variants.** Duplicate an existing material, then use `node_set_properties` to update specific properties — faster than creating from scratch.
+**Use `resource_duplicate` to create variants.** Duplicate an existing material with `property_overrides` to change specific properties — faster than creating from scratch.
