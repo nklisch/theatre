@@ -1,6 +1,6 @@
 use crate::dual_test;
-use crate::harness::*;
 use crate::harness::assertions::*;
+use crate::harness::*;
 use serde_json::json;
 
 const LIVE_3D: &str = "res://live_scene_3d.tscn";
@@ -164,10 +164,7 @@ async fn journey_director_builds_level(b: &impl LiveBackend) {
             .as_array()
             .map(|a| !a.is_empty())
             .unwrap_or(false);
-    assert!(
-        !has_changes,
-        "Self-diff should show no changes: {diff_str}"
-    );
+    assert!(!has_changes, "Self-diff should show no changes: {diff_str}");
 
     // Step 12: Stage verifies the running scene is accessible
     let tree = b
@@ -255,10 +252,7 @@ async fn journey_batch_and_animation(b: &impl LiveBackend) {
         batch_result["completed"], 4,
         "All 4 operations should complete"
     );
-    assert_eq!(
-        batch_result["failed"], 0,
-        "No operations should fail"
-    );
+    assert_eq!(batch_result["failed"], 0, "No operations should fail");
 
     // Step 3: verify all nodes
     let read = b
@@ -312,7 +306,10 @@ async fn journey_batch_and_animation(b: &impl LiveBackend) {
         .await
         .expect("add position track")
         .unwrap_data();
-    assert!(track1["track_index"].as_u64().is_some(), "Should return track_index");
+    assert!(
+        track1["track_index"].as_u64().is_some(),
+        "Should return track_index"
+    );
     let track1_idx = track1["track_index"].as_u64().unwrap();
     assert_eq!(track1["keyframe_count"], 2);
 
@@ -335,7 +332,10 @@ async fn journey_batch_and_animation(b: &impl LiveBackend) {
         .expect("add value track")
         .unwrap_data();
     let track2_idx = track2["track_index"].as_u64().unwrap();
-    assert!(track2_idx > track1_idx, "Second track index should be after first");
+    assert!(
+        track2_idx > track1_idx,
+        "Second track index should be after first"
+    );
     assert_eq!(track2["keyframe_count"], 3);
 
     // Step 7: read animation back — full verification
@@ -353,9 +353,7 @@ async fn journey_batch_and_animation(b: &impl LiveBackend) {
         Some("linear"),
         "Loop mode should be linear"
     );
-    let tracks = anim_read["tracks"]
-        .as_array()
-        .expect("tracks array");
+    let tracks = anim_read["tracks"].as_array().expect("tracks array");
     assert_eq!(tracks.len(), 2, "Should have 2 tracks");
     assert_eq!(
         tracks[0]["type"].as_str(),
@@ -386,14 +384,8 @@ async fn journey_batch_and_animation(b: &impl LiveBackend) {
         .await
         .expect("final animation_read")
         .unwrap_data();
-    let final_tracks = anim_final["tracks"]
-        .as_array()
-        .expect("tracks array");
-    assert_eq!(
-        final_tracks.len(),
-        1,
-        "Should have 1 track after removal"
-    );
+    let final_tracks = anim_final["tracks"].as_array().expect("tracks array");
+    assert_eq!(final_tracks.len(), 1, "Should have 1 track after removal");
     assert_eq!(
         final_tracks[0]["type"].as_str(),
         Some("position_3d"),

@@ -30,10 +30,7 @@ pub fn find_entity<'a>(entities: &'a [Value], name: &str) -> &'a Value {
                 .unwrap_or(false)
         })
         .unwrap_or_else(|| {
-            let paths: Vec<&str> = entities
-                .iter()
-                .filter_map(|e| e["path"].as_str())
-                .collect();
+            let paths: Vec<&str> = entities.iter().filter_map(|e| e["path"].as_str()).collect();
             panic!("Entity containing '{name}' not found. Available: {paths:?}");
         })
 }

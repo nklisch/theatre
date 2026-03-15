@@ -1,6 +1,6 @@
 use crate::dual_test;
-use crate::harness::*;
 use crate::harness::assertions::*;
+use crate::harness::*;
 use serde_json::json;
 
 const LIVE_3D: &str = "res://live_scene_3d.tscn";
@@ -304,10 +304,7 @@ async fn journey_patrol_movement_observed(b: &impl LiveBackend) {
 
     // Step 8: inspect Stationary — should be static
     let stat_inspect = b
-        .stage(
-            "spatial_inspect",
-            json!({"node": "Enemies/Stationary"}),
-        )
+        .stage("spatial_inspect", json!({"node": "Enemies/Stationary"}))
         .await
         .expect("inspect Stationary")
         .unwrap_data();
@@ -339,10 +336,7 @@ async fn journey_patrol_movement_observed(b: &impl LiveBackend) {
 
     // Step 11: verify health dropped
     let stat_after = b
-        .stage(
-            "spatial_inspect",
-            json!({"node": "Enemies/Stationary"}),
-        )
+        .stage("spatial_inspect", json!({"node": "Enemies/Stationary"}))
         .await
         .expect("inspect after damage")
         .unwrap_data();

@@ -65,14 +65,12 @@ impl LiveBackend for CliBackend {
     }
 
     async fn director(&self, operation: &str, params: Value) -> anyhow::Result<ToolResult> {
-        let bin =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/debug/director");
+        let bin = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/debug/director");
 
         let mut params = params;
         if let Value::Object(ref mut map) = params {
-            map.entry("project_path").or_insert_with(|| {
-                Value::String(self.project_dir.to_string_lossy().into())
-            });
+            map.entry("project_path")
+                .or_insert_with(|| Value::String(self.project_dir.to_string_lossy().into()));
         }
 
         let output = Command::new(&bin)

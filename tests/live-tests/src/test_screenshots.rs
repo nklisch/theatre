@@ -1,6 +1,6 @@
 use crate::dual_test;
-use crate::harness::*;
 use crate::harness::assertions::*;
+use crate::harness::*;
 use serde_json::json;
 
 const LIVE_3D: &str = "res://live_scene_3d.tscn";
@@ -82,10 +82,7 @@ async fn journey_dashcam_captures_rendered_scene(b: &impl LiveBackend) {
         .await
         .expect("save clip_a")
         .unwrap_data();
-    let clip_a = save_a["clip_id"]
-        .as_str()
-        .expect("clip_id")
-        .to_string();
+    let clip_a = save_a["clip_id"].as_str().expect("clip_id").to_string();
     let frames_a = save_a["frames"].as_u64().unwrap_or(0);
     assert!(frames_a > 0, "First clip should contain frames");
 
@@ -147,10 +144,7 @@ async fn journey_dashcam_captures_rendered_scene(b: &impl LiveBackend) {
         .await
         .expect("save clip_b")
         .unwrap_data();
-    let clip_b = save_b["clip_id"]
-        .as_str()
-        .expect("clip_id b")
-        .to_string();
+    let clip_b = save_b["clip_id"].as_str().expect("clip_id b").to_string();
     let frames_b = save_b["frames"].as_u64().unwrap_or(0);
     assert!(frames_b > 0, "Second clip should contain frames");
 
@@ -179,12 +173,8 @@ async fn journey_dashcam_captures_rendered_scene(b: &impl LiveBackend) {
         .expect("clips list")
         .unwrap_data();
     let clips = list["clips"].as_array().expect("clips array");
-    let has_a = clips
-        .iter()
-        .any(|c| c["clip_id"].as_str() == Some(&clip_a));
-    let has_b = clips
-        .iter()
-        .any(|c| c["clip_id"].as_str() == Some(&clip_b));
+    let has_a = clips.iter().any(|c| c["clip_id"].as_str() == Some(&clip_a));
+    let has_b = clips.iter().any(|c| c["clip_id"].as_str() == Some(&clip_b));
     assert!(has_a, "Clip A should be in list");
     assert!(has_b, "Clip B should be in list");
 

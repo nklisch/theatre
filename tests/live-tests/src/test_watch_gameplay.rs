@@ -1,6 +1,6 @@
-use crate::stateful_test;
-use crate::harness::*;
 use crate::harness::assertions::*;
+use crate::harness::*;
+use crate::stateful_test;
 use serde_json::json;
 
 const LIVE_3D: &str = "res://live_scene_3d.tscn";
@@ -78,10 +78,7 @@ async fn journey_watch_delta_gameplay(b: &impl LiveBackend) {
 
     // Step 4: inspect Stationary
     let stat_inspect = b
-        .stage(
-            "spatial_inspect",
-            json!({"node": "Enemies/Stationary"}),
-        )
+        .stage("spatial_inspect", json!({"node": "Enemies/Stationary"}))
         .await
         .expect("inspect Stationary")
         .unwrap_data();
@@ -106,10 +103,7 @@ async fn journey_watch_delta_gameplay(b: &impl LiveBackend) {
         .await
         .expect("watch add Patrol")
         .unwrap_data();
-    let watch_id_patrol = w_patrol["watch_id"]
-        .as_str()
-        .expect("watch_id")
-        .to_string();
+    let watch_id_patrol = w_patrol["watch_id"].as_str().expect("watch_id").to_string();
 
     // Step 6: watch stationary state
     let w_stat = b
@@ -123,10 +117,7 @@ async fn journey_watch_delta_gameplay(b: &impl LiveBackend) {
         .await
         .expect("watch add Stationary")
         .unwrap_data();
-    let watch_id_stat = w_stat["watch_id"]
-        .as_str()
-        .expect("watch_id")
-        .to_string();
+    let watch_id_stat = w_stat["watch_id"].as_str().expect("watch_id").to_string();
 
     // Step 7: list watches
     let watch_list = b
@@ -159,10 +150,7 @@ async fn journey_watch_delta_gameplay(b: &impl LiveBackend) {
 
     // Step 10: verify health dropped
     let stat_after = b
-        .stage(
-            "spatial_inspect",
-            json!({"node": "Enemies/Stationary"}),
-        )
+        .stage("spatial_inspect", json!({"node": "Enemies/Stationary"}))
         .await
         .expect("inspect after damage")
         .unwrap_data();
@@ -325,10 +313,7 @@ async fn journey_watch_delta_gameplay(b: &impl LiveBackend) {
 
     // Step 20: verify health=25
     let stat_final = b
-        .stage(
-            "spatial_inspect",
-            json!({"node": "Enemies/Stationary"}),
-        )
+        .stage("spatial_inspect", json!({"node": "Enemies/Stationary"}))
         .await
         .expect("final inspect Stationary")
         .unwrap_data();
