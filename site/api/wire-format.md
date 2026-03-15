@@ -65,7 +65,7 @@ All requests from the server to the addon are JSON objects with a `"type"` field
 
 ```json
 {"type": "snapshot", "detail": "summary", "token_budget": 2000}
-{"type": "delta", "since_frame": 400, "token_budget": 1000}
+{"type": "delta", "token_budget": 1000}
 {"type": "query", "query_type": "radius", "from": [0,0,0], "radius": 5.0}
 {"type": "inspect", "node": "Player", "include": ["properties"]}
 {"type": "config", "tick_rate": 30}

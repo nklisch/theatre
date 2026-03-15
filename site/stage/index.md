@@ -89,7 +89,7 @@ Start here. Get a broad picture of node positions and types. Then drill down wit
 
 ### "What changed in the last few seconds?"
 
-→ **`spatial_delta`** with `since_frame: N`
+→ **`spatial_delta`** — compares against your last snapshot baseline
 
 Much more efficient than repeated snapshots. Only includes nodes that moved or changed properties.
 

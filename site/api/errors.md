@@ -47,7 +47,7 @@ The text content is a JSON object with at minimum an `"error"` field, and often 
 
 | Error | Cause | Resolution |
 |---|---|---|
-| `Frame out of buffer range` | `since_frame` is older than the ring buffer | Use a more recent frame, or start a recording for longer history |
+| `No baseline snapshot` | `spatial_delta` called before any `spatial_snapshot` | Call `spatial_snapshot` first to establish a baseline |
 | `No data collected yet` | Snapshot called before any physics tick | Wait a moment and retry; the collector needs at least 1 frame |
 
 ### Clip errors
