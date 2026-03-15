@@ -2,6 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Parameters for `animation_create`.
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct AnimationCreateParams {
     /// Absolute path to the Godot project directory.
@@ -32,6 +33,7 @@ pub struct AnimationCreateParams {
 /// - blend_shape: `value` as float
 /// - method: `method` (string) and `args` (array)
 /// - bezier: `value` (float), optional `in_handle` and `out_handle` as {x, y}
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct Keyframe {
     /// Time position in seconds.
@@ -68,6 +70,7 @@ pub struct Keyframe {
 }
 
 /// Parameters for `animation_add_track`.
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct AnimationAddTrackParams {
     /// Absolute path to the Godot project directory.
@@ -112,6 +115,7 @@ pub struct AnimationReadParams {
 }
 
 /// Parameters for `animation_remove_track`.
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct AnimationRemoveTrackParams {
     /// Absolute path to the Godot project directory.

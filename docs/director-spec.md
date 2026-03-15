@@ -7,7 +7,7 @@ Director is an MCP server that exposes Godot Engine's internal APIs for operatio
 - **Director** (this spec): Scene/resource manipulation at editor-time
 - **Stage** (sibling tool): Runtime spatial observation of a running game
 
-The agent handles scripts (`.gd`), project config (`project.godot`), and simple text files directly through filesystem access. Director handles everything that needs Godot's own API to serialize correctly.
+The agent handles scripts (`.gd`) and simple text files directly through filesystem access. Director handles everything that needs Godot's own API to serialize correctly, including `project.godot` manipulation (`autoload_add`, `autoload_remove`, `project_settings_set`) — never hand-edit `project.godot`.
 
 Director uses two backends depending on context, selected automatically:
 

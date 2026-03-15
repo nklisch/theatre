@@ -41,6 +41,7 @@ pub struct ProjectSettingsSetParams {
     /// - "application/run/main_scene" → sets the main scene path
     /// - "application/config/name"    → sets the project display name
     /// - "display/window/size/viewport_width" → sets window width
+    ///
     /// Set a value to null to erase the key.
     pub settings: serde_json::Map<String, serde_json::Value>,
 }

@@ -2,6 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// Parameters for `signal_connect`.
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct SignalConnectParams {
     /// Absolute path to the Godot project directory.
@@ -56,6 +57,7 @@ pub struct SignalDisconnectParams {
 }
 
 /// Parameters for `signal_list`.
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct SignalListParams {
     /// Absolute path to the Godot project directory.

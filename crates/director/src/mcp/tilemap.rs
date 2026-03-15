@@ -2,6 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// A single tilemap cell to set.
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct TileMapCell {
     /// Cell coordinates as [x, y] in the tilemap grid.
@@ -45,6 +46,7 @@ pub struct TileMapSetCellsParams {
 }
 
 /// Parameters for `tilemap_get_cells`.
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct TileMapGetCellsParams {
     /// Absolute path to the Godot project directory.
@@ -67,6 +69,7 @@ pub struct TileMapGetCellsParams {
 }
 
 /// Parameters for `tilemap_clear`.
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct TileMapClearParams {
     /// Absolute path to the Godot project directory.

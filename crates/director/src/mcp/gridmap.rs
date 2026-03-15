@@ -2,6 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// A single GridMap cell to set.
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct GridMapCell {
     /// Cell position as [x, y, z] in the grid.
@@ -42,6 +43,7 @@ pub struct GridMapSetCellsParams {
 }
 
 /// Parameters for `gridmap_get_cells`.
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct GridMapGetCellsParams {
     /// Absolute path to the Godot project directory.
@@ -64,6 +66,7 @@ pub struct GridMapGetCellsParams {
 }
 
 /// Parameters for `gridmap_clear`.
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct GridMapClearParams {
     /// Absolute path to the Godot project directory.

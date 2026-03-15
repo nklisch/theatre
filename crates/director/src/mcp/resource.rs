@@ -22,6 +22,7 @@ fn default_depth() -> u32 {
 }
 
 /// Parameters for `material_create`.
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct MaterialCreateParams {
     /// Absolute path to the Godot project directory.
@@ -47,6 +48,7 @@ pub struct MaterialCreateParams {
 }
 
 /// Parameters for `shape_create`.
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct ShapeCreateParams {
     /// Absolute path to the Godot project directory.
@@ -82,6 +84,7 @@ pub struct ShapeCreateParams {
 }
 
 /// Parameters for `style_box_create`.
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct StyleBoxCreateParams {
     /// Absolute path to the Godot project directory.
@@ -100,6 +103,7 @@ pub struct StyleBoxCreateParams {
 }
 
 /// Parameters for `resource_duplicate`.
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct ResourceDuplicateParams {
     /// Absolute path to the Godot project directory.

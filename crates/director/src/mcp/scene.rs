@@ -17,6 +17,7 @@ pub struct SceneCreateParams {
 }
 
 /// Parameters for `scene_read`.
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct SceneReadParams {
     /// Absolute path to the Godot project directory (must contain project.godot).
@@ -35,6 +36,7 @@ pub struct SceneReadParams {
 }
 
 /// Parameters for `scene_list`.
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct SceneListParams {
     /// Absolute path to the Godot project directory (must contain project.godot).
@@ -52,6 +54,7 @@ pub struct SceneListParams {
 }
 
 /// Parameters for `scene_add_instance`.
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct SceneAddInstanceParams {
     /// Absolute path to the Godot project directory.

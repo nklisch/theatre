@@ -2,6 +2,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 /// A node in a VisualShader graph.
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct VisualShaderNode {
     /// Unique integer ID for this node within the shader. IDs 0 and 1 are

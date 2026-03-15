@@ -4,6 +4,7 @@ use serde::{Deserialize, Serialize};
 use super::defaults::default_root;
 
 /// Parameters for `node_add`.
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct NodeAddParams {
     /// Absolute path to the Godot project directory.
@@ -63,6 +64,7 @@ pub struct NodeRemoveParams {
 }
 
 /// Parameters for `node_reparent`.
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct NodeReparentParams {
     /// Absolute path to the Godot project directory.
@@ -83,6 +85,7 @@ pub struct NodeReparentParams {
 }
 
 /// Parameters for `node_set_groups`.
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct NodeSetGroupsParams {
     /// Absolute path to the Godot project directory.
@@ -104,6 +107,7 @@ pub struct NodeSetGroupsParams {
 }
 
 /// Parameters for `node_set_script`.
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct NodeSetScriptParams {
     /// Absolute path to the Godot project directory.
@@ -139,6 +143,7 @@ pub struct NodeSetMetaParams {
 }
 
 /// Parameters for `node_find`.
+#[serde_with::skip_serializing_none]
 #[derive(Debug, Deserialize, Serialize, JsonSchema)]
 pub struct NodeFindParams {
     /// Absolute path to the Godot project directory.
