@@ -64,19 +64,22 @@ and deployment. Binary name is `theatre`; crate name is `theatre-cli`.
 
 ```bash
 theatre install                  # build release + copy to ~/.local/{bin,share}
-theatre init ~/godot/my-game     # interactive project setup (addons, .mcp.json, plugins)
+theatre init ~/godot/my-game     # interactive project setup (addons, .mcp.json, plugins, rules)
 theatre deploy ~/godot/my-game   # rebuild + redeploy to project(s)
 theatre enable ~/godot/my-game   # non-interactive plugin enable/disable
+theatre rules ~/godot/my-game    # generate agent rules file for a project
 ```
 
 - `install` builds from source and populates `~/.local/bin/` (binaries) and
   `~/.local/share/theatre/` (addon templates + GDExtension).
 - `init` reads from the installed share dir (not the repo). Copies addons,
-  generates `.mcp.json`, enables plugins. Interactive by default, `--yes` for
-  non-interactive.
+  generates `.mcp.json`, enables plugins, optionally generates agent rules file.
+  Interactive by default, `--yes` for non-interactive.
 - `deploy` rebuilds from source, updates the share dir, then copies to
   target project(s). Accepts `--release`.
 - `enable` toggles plugins in `project.godot` without copying files.
+- `rules` generates a rules file telling agents not to hand-edit `.tscn`/`.tres`
+  files. Supports `.claude/rules/godot.md` (Claude Code), `CLAUDE.md`, or `AGENTS.md`.
 
 Dependencies: `clap` + `dialoguer` + `console` + `serde_json` + `anyhow`.
 No tokio, no rmcp, no Godot deps.

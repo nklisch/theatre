@@ -92,6 +92,7 @@ This walks you through:
 1. **Addon selection** — choose Stage, Director, or both
 2. **MCP configuration** — generates `.mcp.json` with correct binary paths
 3. **Plugin enabling** — updates `project.godot` to enable plugins and autoloads
+4. **Agent rules** — optionally generates a rules file to prevent hand-editing `.tscn`/`.tres` files
 
 For non-interactive setup (CI, scripting), use `--yes` to accept all defaults:
 
@@ -105,6 +106,7 @@ theatre init ~/path/to/your-godot-project --yes
 - Copies the GDExtension binary (`.so`/`.dylib`/`.dll`) for Stage
 - Generates `.mcp.json` with absolute paths to installed MCP server binaries
 - Enables plugins in `project.godot` and adds the StageRuntime autoload
+- Optionally generates an agent rules file (`.claude/rules/godot.md`, `CLAUDE.md`, or `AGENTS.md`) to prevent hand-editing Godot files
 
 ### Verify the deployment
 

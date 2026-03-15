@@ -118,13 +118,14 @@ Each backend implements the same `Backend` trait, so tool handlers are backend-a
 **Type**: Binary (`bin`, produces `theatre` executable)
 **Purpose**: Unified CLI for installation, project setup, and deployment
 
-The CLI replaces manual build-copy-configure workflows with four commands: `install`, `init`, `deploy`, `enable`. It has no runtime dependencies on Godot or MCP — just filesystem operations and cargo invocations.
+The CLI replaces manual build-copy-configure workflows with five commands: `install`, `init`, `deploy`, `enable`, `rules`. It has no runtime dependencies on Godot or MCP — just filesystem operations and cargo invocations.
 
 **Key commands**:
 - `theatre install` — builds all crates in release mode, copies binaries to `~/.local/bin/` and addon templates to `~/.local/share/theatre/`
-- `theatre init <project>` — interactive project setup: copies addons, generates `.mcp.json`, enables plugins
+- `theatre init <project>` — interactive project setup: copies addons, generates `.mcp.json`, enables plugins, optionally generates agent rules file
 - `theatre deploy <project...>` — rebuilds from source and updates target projects
 - `theatre enable <project>` — toggles plugins in `project.godot`
+- `theatre rules <project>` — generates agent rules file (`.claude/rules/godot.md`, `CLAUDE.md`, or `AGENTS.md`)
 
 **Dependency rules**:
 - Depends on: `clap`, `dialoguer`, `console`, `serde_json`, `anyhow`
