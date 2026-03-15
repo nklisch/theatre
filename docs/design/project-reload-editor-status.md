@@ -347,12 +347,27 @@ static func op_editor_status(params: Dictionary) -> Dictionary:
                 var value: String = str(cfg.get_value("autoload", key, ""))
                 autoloads[key] = value.trim_prefix("*").trim_prefix("res://")
 
+    # Read recent log (works in headless too — same log file)
+    var recent_log: Array[String] = []
+    var log_path := OS.get_user_data_dir() + "/logs/godot.log"
+    if FileAccess.file_exists(log_path):
+        var file := FileAccess.open(log_path, FileAccess.READ)
+        if file != null:
+            var content := file.get_as_text()
+            var lines := content.split("\n")
+            var start := maxi(0, lines.size() - 50)
+            for i in range(start, lines.size()):
+                var line := lines[i].strip_edges()
+                if line != "":
+                    recent_log.append(lines[i])
+
     return {"success": true, "data": {
         "editor_connected": false,
         "active_scene": "",
         "open_scenes": [],
         "game_running": false,
         "autoloads": autoloads,
+        "recent_log": recent_log,
     }}
 ```
 
@@ -400,13 +415,36 @@ static func _editor_status() -> Dictionary:
     for s in open_scenes:
         cleaned_scenes.append(s.trim_prefix("res://"))
 
+    # Read recent log
+    var recent_log: Array[String] = _read_recent_log()
+
     return {"success": true, "data": {
         "editor_connected": true,
         "active_scene": active_scene,
         "open_scenes": cleaned_scenes,
         "game_running": playing,
         "autoloads": autoloads,
+        "recent_log": recent_log,
     }}
+
+
+static func _read_recent_log() -> Array[String]:
+    ## Read the last 50 non-empty lines from godot.log.
+    var log_path := OS.get_user_data_dir() + "/logs/godot.log"
+    var result: Array[String] = []
+    if not FileAccess.file_exists(log_path):
+        return result
+    var file := FileAccess.open(log_path, FileAccess.READ)
+    if file == null:
+        return result
+    var content := file.get_as_text()
+    var lines := content.split("\n")
+    var start := maxi(0, lines.size() - 50)
+    for i in range(start, lines.size()):
+        var line := lines[i].strip_edges()
+        if line != "":
+            result.append(lines[i])
+    return result
 ```
 
 **Implementation Notes**:
@@ -417,12 +455,45 @@ static func _editor_status() -> Dictionary:
 - `EditorInterface.get_open_scenes()` returns `PackedStringArray` of `res://` paths.
 - `EditorInterface.is_playing_scene()` returns `true` when F5 is active.
 - Paths are stripped of `res://` prefix for consistency with all other Director tools.
-- No attempt to read editor log — that's fragile and version-dependent. Agents use
-  `project_reload` for diagnostics.
+
+#### Log file reading
+
+Godot writes ALL output (errors, warnings, script backtraces, print statements) to a
+log file at `<user_data_dir>/logs/godot.log`. The user data dir is project-specific:
+`~/.local/share/godot/app_userdata/<project_name>/logs/` on Linux.
+
+Both the GDScript and Rust sides can read this. The GDScript approach is simpler since
+`OS.get_user_data_dir()` resolves the path automatically:
+
+```gdscript
+# In _editor_status() and op_editor_status():
+var log_path := OS.get_user_data_dir() + "/logs/godot.log"
+var recent_log: Array[String] = []
+if FileAccess.file_exists(log_path):
+    var file := FileAccess.open(log_path, FileAccess.READ)
+    if file != null:
+        var content := file.get_as_text()
+        var lines := content.split("\n")
+        # Take the last N lines (token budget)
+        var start := maxi(0, lines.size() - 50)
+        for i in range(start, lines.size()):
+            if lines[i].strip_edges() != "":
+                recent_log.append(lines[i])
+```
+
+The `recent_log` array is included in the response. The Rust `EditorStatusResponse`
+struct gets a `recent_log: Vec<String>` field.
+
+The same `diagnostics::parse_godot_stderr` function can parse the log file content
+to extract structured errors. The Rust handler does this after receiving the GDScript
+response — it takes the `recent_log` lines, joins them, runs `parse_godot_stderr`,
+and populates `errors` and `warnings` fields on the response.
 
 **Acceptance Criteria**:
 - [ ] Editor path returns `editor_connected: true`, open scenes, active scene, game running state
-- [ ] Headless path returns `editor_connected: false`, autoloads only
+- [ ] Both editor and headless paths include `recent_log` (last 50 lines of godot.log)
+- [ ] Rust handler parses `recent_log` into structured `errors` and `warnings`
+- [ ] Headless path returns `editor_connected: false`, autoloads + log
 - [ ] All paths are project-relative (no `res://` prefix)
 - [ ] Autoloads dictionary matches `project_reload` format
 
@@ -461,6 +532,15 @@ pub struct EditorStatusResponse {
 
     /// Registered autoload singletons (name → script path).
     pub autoloads: serde_json::Value,
+
+    /// Recent lines from godot.log (last 50 lines, includes errors/warnings/print output).
+    pub recent_log: Vec<String>,
+
+    /// Structured errors parsed from the log.
+    pub errors: Vec<crate::diagnostics::GodotDiagnostic>,
+
+    /// Structured warnings parsed from the log.
+    pub warnings: Vec<crate::diagnostics::GodotDiagnostic>,
 }
 ```
 
@@ -470,30 +550,76 @@ pub struct EditorStatusResponse {
 #[tool(
     name = "editor_status",
     description = "Get a snapshot of the Godot editor's current state — which scenes are \
-        open, which is active, whether the game is running, and registered autoloads. \
-        Use this to orient yourself before making changes, or to check whether the editor \
-        is running. Works in headless mode too (returns autoloads and editor_connected=false)."
+        open, which is active, whether the game is running, registered autoloads, and \
+        recent log output (errors, warnings, print statements from godot.log). \
+        Use this to orient yourself before making changes, to check whether the editor \
+        is running, or to see what errors exist. Works in headless mode too."
 )]
 pub async fn editor_status(
     &self,
     Parameters(params): Parameters<EditorStatusParams>,
 ) -> Result<String, McpError> {
-    director_tool!(self, params, "editor_status", EditorStatusResponse)
+    // Custom handler — needs to parse recent_log into structured diagnostics.
+    let op_params = serialize_params(&params)?;
+    let data = run_operation(&self.backend, &params.project_path, "editor_status", &op_params)
+        .await?;
+
+    // Deserialize the GDScript response.
+    let raw: EditorStatusRawResponse = deserialize_response(data)?;
+
+    // Parse recent_log lines into structured diagnostics.
+    let log_text = raw.recent_log.join("\n");
+    let diagnostics = crate::diagnostics::parse_godot_stderr(&log_text);
+    let errors: Vec<_> = diagnostics.iter().filter(|d| d.severity == "error").cloned().collect();
+    let warnings: Vec<_> = diagnostics.iter().filter(|d| d.severity == "warning").cloned().collect();
+
+    serialize_response(&EditorStatusResponse {
+        editor_connected: raw.editor_connected,
+        active_scene: raw.active_scene,
+        open_scenes: raw.open_scenes,
+        game_running: raw.game_running,
+        autoloads: raw.autoloads,
+        recent_log: raw.recent_log,
+        errors,
+        warnings,
+    })
+}
+```
+
+The handler is custom (no `director_tool!`) because it needs to post-process the
+`recent_log` field through `parse_godot_stderr` to produce structured diagnostics.
+
+An intermediate `EditorStatusRawResponse` struct (private, in `responses.rs`) mirrors
+the GDScript response shape without the `errors`/`warnings` fields:
+
+```rust
+/// Raw response from GDScript — deserialized before Rust-side log parsing.
+#[derive(Debug, Deserialize)]
+pub(crate) struct EditorStatusRawResponse {
+    pub editor_connected: bool,
+    pub active_scene: String,
+    pub open_scenes: Vec<String>,
+    pub game_running: bool,
+    pub autoloads: serde_json::Value,
+    pub recent_log: Vec<String>,
 }
 ```
 
 **Implementation Notes**:
-- Standard `director_tool!` macro — no custom logic needed.
+- NOT using `director_tool!` — needs post-processing of `recent_log`.
 - When the editor is running, the backend routes to the editor plugin, which calls
-  `_editor_status()` in `editor_ops.gd` and returns the rich response.
+  `_editor_status()` in `editor_ops.gd` and returns the rich response with log.
 - When the editor is not running, it falls back to daemon/one-shot, which calls
-  `op_editor_status()` in `project_ops.gd` and returns the basic response.
-- This means the backend selection naturally gives us the right level of detail.
+  `op_editor_status()` in `project_ops.gd` and returns the basic response with log.
+- The same `parse_godot_stderr` function from `diagnostics.rs` is reused.
+- `recent_log` is passed through as raw lines so agents can see the full output.
+- `errors` and `warnings` are the structured parse of those same lines.
 
 **Acceptance Criteria**:
-- [ ] Uses `director_tool!` macro (standard dispatch)
 - [ ] Editor path returns rich data via `_editor_status()`
 - [ ] Headless fallback returns basic data via `op_editor_status()`
+- [ ] Both paths include `recent_log` from godot.log
+- [ ] Rust handler parses `recent_log` into structured `errors` and `warnings`
 
 ---
 
