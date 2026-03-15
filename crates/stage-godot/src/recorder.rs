@@ -2104,14 +2104,12 @@ mod tests {
     #[test]
     fn silent_marker_stored_in_pending() {
         // Simulate the add_silent_marker logic without Godot.
-        let mut pending: Vec<DashcamTrigger> = Vec::new();
-
-        pending.push(DashcamTrigger {
+        let pending: Vec<DashcamTrigger> = vec![DashcamTrigger {
             frame: 100,
             timestamp_ms: 1000,
             source: "code".to_string(),
             label: "entered_zone".to_string(),
-        });
+        }];
 
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].frame, 100);
