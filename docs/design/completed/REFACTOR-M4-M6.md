@@ -22,7 +22,7 @@ may depend on earlier ones.
 
 **Priority**: High
 **Risk**: Low
-**Files**: `crates/spectator-server/src/tcp.rs`, `crates/spectator-server/src/mcp/mod.rs`, `crates/spectator-server/src/mcp/delta.rs`, `crates/spectator-server/src/mcp/query.rs`, `crates/spectator-server/src/mcp/watch.rs`, `crates/spectator-server/src/mcp/config.rs`
+**Files**: `crates/stage-server/src/tcp.rs`, `crates/stage-server/src/mcp/mod.rs`, `crates/stage-server/src/mcp/delta.rs`, `crates/stage-server/src/mcp/query.rs`, `crates/stage-server/src/mcp/watch.rs`, `crates/stage-server/src/mcp/config.rs`
 
 **Current State**: 8 call sites repeat the identical 3-line block:
 
@@ -68,7 +68,7 @@ All 8 call sites reduced to `let config = get_config(&self.state).await;` or
 
 **Priority**: High
 **Risk**: Low
-**Files**: `crates/spectator-server/src/mcp/mod.rs`, `crates/spectator-server/src/mcp/delta.rs`, `crates/spectator-server/src/mcp/watch.rs`, `crates/spectator-server/src/mcp/query.rs`
+**Files**: `crates/stage-server/src/mcp/mod.rs`, `crates/stage-server/src/mcp/delta.rs`, `crates/stage-server/src/mcp/watch.rs`, `crates/stage-server/src/mcp/query.rs`
 
 **Current State**: 9+ call sites repeat the identical 4-line epilogue:
 
@@ -117,7 +117,7 @@ Each call site becomes one line: `finalize_response(&mut response, limit, cap)`.
 
 **Priority**: High
 **Risk**: Low
-**Files**: `crates/spectator-server/src/mcp/delta.rs`, `crates/spectator-server/src/mcp/mod.rs`
+**Files**: `crates/stage-server/src/mcp/delta.rs`, `crates/stage-server/src/mcp/mod.rs`
 
 **Current State**: The delta JSON map construction (conditionally inserting
 moved, state_changed, entered, exited, watch_triggers) is duplicated between:
@@ -156,7 +156,7 @@ delta has those). The spatial_action return_delta block calls it directly.
 
 **Priority**: Medium
 **Risk**: Low
-**Files**: `crates/spectator-server/src/mcp/watch.rs`
+**Files**: `crates/stage-server/src/mcp/watch.rs`
 
 **Current State**: The condition-to-string formatting logic is duplicated
 between the "add" action (lines 120-136) and "list" action (lines 179-194):
@@ -190,8 +190,8 @@ Both call sites become `let conditions_desc = format_conditions(&watch.condition
 2. Replace both blocks
 
 **Verification**:
-- `cargo build -p spectator-server`
-- `cargo test -p spectator-server`
+- `cargo build -p stage-server`
+- `cargo test -p stage-server`
 - Grep for `"none".to_string()` in watch.rs — should appear only in the helper
 
 ---
@@ -200,7 +200,7 @@ Both call sites become `let conditions_desc = format_conditions(&watch.condition
 
 **Priority**: Medium
 **Risk**: Low
-**Files**: `crates/spectator-server/src/mcp/query.rs`
+**Files**: `crates/stage-server/src/mcp/query.rs`
 
 **Current State**: The perspective-from-optional-forward pattern appears 4
 times in query.rs (lines 113-115, 142-144, 177-179, 182-184):
@@ -226,8 +226,8 @@ fn build_perspective_for_query(pos: Position3, forward: Option<[f64; 3]>) -> Per
 2. Replace all 4 call sites
 
 **Verification**:
-- `cargo build -p spectator-server`
-- `cargo test -p spectator-server`
+- `cargo build -p stage-server`
+- `cargo test -p stage-server`
 - Grep for `perspective_from_yaw.*0\.0` in query.rs — should appear only in
   the helper
 
@@ -237,7 +237,7 @@ fn build_perspective_for_query(pos: Position3, forward: Option<[f64; 3]>) -> Per
 
 **Priority**: Medium
 **Risk**: Low
-**Files**: `crates/spectator-server/src/mcp/query.rs`
+**Files**: `crates/stage-server/src/mcp/query.rs`
 
 **Current State**: `build_nearest_response` (lines 117-128) and
 `build_radius_response` (lines 146-157) both contain identical JSON entry
@@ -266,8 +266,8 @@ fn query_result_entry(r: &NearestResult, perspective: &Perspective) -> serde_jso
 2. Replace both mapping closures
 
 **Verification**:
-- `cargo build -p spectator-server`
-- `cargo test -p spectator-server`
+- `cargo build -p stage-server`
+- `cargo test -p stage-server`
 
 ---
 
@@ -275,7 +275,7 @@ fn query_result_entry(r: &NearestResult, perspective: &Perspective) -> serde_jso
 
 **Priority**: Medium
 **Risk**: Low
-**Files**: `crates/spectator-server/src/mcp/snapshot.rs`
+**Files**: `crates/stage-server/src/mcp/snapshot.rs`
 
 **Current State**: The static classification check appears 3 times:
 - `snapshot.rs:268` (to_raw_entity)
@@ -297,8 +297,8 @@ fn is_entity_static(entity: &EntityData, config: &SessionConfig) -> bool {
 2. Replace all 3 call sites
 
 **Verification**:
-- `cargo build -p spectator-server`
-- `cargo test -p spectator-server`
+- `cargo build -p stage-server`
+- `cargo test -p stage-server`
 - Grep for `is_static_class` in snapshot.rs — should appear only in the helper
 
 ---
@@ -307,7 +307,7 @@ fn is_entity_static(entity: &EntityData, config: &SessionConfig) -> bool {
 
 **Priority**: Medium (bug fix — documented param is ignored)
 **Risk**: Low
-**Files**: `crates/spectator-server/src/mcp/delta.rs`
+**Files**: `crates/stage-server/src/mcp/delta.rs`
 
 **Current State**: `SpatialDeltaParams.since_frame` (line 22) is declared,
 documented in the MCP tool description ("Use since_frame to diff against a
@@ -342,7 +342,7 @@ addition, not a refactor.
 
 **Priority**: Medium
 **Risk**: Low
-**Files**: `crates/spectator-server/src/config.rs`
+**Files**: `crates/stage-server/src/config.rs`
 
 **Current State**: Several parsed TOML config sections are never used:
 - `RecordingConfig` (lines 33-38): `storage_path`, `max_frames`,
@@ -354,12 +354,12 @@ These are M7 (recording) and M6 features that exist in Godot Project Settings
 (read by GDScript) but don't need to exist in the server's TOML parser yet.
 
 **Target State**: Remove `RecordingConfig` and `DisplayConfig` structs and
-their fields from `SpectatorToml`. Keep the `[recording]` and `[display]`
+their fields from `StageToml`. Keep the `[recording]` and `[display]`
 TOML table names as comments documenting they'll be added when needed.
 
 **Approach**:
-1. Remove `RecordingConfig` struct and `recording` field from `SpectatorToml`
-2. Remove `DisplayConfig` struct and `display` field from `SpectatorToml`
+1. Remove `RecordingConfig` struct and `recording` field from `StageToml`
+2. Remove `DisplayConfig` struct and `display` field from `StageToml`
 3. Add comment: `// [recording] and [display] sections parsed when M7 lands`
 
 **Verification**:
@@ -372,7 +372,7 @@ TOML table names as comments documenting they'll be added when needed.
 
 **Priority**: Low
 **Risk**: Low
-**Files**: `crates/spectator-server/src/mcp/snapshot.rs`
+**Files**: `crates/stage-server/src/mcp/snapshot.rs`
 
 **Current State**: `SpatialSnapshotParams.cursor` (line 52) is declared but
 never read. Pagination cursors are generated in responses but the consumer
@@ -394,7 +394,7 @@ feature is implemented.
 
 **Priority**: Low
 **Risk**: Low
-**Files**: `crates/spectator-core/src/cluster.rs`
+**Files**: `crates/stage-core/src/cluster.rs`
 
 **Current State**: Individual clustering strategy functions are `pub` but
 only called from `cluster_entities()`:
@@ -414,7 +414,7 @@ The public API surface is just `cluster_entities()` and the `Cluster` /
 1. Change `pub fn cluster_by_group` → `pub(crate) fn cluster_by_group`
 2. Same for `cluster_by_class`, `cluster_by_proximity`,
    `generate_cluster_summary`
-3. Check that no code outside spectator-core calls these directly
+3. Check that no code outside stage-core calls these directly
 
 **Verification**:
 - `cargo build --workspace`
@@ -426,7 +426,7 @@ The public API surface is just `cluster_entities()` and the `Cluster` /
 
 **Priority**: Low
 **Risk**: Low
-**Files**: `crates/spectator-core/src/delta.rs`, `crates/spectator-core/src/watch.rs`
+**Files**: `crates/stage-core/src/delta.rs`, `crates/stage-core/src/watch.rs`
 
 **Current State**:
 - `values_equal()` in `delta.rs:295` is `pub` but only called from
@@ -435,7 +435,7 @@ The public API surface is just `cluster_entities()` and the `Cluster` /
 - `evaluate_condition()` in `watch.rs:200` is a free `fn` (already private,
   not pub). No change needed there.
 
-Since both call sites are within `spectator-core`, `values_equal` should be
+Since both call sites are within `stage-core`, `values_equal` should be
 `pub(crate)`.
 
 **Target State**: Change `pub fn values_equal` → `pub(crate) fn values_equal`.
@@ -453,11 +453,11 @@ Since both call sites are within `spectator-core`, `values_equal` should be
 
 **Priority**: Low
 **Risk**: Low
-**Files**: `crates/spectator-server/src/tcp.rs`
+**Files**: `crates/stage-server/src/tcp.rs`
 
 **Current State**: `HandshakeInfo` (lines 73-81) stores 5 fields from the
 addon handshake but none are ever read after being stored:
-- `spectator_version`
+- `stage_version`
 - `godot_version`
 - `scene_dimensions`
 - `physics_ticks_per_sec`
@@ -507,14 +507,14 @@ These were identified but not worth refactoring now:
   would be complex. The simpler helpers in Steps 1-3 address the repeated
   parts without adding framework complexity.
 
-- **collector.rs split (1358 lines)**: The spectator-godot collector is
+- **collector.rs split (1358 lines)**: The stage-godot collector is
   large but cohesive — it's the single scene tree interface and all methods
   need `&self` access to the base Node. Splitting into submodules would
   require either re-exporting through the main struct or passing `&self`
   around, adding complexity. The GDExtension pattern naturally concentrates
   API surface. Revisit if the file exceeds 2000 lines.
 
-- **query.rs type organization (667 lines)**: spectator-protocol's query.rs
+- **query.rs type organization (667 lines)**: stage-protocol's query.rs
   contains 35+ types in a flat namespace. While large, these are all wire
   format types that belong together. Splitting by concern (snapshot_types,
   action_types) would add import complexity for minimal benefit. All types

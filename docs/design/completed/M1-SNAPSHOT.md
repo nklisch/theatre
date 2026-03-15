@@ -17,9 +17,9 @@ M1 delivers the first end-to-end useful tool: an agent calls `spatial_snapshot` 
 
 ## Implementation Units
 
-### Unit 1: Core Spatial Types (`spectator-core`)
+### Unit 1: Core Spatial Types (`stage-core`)
 
-**File:** `crates/spectator-core/src/types.rs`
+**File:** `crates/stage-core/src/types.rs`
 
 These are the domain types used throughout the server for spatial computation. They are pure Rust — no Godot, no MCP.
 
@@ -159,7 +159,7 @@ pub struct FrameInfo {
 }
 ```
 
-**File:** `crates/spectator-core/src/lib.rs`
+**File:** `crates/stage-core/src/lib.rs`
 
 ```rust
 pub mod bearing;
@@ -176,9 +176,9 @@ pub mod types;
 
 ---
 
-### Unit 2: Bearing Calculation (`spectator-core`)
+### Unit 2: Bearing Calculation (`stage-core`)
 
-**File:** `crates/spectator-core/src/bearing.rs`
+**File:** `crates/stage-core/src/bearing.rs`
 
 ```rust
 use crate::types::{Cardinal, Elevation, Perspective, Position3, RelativePosition};
@@ -272,9 +272,9 @@ pub fn compass_bearing(forward: [f64; 3]) -> (Cardinal, f64) {
 
 ---
 
-### Unit 3: Token Budget (`spectator-core`)
+### Unit 3: Token Budget (`stage-core`)
 
-**File:** `crates/spectator-core/src/budget.rs`
+**File:** `crates/stage-core/src/budget.rs`
 
 ```rust
 use serde::{Deserialize, Serialize};
@@ -357,9 +357,9 @@ impl BudgetEnforcer {
 
 ---
 
-### Unit 4: Clustering Engine (`spectator-core`)
+### Unit 4: Clustering Engine (`stage-core`)
 
-**File:** `crates/spectator-core/src/cluster.rs`
+**File:** `crates/stage-core/src/cluster.rs`
 
 ```rust
 use crate::types::{Cardinal, RawEntityData, RelativePosition};
@@ -453,13 +453,13 @@ pub fn generate_cluster_summary(
 
 This unit adds request/response dispatch to both the server and addon. M0 only did handshake — now we need the server to send queries and receive responses.
 
-#### 5a: Protocol Query Types (`spectator-protocol`)
+#### 5a: Protocol Query Types (`stage-protocol`)
 
-**File:** `crates/spectator-protocol/src/messages.rs` (modify existing)
+**File:** `crates/stage-protocol/src/messages.rs` (modify existing)
 
 Add structured query method types. The existing `Query` variant uses `method: String` and `params: Value` which is sufficient — we don't need to change the enum. But we add helper types for common query parameters and response shapes.
 
-**File:** `crates/spectator-protocol/src/query.rs` (new)
+**File:** `crates/stage-protocol/src/query.rs` (new)
 
 ```rust
 use serde::{Deserialize, Serialize};
@@ -594,7 +594,7 @@ pub struct FrameInfoResponse {
 }
 ```
 
-**File:** `crates/spectator-protocol/src/lib.rs` (modify)
+**File:** `crates/stage-protocol/src/lib.rs` (modify)
 
 ```rust
 pub mod codec;
@@ -608,9 +608,9 @@ pub mod query;
 - [ ] `SnapshotResponse` deserializes correctly with all entity fields
 - [ ] Round-trip serialization of `EntityData` with optional fields
 
-#### 5b: Server TCP Query Dispatch (`spectator-server`)
+#### 5b: Server TCP Query Dispatch (`stage-server`)
 
-**File:** `crates/spectator-server/src/tcp.rs` (modify existing)
+**File:** `crates/stage-server/src/tcp.rs` (modify existing)
 
 Add ability for MCP handlers to send queries and receive responses through the TCP connection. The key change: the server needs a request/response correlation mechanism.
 
@@ -650,7 +650,7 @@ pub enum QueryResult {
 }
 ```
 
-**File:** `crates/spectator-server/src/tcp.rs` — modify `handle_connection` read loop:
+**File:** `crates/stage-server/src/tcp.rs` — modify `handle_connection` read loop:
 
 ```rust
 // Step 5: Read loop — dispatch incoming messages
@@ -679,7 +679,7 @@ loop {
 }
 ```
 
-**File:** `crates/spectator-server/src/tcp.rs` — add `query_addon` helper:
+**File:** `crates/stage-server/src/tcp.rs` — add `query_addon` helper:
 
 ```rust
 /// Send a query to the addon and wait for the response.
@@ -732,13 +732,13 @@ pub async fn query_addon(
     match result {
         QueryResult::Ok(data) => Ok(data),
         QueryResult::Err { code, message } => {
-            Err(make_spectator_error(&code, &message))
+            Err(make_stage_error(&code, &message))
         }
     }
 }
 
-/// Map Spectator error codes to McpError.
-fn make_spectator_error(code: &str, message: &str) -> McpError {
+/// Map Stage error codes to McpError.
+fn make_stage_error(code: &str, message: &str) -> McpError {
     match code {
         "node_not_found" => McpError::invalid_params(message, None),
         "scene_not_loaded" => McpError::internal_error(message, None),
@@ -755,22 +755,22 @@ fn make_spectator_error(code: &str, message: &str) -> McpError {
 - [ ] Pending query is cleaned up on timeout, error, and success
 - [ ] Multiple concurrent queries (different request IDs) resolve independently
 
-#### 5c: Addon Query Handler (`spectator-godot`)
+#### 5c: Addon Query Handler (`stage-godot`)
 
-**File:** `crates/spectator-godot/src/query_handler.rs` (new)
+**File:** `crates/stage-godot/src/query_handler.rs` (new)
 
 Handles incoming Query messages by dispatching to the collector and sending responses.
 
 ```rust
 use godot::prelude::*;
-use spectator_protocol::{
+use stage_protocol::{
     codec,
     messages::Message,
     query::{DetailLevel, GetSnapshotDataParams, PerspectiveParam},
 };
 use std::net::TcpStream;
 
-use crate::collector::SpectatorCollector;
+use crate::collector::StageCollector;
 
 /// Dispatch an incoming query to the appropriate handler.
 /// Returns the response Message to send back.
@@ -778,7 +778,7 @@ pub fn handle_query(
     id: String,
     method: &str,
     params: serde_json::Value,
-    collector: &SpectatorCollector,
+    collector: &StageCollector,
 ) -> Message {
     let result = match method {
         "get_snapshot_data" => handle_get_snapshot_data(params, collector),
@@ -806,7 +806,7 @@ struct QueryError {
 
 fn handle_get_snapshot_data(
     params: serde_json::Value,
-    collector: &SpectatorCollector,
+    collector: &StageCollector,
 ) -> Result<serde_json::Value, QueryError> {
     let params: GetSnapshotDataParams = serde_json::from_value(params)
         .map_err(|e| QueryError {
@@ -822,7 +822,7 @@ fn handle_get_snapshot_data(
 }
 
 fn handle_get_frame_info(
-    collector: &SpectatorCollector,
+    collector: &StageCollector,
 ) -> Result<serde_json::Value, QueryError> {
     let info = collector.get_frame_info();
     serde_json::to_value(&info).map_err(|e| QueryError {
@@ -832,13 +832,13 @@ fn handle_get_frame_info(
 }
 ```
 
-**File:** `crates/spectator-godot/src/tcp_server.rs` (modify existing)
+**File:** `crates/stage-godot/src/tcp_server.rs` (modify existing)
 
 Integrate the query handler into the message handling loop.
 
-Changes to `SpectatorTCPServer`:
-1. Add a `collector: Option<Gd<SpectatorCollector>>` field
-2. Add a `#[func] set_collector(&mut self, collector: Gd<SpectatorCollector>)` method
+Changes to `StageTCPServer`:
+1. Add a `collector: Option<Gd<StageCollector>>` field
+2. Add a `#[func] set_collector(&mut self, collector: Gd<StageCollector>)` method
 3. Modify `handle_message` to dispatch Query messages to `query_handler::handle_query`
 4. Send the response back over TCP
 
@@ -869,7 +869,7 @@ fn send_response(&mut self, msg: Message) {
     if let Some(stream) = &mut self.client {
         stream.set_nonblocking(false).ok();
         if let Err(e) = codec::write_message(stream, &msg) {
-            godot_error!("[Spectator] Failed to send response: {}", e);
+            godot_error!("[Stage] Failed to send response: {}", e);
             self.disconnect_client();
             return;
         }
@@ -880,29 +880,29 @@ fn send_response(&mut self, msg: Message) {
 }
 ```
 
-**File:** `addons/spectator/runtime.gd` (modify existing)
+**File:** `addons/stage/runtime.gd` (modify existing)
 
 Wire the collector into the TCP server:
 
 ```gdscript
 extends Node
 
-var tcp_server: SpectatorTCPServer
-var collector: SpectatorCollector
+var tcp_server: StageTCPServer
+var collector: StageCollector
 
 func _ready() -> void:
-    if not ClassDB.class_exists(&"SpectatorTCPServer"):
-        push_error("[Spectator] GDExtension not loaded")
+    if not ClassDB.class_exists(&"StageTCPServer"):
+        push_error("[Stage] GDExtension not loaded")
         return
 
-    collector = SpectatorCollector.new()
+    collector = StageCollector.new()
     add_child(collector)
 
-    tcp_server = SpectatorTCPServer.new()
+    tcp_server = StageTCPServer.new()
     add_child(tcp_server)
     tcp_server.set_collector(collector)
 
-    var port: int = ProjectSettings.get_setting("spectator/connection/port", 9077)
+    var port: int = ProjectSettings.get_setting("stage/connection/port", 9077)
     tcp_server.start(port)
 
 func _physics_process(_delta: float) -> void:
@@ -924,9 +924,9 @@ func _exit_tree() -> void:
 
 ---
 
-### Unit 6: Scene Collector (`spectator-godot`)
+### Unit 6: Scene Collector (`stage-godot`)
 
-**File:** `crates/spectator-godot/src/collector.rs` (new)
+**File:** `crates/stage-godot/src/collector.rs` (new)
 
 The core data collection class. Traverses the Godot scene tree and returns raw entity data.
 
@@ -936,7 +936,7 @@ use godot::classes::{
     Camera3D, CharacterBody3D, Engine, Node3D, PhysicsBody3D, RigidBody3D,
     StaticBody3D,
 };
-use spectator_protocol::query::{
+use stage_protocol::query::{
     ChildData, DetailLevel, EntityData, FrameInfoResponse, GetSnapshotDataParams,
     PerspectiveData, PerspectiveParam, PhysicsEntityData, RecentSignalData,
     SnapshotResponse, TransformEntityData,
@@ -964,19 +964,19 @@ const STATIC_CLASSES: &[&str] = &[
 
 #[derive(GodotClass)]
 #[class(base = Node)]
-pub struct SpectatorCollector {
+pub struct StageCollector {
     base: Base<Node>,
 }
 
 #[godot_api]
-impl INode for SpectatorCollector {
+impl INode for StageCollector {
     fn init(base: Base<Node>) -> Self {
         Self { base }
     }
 }
 
 #[godot_api]
-impl SpectatorCollector {
+impl StageCollector {
     /// Collect a full snapshot of the scene for the server.
     /// Called from query_handler when the server sends get_snapshot_data.
     #[func]
@@ -987,7 +987,7 @@ impl SpectatorCollector {
     }
 }
 
-impl SpectatorCollector {
+impl StageCollector {
     /// Collect scene snapshot data based on the provided parameters.
     pub fn collect_snapshot(&self, params: &GetSnapshotDataParams) -> SnapshotResponse {
         let tree = match self.base().get_tree() {
@@ -1083,8 +1083,8 @@ impl SpectatorCollector {
         params: &GetSnapshotDataParams,
         entities: &mut Vec<EntityData>,
     ) {
-        // Skip Spectator's own nodes
-        if self.is_spectator_node(node) {
+        // Skip Stage's own nodes
+        if self.is_stage_node(node) {
             return;
         }
 
@@ -1368,14 +1368,14 @@ impl SpectatorCollector {
         node.get_name().to_string()
     }
 
-    /// Check if a node is part of Spectator's own infrastructure.
-    fn is_spectator_node(&self, node: &Gd<Node>) -> bool {
+    /// Check if a node is part of Stage's own infrastructure.
+    fn is_stage_node(&self, node: &Gd<Node>) -> bool {
         let name = node.get_name().to_string();
-        name == "SpectatorRuntime"
-            || name.starts_with("SpectatorTCPServer")
-            || name.starts_with("SpectatorCollector")
-            || name.starts_with("SpectatorRecorder")
-            || node.is_in_group("spectator_internal")
+        name == "StageRuntime"
+            || name.starts_with("StageTCPServer")
+            || name.starts_with("StageCollector")
+            || name.starts_with("StageRecorder")
+            || node.is_in_group("stage_internal")
     }
 
     /// Get current frame info.
@@ -1462,7 +1462,7 @@ fn variant_to_json(v: &Variant) -> Option<serde_json::Value> {
 }
 ```
 
-**File:** `crates/spectator-godot/src/lib.rs` (modify)
+**File:** `crates/stage-godot/src/lib.rs` (modify)
 
 ```rust
 use godot::prelude::*;
@@ -1471,14 +1471,14 @@ mod collector;
 mod query_handler;
 mod tcp_server;
 
-struct SpectatorExtension;
+struct StageExtension;
 
 #[gdextension]
-unsafe impl ExtensionLibrary for SpectatorExtension {}
+unsafe impl ExtensionLibrary for StageExtension {}
 ```
 
 **Acceptance Criteria:**
-- [ ] `SpectatorCollector` class is registered and available in Godot
+- [ ] `StageCollector` class is registered and available in Godot
 - [ ] `collect_snapshot` returns entities from the active scene
 - [ ] Camera perspective uses the active Camera3D position and forward vector
 - [ ] Node perspective resolves to the specified node's position
@@ -1487,28 +1487,28 @@ unsafe impl ExtensionLibrary for SpectatorExtension {}
 - [ ] Full detail adds: children, script, signals, physics, transform, all exported vars
 - [ ] Groups filter: entities not in specified groups are excluded
 - [ ] Class filter: entities not matching specified classes are excluded
-- [ ] Spectator's own nodes are excluded from results
+- [ ] Stage's own nodes are excluded from results
 - [ ] Internal groups (starting with `_`) are excluded from entity groups
 - [ ] `variant_to_json` handles nil, bool, int, float, string, vector2/3, color, array, dictionary
 - [ ] Static class heuristic: StaticBody3D etc. classified as static; MeshInstance3D only if no script
 
 ---
 
-### Unit 7: MCP `spatial_snapshot` Tool (`spectator-server`)
+### Unit 7: MCP `spatial_snapshot` Tool (`stage-server`)
 
-**File:** `crates/spectator-server/src/mcp/mod.rs` (new)
+**File:** `crates/stage-server/src/mcp/mod.rs` (new)
 
 ```rust
 mod snapshot;
 
-use crate::server::SpectatorServer;
+use crate::server::StageServer;
 use rmcp::tool_box;
 
 #[tool_box]
-impl SpectatorServer {}
+impl StageServer {}
 ```
 
-**File:** `crates/spectator-server/src/server.rs` (modify)
+**File:** `crates/stage-server/src/server.rs` (modify)
 
 Remove the manual `ServerHandler` impl and let `#[tool_box]` generate tool dispatch:
 
@@ -1521,21 +1521,21 @@ use tokio::sync::Mutex;
 use crate::tcp::SessionState;
 
 #[derive(Clone)]
-pub struct SpectatorServer {
+pub struct StageServer {
     pub state: Arc<Mutex<SessionState>>,
 }
 
-impl SpectatorServer {
+impl StageServer {
     pub fn new(state: Arc<Mutex<SessionState>>) -> Self {
         Self { state }
     }
 }
 
-impl ServerHandler for SpectatorServer {
+impl ServerHandler for StageServer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
             server_info: Implementation {
-                name: "spectator-server".to_string(),
+                name: "stage-server".to_string(),
                 version: env!("CARGO_PKG_VERSION").to_string(),
                 ..Default::default()
             },
@@ -1546,22 +1546,22 @@ impl ServerHandler for SpectatorServer {
 }
 ```
 
-**File:** `crates/spectator-server/src/mcp/snapshot.rs` (new)
+**File:** `crates/stage-server/src/mcp/snapshot.rs` (new)
 
 ```rust
-use crate::server::SpectatorServer;
+use crate::server::StageServer;
 use crate::tcp::query_addon;
 use rmcp::model::ErrorData as McpError;
 use rmcp::tool;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use spectator_core::{
+use stage_core::{
     bearing,
     budget::{BudgetEnforcer, BudgetReport, SnapshotBudgetDefaults, resolve_budget},
     cluster::{self, Cluster, ClusterStrategy},
     types::{Perspective, Position3, RelativePosition},
 };
-use spectator_protocol::query::{
+use stage_protocol::query::{
     DetailLevel, EntityData, GetSnapshotDataParams, PerspectiveParam, SnapshotResponse,
 };
 
@@ -1661,7 +1661,7 @@ struct StaticSummary {
     categories: serde_json::Map<String, serde_json::Value>,
 }
 
-impl SpectatorServer {
+impl StageServer {
     #[tool(description = "Get a spatial snapshot of the current scene from a perspective. Use detail 'summary' for a cheap overview (~200 tokens), 'standard' for per-entity data (~400-800 tokens), or 'full' for everything including transforms, physics, and children (~1000+ tokens). Start with summary, then drill down.")]
     pub async fn spatial_snapshot(
         &self,
@@ -1865,7 +1865,7 @@ fn build_perspective_param(params: &SpatialSnapshotParams) -> Result<Perspective
     }
 }
 
-fn build_perspective(data: &spectator_protocol::query::PerspectiveData) -> Perspective {
+fn build_perspective(data: &stage_protocol::query::PerspectiveData) -> Perspective {
     let position: Position3 = [data.position[0], data.position[1], data.position[2]];
     let forward = [data.forward[0], data.forward[1], data.forward[2]];
     let (facing, facing_deg) = bearing::compass_bearing(forward);
@@ -2116,7 +2116,7 @@ fn classify_static_category(class: &str) -> String {
 }
 ```
 
-**File:** `crates/spectator-server/src/main.rs` (modify — add `mod mcp`)
+**File:** `crates/stage-server/src/main.rs` (modify — add `mod mcp`)
 
 ```rust
 mod mcp;
@@ -2152,9 +2152,9 @@ mod tcp;
 ```json
 {
   "mcpServers": {
-    "spectator": {
+    "stage": {
       "command": "cargo",
-      "args": ["run", "-p", "spectator-server"],
+      "args": ["run", "-p", "stage-server"],
       "env": {
         "THEATRE_PORT": "9077"
       }
@@ -2164,7 +2164,7 @@ mod tcp;
 ```
 
 **Acceptance Criteria:**
-- [ ] Claude Code loads spectator-server as an MCP server using this config
+- [ ] Claude Code loads stage-server as an MCP server using this config
 - [ ] `spatial_snapshot` tool appears in the agent's tool list
 - [ ] Agent can call the tool and receive a response (when game is running)
 
@@ -2176,14 +2176,14 @@ mod tcp;
 2. **Unit 2: Bearing calculation** — depends on Unit 1 types
 3. **Unit 3: Token budget** — depends on nothing, pure logic
 4. **Unit 4: Clustering engine** — depends on Units 1, 2
-5. **Unit 5a: Protocol query types** — extends spectator-protocol
+5. **Unit 5a: Protocol query types** — extends stage-protocol
 6. **Unit 5b: Server TCP query dispatch** — depends on 5a, modifies server tcp.rs
 7. **Unit 5c: Addon query handler** — depends on 5a, modifies addon
 8. **Unit 6: Scene collector** — depends on 5a (protocol types), core GDExtension work
 9. **Unit 7: MCP snapshot tool** — depends on all above, final integration
 10. **Unit 8: MCP config** — trivial, do last
 
-Units 1-4 can be done in parallel (all in spectator-core, independent of each other).
+Units 1-4 can be done in parallel (all in stage-core, independent of each other).
 Units 5a-5c are sequential (protocol first, then server dispatch, then addon handler).
 Unit 6 depends on 5a (needs protocol types).
 Unit 7 ties everything together.
@@ -2192,7 +2192,7 @@ Unit 7 ties everything together.
 
 ## Testing
 
-### Unit Tests: `crates/spectator-core/src/bearing.rs`
+### Unit Tests: `crates/stage-core/src/bearing.rs`
 
 ```rust
 #[cfg(test)]
@@ -2223,7 +2223,7 @@ mod tests {
 }
 ```
 
-### Unit Tests: `crates/spectator-core/src/budget.rs`
+### Unit Tests: `crates/stage-core/src/budget.rs`
 
 ```rust
 #[cfg(test)]
@@ -2245,7 +2245,7 @@ mod tests {
 }
 ```
 
-### Unit Tests: `crates/spectator-core/src/cluster.rs`
+### Unit Tests: `crates/stage-core/src/cluster.rs`
 
 ```rust
 #[cfg(test)]
@@ -2264,7 +2264,7 @@ mod tests {
 }
 ```
 
-### Unit Tests: `crates/spectator-protocol/src/query.rs`
+### Unit Tests: `crates/stage-protocol/src/query.rs`
 
 ```rust
 #[cfg(test)]
@@ -2280,7 +2280,7 @@ mod tests {
 }
 ```
 
-### Integration Test: `crates/spectator-server/tests/snapshot_integration.rs`
+### Integration Test: `crates/stage-server/tests/snapshot_integration.rs`
 
 Mock the TCP connection (no real Godot) and verify the full MCP → TCP → response pipeline:
 
@@ -2309,7 +2309,7 @@ cargo fmt --check
 # Verify MCP tool is registered (manual — requires AI client)
 # 1. Start Godot with addon enabled
 # 2. Press Play
-# 3. Start spectator-server (or use .mcp.json)
+# 3. Start stage-server (or use .mcp.json)
 # 4. Call spatial_snapshot(detail: "summary")
 # 5. Verify response has: frame, perspective, clusters, budget
 # 6. Call spatial_snapshot(detail: "standard")

@@ -1,6 +1,6 @@
-# Spectator API Reference
+# Stage API Reference
 
-Complete parameter schemas for all 9 Spectator MCP tools.
+Complete parameter schemas for all 9 Stage MCP tools.
 
 ## `spatial_snapshot`
 

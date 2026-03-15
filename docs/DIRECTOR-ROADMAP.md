@@ -316,7 +316,7 @@ independent of Director implementation and can happen any time:
 - Root `README.md` rewritten to introduce both tools
 - `docs/` audit for project-name vs tool-name references
 
-Crate names use `stage-*` (formerly `spectator-*`).
+Crate names use `stage-*` (formerly `stage-*`).
 
 ---
 

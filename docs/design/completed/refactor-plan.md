@@ -17,7 +17,7 @@ independently.
 
 **Priority**: High
 **Risk**: Low
-**Files**: `crates/spectator-server/src/clip_analysis.rs`
+**Files**: `crates/stage-server/src/clip_analysis.rs`
 
 **Current State**: 19 occurrences of
 `.map_err(|e| McpError::internal_error(format!("SQLite error: {e}"), None))`
@@ -33,9 +33,9 @@ helper at the top of the file, called from all 19 sites.
    `Err(e) => Err(sqlite_err(e))`
 
 **Verification**:
-- `cargo build -p spectator-server`
-- `cargo test -p spectator-server` (all clip analysis tests pass)
-- `cargo clippy -p spectator-server`
+- `cargo build -p stage-server`
+- `cargo test -p stage-server` (all clip analysis tests pass)
+- `cargo clippy -p stage-server`
 - Grep confirms zero remaining inline `"SQLite error"` format strings
 
 ---
@@ -44,7 +44,7 @@ helper at the top of the file, called from all 19 sites.
 
 **Priority**: High
 **Risk**: Low
-**Files**: `crates/spectator-server/src/mcp/watch.rs`
+**Files**: `crates/stage-server/src/mcp/watch.rs`
 
 **Current State** (line 151):
 ```rust
@@ -66,8 +66,8 @@ let mut response = serde_json::json!({
 **Approach**: Replace the `"removed"` field with `"watch_id"` echoing the input.
 
 **Verification**:
-- `cargo build -p spectator-server`
-- `cargo test -p spectator-server`
+- `cargo build -p stage-server`
+- `cargo test -p stage-server`
 - Manual review: response now echoes `watch_id` per contract rules
 
 ---
@@ -76,7 +76,7 @@ let mut response = serde_json::json!({
 
 **Priority**: High
 **Risk**: Low
-**Files**: `crates/spectator-server/src/mcp/mod.rs`
+**Files**: `crates/stage-server/src/mcp/mod.rs`
 
 **Current State**:
 - Line 123: `serde_json::to_value(val).unwrap_or_default()` — silently produces
@@ -99,35 +99,35 @@ These violate error-layering: library helpers should not silently swallow errors
    `.map_err(|e| McpError::internal_error(...))?`
 
 **Verification**:
-- `cargo build -p spectator-server` (callers updated)
+- `cargo build -p stage-server` (callers updated)
 - `cargo test --workspace`
 - `cargo clippy --workspace`
 
 ---
 
-### Step 4: Extract shared serde helpers to spectator-protocol
+### Step 4: Extract shared serde helpers to stage-protocol
 
 **Priority**: Medium
 **Risk**: Low
 **Files**:
-- `crates/spectator-protocol/src/lib.rs` (new `mcp_helpers` module)
-- `crates/spectator-server/src/mcp/mod.rs` (remove duplicates, re-import)
+- `crates/stage-protocol/src/lib.rs` (new `mcp_helpers` module)
+- `crates/stage-server/src/mcp/mod.rs` (remove duplicates, re-import)
 - `crates/director/src/mcp/mod.rs` (remove duplicates, re-import)
 
 **Current State**: `serialize_params` and `serialize_response` are defined
-identically in both `spectator-server/src/mcp/mod.rs:34-49` and
+identically in both `stage-server/src/mcp/mod.rs:34-49` and
 `director/src/mcp/mod.rs:61-69`.
 
-**Target State**: Both functions live in `spectator-protocol::mcp_helpers` and
+**Target State**: Both functions live in `stage-protocol::mcp_helpers` and
 are imported by both crates.
 
 **Approach**:
-1. Add `rmcp` as an optional dependency of `spectator-protocol` behind an
+1. Add `rmcp` as an optional dependency of `stage-protocol` behind an
    `mcp` feature flag (both server and director already depend on rmcp)
-2. Create `crates/spectator-protocol/src/mcp_helpers.rs` with the three
+2. Create `crates/stage-protocol/src/mcp_helpers.rs` with the three
    functions: `serialize_params`, `deserialize_response`, `serialize_response`
 3. In both consuming crates, replace local definitions with
-   `use spectator_protocol::mcp_helpers::*`
+   `use stage_protocol::mcp_helpers::*`
 
 **Verification**:
 - `cargo build --workspace`
@@ -141,7 +141,7 @@ are imported by both crates.
 **Priority**: Medium
 **Risk**: Low
 **Files**:
-- `crates/spectator-server/src/mcp/mod.rs` (add helper)
+- `crates/stage-server/src/mcp/mod.rs` (add helper)
 - 8+ MCP handler files (simplify repeated pattern)
 
 **Current State**: Every handler that needs budget does:
@@ -173,7 +173,7 @@ then `finalize_response(&mut response, bc.limit, bc.hard_cap)`.
    they were only used for budget
 
 **Verification**:
-- `cargo build -p spectator-server`
+- `cargo build -p stage-server`
 - `cargo test --workspace`
 - Each handler is shorter by 2 lines; the budget resolution logic is in one place
 
@@ -183,7 +183,7 @@ then `finalize_response(&mut response, bc.limit, bc.hard_cap)`.
 
 **Priority**: Medium
 **Risk**: Low
-**Files**: `crates/spectator-server/src/mcp/query.rs`
+**Files**: `crates/stage-server/src/mcp/query.rs`
 
 **Current State**: `build_nearest_response` (lines 119-134) and
 `build_radius_response` (lines 136-153) are nearly identical — both build a
@@ -208,8 +208,8 @@ fn build_list_query_response(
 3. Update call sites
 
 **Verification**:
-- `cargo build -p spectator-server`
-- `cargo test -p spectator-server`
+- `cargo build -p stage-server`
+- `cargo test -p stage-server`
 - Existing query integration tests still pass
 
 ---
@@ -219,25 +219,25 @@ fn build_list_query_response(
 **Priority**: Low
 **Risk**: Low
 **Files**:
-- `crates/spectator-server/src/mcp/snapshot.rs` (`to_entity_snapshot`)
-- `crates/spectator-server/src/mcp/mod.rs` (`update_spatial_state` calls it)
-- `crates/spectator-server/src/mcp/delta.rs` (imports it)
+- `crates/stage-server/src/mcp/snapshot.rs` (`to_entity_snapshot`)
+- `crates/stage-server/src/mcp/mod.rs` (`update_spatial_state` calls it)
+- `crates/stage-server/src/mcp/delta.rs` (imports it)
 
 **Current State**: `to_entity_snapshot` lives in `snapshot.rs` but is used by
 both snapshot and delta modules. It converts protocol `EntityData` to core
 `EntitySnapshot`.
 
 **Target State**: Move to a small `conversions.rs` module under
-`crates/spectator-server/src/mcp/` that both snapshot and delta import from,
+`crates/stage-server/src/mcp/` that both snapshot and delta import from,
 making the dependency explicit rather than going through `snapshot::`.
 
 **Approach**:
-1. Create `crates/spectator-server/src/mcp/conversions.rs`
+1. Create `crates/stage-server/src/mcp/conversions.rs`
 2. Move `to_entity_snapshot` (and possibly `to_raw_entity` if delta also needs it)
 3. Update imports in `snapshot.rs`, `delta.rs`, and `mod.rs`
 
 **Verification**:
-- `cargo build -p spectator-server`
+- `cargo build -p stage-server`
 - `cargo test --workspace`
 
 ---

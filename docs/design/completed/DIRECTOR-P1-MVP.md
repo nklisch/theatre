@@ -43,10 +43,10 @@ Add `"tests/director-tests"` to the exclusion from default-members (like
 wire-tests — requires Godot at runtime):
 ```toml
 default-members = [
-    "crates/spectator-server",
-    "crates/spectator-godot",
-    "crates/spectator-protocol",
-    "crates/spectator-core",
+    "crates/stage-server",
+    "crates/stage-godot",
+    "crates/stage-protocol",
+    "crates/stage-core",
     "crates/director",
 ]
 ```
@@ -391,7 +391,7 @@ use node::{NodeAddParams, NodeRemoveParams, NodeSetPropertiesParams};
 use scene::{SceneCreateParams, SceneReadParams};
 
 // ---------------------------------------------------------------------------
-// Shared MCP helpers (Director-specific subset of Spectator's pattern)
+// Shared MCP helpers (Director-specific subset of Stage's pattern)
 // ---------------------------------------------------------------------------
 
 /// Run an operation via headless Godot and return the parsed result data.
@@ -513,7 +513,7 @@ impl DirectorServer {
   logging later.
 - No `finalize_response` / budget injection — Director responses are generally
   small. Add if needed.
-- `run_operation` is the Director equivalent of Spectator's `query_addon`. It
+- `run_operation` is the Director equivalent of Stage's `query_addon`. It
   resolves godot, validates the project, runs the subprocess, and returns
   parsed JSON.
 
@@ -1712,7 +1712,7 @@ fn journey_create_scene_add_nodes_set_properties_read_back() {
 
 **Implementation Notes:**
 - The test project at `tests/godot-project/` already has an `addons/` directory
-  (with `spectator/`). Director's addon must also be accessible.
+  (with `stage/`). Director's addon must also be accessible.
 - **Symlink approach**: Create a symlink `tests/godot-project/addons/director`
   → `../../../../addons/director`. This ensures tests always use the current
   addon code.

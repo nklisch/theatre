@@ -3,7 +3,7 @@
 ## Overview
 
 End-to-end tests that launch a real Godot binary in headless mode, connect
-`spectator-server` to the real addon, and exercise multi-step agent debugging
+`stage-server` to the real addon, and exercise multi-step agent debugging
 journeys against a live scene tree. These test the boundaries that mock tests
 **cannot**: GDExtension collector accuracy, real physics/transform data, TCP
 wire fidelity under actual Godot timing, and the full handshake-to-tool-call
@@ -38,7 +38,7 @@ debugging story.
 
 ### Unit 1: GodotProcess — Headless Launcher
 
-**File**: `crates/spectator-server/tests/support/godot_process.rs`
+**File**: `crates/stage-server/tests/support/godot_process.rs`
 
 ```rust
 use std::path::PathBuf;
@@ -101,7 +101,7 @@ small TOCTOU window but it's fine for test environments.
 
 The Godot binary path comes from `GODOT_BIN` env var (default: `godot`).
 The test project path is `{manifest_dir}/../../tests/godot-project` (relative
-to the spectator-server crate).
+to the stage-server crate).
 
 Wait-for-ready: Poll `TcpStream::connect()` every 100ms up to 15 seconds.
 If it times out, dump Godot's stderr for debugging.
@@ -121,24 +121,24 @@ godot --headless --fixed-fps 60 --path <project_dir> <scene>
 
 ### Unit 2: E2EHarness — Real Godot Test Harness
 
-**File**: `crates/spectator-server/tests/support/e2e_harness.rs`
+**File**: `crates/stage-server/tests/support/e2e_harness.rs`
 
 ```rust
 use super::godot_process::GodotProcess;
-use spectator_server::{server::SpectatorServer, tcp::{SessionState, tcp_client_loop}};
+use stage_server::{server::StageServer, tcp::{SessionState, tcp_client_loop}};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 use rmcp::model::ErrorData as McpError;
 
-/// Full-stack E2E harness: real Godot + real SpectatorServer.
+/// Full-stack E2E harness: real Godot + real StageServer.
 ///
 /// Provides the same `call_tool(name, params)` interface as TestHarness,
 /// but against a real running Godot scene. Additionally provides a
 /// step-based trace log for debugging multi-step journey failures.
 pub struct E2EHarness {
     pub godot: GodotProcess,
-    pub server: SpectatorServer,
+    pub server: StageServer,
     pub state: Arc<Mutex<SessionState>>,
     _tcp_task: JoinHandle<()>,
     trace: Vec<StepTrace>,
@@ -213,7 +213,7 @@ impl Drop for E2EHarness {
 `start()` calls `GodotProcess::start(scene)`, creates `SessionState`,
 spawns `tcp_client_loop` connecting to `godot.port()`, waits for
 `state.connected == true` (same pattern as mock TestHarness), then creates
-`SpectatorServer::new(state)`.
+`StageServer::new(state)`.
 
 The `step()` method wraps `call_tool()` with timing (`Instant::now()`) and
 stores the result in `trace`. On assertion failure, `trace_dump()` prints:
@@ -228,8 +228,8 @@ E2E Journey Trace (test_scene_3d.tscn):
     Error: internal_error — delta baseline not established
 
 Godot stderr (last 20 lines):
-  [Spectator] TCP: client connected from 127.0.0.1:54321
-  [Spectator] Handshake: protocol_version=1, dimensions=3
+  [Stage] TCP: client connected from 127.0.0.1:54321
+  [Stage] Handshake: protocol_version=1, dimensions=3
   ...
 ```
 
@@ -253,7 +253,7 @@ duplication.
 
 ### Unit 3: Shared Tool Dispatch
 
-**File**: `crates/spectator-server/tests/support/mod.rs` (modify existing)
+**File**: `crates/stage-server/tests/support/mod.rs` (modify existing)
 
 ```rust
 pub mod fixtures;
@@ -265,10 +265,10 @@ pub mod godot_process;
 #[cfg(feature = "e2e-tests")]
 pub mod e2e_harness;
 
-/// Shared tool dispatch: routes tool name + JSON params to SpectatorServer
+/// Shared tool dispatch: routes tool name + JSON params to StageServer
 /// handler methods. Used by both TestHarness and E2EHarness.
 pub async fn dispatch_tool(
-    server: &SpectatorServer,
+    server: &StageServer,
     name: &str,
     params: serde_json::Value,
 ) -> Result<serde_json::Value, McpError> { ... }
@@ -287,7 +287,7 @@ function. Both `TestHarness::call_tool` and `E2EHarness::step` call it.
 
 ### Unit 4: Journey — Agent Investigates a Scene
 
-**File**: `crates/spectator-server/tests/e2e_journeys.rs`
+**File**: `crates/stage-server/tests/e2e_journeys.rs`
 
 **Story**: An agent connects to a running game and explores the scene to
 understand its structure. This is the most common first interaction — the
@@ -300,7 +300,7 @@ agent needs situational awareness before it can help debug anything.
 /// and real spatial indexing against actual Godot transforms.
 ///
 /// Steps:
-///   1. Verify handshake: session connected, dimensions=3, project="SpectatorTests"
+///   1. Verify handshake: session connected, dimensions=3, project="StageTests"
 ///   2. scene_tree() → real hierarchy (TestScene3D, Camera3D, Player, Enemies/Scout, ...)
 ///   3. spatial_snapshot(summary) → clustered groups, correct entity count
 ///   4. spatial_snapshot(standard) → per-entity data with real positions
@@ -340,7 +340,7 @@ GDExtension loading failures that would be invisible to tool calls.
 
 ### Unit 5: Journey — Agent Debugs a Spatial Bug
 
-**File**: `crates/spectator-server/tests/e2e_journeys.rs`
+**File**: `crates/stage-server/tests/e2e_journeys.rs`
 
 **Story**: An agent teleports an enemy to a new position, verifies the move
 with a snapshot, checks that the delta engine tracks the movement, and then
@@ -399,7 +399,7 @@ Step 10's delta should detect `health` changing from 80 to 25 in
 
 ### Unit 6: Journey — Recording During Live Session
 
-**File**: `crates/spectator-server/tests/e2e_journeys.rs`
+**File**: `crates/stage-server/tests/e2e_journeys.rs`
 
 **Story**: An agent starts a recording, takes snapshots while the game runs,
 adds a marker, stops the recording, then verifies the recording metadata.
@@ -428,7 +428,7 @@ async fn journey_recording_lifecycle() { ... }
 
 **Implementation Notes**:
 
-The GDExtension `SpectatorRecorder` captures frames in `_physics_process`.
+The GDExtension `StageRecorder` captures frames in `_physics_process`.
 With `--fixed-fps 60`, waiting 30 frames ≈ 500ms. After stop, the
 `frames_captured` count should be between 20 and 60 (timing is approximate
 in headless mode).
@@ -457,7 +457,7 @@ Frame number assertions: step 1 captures `frame_0`, step 5 captures
 
 ### Unit 7: Journey — 2D Scene Verification
 
-**File**: `crates/spectator-server/tests/e2e_journeys.rs`
+**File**: `crates/stage-server/tests/e2e_journeys.rs`
 
 **Story**: An agent connects to a 2D scene and verifies that position format,
 bearing system, and spatial indexing all adapt correctly. This catches
@@ -504,7 +504,7 @@ this correctly (set `global_position` as `Vector2`, not `Vector3`).
 
 ## Cargo.toml Changes
 
-**File**: `crates/spectator-server/Cargo.toml`
+**File**: `crates/stage-server/Cargo.toml`
 
 ```toml
 [features]
@@ -548,7 +548,7 @@ Add group `enemies` to Scout2D node.
 
 1. **GodotProcess** — headless launcher with ephemeral port + stderr capture
 2. **Shared dispatch** — extract tool routing from TestHarness
-3. **E2EHarness** — wires GodotProcess + SpectatorServer + trace logging
+3. **E2EHarness** — wires GodotProcess + StageServer + trace logging
 4. **Scene groups** — add missing groups to test scenes
 5. **Cargo.toml** — add `e2e-tests` feature + `[[test]]` entry
 6. **Journey tests** — all 4 journeys in `e2e_journeys.rs`
@@ -563,16 +563,16 @@ Step 6 depends on all prior steps.
 
 ```bash
 # Prerequisites: Godot 4.x on PATH (or set GODOT_BIN), GDExtension built
-theatre-deploy ~/dev/spectator/tests/godot-project  # or copy .so manually
+theatre-deploy ~/dev/stage/tests/godot-project  # or copy .so manually
 
 # Run E2E journey tests
-cargo test -p spectator-server --features e2e-tests -- --nocapture
+cargo test -p stage-server --features e2e-tests -- --nocapture
 
 # Run specific journey
-cargo test -p spectator-server --features e2e-tests journey_explore_scene -- --nocapture
+cargo test -p stage-server --features e2e-tests journey_explore_scene -- --nocapture
 
 # Run all tests (unit + mock integration + E2E)
-cargo test -p spectator-server --features integration-tests,e2e-tests
+cargo test -p stage-server --features integration-tests,e2e-tests
 ```
 
 ### Environment Variables
@@ -622,14 +622,14 @@ Full result: {"moved":[...],"state_changed":[],"entered":[],"exited":[]}
 
 ```bash
 # Build (ensures e2e support code compiles)
-cargo build -p spectator-server --features e2e-tests --tests
+cargo build -p stage-server --features e2e-tests --tests
 
 # Lint
-cargo clippy -p spectator-server --features e2e-tests --tests
+cargo clippy -p stage-server --features e2e-tests --tests
 
 # Run (requires Godot)
-cargo test -p spectator-server --features e2e-tests -- --nocapture
+cargo test -p stage-server --features e2e-tests -- --nocapture
 
 # Existing tests still pass
-cargo test -p spectator-server --features integration-tests
+cargo test -p stage-server --features integration-tests
 ```

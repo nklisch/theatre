@@ -61,7 +61,7 @@ func _dispatch(operation: String, params: Dictionary) -> Dictionary: ...
 func _check_idle_timeout() -> void: ...
 ```
 
-**Wire protocol**: Length-prefixed JSON, matching spectator-protocol's framing:
+**Wire protocol**: Length-prefixed JSON, matching stage-protocol's framing:
 `[4 bytes: big-endian u32 length][JSON payload, UTF-8]`
 
 **Request format** (from Rust → GDScript):
@@ -108,7 +108,7 @@ func _dispatch(operation: String, params: Dictionary) -> Dictionary:
   only expected client).
 - Uses `TCPServer` and `StreamPeerTCP` (Godot built-in, no GDExtension needed).
 - Length-prefix framing: read 4 bytes as big-endian u32, then read that many
-  bytes of JSON. Same for writes. This matches spectator-protocol's codec.
+  bytes of JSON. Same for writes. This matches stage-protocol's codec.
 - `_process` is used (not `_physics_process`) because daemon does not interact
   with the physics simulation.
 - The idle timeout timer resets on: client connect, client disconnect, any
@@ -717,6 +717,6 @@ godot --headless --path tests/godot-project --script addons/director/daemon.gd
 # Expected: {"source":"director","status":"ready","port":6550} on stdout
 
 # Verify all workspace tests still pass
-theatre-deploy ~/dev/spectator/tests/godot-project
+theatre-deploy ~/dev/stage/tests/godot-project
 cargo test --workspace
 ```

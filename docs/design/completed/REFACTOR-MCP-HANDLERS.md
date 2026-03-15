@@ -2,7 +2,7 @@
 
 ## Summary
 
-The MCP tool handler layer (`crates/spectator-server/src/mcp/`) has accumulated
+The MCP tool handler layer (`crates/stage-server/src/mcp/`) has accumulated
 duplication across handler files as new tools were added. The main opportunities
 are: duplicated default-value functions, repeated `query_addon → finalize`
 boilerplate in clips handlers, a pattern violation in the config handler's
@@ -28,15 +28,15 @@ copy-pasted identically in both `snapshot.rs:61-66` and `delta.rs:40-45`.
 imported by both `snapshot.rs` and `delta.rs`.
 
 **Approach**:
-1. Create `crates/spectator-server/src/mcp/defaults.rs`
+1. Create `crates/stage-server/src/mcp/defaults.rs`
 2. Move the three default functions there
 3. Update `#[serde(default = "...")]` paths in both param structs to reference
    the new module (serde `default` accepts a path string)
 4. Remove the duplicate definitions
 
 **Verification**:
-- `cargo build -p spectator-server`
-- `cargo test -p spectator-server` — all tests pass
+- `cargo build -p stage-server`
+- `cargo test -p stage-server` — all tests pass
 - Grep for `default_perspective` and `default_radius` confirms single definition
 
 ### Step 2: Fix config handler budget injection (pattern violation)
@@ -60,8 +60,8 @@ computed budget values.
 3. Call `finalize_response(&mut response, budget_limit, hard_cap)`
 
 **Verification**:
-- `cargo build -p spectator-server`
-- `cargo test -p spectator-server`
+- `cargo build -p stage-server`
+- `cargo test -p stage-server`
 - Manual inspection: config response now includes properly computed budget
 
 ### Step 3: Use `query_and_finalize` in clips action handlers
@@ -84,8 +84,8 @@ inline `query_addon + finalize_response`.
 2. This is a ~4 line reduction per handler
 
 **Verification**:
-- `cargo test -p spectator-server`
-- E2E tests: `theatre-deploy ~/dev/spectator/tests/godot-project && cargo test --workspace`
+- `cargo test -p stage-server`
+- E2E tests: `theatre-deploy ~/dev/stage/tests/godot-project && cargo test --workspace`
 
 ### Step 4: Extract `resolve_frame` helper in clip analysis handlers
 
@@ -123,7 +123,7 @@ pattern.
 2. Replace inline logic in the three handlers
 
 **Verification**:
-- `cargo test -p spectator-server`
+- `cargo test -p stage-server`
 - E2E clip analysis tests pass
 
 ### Step 5: Consolidate `build_delta_json` conditional inserts
@@ -150,7 +150,7 @@ fn insert_if_nonempty<T: Serialize>(map: &mut Map, key: &str, val: &[T]) {
 2. Replace the five conditional blocks with five one-line calls
 
 **Verification**:
-- `cargo test -p spectator-server` — delta tests pass
+- `cargo test -p stage-server` — delta tests pass
 - JSON output unchanged (verify with existing snapshot comparison tests)
 
 ### Step 6: Extract shared `_error()` in GDScript director ops

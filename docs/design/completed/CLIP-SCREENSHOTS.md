@@ -137,7 +137,7 @@ default: 64MB). When a clip flushes, screenshots are written to the
 
 ### Unit 1: Screenshot Capture in GDExtension
 
-**File**: `crates/spectator-godot/src/recorder.rs`
+**File**: `crates/stage-godot/src/recorder.rs`
 
 ```rust
 /// A captured viewport screenshot.
@@ -160,8 +160,8 @@ pub struct DashcamConfig {
     pub screenshot_byte_cap_mb: u32,     // default: 64
 }
 
-// New fields in SpectatorRecorder:
-pub struct SpectatorRecorder {
+// New fields in StageRecorder:
+pub struct StageRecorder {
     // ... existing fields ...
     screenshot_ring: VecDeque<CapturedScreenshot>,
     screenshot_ring_bytes: usize,
@@ -236,7 +236,7 @@ fn physics_process(&mut self, _delta: f64) {
 
 ### Unit 2: Screenshot Storage in SQLite
 
-**File**: `crates/spectator-godot/src/recorder.rs`
+**File**: `crates/stage-godot/src/recorder.rs`
 
 Extend `flush_dashcam_clip_internal` to write screenshots alongside frames.
 
@@ -299,7 +299,7 @@ fn flush_dashcam_clip_internal(&mut self) -> Option<String> {
 
 ### Unit 3: Screenshot Reading in Clip Analysis
 
-**File**: `crates/spectator-server/src/clip_analysis.rs`
+**File**: `crates/stage-server/src/clip_analysis.rs`
 
 ```rust
 /// A screenshot read from a clip's SQLite database.
@@ -368,7 +368,7 @@ pub struct ScreenshotMeta {
 
 ### Unit 4: MCP Tool Actions
 
-**File**: `crates/spectator-server/src/mcp/clips.rs`
+**File**: `crates/stage-server/src/mcp/clips.rs`
 
 Add two new actions to the `clips` tool: `screenshot_at` and `screenshots`.
 
@@ -479,7 +479,7 @@ pub async fn handle_clips(
 ```
 
 **Implementation Notes:**
-- The `base64` crate must be added to `spectator-server/Cargo.toml`.
+- The `base64` crate must be added to `stage-server/Cargo.toml`.
 - All existing actions must be wrapped: their current `Result<String, McpError>`
   return values become `CallToolResult::success(vec![Content::text(s)])`.
 - The `#[tool]` macro handler in `mcp/mod.rs` that calls `handle_clips` must
@@ -499,7 +499,7 @@ pub async fn handle_clips(
 
 ### Unit 5: Dashcam Config Extension
 
-**File**: `crates/spectator-godot/src/recorder.rs`
+**File**: `crates/stage-godot/src/recorder.rs`
 
 Extend `apply_dashcam_config` and `get_dashcam_config_json` to include
 screenshot settings.
@@ -515,7 +515,7 @@ screenshot settings.
 // In get_dashcam_config_json, serialize new keys alongside existing ones.
 ```
 
-**File**: `crates/spectator-server/src/mcp/clips.rs`
+**File**: `crates/stage-server/src/mcp/clips.rs`
 
 The `status` action response already includes `config` — no changes needed
 since the config JSON is passed through from the addon.
@@ -529,7 +529,7 @@ since the config JSON is passed through from the addon.
 
 ### Unit 6: Screenshot Status in Dashcam Status
 
-**File**: `crates/spectator-godot/src/recorder.rs`
+**File**: `crates/stage-godot/src/recorder.rs`
 
 Add screenshot buffer stats to the dashcam status query.
 
@@ -546,12 +546,12 @@ pub fn get_screenshot_buffer_kb(&self) -> u32 {
 }
 ```
 
-**File**: `crates/spectator-godot/src/recording_handler.rs`
+**File**: `crates/stage-godot/src/recording_handler.rs`
 
 Extend `handle_dashcam_status` to include screenshot stats:
 
 ```rust
-fn handle_dashcam_status(recorder: &mut Gd<SpectatorRecorder>) -> Result<Value, (String, String)> {
+fn handle_dashcam_status(recorder: &mut Gd<StageRecorder>) -> Result<Value, (String, String)> {
     let rec = recorder.bind();
     // ... existing fields ...
     let screenshot_count = rec.get_screenshot_buffer_count();
@@ -589,17 +589,17 @@ fn handle_dashcam_status(recorder: &mut Gd<SpectatorRecorder>) -> Result<Value, 
 
 ## Dependencies
 
-- `base64` crate added to `spectator-server/Cargo.toml` (for JPEG→base64
+- `base64` crate added to `stage-server/Cargo.toml` (for JPEG→base64
   encoding in MCP responses).
-- No new dependencies needed in `spectator-godot` — Godot's `Image` class
+- No new dependencies needed in `stage-godot` — Godot's `Image` class
   provides JPEG encoding natively.
-- No changes to `spectator-protocol` — screenshots don't flow over TCP.
+- No changes to `stage-protocol` — screenshots don't flow over TCP.
   They're captured in GDExtension, stored in SQLite, and read directly by
   the server.
 
 ## Testing
 
-### Unit Tests: `crates/spectator-godot/src/recorder.rs`
+### Unit Tests: `crates/stage-godot/src/recorder.rs`
 
 Screenshot capture involves Godot's viewport API which is unavailable in
 headless unit tests. Test the following without Godot:
@@ -610,7 +610,7 @@ headless unit tests. Test the following without Godot:
   comparison logic.
 - **Config parsing:** Verify `apply_dashcam_config` handles screenshot keys.
 
-### Unit Tests: `crates/spectator-server/src/clip_analysis.rs`
+### Unit Tests: `crates/stage-server/src/clip_analysis.rs`
 
 - **`read_screenshot_near_frame`:** Create in-memory SQLite DB with screenshots
   table, insert test rows, verify nearest-frame lookup.
@@ -621,7 +621,7 @@ headless unit tests. Test the following without Godot:
 
 ### Test Harness Changes
 
-**File**: `crates/spectator-server/tests/support/mod.rs`
+**File**: `crates/stage-server/tests/support/mod.rs`
 
 The `dispatch_tool` / `dispatch_tool_raw` helpers currently assume all tools
 return `Result<String, McpError>`. When the `clips` handler changes to return
@@ -631,7 +631,7 @@ Add a `dispatch_tool_result` variant that returns `CallToolResult`:
 
 ```rust
 pub async fn dispatch_tool_result(
-    server: &SpectatorServer,
+    server: &StageServer,
     name: &str,
     params: serde_json::Value,
 ) -> Result<CallToolResult, McpError> {
@@ -658,7 +658,7 @@ impl E2EHarness {
 
 ### E2E Journey Tests
 
-**File**: `crates/spectator-server/tests/e2e_journeys.rs`
+**File**: `crates/stage-server/tests/e2e_journeys.rs`
 
 #### Journey: `journey_screenshot_capture_and_retrieval`
 
@@ -922,11 +922,11 @@ async fn journey_screenshot_status_fields() {
 cargo build --workspace
 
 # Run all tests (unit + integration + E2E)
-theatre-deploy ~/dev/spectator/tests/godot-project
+theatre-deploy ~/dev/stage/tests/godot-project
 cargo test --workspace
 
 # Run only the new E2E screenshot journeys
-cargo test -p spectator-server --test e2e_journeys journey_screenshot -- --nocapture
+cargo test -p stage-server --test e2e_journeys journey_screenshot -- --nocapture
 
 # Lint
 cargo clippy --workspace

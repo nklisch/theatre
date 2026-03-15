@@ -34,15 +34,15 @@ All operations accept `project_path` as the first parameter — the absolute pat
 
 Director routes operations to whichever backend is available:
 
-### Editor plugin (port 6550) — preferred
+### Editor plugin (port 6551) — preferred
 
-When the Director addon is running in the open Godot editor, it listens on port 6550. Operations execute using the full editor API, including resource saving, scene import processing, and script reloading. Changes appear immediately in the editor.
+When the Director addon is running in the open Godot editor, it listens on port 6551. Operations execute using the full editor API, including resource saving, scene import processing, and script reloading. Changes appear immediately in the editor.
 
 **Best for**: Any time you have the editor open.
 
-### Headless daemon (port 6551) — fallback
+### Headless daemon (port 6550) — fallback
 
-A Godot headless process (`godot --headless --script addons/director/daemon.gd`) can be running in the background. It listens on port 6551 and processes operations using Godot's resource system without a GUI.
+A Godot headless process (`godot --headless --script addons/director/daemon.gd`) can be running in the background. It listens on port 6550 and processes operations using Godot's resource system without a GUI.
 
 **Best for**: CI/CD pipelines, batch operations, working without the editor open.
 
@@ -54,7 +54,7 @@ If neither TCP backend is reachable, Director spawns a temporary Godot process, 
 
 ### You do not pick the backend
 
-The `director` binary tries port 6550, then 6551, then one-shot. You just call the MCP tool — Director handles routing automatically. If the editor is open, it uses the editor. If not, it falls back gracefully.
+The `director` binary tries port 6551, then 6550, then one-shot. You just call the MCP tool — Director handles routing automatically. If the editor is open, it uses the editor. If not, it falls back gracefully.
 
 ## `project_path` is always first
 

@@ -1034,7 +1034,7 @@ cargo clippy --workspace
 cargo fmt --check
 
 # Deploy GDExtension to test project
-theatre-deploy ~/dev/spectator/tests/godot-project
+theatre-deploy ~/dev/stage/tests/godot-project
 
 # Run all tests
 cargo test --workspace

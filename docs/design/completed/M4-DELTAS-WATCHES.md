@@ -15,9 +15,9 @@ One enhancement: `return_delta` on `spatial_action` responses.
 
 ## Implementation Units
 
-### Unit 1: Snapshot State Storage (`spectator-core`)
+### Unit 1: Snapshot State Storage (`stage-core`)
 
-**File:** `crates/spectator-core/src/delta.rs` (new)
+**File:** `crates/stage-core/src/delta.rs` (new)
 
 The delta engine needs to store the "last known state" per entity to compute diffs. This module tracks entity snapshots and computes changes.
 
@@ -324,7 +324,7 @@ fn values_equal(a: &serde_json::Value, b: &serde_json::Value) -> bool {
 ```
 
 **Implementation Notes:**
-- `DeltaEngine` lives in spectator-core (pure Rust, no Godot/MCP deps)
+- `DeltaEngine` lives in stage-core (pure Rust, no Godot/MCP deps)
 - `store_snapshot` is called after every `spatial_snapshot` and `spatial_delta` so the baseline is always fresh
 - `compute_delta` is pure: it takes current data and compares against stored state
 - The `event_buffer` is filled by push events from the addon (signal subscriptions, future M4 addition)
@@ -342,9 +342,9 @@ fn values_equal(a: &serde_json::Value, b: &serde_json::Value) -> bool {
 
 ---
 
-### Unit 2: Watch Engine (`spectator-core`)
+### Unit 2: Watch Engine (`stage-core`)
 
-**File:** `crates/spectator-core/src/watch.rs` (new)
+**File:** `crates/stage-core/src/watch.rs` (new)
 
 The watch engine manages subscriptions and evaluates conditions against entity state. It is pure computation — no Godot or MCP deps.
 
@@ -627,9 +627,9 @@ fn evaluate_condition(
 
 ---
 
-### Unit 3: Wire `delta` and `watch` into `spectator-core` exports
+### Unit 3: Wire `delta` and `watch` into `stage-core` exports
 
-**File:** `crates/spectator-core/src/lib.rs` (edit)
+**File:** `crates/stage-core/src/lib.rs` (edit)
 
 ```rust
 pub mod bearing;
@@ -641,27 +641,27 @@ pub mod types;
 pub mod watch;
 ```
 
-**File:** `crates/spectator-core/src/delta.rs` — make `values_equal` public:
+**File:** `crates/stage-core/src/delta.rs` — make `values_equal` public:
 
 ```rust
 pub fn values_equal(a: &serde_json::Value, b: &serde_json::Value) -> bool {
 ```
 
 **Acceptance Criteria:**
-- [ ] `spectator_core::delta` and `spectator_core::watch` are accessible from `spectator-server`
+- [ ] `stage_core::delta` and `stage_core::watch` are accessible from `stage-server`
 - [ ] Workspace builds with `cargo build --workspace`
 
 ---
 
-### Unit 4: Add Delta Engine and Watch Engine to SessionState (`spectator-server`)
+### Unit 4: Add Delta Engine and Watch Engine to SessionState (`stage-server`)
 
-**File:** `crates/spectator-server/src/tcp.rs` (edit)
+**File:** `crates/stage-server/src/tcp.rs` (edit)
 
 Add `DeltaEngine` and `WatchEngine` to `SessionState`:
 
 ```rust
-use spectator_core::delta::DeltaEngine;
-use spectator_core::watch::WatchEngine;
+use stage_core::delta::DeltaEngine;
+use stage_core::watch::WatchEngine;
 
 pub struct SessionState {
     pub tcp_writer: Option<TcpClientHandle>,
@@ -719,17 +719,17 @@ Also add reconnection handling in the `tcp_client_loop` disconnect cleanup:
 
 ---
 
-### Unit 5: Store Snapshot in Delta Engine (`spectator-server`)
+### Unit 5: Store Snapshot in Delta Engine (`stage-server`)
 
-**File:** `crates/spectator-server/src/mcp/snapshot.rs` (edit)
+**File:** `crates/stage-server/src/mcp/snapshot.rs` (edit)
 
 After a `spatial_snapshot` completes and the spatial index is rebuilt, store the entity data in the delta engine. This is the auto-update mechanism — every snapshot call automatically becomes the new delta baseline.
 
 Add a helper to convert `EntityData` to `EntitySnapshot`:
 
 ```rust
-use spectator_core::delta::EntitySnapshot;
-use spectator_core::types::vec_to_array3;
+use stage_core::delta::EntitySnapshot;
+use stage_core::types::vec_to_array3;
 
 /// Convert protocol EntityData to a delta-compatible EntitySnapshot.
 pub fn to_entity_snapshot(e: &EntityData) -> EntitySnapshot {
@@ -772,25 +772,25 @@ In the `spatial_snapshot` handler, after rebuilding the spatial index (step 6b),
 
 ---
 
-### Unit 6: `spatial_delta` MCP Tool (`spectator-server`)
+### Unit 6: `spatial_delta` MCP Tool (`stage-server`)
 
-**File:** `crates/spectator-server/src/mcp/delta.rs` (new)
+**File:** `crates/stage-server/src/mcp/delta.rs` (new)
 
 ```rust
 use rmcp::model::ErrorData as McpError;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-use spectator_core::{
+use stage_core::{
     bearing,
     budget::{estimate_tokens, resolve_budget, SnapshotBudgetDefaults},
     delta::{DeltaResult, EntitySnapshot},
     types::vec_to_array3,
 };
-use spectator_protocol::query::{GetSnapshotDataParams, DetailLevel, PerspectiveParam};
+use stage_protocol::query::{GetSnapshotDataParams, DetailLevel, PerspectiveParam};
 
 use crate::tcp::query_addon;
-use crate::server::SpectatorServer;
+use crate::server::StageServer;
 
 use super::{deserialize_response, inject_budget, serialize_params, serialize_response};
 use super::snapshot::to_entity_snapshot;
@@ -823,7 +823,7 @@ fn default_perspective() -> String { "camera".to_string() }
 fn default_radius() -> f64 { 50.0 }
 ```
 
-In `crates/spectator-server/src/mcp/mod.rs`, add the delta module and tool registration:
+In `crates/stage-server/src/mcp/mod.rs`, add the delta module and tool registration:
 
 ```rust
 pub mod delta;
@@ -887,7 +887,7 @@ pub async fn handle_spatial_delta(
         detail: DetailLevel::Standard,
     };
 
-    let raw_data: spectator_protocol::query::SnapshotResponse = {
+    let raw_data: stage_protocol::query::SnapshotResponse = {
         let data = query_addon(state, "get_snapshot_data", serialize_params(&query_params)?)
             .await?;
         deserialize_response(data)?
@@ -920,17 +920,17 @@ pub async fn handle_spatial_delta(
         s.delta_engine.store_snapshot(raw_data.frame, current_snapshots.clone());
 
         // Rebuild spatial index
-        let indexed: Vec<spectator_core::index::IndexedEntity> = raw_data
+        let indexed: Vec<stage_core::index::IndexedEntity> = raw_data
             .entities
             .iter()
-            .map(|e| spectator_core::index::IndexedEntity {
+            .map(|e| stage_core::index::IndexedEntity {
                 path: e.path.clone(),
                 class: e.class.clone(),
                 position: vec_to_array3(&e.position),
                 groups: e.groups.clone(),
             })
             .collect();
-        s.spatial_index = spectator_core::index::SpatialIndex::build(indexed);
+        s.spatial_index = stage_core::index::SpatialIndex::build(indexed);
 
         (delta, triggers, from)
     };
@@ -994,21 +994,21 @@ pub async fn handle_spatial_delta(
 
 ---
 
-### Unit 7: `spatial_watch` MCP Tool (`spectator-server`)
+### Unit 7: `spatial_watch` MCP Tool (`stage-server`)
 
-**File:** `crates/spectator-server/src/mcp/watch.rs` (new)
+**File:** `crates/stage-server/src/mcp/watch.rs` (new)
 
 ```rust
 use rmcp::model::ErrorData as McpError;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
-use spectator_core::{
+use stage_core::{
     budget::estimate_tokens,
     watch::{ConditionOperator, TrackCategory, WatchCondition},
 };
 
-use crate::server::SpectatorServer;
+use crate::server::StageServer;
 
 use super::{inject_budget, serialize_response};
 
@@ -1257,9 +1257,9 @@ pub async fn spatial_watch(
 
 ---
 
-### Unit 8: Wire `return_delta` on `spatial_action` (`spectator-server`)
+### Unit 8: Wire `return_delta` on `spatial_action` (`stage-server`)
 
-**File:** `crates/spectator-server/src/mcp/mod.rs` (edit the `spatial_action` handler)
+**File:** `crates/stage-server/src/mcp/mod.rs` (edit the `spatial_action` handler)
 
 Replace the M4 placeholder in the `spatial_action` handler with real delta computation:
 
@@ -1279,7 +1279,7 @@ pub async fn spatial_action(
     let mut response: serde_json::Value = data;
 
     let json_bytes = serde_json::to_vec(&response).unwrap_or_default().len();
-    let used = spectator_core::budget::estimate_tokens(json_bytes);
+    let used = stage_core::budget::estimate_tokens(json_bytes);
     inject_budget(&mut response, used, 500);
 
     if params.return_delta {
@@ -1291,13 +1291,13 @@ pub async fn spatial_action(
 
         if has_baseline {
             // Fetch current snapshot from addon
-            let query_params = spectator_protocol::query::GetSnapshotDataParams {
-                perspective: spectator_protocol::query::PerspectiveParam::Camera,
+            let query_params = stage_protocol::query::GetSnapshotDataParams {
+                perspective: stage_protocol::query::PerspectiveParam::Camera,
                 radius: 50.0,
                 include_offscreen: true,
                 groups: vec![],
                 class_filter: vec![],
-                detail: spectator_protocol::query::DetailLevel::Standard,
+                detail: stage_protocol::query::DetailLevel::Standard,
             };
 
             if let Ok(snap_data) = query_addon(
@@ -1307,8 +1307,8 @@ pub async fn spatial_action(
             )
             .await
             {
-                if let Ok(raw_data) = serde_json::from_value::<spectator_protocol::query::SnapshotResponse>(snap_data) {
-                    let current_snapshots: Vec<spectator_core::delta::EntitySnapshot> = raw_data
+                if let Ok(raw_data) = serde_json::from_value::<stage_protocol::query::SnapshotResponse>(snap_data) {
+                    let current_snapshots: Vec<stage_core::delta::EntitySnapshot> = raw_data
                         .entities
                         .iter()
                         .map(snapshot::to_entity_snapshot)
@@ -1389,7 +1389,7 @@ pub async fn spatial_action(
 
 ### Unit 9: Delta Engine `last_snapshot_map` Accessor
 
-**File:** `crates/spectator-core/src/delta.rs` (edit)
+**File:** `crates/stage-core/src/delta.rs` (edit)
 
 Add a public accessor for the watch engine to read the previous state:
 
@@ -1410,7 +1410,7 @@ impl DeltaEngine {
 
 ### Unit 10: Push Event Handling for Signal Subscriptions
 
-**File:** `crates/spectator-protocol/src/query.rs` (edit — append)
+**File:** `crates/stage-protocol/src/query.rs` (edit — append)
 
 Add protocol types for signal subscription:
 
@@ -1430,7 +1430,7 @@ pub struct UnsubscribeSignalParams {
 }
 ```
 
-**File:** `crates/spectator-server/src/tcp.rs` (edit)
+**File:** `crates/stage-server/src/tcp.rs` (edit)
 
 In the read loop, handle `Event` messages by pushing them into the delta engine:
 
@@ -1443,8 +1443,8 @@ Ok(Message::Event { event, data }) => {
             data.get("signal").and_then(|v| v.as_str()),
             data.get("frame").and_then(|v| v.as_u64()),
         ) {
-            s.delta_engine.push_event(spectator_core::delta::BufferedEvent {
-                event_type: spectator_core::delta::BufferedEventType::SignalEmitted,
+            s.delta_engine.push_event(stage_core::delta::BufferedEvent {
+                event_type: stage_core::delta::BufferedEventType::SignalEmitted,
                 path: node.to_string(),
                 frame,
                 data: serde_json::json!({
@@ -1462,7 +1462,7 @@ Ok(Message::Event { event, data }) => {
 **Implementation Notes:**
 - Signal subscription (`subscribe_signal`/`unsubscribe_signal`) is handled on the addon side — for M4, we handle the push events that arrive, but don't implement the subscribe/unsubscribe commands yet. The addon doesn't currently support signal subscriptions, so this unit is **future-ready plumbing only**.
 - The delta engine's `event_buffer` is drained during `compute_delta` and included in the `signals_emitted` section of the response.
-- The `Event` message type already exists in `spectator-protocol/messages.rs` — we just need to handle it in the read loop.
+- The `Event` message type already exists in `stage-protocol/messages.rs` — we just need to handle it in the read loop.
 
 **Acceptance Criteria:**
 - [ ] `Event` messages from addon are parsed and stored in delta engine
@@ -1473,7 +1473,7 @@ Ok(Message::Event { event, data }) => {
 
 ### Unit 11: Include Buffered Events in Delta Response
 
-**File:** `crates/spectator-server/src/mcp/delta.rs` (edit)
+**File:** `crates/stage-server/src/mcp/delta.rs` (edit)
 
 After computing the delta and before building the response, drain events from the delta engine and include them:
 
@@ -1490,7 +1490,7 @@ let signals_emitted = {
 if !signals_emitted.is_empty() {
     let signal_entries: Vec<serde_json::Value> = signals_emitted
         .iter()
-        .filter(|e| matches!(e.event_type, spectator_core::delta::BufferedEventType::SignalEmitted))
+        .filter(|e| matches!(e.event_type, stage_core::delta::BufferedEventType::SignalEmitted))
         .map(|e| {
             serde_json::json!({
                 "path": e.path,
@@ -1517,9 +1517,9 @@ if !signals_emitted.is_empty() {
 
 ## Implementation Order
 
-1. **Unit 1**: Delta engine (`spectator-core/delta.rs`) — pure logic, no deps on other units
-2. **Unit 2**: Watch engine (`spectator-core/watch.rs`) — depends on Unit 1 for `values_equal`
-3. **Unit 3**: Wire modules into `spectator-core/lib.rs`
+1. **Unit 1**: Delta engine (`stage-core/delta.rs`) — pure logic, no deps on other units
+2. **Unit 2**: Watch engine (`stage-core/watch.rs`) — depends on Unit 1 for `values_equal`
+3. **Unit 3**: Wire modules into `stage-core/lib.rs`
 4. **Unit 9**: Add `last_snapshot_map` accessor to delta engine
 5. **Unit 4**: Add engines to `SessionState` — depends on Units 1-3
 6. **Unit 5**: Store snapshot in delta engine from `spatial_snapshot` — depends on Unit 4
@@ -1533,7 +1533,7 @@ if !signals_emitted.is_empty() {
 
 ## Testing
 
-### Unit Tests: `crates/spectator-core/src/delta.rs`
+### Unit Tests: `crates/stage-core/src/delta.rs`
 
 ```rust
 #[cfg(test)]
@@ -1593,7 +1593,7 @@ mod tests {
 }
 ```
 
-### Unit Tests: `crates/spectator-core/src/watch.rs`
+### Unit Tests: `crates/stage-core/src/watch.rs`
 
 ```rust
 #[cfg(test)]
@@ -1649,7 +1649,7 @@ mod tests {
 }
 ```
 
-### Integration-level Tests: `crates/spectator-server/src/mcp/delta.rs`
+### Integration-level Tests: `crates/stage-server/src/mcp/delta.rs`
 
 These test the MCP parameter parsing and response building. Since the actual addon call requires a running Godot instance, these test the param validation and error paths:
 
@@ -1669,7 +1669,7 @@ mod tests {
 }
 ```
 
-### Integration-level Tests: `crates/spectator-server/src/mcp/watch.rs`
+### Integration-level Tests: `crates/stage-server/src/mcp/watch.rs`
 
 ```rust
 #[cfg(test)]
@@ -1718,8 +1718,8 @@ cargo clippy --workspace
 cargo fmt --check
 
 # Verify new modules compile
-cargo test -p spectator-core -- delta
-cargo test -p spectator-core -- watch
+cargo test -p stage-core -- delta
+cargo test -p stage-core -- watch
 
 # Verify MCP tool registration (check tool count)
 # The server should register 7 tools: spatial_snapshot, spatial_inspect,

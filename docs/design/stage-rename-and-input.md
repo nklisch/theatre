@@ -1,10 +1,10 @@
-# Design: Rename Spectator → Stage + Input Injection
+# Design: Rename Stage → Stage + Input Injection
 
 ## Overview
 
 Two changes shipped together:
 
-1. **Rename** every occurrence of "Spectator" to "Stage" — crate names, binary name,
+1. **Rename** every occurrence of "Stage" to "Stage" — crate names, binary name,
    GDExtension classes, addon directory, config file, env vars, docs, skills, CI.
 2. **Input injection** — four new `spatial_action` action types that let agents
    drive a running Godot game: `action_press`, `action_release`, `inject_key`,
@@ -14,38 +14,38 @@ Two changes shipped together:
 
 | Old | New |
 |-----|-----|
-| `spectator` (binary) | `stage` |
-| `spectator-server` (crate) | `stage-server` |
-| `spectator-godot` (crate) | `stage-godot` |
-| `spectator-protocol` (crate) | `stage-protocol` |
-| `spectator-core` (crate) | `stage-core` |
-| `spectator-wire-tests` (crate) | `stage-wire-tests` |
-| `SpectatorServer` (struct) | `StageServer` |
-| `SpectatorExtension` (struct) | `StageExtension` |
-| `SpectatorTCPServer` (GDExtension class) | `StageTCPServer` |
-| `SpectatorCollector` (GDExtension class) | `StageCollector` |
-| `SpectatorRecorder` (GDExtension class) | `StageRecorder` |
-| `SpectatorToml` (struct) | `StageToml` |
-| `SpectatorCliFixture` (test) | `StageCliFixture` |
-| `SpectatorRuntime` (autoload) | `StageRuntime` |
-| `SpectatorDock` (scene node) | `StageDock` |
-| `spectator.toml` (config file) | `stage.toml` |
-| `spectator.gdextension` | `stage.gdextension` |
-| `libspectator_godot.so/dylib` | `libstage_godot.so/dylib` |
-| `spectator_godot.dll` | `stage_godot.dll` |
-| `addons/spectator/` | `addons/stage/` |
-| `SPECTATOR_PORT` (env, deprecated) | keep as deprecated alias |
-| `SPECTATOR_PROJECT_DIR` (env) | keep as deprecated alias |
-| `spectator=info` (tracing) | `stage=info` |
-| `"spectator"` (debugger channel) | `"stage"` |
-| `theatre/spectator/...` (project settings) | `theatre/stage/...` |
-| `site/spectator/` | `site/stage/` |
-| `.agents/skills/spectator/` | `.agents/skills/stage/` |
-| `.agents/skills/spectator-dev/` | `.agents/skills/stage-dev/` |
+| `stage` (binary) | `stage` |
+| `stage-server` (crate) | `stage-server` |
+| `stage-godot` (crate) | `stage-godot` |
+| `stage-protocol` (crate) | `stage-protocol` |
+| `stage-core` (crate) | `stage-core` |
+| `stage-wire-tests` (crate) | `stage-wire-tests` |
+| `StageServer` (struct) | `StageServer` |
+| `StageExtension` (struct) | `StageExtension` |
+| `StageTCPServer` (GDExtension class) | `StageTCPServer` |
+| `StageCollector` (GDExtension class) | `StageCollector` |
+| `StageRecorder` (GDExtension class) | `StageRecorder` |
+| `StageToml` (struct) | `StageToml` |
+| `StageCliFixture` (test) | `StageCliFixture` |
+| `StageRuntime` (autoload) | `StageRuntime` |
+| `StageDock` (scene node) | `StageDock` |
+| `stage.toml` (config file) | `stage.toml` |
+| `stage.gdextension` | `stage.gdextension` |
+| `libstage_godot.so/dylib` | `libstage_godot.so/dylib` |
+| `stage_godot.dll` | `stage_godot.dll` |
+| `addons/stage/` | `addons/stage/` |
+| `STAGE_PORT` (env, deprecated) | keep as deprecated alias |
+| `STAGE_PROJECT_DIR` (env) | keep as deprecated alias |
+| `stage=info` (tracing) | `stage=info` |
+| `"stage"` (debugger channel) | `"stage"` |
+| `theatre/stage/...` (project settings) | `theatre/stage/...` |
+| `site/stage/` | `site/stage/` |
+| `.agents/skills/stage/` | `.agents/skills/stage/` |
+| `.agents/skills/stage-dev/` | `.agents/skills/stage-dev/` |
 
 ### Wire Protocol Compatibility
 
-The Handshake and HandshakeAck structs have `spectator_version` fields.
+The Handshake and HandshakeAck structs have `stage_version` fields.
 These are **wire protocol fields** — renaming them breaks compatibility with
 any existing addon/server pairings. Since there are no external users yet,
 rename to `stage_version`. Bump `PROTOCOL_VERSION` from 1 → 2 to make any
@@ -60,10 +60,10 @@ stale builds fail fast with a clear version mismatch error.
 Move the four crate directories and the test crate:
 
 ```
-crates/spectator-server/    →  crates/stage-server/
-crates/spectator-godot/     →  crates/stage-godot/
-crates/spectator-protocol/  →  crates/stage-protocol/
-crates/spectator-core/      →  crates/stage-core/
+crates/stage-server/    →  crates/stage-server/
+crates/stage-godot/     →  crates/stage-godot/
+crates/stage-protocol/  →  crates/stage-protocol/
+crates/stage-core/      →  crates/stage-core/
 ```
 
 Test crate directory stays at `tests/wire-tests/` (it's fine) but the
@@ -78,19 +78,19 @@ crate name changes in its `Cargo.toml`.
 ### Unit 2: Rename Addon Directory
 
 ```
-addons/spectator/  →  addons/stage/
+addons/stage/  →  addons/stage/
 ```
 
 Inside the new `addons/stage/`:
-- Rename `spectator.gdextension` → `stage.gdextension`
-- Rename `bin/linux/libspectator_godot.so` → `bin/linux/libstage_godot.so` (and other platforms)
+- Rename `stage.gdextension` → `stage.gdextension`
+- Rename `bin/linux/libstage_godot.so` → `bin/linux/libstage_godot.so` (and other platforms)
 - Update `plugin.cfg`: `name="Stage"`
 - Update `stage.gdextension`: all library paths use `addons/stage/bin/<platform>/libstage_godot.*`
 
 **Acceptance Criteria**:
 - [ ] `addons/stage/plugin.cfg` exists with `name="Stage"`
 - [ ] `addons/stage/stage.gdextension` paths reference `addons/stage/bin/...`
-- [ ] `addons/spectator/` does not exist
+- [ ] `addons/stage/` does not exist
 
 ---
 
@@ -132,15 +132,15 @@ stage-core = { path = "crates/stage-core" }
 
 **`crates/stage-core/Cargo.toml`**: `name = "stage-core"`
 
-**`crates/director/Cargo.toml`**: dep `stage-protocol` (was `spectator-protocol`)
+**`crates/director/Cargo.toml`**: dep `stage-protocol` (was `stage-protocol`)
 
-**`crates/theatre-cli/Cargo.toml`**: no direct spectator dep (it's pure CLI)
+**`crates/theatre-cli/Cargo.toml`**: no direct stage dep (it's pure CLI)
 
-**`crates/theatre-docs-gen/Cargo.toml`**: dep `stage-server` (was `spectator-server`)
+**`crates/theatre-docs-gen/Cargo.toml`**: dep `stage-server` (was `stage-server`)
 
 **`tests/wire-tests/Cargo.toml`**: `name = "stage-wire-tests"`, dep `stage-protocol`
 
-**`tests/director-tests/Cargo.toml`**: dep `stage-protocol` (was `spectator-protocol`)
+**`tests/director-tests/Cargo.toml`**: dep `stage-protocol` (was `stage-protocol`)
 
 **Acceptance Criteria**:
 - [ ] `cargo build --workspace` succeeds
@@ -151,36 +151,36 @@ stage-core = { path = "crates/stage-core" }
 
 ### Unit 4: Rename Rust Structs and Imports
 
-All `use spectator_protocol::` → `use stage_protocol::`, etc.
+All `use stage_protocol::` → `use stage_protocol::`, etc.
 
 **Struct renames** (find+replace within each crate):
 
 | File(s) | Old | New |
 |---------|-----|-----|
-| `stage-server/src/server.rs`, `main.rs`, `mcp/mod.rs` | `SpectatorServer` | `StageServer` |
-| `stage-godot/src/lib.rs` | `SpectatorExtension` | `StageExtension` |
-| `stage-godot/src/tcp_server.rs` | `SpectatorTCPServer` | `StageTCPServer` |
-| `stage-godot/src/collector.rs` | `SpectatorCollector` | `StageCollector` |
-| `stage-godot/src/recorder.rs` | `SpectatorRecorder` | `StageRecorder` |
-| `stage-server/src/config.rs` | `SpectatorToml` | `StageToml` |
-| `stage-server/tests/support/cli_fixture.rs` | `SpectatorCliFixture` | `StageCliFixture` |
+| `stage-server/src/server.rs`, `main.rs`, `mcp/mod.rs` | `StageServer` | `StageServer` |
+| `stage-godot/src/lib.rs` | `StageExtension` | `StageExtension` |
+| `stage-godot/src/tcp_server.rs` | `StageTCPServer` | `StageTCPServer` |
+| `stage-godot/src/collector.rs` | `StageCollector` | `StageCollector` |
+| `stage-godot/src/recorder.rs` | `StageRecorder` | `StageRecorder` |
+| `stage-server/src/config.rs` | `StageToml` | `StageToml` |
+| `stage-server/tests/support/cli_fixture.rs` | `StageCliFixture` | `StageCliFixture` |
 
 **Import renames** (all files):
-- `use spectator_protocol::` → `use stage_protocol::`
-- `use spectator_core::` → `use stage_core::`
-- `use spectator_server::` → `use stage_server::`
-- `spectator_protocol` in `extern crate` or path refs → `stage_protocol`
+- `use stage_protocol::` → `use stage_protocol::`
+- `use stage_core::` → `use stage_core::`
+- `use stage_server::` → `use stage_server::`
+- `stage_protocol` in `extern crate` or path refs → `stage_protocol`
 
 **String literal renames**:
-- `"spectator=info"` / `"spectator=warn"` → `"stage=info"` / `"stage=warn"` (tracing directives)
-- `"spectator.toml"` → `"stage.toml"` (config file name)
-- `spectator_version` field in `Handshake`, `HandshakeAck`, `HandshakeError` → `stage_version`
-- `env!("CARGO_BIN_EXE_spectator")` → `env!("CARGO_BIN_EXE_stage")` (test fixtures)
-- `make_spectator_error` → `make_stage_error` (if exists in tcp.rs)
+- `"stage=info"` / `"stage=warn"` → `"stage=info"` / `"stage=warn"` (tracing directives)
+- `"stage.toml"` → `"stage.toml"` (config file name)
+- `stage_version` field in `Handshake`, `HandshakeAck`, `HandshakeError` → `stage_version`
+- `env!("CARGO_BIN_EXE_stage")` → `env!("CARGO_BIN_EXE_stage")` (test fixtures)
+- `make_stage_error` → `make_stage_error` (if exists in tcp.rs)
 
 **Env var handling** (in `main.rs` and `cli.rs`):
-- `SPECTATOR_PORT` — keep as deprecated fallback (already behind `THEATRE_PORT`)
-- `SPECTATOR_PROJECT_DIR` — keep as deprecated fallback
+- `STAGE_PORT` — keep as deprecated fallback (already behind `THEATRE_PORT`)
+- `STAGE_PROJECT_DIR` — keep as deprecated fallback
 
 **Protocol version bump** (in `stage-protocol/src/handshake.rs`):
 ```rust
@@ -188,20 +188,20 @@ pub const PROTOCOL_VERSION: u32 = 2;
 ```
 
 **Acceptance Criteria**:
-- [ ] `cargo build --workspace` succeeds with zero warnings about `spectator`
+- [ ] `cargo build --workspace` succeeds with zero warnings about `stage`
 - [ ] `cargo test --workspace` passes
-- [ ] `grep -r "spectator" crates/ --include="*.rs" -l` returns zero results (except deprecated env var fallback strings)
+- [ ] `grep -r "stage" crates/ --include="*.rs" -l` returns zero results (except deprecated env var fallback strings)
 
 ---
 
 ### Unit 5: Update GDScript Files
 
 **`addons/stage/runtime.gd`**:
-- `ClassDB.class_exists(&"StageTCPServer")` (was `SpectatorTCPServer`)
+- `ClassDB.class_exists(&"StageTCPServer")` (was `StageTCPServer`)
 - `ClassDB.instantiate(&"StageTCPServer")`, `&"StageCollector"`, `&"StageRecorder"`
-- `[Stage]` prefix in push_error/push_warning (was `[Spectator]`)
-- `SPECTATOR_PORT` env var — keep as fallback with comment
-- Project settings: `"theatre/stage/connection/..."` (was `theatre/spectator/...`)
+- `[Stage]` prefix in push_error/push_warning (was `[Stage]`)
+- `STAGE_PORT` env var — keep as fallback with comment
+- Project settings: `"theatre/stage/connection/..."` (was `theatre/stage/...`)
 - Debugger channel: `"stage"`, messages `"stage:status"`, `"stage:command"`, `"stage:activity"`
 - Autoload name if referenced: `"StageRuntime"`
 
@@ -210,10 +210,10 @@ pub const PROTOCOL_VERSION: u32 = 2;
 - `preload("res://addons/stage/debugger_plugin.gd")`
 - `add_autoload_singleton("StageRuntime", "res://addons/stage/runtime.gd")`
 - `remove_autoload_singleton("StageRuntime")`
-- Project settings: `"theatre/stage/..."` (was `theatre/spectator/...`)
+- Project settings: `"theatre/stage/..."` (was `theatre/stage/...`)
 
 **`addons/stage/debugger_plugin.gd`**:
-- `return prefix == "stage"` (was `"spectator"`)
+- `return prefix == "stage"` (was `"stage"`)
 - Message handlers: `"stage:status"`, `"stage:activity"`
 
 **`addons/stage/dock.tscn`**:
@@ -224,8 +224,8 @@ pub const PROTOCOL_VERSION: u32 = 2;
 - `name="Stage"`
 
 **Acceptance Criteria**:
-- [ ] `grep -r "spectator" addons/stage/ -l` returns zero results (except deprecated env var comment)
-- [ ] `grep -r "Spectator" addons/stage/ -l` returns zero results
+- [ ] `grep -r "stage" addons/stage/ -l` returns zero results (except deprecated env var comment)
+- [ ] `grep -r "Stage" addons/stage/ -l` returns zero results
 
 ---
 
@@ -233,24 +233,24 @@ pub const PROTOCOL_VERSION: u32 = 2;
 
 **`crates/theatre-cli/src/paths.rs`**:
 - `gdext_filename()`: `"libstage_godot.so"`, `"libstage_godot.dylib"`, `"stage_godot.dll"`
-- `gdext_binary()`: `.join("stage")` (was `.join("spectator")`)
+- `gdext_binary()`: `.join("stage")` (was `.join("stage")`)
 - `validate_installed()`: check `addon_dir.join("stage").join("plugin.cfg")`
 - Tests: update expected filenames
 
 **`crates/theatre-cli/src/install.rs`**:
-- `"stage-godot"` (was `"spectator-godot"`)
-- `"stage-server"` (was `"spectator-server"`)
-- `"stage"` binary name (was `"spectator"`)
-- addon path: `"stage"` (was `"spectator"`)
+- `"stage-godot"` (was `"stage-godot"`)
+- `"stage-server"` (was `"stage-server"`)
+- `"stage"` binary name (was `"stage"`)
+- addon path: `"stage"` (was `"stage"`)
 
 **`crates/theatre-cli/src/deploy.rs`**:
 - Same pattern: crate names, binary name, addon paths
 
 **`crates/theatre-cli/src/init.rs`**:
-- `SPECTATOR_PLUGIN_CFG` → `STAGE_PLUGIN_CFG` = `"res://addons/stage/plugin.cfg"`
-- `SPECTATOR_RUNTIME_NAME` → `STAGE_RUNTIME_NAME` = `"StageRuntime"`
-- `SPECTATOR_RUNTIME_SCRIPT` → `STAGE_RUNTIME_SCRIPT` = `"*res://addons/stage/runtime.gd"`
-- MCP config key: `"stage"` (was `"spectator"`)
+- `STAGE_PLUGIN_CFG` = `"res://addons/stage/plugin.cfg"`
+- `STAGE_RUNTIME_NAME` = `"StageRuntime"`
+- `STAGE_RUNTIME_SCRIPT` = `"*res://addons/stage/runtime.gd"`
+- MCP config key: `"stage"` (was `"stage"`)
 
 **`crates/theatre-cli/src/enable.rs`**:
 - Same constants as init.rs
@@ -261,7 +261,7 @@ pub const PROTOCOL_VERSION: u32 = 2;
 **Acceptance Criteria**:
 - [ ] `cargo build -p theatre-cli` succeeds
 - [ ] `cargo test -p theatre-cli` passes
-- [ ] `grep -r "spectator" crates/theatre-cli/ --include="*.rs" -l` returns zero
+- [ ] `grep -r "stage" crates/theatre-cli/ --include="*.rs" -l` returns zero
 
 ---
 
@@ -272,27 +272,27 @@ pub const PROTOCOL_VERSION: u32 = 2;
 - Plugin path: `"res://addons/stage/plugin.cfg"`
 
 **`tests/godot-project/addons/`**:
-- If symlinked to `addons/spectator/`, update symlink to `addons/stage/`
+- If symlinked to `addons/stage/`, update symlink to `addons/stage/`
 - If copied, rename directory
 
 **`examples/2d-platformer-demo/project.godot`**:
 - Same autoload and plugin path changes
 
 **Test harness files** (`tests/wire-tests/src/harness.rs`):
-- `spectator_version` → `stage_version` in handshake
+- `stage_version` → `stage_version` in handshake
 - session_id: `"wire-test-session"` (unchanged)
 
 **`crates/stage-server/tests/support/`**:
-- `e2e_harness.rs`: `StageServer::new(...)` (was `SpectatorServer`)
-- `cli_fixture.rs`: `StageCliFixture` (was `SpectatorCliFixture`)
+- `e2e_harness.rs`: `StageServer::new(...)` (was `StageServer`)
+- `cli_fixture.rs`: `StageCliFixture` (was `StageCliFixture`)
 - `mod.rs`: `use stage_server::server::StageServer` etc.
-- `godot_process.rs`: stderr log prefix `"stage_godot_{port}"` (was `spectator_godot_`)
+- `godot_process.rs`: stderr log prefix `"stage_godot_{port}"` (was `stage_godot_`)
 
 **`crates/stage-server/tests/cli_binary.rs`**:
-- `env!("CARGO_BIN_EXE_stage")` (was `spectator`)
+- `env!("CARGO_BIN_EXE_stage")` (was `stage`)
 
 **`crates/stage-server/tests/cli_journeys.rs`**:
-- `StageCliFixture` (was `SpectatorCliFixture`)
+- `StageCliFixture` (was `StageCliFixture`)
 
 **Acceptance Criteria**:
 - [ ] `cargo test --workspace --no-run` compiles all test crates
@@ -695,7 +695,7 @@ fn parse_mouse_button(name: &str) -> Result<MouseButton, String> {
 
 ### Unit 11: Update Documentation
 
-**`CLAUDE.md`** — full pass replacing all `spectator` references:
+**`CLAUDE.md`** — full pass replacing all `stage` references:
 - Repository Layout: `stage-server/`, `stage-godot/`, `stage-protocol/`, `stage-core/`
 - Build Commands: `cargo build -p stage-server`, `-p stage-godot`, etc.
 - Binary name: `stage serve`, `stage <tool>`
@@ -706,13 +706,13 @@ fn parse_mouse_button(name: &str) -> Result<MouseButton, String> {
 - stdout constraint: `stage serve`
 
 **`docs/` directory** — update all design docs, specs, migration guide:
-- `THEATRE-MIGRATION.md`: `SPECTATOR_PORT` reference stays (it's about migration)
+- `THEATRE-MIGRATION.md`: `STAGE_PORT` reference stays (it's about migration)
 - Active design docs in `docs/design/`: update references
 - Completed designs in `docs/design/completed/`: leave as-is (historical)
 - `ROADMAP.md`, `SPEC.md`, `CONTRACT.md`, `VISION.md`, `UX.md`, `TECH.md`: update
 
 **Acceptance Criteria**:
-- [ ] `grep -ri "spectator" CLAUDE.md` returns zero (except deprecated env var mentions)
+- [ ] `grep -ri "stage" CLAUDE.md` returns zero (except deprecated env var mentions)
 - [ ] Active design docs updated
 
 ---
@@ -720,15 +720,15 @@ fn parse_mouse_button(name: &str) -> Result<MouseButton, String> {
 ### Unit 12: Update Skills and Agent Config
 
 **`.claude/skills/patterns/*.md`** — all 16 pattern files:
-- Replace `spectator-server` → `stage-server`, `spectator-godot` → `stage-godot`, etc.
-- Replace `SpectatorServer` → `StageServer`, `SpectatorCollector` → `StageCollector`, etc.
-- Replace file paths: `crates/spectator-*/` → `crates/stage-*/`
+- Replace `stage-server` → `stage-server`, `stage-godot` → `stage-godot`, etc.
+- Replace `StageServer` → `StageServer`, `StageCollector` → `StageCollector`, etc.
+- Replace file paths: `crates/stage-*/` → `crates/stage-*/`
 
 **`.claude/rules/patterns.md`** — pattern index file:
 - Update all path references
 
-**`.agents/skills/spectator/` → `.agents/skills/stage/`** (rename directory)
-**`.agents/skills/spectator-dev/` → `.agents/skills/stage-dev/`** (rename directory)
+**`.agents/skills/stage/` → `.agents/skills/stage/`** (rename directory)
+**`.agents/skills/stage-dev/` → `.agents/skills/stage-dev/`** (rename directory)
 - Update SKILL.md content inside each
 
 **`.agents/tap.json`**:
@@ -745,20 +745,20 @@ fn parse_mouse_button(name: &str) -> Result<MouseButton, String> {
 
 **Acceptance Criteria**:
 - [ ] `.agents/skills/stage/SKILL.md` exists
-- [ ] `.agents/skills/spectator/` does not exist
-- [ ] `grep -r "spectator" .claude/skills/ -l` returns zero files
-- [ ] `grep -r "spectator" .agents/ -l` returns zero files
+- [ ] `.agents/skills/stage/` does not exist
+- [ ] `grep -r "stage" .claude/skills/ -l` returns zero files
+- [ ] `grep -r "stage" .agents/ -l` returns zero files
 
 ---
 
 ### Unit 13: Update Site (VitePress)
 
-**Rename directory**: `site/spectator/` → `site/stage/`
+**Rename directory**: `site/stage/` → `site/stage/`
 
 **`site/.vitepress/config.mts`**:
 - Nav: `{ text: 'Stage', link: '/stage/' }`
 - Sidebar key: `'/stage/'` with updated links
-- Replace all `spectator` references
+- Replace all `stage` references
 
 **`site/.vitepress/data/tools.data.ts`**:
 - `server: 'stage' | 'director'`
@@ -767,15 +767,15 @@ fn parse_mouse_button(name: &str) -> Result<MouseButton, String> {
 - `"server": "stage"` (all occurrences)
 - Update description strings
 
-**All `.md` files in `site/`** — replace "Spectator" → "Stage", "spectator" → "stage"
+**All `.md` files in `site/`** — replace "Stage" → "Stage", "stage" → "stage"
 in tool descriptions, headings, URLs, and code examples.
 
 **`site/scripts/check-staleness.sh`**:
-- `for md in "$SITE_DIR"/stage/*.md` (was `spectator`)
+- `for md in "$SITE_DIR"/stage/*.md` (was `stage`)
 
 **Acceptance Criteria**:
 - [ ] `site/stage/` exists with all pages
-- [ ] `site/spectator/` does not exist
+- [ ] `site/stage/` does not exist
 - [ ] VitePress builds successfully
 
 ---
@@ -796,7 +796,7 @@ in tool descriptions, headings, URLs, and code examples.
 - `rsync ... addons/stage/ .../addons/stage/`
 
 **Acceptance Criteria**:
-- [ ] `grep -r "spectator" .github/ -l` returns zero
+- [ ] `grep -r "stage" .github/ -l` returns zero
 
 ---
 
@@ -816,7 +816,7 @@ in tool descriptions, headings, URLs, and code examples.
 - `"  ✓ addons/stage/"`
 
 **Acceptance Criteria**:
-- [ ] `grep -r "spectator" scripts/ -l` returns zero
+- [ ] `grep -r "stage" scripts/ -l` returns zero
 
 ---
 
@@ -873,13 +873,13 @@ cargo fmt --check
 ### Grep Verification
 ```bash
 # Should return ONLY deprecated env var fallback strings in cli.rs/main.rs
-grep -ri "spectator" crates/ --include="*.rs" -l
-grep -ri "spectator" addons/ -l
-grep -ri "spectator" .github/ -l
-grep -ri "spectator" scripts/ -l
-grep -ri "spectator" .claude/ -l
-grep -ri "spectator" .agents/ -l
-grep -ri "spectator" site/ --include="*.md" --include="*.mts" --include="*.ts" --include="*.json" -l
+grep -ri "stage" crates/ --include="*.rs" -l
+grep -ri "stage" addons/ -l
+grep -ri "stage" .github/ -l
+grep -ri "stage" scripts/ -l
+grep -ri "stage" .claude/ -l
+grep -ri "stage" .agents/ -l
+grep -ri "stage" site/ --include="*.md" --include="*.mts" --include="*.ts" --include="*.json" -l
 ```
 
 ### Input Injection Tests
@@ -922,7 +922,7 @@ cargo fmt --check
 ls -la target/debug/stage
 
 # 6. No stale references (allow deprecated env vars)
-! grep -ri "spectator" crates/ --include="*.rs" -l | grep -v "deprecated"
+! grep -ri "stage" crates/ --include="*.rs" -l | grep -v "deprecated"
 
 # 7. Site builds
 cd site && npm run build

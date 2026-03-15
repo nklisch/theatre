@@ -1,10 +1,10 @@
 <script setup lang="ts">
 /**
  * Renders the Theatre architecture flow diagram.
- * Props control which path to highlight (spectator, director, or both).
+ * Props control which path to highlight (stage, director, or both).
  */
 defineProps<{
-  highlight?: 'spectator' | 'director' | 'both'
+  highlight?: 'stage' | 'director' | 'both'
 }>()
 </script>
 
@@ -16,14 +16,14 @@ defineProps<{
 │           (Claude Code, Cursor, etc.)               │
 └──────┬──────────────────────┬───────────────────────┘
        │                      │
-  Spectator (MCP)        Director (MCP)
-  <em>observe the game</em>      <em>build the game</em>
+    Stage (MCP)          Director (MCP)
+  <em>observe &amp; interact</em>    <em>build the game</em>
        │                      │
   ┌────▼────────┐      ┌──────▼──────┐
-  │  spectator  │      │  director   │
-  │  -server    │      │   server    │
+  │   stage     │      │  director   │
+  │   server    │      │   server    │
   └────┬────────┘      └──────┬──────┘
-       │ TCP :9077            │ TCP :6550/:6551
+       │ TCP :9077            │ TCP :6551/:6550
   ┌────▼────────┐      ┌──────▼──────┐
   │   Godot     │      │   Godot     │
   │ GDExtension │      │ GDScript    │
@@ -41,7 +41,7 @@ defineProps<{
   font-style: normal;
   color: var(--vp-c-text-3);
 }
-.arch-pre.spectator em:first-of-type,
+.arch-pre.stage em:first-of-type,
 .arch-pre.both em {
   color: var(--vp-c-brand-1);
 }

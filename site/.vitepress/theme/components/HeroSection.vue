@@ -12,12 +12,12 @@ import { withBase } from 'vitepress'
       <div class="hero-badge">MCP Toolkit for Godot</div>
       <h1 class="hero-title">
         Your AI can read your code.<br/>
-        <span class="hero-highlight">Now it can see your game.</span>
+        <span class="hero-highlight">Now it can see — and act in — your game.</span>
       </h1>
       <p class="hero-tagline">
-        Theatre gives AI agents spatial awareness of running Godot games
-        and the ability to build scenes, resources, and animations — all through
-        the Model Context Protocol.
+        Theatre gives AI agents spatial awareness of running Godot games,
+        live interaction for testing hypotheses, and the ability to build
+        scenes, resources, and animations — all through the Model Context Protocol.
       </p>
       <div class="hero-actions">
         <a :href="withBase('/guide/getting-started')" class="hero-btn primary">Get Started</a>

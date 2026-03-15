@@ -8,13 +8,13 @@ an agent, or a human — the system saves a clip: the pre-window frames already 
 buffer plus a post-window of new frames captured after the trigger. Each clip is a
 self-contained SQLite file, identical in schema to M7 explicit recordings.
 
-**Depends on:** M7 (SpectatorRecorder, SQLite schema, FrameEntityData), M8 (analysis
+**Depends on:** M7 (StageRecorder, SQLite schema, FrameEntityData), M8 (analysis
 queries work unchanged on dashcam clips)
 
 **Exit Criteria:**
 - Addon starts buffering automatically with no MCP or human interaction.
-- Game code calls `SpectatorRecorder.add_marker("system", "player_died")` from GDScript;
-  a clip is saved to `user://spectator_recordings/` covering the configured pre- and
+- Game code calls `StageRecorder.add_marker("system", "player_died")` from GDScript;
+  a clip is saved to `user://stage_recordings/` covering the configured pre- and
   post-window around that frame.
 - Agent calls `recording(action: "add_marker", marker_label: "root cause")` with
   `source: "agent"`; clip saves with agent-tier windows.
@@ -26,9 +26,9 @@ queries work unchanged on dashcam clips)
 
 ---
 
-## Architecture Decision: Ring Buffer in SpectatorRecorder
+## Architecture Decision: Ring Buffer in StageRecorder
 
-**Decision:** Add a second operating mode to `SpectatorRecorder` — dashcam mode —
+**Decision:** Add a second operating mode to `StageRecorder` — dashcam mode —
 that runs a fixed-capacity `VecDeque<CapturedFrame>` alongside the existing explicit
 recording path. Dashcam mode activates automatically in `fn ready()`.
 
@@ -42,7 +42,7 @@ recording path. Dashcam mode activates automatically in `fn ready()`.
 - No new TCP methods are needed. Clips appear in `recording_list` automatically because
   they use the same SQLite schema and storage directory.
 
-**Consequence:** `SpectatorRecorder` grows a dashcam config struct and clip-state
+**Consequence:** `StageRecorder` grows a dashcam config struct and clip-state
 machine. The `recorder.rs` file will be the primary site of change; no other crates
 require new logic.
 
@@ -69,7 +69,7 @@ deliberate, high-signal triggers.
 | `system` | 30 s | 10 s |
 | `agent` / `human` | 60 s | 30 s |
 
-All values are configurable via `spatial_config` (session) and `spectator.toml`
+All values are configurable via `spatial_config` (session) and `stage.toml`
 (project), consistent with M5 config precedence.
 
 ---
@@ -142,7 +142,7 @@ are still written to the clip so the frequency of events is visible to the agent
 
 ## New GDExtension API
 
-### SpectatorRecorder — new `@func` exports
+### StageRecorder — new `@func` exports
 
 ```gdscript
 # Enable/disable dashcam mode at runtime (enabled by default on load).
@@ -237,7 +237,7 @@ These follow the existing `query_addon` / `handle_recording_query` dispatch patt
 
 ## Configuration
 
-New keys under `[recording]` in `spectator.toml`:
+New keys under `[recording]` in `stage.toml`:
 
 ```toml
 [recording]
@@ -337,7 +337,7 @@ Dock changes are minimal — the existing recording panel is extended, not repla
 - Wire through `handle_recording_query` dispatch
 
 ### Phase 4 — Config (server + godot)
-- Add dashcam keys to `spectator.toml` parsing in `config.rs`
+- Add dashcam keys to `stage.toml` parsing in `config.rs`
 - Add `spatial_config` session override support for dashcam params
 - Propagate config to addon via `dashcam_config` TCP method on connect
 

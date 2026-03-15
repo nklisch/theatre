@@ -36,7 +36,7 @@
 - [x] 2D coordinate output: single `rot` angle (collector.rs:320)
 - [x] 2D coordinate output: `[x, y]` velocities (collector.rs:358-369)
 - [x] 2D bearing system: 8-direction compass without elevation (bearing.rs:157-203)
-- [x] 2D spatial index: `GridHash2D` grid hash in spectator-core (index.rs:134-237)
+- [x] 2D spatial index: `GridHash2D` grid hash in stage-core (index.rs:134-237)
 - [ ] 2D frustum check: Camera2D viewport rectangle — **GAP: `include_offscreen` param ignored for 2D**
 - [ ] 2D physics: `PhysicsRayQueryParameters2D` for raycasts — **GAP: only 3D raycast exists, fails in 2D scenes**
 - [x] 2D transform output: `Transform2D` (origin + angle) (collector.rs:394-406)
@@ -64,28 +64,28 @@
 
 ### 1. [M8 — design compliance] `signal_emitted` / `entered_area` conditions in `query_range` never match
 
-- File: `crates/spectator-server/src/recording_analysis.rs:436`
+- File: `crates/stage-server/src/recording_analysis.rs:436`
 - Expected: When `condition_type` is `"signal_emitted"`, query the events table for signal events in the frame range at the target node; return `RangeMatch` hits. Same for `"entered_area"` → `area_enter` events.
 - Actual: Returns `None` with comment `// handled via events table` — events table is never queried. These conditions always produce zero results.
 - Fix: Add `evaluate_signal_emitted()` and `evaluate_entered_area()` functions that query the events table for matching events. The events table has `frame`, `node`, `event_type`, `data` columns. For `signal_emitted`: query `SELECT * FROM events WHERE event_type='signal' AND node=? AND frame BETWEEN ? AND ?`, optionally filtering by `condition.signal_name`. For `entered_area`: query `event_type='area_enter'`. Return `RangeMatch { frame, time_ms, node, annotation: "signal_emitted" / "area_enter" }` per match. Remove the `=> None` stub.
 
 ### 2. [M9 — design compliance] Collision event correlation for system markers not implemented
 
-- File: `crates/spectator-server/src/recording_analysis.rs` (no collision detection function exists)
+- File: `crates/stage-server/src/recording_analysis.rs` (no collision detection function exists)
 - Expected: During `query_range` or post-hoc analysis, detect collision events and auto-generate system markers. M8 roadmap deliverable: "Collision event correlation".
 - Actual: Velocity spike and property threshold marker generation are implemented, but no collision event logic exists.
 - Fix: Add `evaluate_collision()` function that queries `events WHERE event_type='collision'` and returns `RangeMatch` with annotation. Wire into `evaluate_condition()` dispatch at line 426.
 
 ### 3. [M9 — design compliance] Camera2D viewport frustum culling not implemented
 
-- File: `crates/spectator-godot/src/collector.rs:240-261` (`should_collect_2d`)
+- File: `crates/stage-godot/src/collector.rs:240-261` (`should_collect_2d`)
 - Expected: When `include_offscreen: false` and perspective is `camera`, 2D entities outside Camera2D's viewport rectangle are excluded. M9 roadmap: "2D frustum check: Camera2D viewport rectangle instead of Camera3D frustum." M9 exit criteria: "Camera2D viewport culling."
 - Actual: `should_collect_2d` only filters by `class_filter` and `groups`. `include_offscreen` is never checked. All 2D entities are included regardless of viewport visibility.
 - Fix: In `should_collect_2d`, if `!params.include_offscreen` and perspective is camera-based, extract Camera2D from scene tree. Use Camera2D's `get_canvas_transform()` and viewport size to compute screen-space bounds. Check if the node's global position falls within the viewport rect. Return `false` if outside. A helper `is_visible_to_camera_2d(node: &Gd<Node2D>, camera: &Gd<Camera2D>) -> bool` is the cleanest approach.
 
 ### 4. [M9 — design compliance] 2D raycast uses 3D physics, fails in pure 2D scenes
 
-- File: `crates/spectator-godot/src/collector.rs:1476-1527` (`fn raycast`)
+- File: `crates/stage-godot/src/collector.rs:1476-1527` (`fn raycast`)
 - Expected: In 2D scenes, raycasts use `PhysicsRayQueryParameters2D` and `World2D`. M9 roadmap: "2D physics: `PhysicsRayQueryParameters2D` for raycasts." M9 exit criteria: "Raycasts use 2D physics."
 - Actual: `raycast()` calls `get_world_3d()` unconditionally. In a pure 2D scene, `get_world_3d()` returns `None`, and the function returns `Err("No World3D — is this a 3D scene?")`. 2D raycasts are completely broken.
 - Fix: Add a dimension parameter to `raycast()` (or a parallel `raycast_2d(from: Vector2, to: Vector2)` function). The 2D version uses `PhysicsServer2D::singleton()`, `get_world_2d()`, `intersect_ray()` with `PhysicsRayQueryParameters2D`. In `action_handler.rs`, branch on scene dimensions when dispatching raycast queries — use 2D or 3D version accordingly. Return `blocked_at: [x, y]` (2-element) in the 2D case.
@@ -95,7 +95,7 @@
 - File: `examples/2d-platformer-demo/` (directory does not exist)
 - Expected: A Godot project with 2D platformer demonstrating spatial snapshot, bearing output, and Camera2D viewport culling. M9 roadmap: "2D example project (`examples/2d-platformer-demo/`)."
 - Actual: `examples/` directory does not exist.
-- Fix: Create a minimal Godot 4 project at `examples/2d-platformer-demo/` with: a TileMap floor, a CharacterBody2D player, 2–3 enemy CharacterBody2D nodes, Camera2D tracking the player, and the Spectator addon enabled. Include a `README.md` with agent query examples showing 2D output format.
+- Fix: Create a minimal Godot 4 project at `examples/2d-platformer-demo/` with: a TileMap floor, a CharacterBody2D player, 2–3 enemy CharacterBody2D nodes, Camera2D tracking the player, and the Stage addon enabled. Include a `README.md` with agent query examples showing 2D output format.
 
 ---
 

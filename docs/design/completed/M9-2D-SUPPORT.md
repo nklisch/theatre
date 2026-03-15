@@ -2,7 +2,7 @@
 
 ## Overview
 
-M9 makes Spectator work correctly with 2D Godot games. All tools produce 2D-appropriate output: `[x, y]` positions, single-angle rotation, no elevation, Camera2D viewport culling, 2D physics queries, and a grid-hash spatial index. The MCP tool interfaces remain identical — differences are in the *values* within response structures.
+M9 makes Stage work correctly with 2D Godot games. All tools produce 2D-appropriate output: `[x, y]` positions, single-angle rotation, no elevation, Camera2D viewport culling, 2D physics queries, and a grid-hash spatial index. The MCP tool interfaces remain identical — differences are in the *values* within response structures.
 
 **Depends on:** M1-M8 (layered on top of working 3D implementation)
 
@@ -72,9 +72,9 @@ M9 makes Spectator work correctly with 2D Godot games. All tools produce 2D-appr
 
 ## Implementation Units
 
-### Unit 1: SceneDimensions Enum in spectator-protocol
+### Unit 1: SceneDimensions Enum in stage-protocol
 
-**File:** `crates/spectator-protocol/src/handshake.rs`
+**File:** `crates/stage-protocol/src/handshake.rs`
 
 ```rust
 /// Scene coordinate system type.
@@ -119,7 +119,7 @@ impl Handshake {
 
 This avoids breaking the existing handshake wire format while providing typed access.
 
-**File:** `crates/spectator-protocol/src/static_classes.rs`
+**File:** `crates/stage-protocol/src/static_classes.rs`
 
 Add 2D static classes to `STATIC_CLASSES`:
 
@@ -158,7 +158,7 @@ pub fn classify_static_category(class: &str) -> &'static str {
 
 **Implementation Notes:**
 - The `SceneDimensions` enum lives in `handshake.rs` alongside the `Handshake` struct since it's intrinsically part of the connection protocol
-- Re-export from `spectator_protocol` lib.rs for convenience
+- Re-export from `stage_protocol` lib.rs for convenience
 
 **Acceptance Criteria:**
 - [ ] `SceneDimensions` enum exists with `Two`, `Three`, `Mixed` variants
@@ -170,9 +170,9 @@ pub fn classify_static_category(class: &str) -> &'static str {
 
 ---
 
-### Unit 2: Scene Dimension Detection in spectator-godot
+### Unit 2: Scene Dimension Detection in stage-godot
 
-**File:** `crates/spectator-godot/src/tcp_server.rs`
+**File:** `crates/stage-godot/src/tcp_server.rs`
 
 Replace the hardcoded `detect_scene_dimensions`:
 
@@ -215,7 +215,7 @@ fn has_node_type_recursive(node: &Gd<Node>, check_2d: bool) -> bool {
 **Implementation Notes:**
 - Detection runs once during handshake, not per-frame — performance is not critical
 - The recursive scan stops at first match (early return) for efficiency
-- Spectator's own nodes (SpectatorRuntime etc.) are Node, not Node2D/Node3D, so they don't interfere
+- Stage's own nodes (StageRuntime etc.) are Node, not Node2D/Node3D, so they don't interfere
 - Default to 3D when no spatial nodes exist (matches current behavior)
 
 **Acceptance Criteria:**
@@ -226,9 +226,9 @@ fn has_node_type_recursive(node: &Gd<Node>, check_2d: bool) -> bool {
 
 ---
 
-### Unit 3: 2D Entity Collection in spectator-godot
+### Unit 3: 2D Entity Collection in stage-godot
 
-**File:** `crates/spectator-godot/src/collector.rs`
+**File:** `crates/stage-godot/src/collector.rs`
 
 Modify `collect_entities_recursive` to collect both Node3D and Node2D entities:
 
@@ -239,7 +239,7 @@ fn collect_entities_recursive(
     params: &GetSnapshotDataParams,
     entities: &mut Vec<EntityData>,
 ) {
-    if self.is_spectator_node(node) {
+    if self.is_stage_node(node) {
         return;
     }
 
@@ -422,7 +422,7 @@ use godot::classes::{
 
 ### Unit 4: 2D Perspective Resolution and Spatial Context
 
-**File:** `crates/spectator-godot/src/collector.rs`
+**File:** `crates/stage-godot/src/collector.rs`
 
 Update `resolve_perspective` to handle Camera2D:
 
@@ -594,7 +594,7 @@ fn collect_nearby_recursive_2d(
     result: &mut Vec<NearbyEntityRaw>,
     radius: f64,
 ) {
-    if self.is_spectator_node(node) { return; }
+    if self.is_stage_node(node) { return; }
     if node.instance_id() == exclude.instance_id() { return; }
 
     if let Ok(n2d) = node.clone().try_cast::<Node2D>() {
@@ -787,9 +787,9 @@ fn collect_child_props(
 
 ---
 
-### Unit 5: 2D Bearing System in spectator-core
+### Unit 5: 2D Bearing System in stage-core
 
-**File:** `crates/spectator-core/src/bearing.rs`
+**File:** `crates/stage-core/src/bearing.rs`
 
 Add 2D bearing functions alongside existing 3D ones:
 
@@ -853,7 +853,7 @@ pub fn perspective_from_angle_2d(position: [f64; 2], angle_deg: f64) -> ([f64; 2
 }
 ```
 
-**File:** `crates/spectator-core/src/types.rs`
+**File:** `crates/stage-core/src/types.rs`
 
 Add the 2D position type alias:
 
@@ -887,7 +887,7 @@ pub fn vec_to_array2(v: &[f64]) -> [f64; 2] {
 
 ### Unit 6: 2D Grid Hash Spatial Index
 
-**File:** `crates/spectator-core/src/index.rs`
+**File:** `crates/stage-core/src/index.rs`
 
 Add a `GridHash2D` struct and make `SpatialIndex` an enum:
 
@@ -1129,12 +1129,12 @@ Add `use std::collections::HashMap;` to imports.
 
 ### Unit 7: Dimension-Aware Server Layer
 
-**File:** `crates/spectator-server/src/tcp.rs`
+**File:** `crates/stage-server/src/tcp.rs`
 
 Store `scene_dimensions` in `SessionState` and use it:
 
 ```rust
-use spectator_protocol::handshake::SceneDimensions;
+use stage_protocol::handshake::SceneDimensions;
 
 pub struct SessionState {
     // ... existing fields ...
@@ -1159,7 +1159,7 @@ In `handle_connection`, after receiving handshake, set `scene_dimensions`:
 s.scene_dimensions = handshake.dimensions();
 ```
 
-**File:** `crates/spectator-server/src/mcp/snapshot.rs`
+**File:** `crates/stage-server/src/mcp/snapshot.rs`
 
 Update `build_perspective` to handle 2D:
 
@@ -1270,7 +1270,7 @@ let new_index = if scene_dimensions.is_2d() {
 };
 ```
 
-**File:** `crates/spectator-server/src/mcp/mod.rs`
+**File:** `crates/stage-server/src/mcp/mod.rs`
 
 Add a helper to get scene_dimensions from state (for use by tool handlers):
 
@@ -1299,7 +1299,7 @@ pub fn scene_dimensions(state: &SessionState) -> SceneDimensions {
 
 ### Unit 8: 2D Delta Engine Adaptation
 
-**File:** `crates/spectator-core/src/delta.rs`
+**File:** `crates/stage-core/src/delta.rs`
 
 The delta engine's `EntitySnapshot` uses `Position3 = [f64; 3]`. For 2D entities, the Z component will be 0.0. The movement detection threshold (0.01) applies to Euclidean distance, which works correctly in 2D when Z=0.
 
@@ -1321,11 +1321,11 @@ The `to_entity_snapshot` function in `snapshot.rs` uses `vec_to_array3` which al
 
 ### Unit 9: 2D Raycast Support
 
-**File:** `crates/spectator-godot/src/collector.rs` (or a new method)
+**File:** `crates/stage-godot/src/collector.rs` (or a new method)
 
 The raycast implementation needs to dispatch to 2D or 3D physics. Looking at the current code, raycasts are handled via the `spatial_query` TCP method which calls into the addon. Add 2D raycast handling:
 
-**File:** `crates/spectator-godot/src/query_handler.rs`
+**File:** `crates/stage-godot/src/query_handler.rs`
 
 In the raycast handler (or wherever `SpatialQueryRequest::Raycast` is dispatched):
 
@@ -1335,7 +1335,7 @@ fn execute_raycast_2d(
     from: Vector2,
     to: Vector2,
     collision_mask: Option<u32>,
-    collector: &SpectatorCollector,
+    collector: &StageCollector,
 ) -> RaycastResponse {
     let total_distance = from.distance_to(to) as f64;
 
@@ -1429,7 +1429,7 @@ let new_index = if scene_dimensions.is_2d() {
 
 ## Testing
 
-### Unit Tests: `crates/spectator-core/src/bearing.rs`
+### Unit Tests: `crates/stage-core/src/bearing.rs`
 
 ```rust
 #[test]
@@ -1459,7 +1459,7 @@ fn relative_position_2d_no_elevation() {
 }
 ```
 
-### Unit Tests: `crates/spectator-core/src/index.rs`
+### Unit Tests: `crates/stage-core/src/index.rs`
 
 ```rust
 #[test]
@@ -1514,7 +1514,7 @@ fn spatial_index_3d_still_works() {
 }
 ```
 
-### Unit Tests: `crates/spectator-protocol/src/handshake.rs`
+### Unit Tests: `crates/stage-protocol/src/handshake.rs`
 
 ```rust
 #[test]
@@ -1534,7 +1534,7 @@ fn scene_dimensions_predicates() {
 }
 ```
 
-### Unit Tests: `crates/spectator-protocol/src/static_classes.rs`
+### Unit Tests: `crates/stage-protocol/src/static_classes.rs`
 
 ```rust
 #[test]
@@ -1556,7 +1556,7 @@ fn classify_2d_classes() {
 }
 ```
 
-### Integration Tests: `crates/spectator-core/src/delta.rs`
+### Integration Tests: `crates/stage-core/src/delta.rs`
 
 ```rust
 #[test]

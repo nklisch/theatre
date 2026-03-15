@@ -1,7 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
   <!-- Godot-blue circle background -->
   <circle cx="32" cy="32" r="30" fill="#478CBF"/>
-  <!-- Spotlight / stage curtain motif -->
+  <!-- Spotlight / stage motif -->
   <path d="M32 14 L14 50 L32 42 L50 50 Z" fill="#D4A05A" opacity="0.9"/>
   <circle cx="32" cy="20" r="6" fill="#F5E6CC"/>
+  <!-- Signal arcs — observe + interact -->
+  <path d="M44 18 Q50 22 48 30" stroke="#F5E6CC" stroke-width="2" fill="none" opacity="0.6"/>
+  <path d="M48 14 Q56 20 52 30" stroke="#F5E6CC" stroke-width="1.5" fill="none" opacity="0.4"/>
 </svg>

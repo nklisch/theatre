@@ -2,7 +2,7 @@
 
 ## Problem
 
-Spectator has unit tests for protocol serialization, codec framing, bearing
+Stage has unit tests for protocol serialization, codec framing, bearing
 math, and spatial indexing — but **zero tests that verify the system works
 end-to-end**. A regression in the GDExtension collector, a protocol mismatch
 between server and addon, or a broken MCP tool handler can only be caught
@@ -11,7 +11,7 @@ manually by running Godot and eyeballing results.
 We need automated integration tests that exercise the real data path:
 
 ```
-MCP tool call → spectator-server → TCP → spectator-godot → Godot scene tree → response → assertions
+MCP tool call → stage-server → TCP → stage-godot → Godot scene tree → response → assertions
 ```
 
 ## Design Overview
@@ -23,7 +23,7 @@ Two test layers, each valuable independently:
 | **TCP mock tests** | Server handlers, protocol correctness, spatial processing | No | Fast (~1s) | Yes |
 | **E2E tests** | Full stack against real Godot binary + real scene data | Yes | Slow (~10-30s) | Optional (needs Godot in CI) |
 
-Both layers live in a new `tests/` crate or in `crates/spectator-server/tests/`.
+Both layers live in a new `tests/` crate or in `crates/stage-server/tests/`.
 
 ---
 
@@ -31,8 +31,8 @@ Both layers live in a new `tests/` crate or in `crates/spectator-server/tests/`.
 
 ### Concept
 
-Spin up a mock TCP listener that speaks the spectator protocol (handshake +
-query/response). Create a `SpectatorServer` instance pointing at the mock.
+Spin up a mock TCP listener that speaks the stage protocol (handshake +
+query/response). Create a `StageServer` instance pointing at the mock.
 Call MCP tool handlers directly and assert on results.
 
 This tests the **server half** of the stack in isolation — tool parameter
@@ -50,7 +50,7 @@ Test harness
     │   ├─ Responds with canned/computed Response messages
     │   └─ Can inject Event messages (signal_emitted)
     │
-    ├─ SpectatorServer (real code, real SessionState)
+    ├─ StageServer (real code, real SessionState)
     │   ├─ tcp_client_loop connects to mock addon
     │   └─ Tool handlers called directly via Rust
     │
@@ -227,11 +227,11 @@ Instead of going through MCP stdio transport, call tool handlers directly:
 ```rust
 // tests/support/harness.rs
 
-use spectator_server::server::SpectatorServer;
-use spectator_server::tcp::SessionState;
+use stage_server::server::StageServer;
+use stage_server::tcp::SessionState;
 
 pub struct TestHarness {
-    pub server: SpectatorServer,
+    pub server: StageServer,
     pub mock: MockAddon,
 }
 
@@ -259,7 +259,7 @@ impl TestHarness {
 ### Concept
 
 Launch Godot 4.6 in headless mode with a purpose-built test project.
-Start spectator-server's TCP client (not the MCP stdio server — we call
+Start stage-server's TCP client (not the MCP stdio server — we call
 handlers directly). Make real tool calls against a real running game scene
 with real physics.
 
@@ -269,12 +269,12 @@ with real physics.
 Test harness
     │
     ├─ Godot (headless, --fixed-fps 60)
-    │   ├─ Test project with spectator addon enabled
+    │   ├─ Test project with stage addon enabled
     │   ├─ Known scene: fixed positions, groups, properties
-    │   ├─ SpectatorTCPServer listening on port (ephemeral via env)
-    │   └─ SpectatorCollector collecting real scene data
+    │   ├─ StageTCPServer listening on port (ephemeral via env)
+    │   └─ StageCollector collecting real scene data
     │
-    ├─ SpectatorServer (real TCP client connects to real Godot)
+    ├─ StageServer (real TCP client connects to real Godot)
     │   ├─ Handshake with real addon
     │   └─ Tool handlers return real scene data
     │
@@ -283,7 +283,7 @@ Test harness
 
 ### Test Project: `tests/godot-project/`
 
-A minimal Godot project inside the spectator repo, committed to version
+A minimal Godot project inside the stage repo, committed to version
 control. Not the cosmic showcase — a purpose-built deterministic scene.
 
 #### Project structure
@@ -291,7 +291,7 @@ control. Not the cosmic showcase — a purpose-built deterministic scene.
 ```
 tests/godot-project/
     project.godot
-    addons/spectator/     → symlink to ../../addons/spectator/
+    addons/stage/     → symlink to ../../addons/stage/
     test_scene_3d.tscn    → deterministic 3D scene
     test_scene_3d.gd      → minimal script with known properties
     test_scene_2d.tscn    → deterministic 2D scene
@@ -454,11 +454,11 @@ async fn wait_for_port(port: u16, timeout: Duration) -> Result<()> {
 
 pub struct E2EHarness {
     pub godot: GodotProcess,
-    pub server: SpectatorServer,
+    pub server: StageServer,
 }
 
 impl E2EHarness {
-    /// Launch Godot headless, create SpectatorServer, connect, handshake.
+    /// Launch Godot headless, create StageServer, connect, handshake.
     pub async fn start(scene: &str) -> Result<Self> {
         let godot = GodotProcess::start(scene).await?;
 
@@ -474,7 +474,7 @@ impl E2EHarness {
         // Wait for handshake to complete
         wait_for_connected(&state, Duration::from_secs(5)).await?;
 
-        let server = SpectatorServer::new(state);
+        let server = StageServer::new(state);
         Ok(Self { godot, server })
     }
 
@@ -551,7 +551,7 @@ These test against the real Godot scene, so assertions are on actual game data.
 ## File Organization
 
 ```
-crates/spectator-server/
+crates/stage-server/
     tests/
         integration/
             mod.rs               → conditional compilation, shared setup
@@ -571,13 +571,13 @@ tests/
         test_scene_3d.gd
         test_scene_2d.tscn
         test_scene_2d.gd
-        addons/spectator/        → symlink
+        addons/stage/        → symlink
 ```
 
 ### Feature Gating
 
 ```toml
-# crates/spectator-server/Cargo.toml
+# crates/stage-server/Cargo.toml
 [features]
 integration-tests = []  # enables tcp mock tests (no external deps)
 e2e-tests = []          # enables real-Godot tests (needs godot binary)
@@ -600,7 +600,7 @@ cargo test --workspace --features integration-tests
 cargo test --workspace --features e2e-tests
 
 # Just E2E
-cargo test -p spectator-server --features e2e-tests -- e2e
+cargo test -p stage-server --features e2e-tests -- e2e
 ```
 
 ### Environment Variables
@@ -608,8 +608,8 @@ cargo test -p spectator-server --features e2e-tests -- e2e
 | Variable | Purpose | Default |
 |----------|---------|---------|
 | `GODOT_BIN` | Path to Godot binary | `godot` (from PATH) |
-| `SPECTATOR_TEST_PORT` | Base port for test TCP listeners | auto (ephemeral) |
-| `SPECTATOR_E2E_TIMEOUT` | Max seconds to wait for Godot startup | `10` |
+| `STAGE_TEST_PORT` | Base port for test TCP listeners | auto (ephemeral) |
+| `STAGE_E2E_TIMEOUT` | Max seconds to wait for Godot startup | `10` |
 
 ---
 
@@ -647,21 +647,21 @@ e2e-tests:
         use-dotnet: false
 
     - name: Build GDExtension
-      run: cargo build -p spectator-godot
+      run: cargo build -p stage-godot
 
     - name: Copy GDExtension to test project
       run: |
-        mkdir -p tests/godot-project/addons/spectator/bin/linux/
-        cp target/debug/libspectator_godot.so tests/godot-project/addons/spectator/bin/linux/
-        cp addons/spectator/*.gd tests/godot-project/addons/spectator/
-        cp addons/spectator/plugin.cfg tests/godot-project/addons/spectator/
-        cp addons/spectator/spectator.gdextension tests/godot-project/addons/spectator/
+        mkdir -p tests/godot-project/addons/stage/bin/linux/
+        cp target/debug/libstage_godot.so tests/godot-project/addons/stage/bin/linux/
+        cp addons/stage/*.gd tests/godot-project/addons/stage/
+        cp addons/stage/plugin.cfg tests/godot-project/addons/stage/
+        cp addons/stage/stage.gdextension tests/godot-project/addons/stage/
 
     - name: Import Godot project (generates .godot/ cache)
       run: godot --headless --import --path tests/godot-project --quit
 
     - name: Run E2E tests
-      run: cargo test -p spectator-server --features e2e-tests
+      run: cargo test -p stage-server --features e2e-tests
       env:
         GODOT_BIN: godot
 ```
@@ -677,7 +677,7 @@ e2e-tests:
 4. **Layer 1 tests** — start with snapshot (most complex), then simpler tools
 5. **Test Godot project** — create `tests/godot-project/` with scenes
 6. **GodotProcess** — headless launcher with port management
-7. **E2EHarness** — wiring GodotProcess + SpectatorServer
+7. **E2EHarness** — wiring GodotProcess + StageServer
 8. **Layer 2 tests** — mirror Layer 1 structure against real Godot
 9. **CI** — add feature flags to workflow
 
@@ -716,7 +716,7 @@ The mock/Godot process reports its port back to the test harness.
 ### Handling Godot's addon port
 
 The test project must read `THEATRE_PORT` env var to override the default
-9077. The addon already reads `spectator/connection/port` from Project
+9077. The addon already reads `stage/connection/port` from Project
 Settings — we can either:
 
 1. **Override in `project.godot`** — set port to a known value per test
@@ -731,7 +731,7 @@ takes precedence over the Project Settings port. This is useful for testing
 # In runtime.gd _ready():
 var port: int = OS.get_environment("THEATRE_PORT").to_int()
 if port == 0:
-    port = ProjectSettings.get_setting("spectator/connection/port", 9077)
+    port = ProjectSettings.get_setting("stage/connection/port", 9077)
 ```
 
 ### Determinism and timing
@@ -750,7 +750,7 @@ if port == 0:
 
 Each E2E test gets its own Godot process on its own port. This prevents state
 leakage between tests but is slower. For Layer 1 (mock) tests, each test gets
-its own MockAddon + SpectatorServer, which is fast enough to not matter.
+its own MockAddon + StageServer, which is fast enough to not matter.
 
 If E2E tests become too slow, we can share a single Godot process across a
 test module and use `spatial_action` to reset state between tests (teleport

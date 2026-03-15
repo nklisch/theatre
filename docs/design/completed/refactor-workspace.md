@@ -4,7 +4,7 @@
 
 Cross-crate analysis found six concrete refactoring opportunities: a contract
 violation in distance field naming, duplicated serialization helpers between
-spectator-server and director, repeated static-cluster construction in the
+stage-server and director, repeated static-cluster construction in the
 clustering module, duplicated spatial-index rebuild logic between snapshot and
 delta handlers, local default functions that belong in the shared defaults
 module, and a useful `insert_if_nonempty` helper trapped in a single module.
@@ -19,8 +19,8 @@ interfaces change (except fixing ClusterNearest's wire output from `dist` to
 
 **Priority**: High
 **Risk**: Low (internal rename + one wire format bug fix)
-**Files**: `crates/spectator-core/src/types.rs`, `crates/spectator-core/src/cluster.rs`,
-plus ~20 callsites across spectator-core and spectator-server
+**Files**: `crates/stage-core/src/types.rs`, `crates/stage-core/src/cluster.rs`,
+plus ~20 callsites across stage-core and stage-server
 
 **Current State**:
 - `RelativePosition::dist` uses `#[serde(rename = "distance")]` — the Rust
@@ -54,7 +54,7 @@ plus ~20 callsites across spectator-core and spectator-server
 
 **Priority**: High
 **Risk**: Low (pure refactor, no behavior change)
-**Files**: `crates/spectator-core/src/cluster.rs`
+**Files**: `crates/stage-core/src/cluster.rs`
 
 **Current State**:
 The static_geometry cluster is constructed identically in 4 places
@@ -81,8 +81,8 @@ clustering functions.
 3. Existing tests cover all 4 clustering strategies — no new tests needed.
 
 **Verification**:
-- `cargo test -p spectator-core` passes (existing cluster tests)
-- `cargo clippy -p spectator-core` clean
+- `cargo test -p stage-core` passes (existing cluster tests)
+- `cargo clippy -p stage-core` clean
 
 ---
 
@@ -90,8 +90,8 @@ clustering functions.
 
 **Priority**: Medium
 **Risk**: Low
-**Files**: `crates/spectator-server/src/mcp/defaults.rs`,
-`crates/spectator-server/src/mcp/query.rs`
+**Files**: `crates/stage-server/src/mcp/defaults.rs`,
+`crates/stage-server/src/mcp/query.rs`
 
 **Current State**:
 - `defaults.rs` has: `default_perspective`, `default_radius`, `default_detail`
@@ -108,8 +108,8 @@ clustering functions.
 2. Update query.rs imports.
 
 **Verification**:
-- `cargo build -p spectator-server` passes
-- `cargo test -p spectator-server` passes
+- `cargo build -p stage-server` passes
+- `cargo test -p stage-server` passes
 
 ---
 
@@ -117,8 +117,8 @@ clustering functions.
 
 **Priority**: Medium
 **Risk**: Low
-**Files**: `crates/spectator-server/src/mcp/delta.rs`,
-`crates/spectator-server/src/mcp/mod.rs`
+**Files**: `crates/stage-server/src/mcp/delta.rs`,
+`crates/stage-server/src/mcp/mod.rs`
 
 **Current State**:
 `insert_if_nonempty` (delta.rs:42-50) is a useful utility for conditionally
@@ -135,8 +135,8 @@ but the pattern appears informally elsewhere (e.g., snapshot response building).
 3. Optionally adopt it in other handlers where the pattern appears inline.
 
 **Verification**:
-- `cargo build -p spectator-server` passes
-- `cargo test -p spectator-server` passes
+- `cargo build -p stage-server` passes
+- `cargo test -p stage-server` passes
 
 ---
 
@@ -144,8 +144,8 @@ but the pattern appears informally elsewhere (e.g., snapshot response building).
 
 **Priority**: Medium
 **Risk**: Medium (touches two critical handlers)
-**Files**: `crates/spectator-server/src/mcp/mod.rs` (snapshot handler, lines 217-259),
-`crates/spectator-server/src/mcp/delta.rs` (lines 141-153)
+**Files**: `crates/stage-server/src/mcp/mod.rs` (snapshot handler, lines 217-259),
+`crates/stage-server/src/mcp/delta.rs` (lines 141-153)
 
 **Current State**:
 Both snapshot and delta handlers rebuild the spatial index from raw entity data
@@ -188,18 +188,18 @@ Both handlers call this shared function.
 
 **Priority**: Medium
 **Risk**: Low (additive — new shared code, no behavior change)
-**Files**: `crates/spectator-server/src/mcp/mod.rs`,
+**Files**: `crates/stage-server/src/mcp/mod.rs`,
 `crates/director/src/mcp/mod.rs`
 
 **Current State**:
 `serialize_params` and `serialize_response` are duplicated 1:1 between
-spectator-server and director. Both have identical error handling.
+stage-server and director. Both have identical error handling.
 
 **Target State**:
 A shared module (options below) that both crates import from:
 - **Option A**: New `crates/mcp-helpers/` micro-crate with `serialize_params`,
   `deserialize_response`, `serialize_response`.
-- **Option B**: Move helpers into spectator-protocol (both crates already
+- **Option B**: Move helpers into stage-protocol (both crates already
   depend on it), behind an optional `mcp` feature to avoid pulling McpError
   into protocol unconditionally.
 - **Option C**: Accept the duplication — it's ~15 lines total and both crates
@@ -244,5 +244,5 @@ Intentional design — sync for GDExtension (no async runtime), async for server
 
 ### Message construction helpers
 Adding `Message::ok_response()` and `Message::error_response()` to
-spectator-protocol would be a minor improvement but the current usage is
+stage-protocol would be a minor improvement but the current usage is
 minimal and clear. Low value.

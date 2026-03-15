@@ -18,7 +18,8 @@ const STAGE_RUNTIME_SCRIPT: &str = "res://addons/stage/runtime.gd";
 
 #[derive(Args)]
 pub struct InitArgs {
-    /// Godot project path
+    /// Godot project path (default: current directory)
+    #[arg(default_value = ".")]
     project: PathBuf,
 
     /// Skip interactive prompts, use defaults

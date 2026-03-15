@@ -12,7 +12,7 @@ Zero pattern violations were found — the code follows all established patterns
 
 **Priority**: High
 **Risk**: Low
-**Files**: `crates/spectator-server/src/mcp/mod.rs`, `snapshot.rs`, `watch.rs`, `scene_tree.rs`, `inspect.rs`, `config.rs`
+**Files**: `crates/stage-server/src/mcp/mod.rs`, `snapshot.rs`, `watch.rs`, `scene_tree.rs`, `inspect.rs`, `config.rs`
 
 **Current State**: 8+ functions with identical structure — match string to enum variant, return `McpError::invalid_params` on mismatch:
 
@@ -74,8 +74,8 @@ pub fn parse_detail(s: &str) -> Result<DetailLevel, McpError> {
 4. Remove `parse_cluster_by` and `parse_bearing_format` in config.rs which use a different (serde-based) approach — unify to same pattern
 
 **Verification**:
-- `cargo test -p spectator-server` — existing parse tests pass
-- `cargo clippy -p spectator-server` — no new warnings
+- `cargo test -p stage-server` — existing parse tests pass
+- `cargo clippy -p stage-server` — no new warnings
 - Grep confirms no remaining standalone match-to-McpError enum parsing blocks
 
 ---
@@ -84,7 +84,7 @@ pub fn parse_detail(s: &str) -> Result<DetailLevel, McpError> {
 
 **Priority**: High
 **Risk**: Low
-**Files**: `crates/spectator-server/src/mcp/mod.rs`, `action.rs`, `recording.rs`, `query.rs`, `snapshot.rs`
+**Files**: `crates/stage-server/src/mcp/mod.rs`, `action.rs`, `recording.rs`, `query.rs`, `snapshot.rs`
 
 **Current State**: 15+ instances of the same pattern:
 
@@ -121,8 +121,8 @@ let frames = require_param!(params.frames, "'frames' is required for advance_fra
 3. Then `recording.rs` (8 instances), `query.rs` (6 instances), `snapshot.rs` (2 instances)
 
 **Verification**:
-- `cargo test -p spectator-server` — all action/recording/query tests pass
-- `cargo clippy -p spectator-server`
+- `cargo test -p stage-server` — all action/recording/query tests pass
+- `cargo clippy -p stage-server`
 - Each file saves 2-3 lines per instance (~45 lines total)
 
 ---
@@ -131,7 +131,7 @@ let frames = require_param!(params.frames, "'frames' is required for advance_fra
 
 **Priority**: High
 **Risk**: Low
-**Files**: `crates/spectator-server/src/mcp/recording.rs`, `crates/spectator-server/src/recording_analysis.rs`
+**Files**: `crates/stage-server/src/mcp/recording.rs`, `crates/stage-server/src/recording_analysis.rs`
 
 **Current State**: All 4 M8 analysis handlers (`handle_snapshot_at`, `handle_query_range`, `handle_diff_frames`, `handle_find_event`) repeat the same 4-line setup:
 
@@ -199,7 +199,7 @@ Each handler shrinks from ~25 lines to ~12 lines.
 3. Move `resolve_recording_id` logic into `RecordingSession::open`
 
 **Verification**:
-- `cargo test -p spectator-server` — recording tests pass
+- `cargo test -p stage-server` — recording tests pass
 - All 4 analysis handlers produce identical output to before
 - `resolve_recording_id` is no longer a standalone function
 
@@ -209,13 +209,13 @@ Each handler shrinks from ~25 lines to ~12 lines.
 
 **Priority**: Medium
 **Risk**: Low
-**Files**: `crates/spectator-server/src/mcp/mod.rs` (spatial_action handler)
+**Files**: `crates/stage-server/src/mcp/mod.rs` (spatial_action handler)
 
 **Current State**: `spatial_action` (mod.rs:343-346) manually calls `inject_budget` instead of `finalize_response`:
 
 ```rust
 let json_bytes = serde_json::to_vec(&response).unwrap_or_default().len();
-let used = spectator_core::budget::estimate_tokens(json_bytes);
+let used = stage_core::budget::estimate_tokens(json_bytes);
 let action_budget = resolve_budget(None, 500, config.token_hard_cap);
 inject_budget(&mut response, used, action_budget, config.token_hard_cap);
 ```
@@ -240,9 +240,9 @@ Also in `spatial_inspect` (mod.rs:280-282), replace the inline `.map_err` with `
 3. Ensure response includes accurate budget with delta payload
 
 **Verification**:
-- `cargo test -p spectator-server` — action tests pass
+- `cargo test -p stage-server` — action tests pass
 - Budget values in action responses now accurately include delta payload size
-- `grep -n "inject_budget" crates/spectator-server/src/mcp/` only shows the definition in mod.rs
+- `grep -n "inject_budget" crates/stage-server/src/mcp/` only shows the definition in mod.rs
 
 ---
 
@@ -250,7 +250,7 @@ Also in `spatial_inspect` (mod.rs:280-282), replace the inline `.map_err` with `
 
 **Priority**: Medium
 **Risk**: Low
-**Files**: `crates/spectator-server/src/mcp/mod.rs`, `recording.rs`, `query.rs`, `delta.rs`
+**Files**: `crates/stage-server/src/mcp/mod.rs`, `recording.rs`, `query.rs`, `delta.rs`
 
 **Current State**: 9+ instances of the same two-line pattern:
 
@@ -284,7 +284,7 @@ let raw_data: SnapshotResponse = query_and_deserialize(&self.state, "get_snapsho
 3. Leave recording.rs callers that pass raw `json!({})` params — those use `query_addon` directly with already-built JSON, which is fine
 
 **Verification**:
-- `cargo test -p spectator-server`
+- `cargo test -p stage-server`
 - Each refactored call site saves 2 lines
 - `serialize_params` and `deserialize_response` remain available for edge cases
 
@@ -294,7 +294,7 @@ let raw_data: SnapshotResponse = query_and_deserialize(&self.state, "get_snapsho
 
 **Priority**: Medium
 **Risk**: Medium
-**Files**: `crates/spectator-server/src/mcp/snapshot.rs`
+**Files**: `crates/stage-server/src/mcp/snapshot.rs`
 
 **Current State**: `build_standard_response` (lines 359-419) and `build_full_response` (lines 421-481) share ~60% structure:
 - Both create a `BudgetEnforcer`, add 200-byte overhead
@@ -335,7 +335,7 @@ The tier controls: (a) whether static entities become counts or individual nodes
 4. Keep function signatures unchanged for callers
 
 **Verification**:
-- `cargo test -p spectator-server` — snapshot tests pass
+- `cargo test -p stage-server` — snapshot tests pass
 - Diff output of standard and full responses before/after to confirm identical JSON
 - ~50 lines removed from snapshot.rs
 
@@ -345,7 +345,7 @@ The tier controls: (a) whether static entities become counts or individual nodes
 
 **Priority**: Low
 **Risk**: Low
-**Files**: `crates/spectator-server/src/mcp/recording.rs`
+**Files**: `crates/stage-server/src/mcp/recording.rs`
 
 **Current State**: `handle_stop`, `handle_status`, `handle_list` are nearly identical 5-line functions:
 
@@ -386,7 +386,7 @@ Then the dispatch becomes:
 3. Keep `handle_start`, `handle_delete`, `handle_markers`, `handle_add_marker` as separate functions (they have parameter-specific logic)
 
 **Verification**:
-- `cargo test -p spectator-server` — recording tests pass
+- `cargo test -p stage-server` — recording tests pass
 - 3 functions (~15 lines) eliminated
 - Match arms remain readable
 

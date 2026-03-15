@@ -98,7 +98,7 @@ are listed in the material's shader parameter list.
 
 ### Unit 1: Protocol Types — `InspectResources` struct
 
-**File:** `crates/spectator-protocol/src/query.rs`
+**File:** `crates/stage-protocol/src/query.rs`
 
 ```rust
 /// Add Resources variant to InspectCategory enum
@@ -276,7 +276,7 @@ pub struct ParticleData {
 
 ### Unit 2: MCP Handler — parse `"resources"` include
 
-**File:** `crates/spectator-server/src/mcp/inspect.rs`
+**File:** `crates/stage-server/src/mcp/inspect.rs`
 
 ```rust
 // Update default_include to NOT include "resources" by default
@@ -309,7 +309,7 @@ pub fn parse_include(strings: &[String]) -> Result<Vec<InspectCategory>, McpErro
 }
 ```
 
-**File:** `crates/spectator-server/src/mcp/mod.rs`
+**File:** `crates/stage-server/src/mcp/mod.rs`
 
 The `spatial_inspect` handler in `mod.rs` needs no changes — it already passes through
 the full `NodeInspectResponse` via `serde_json::to_value`. The new `resources` field
@@ -340,7 +340,7 @@ Update the tool description string to mention resources:
 
 ### Unit 3: GDExtension — Resource Collection in Collector
 
-**File:** `crates/spectator-godot/src/collector.rs`
+**File:** `crates/stage-godot/src/collector.rs`
 
 Add `collect_inspect_resources` method and supporting helpers:
 
@@ -354,13 +354,13 @@ use godot::classes::{
     CircleShape2D, RectangleShape2D, CapsuleShape2D, SegmentShape2D,
     GeometryInstance3D, MeshInstance2D, AnimationTree,
 };
-use spectator_protocol::query::{
+use stage_protocol::query::{
     InspectResources, MeshResourceData, MaterialOverrideData,
     CollisionShapeData, AnimationPlayerData, NavigationAgentData,
     SpriteData, ParticleData,
 };
 
-impl SpectatorCollector {
+impl StageCollector {
     /// Collect resource data from the node and its immediate children.
     fn collect_inspect_resources(&self, node: &Gd<Node>) -> InspectResources {
         let mut resources = InspectResources {
@@ -862,7 +862,7 @@ InspectCategory::Resources => {
 
 ### Unit 4: Query Handler — `get_node_resources` method dispatch
 
-**File:** `crates/spectator-godot/src/query_handler.rs`
+**File:** `crates/stage-godot/src/query_handler.rs`
 
 No changes needed. The existing `get_node_inspect` method already dispatches to
 `collector.inspect_node()`, which now handles `InspectCategory::Resources` via the new
@@ -877,7 +877,7 @@ automatically.
 
 ### Unit 5: Integration Test — Resource Inspection via TCP Mock
 
-**File:** `crates/spectator-server/tests/tcp_mock.rs`
+**File:** `crates/stage-server/tests/tcp_mock.rs`
 
 Add a test that exercises the resource inspection path through the mock TCP layer.
 
@@ -1000,11 +1000,11 @@ async fn test_inspect_default_excludes_resources() {
 
 ## Implementation Order
 
-1. **Unit 1: Protocol Types** — `InspectResources` and sub-structs in `spectator-protocol`
+1. **Unit 1: Protocol Types** — `InspectResources` and sub-structs in `stage-protocol`
    - No dependencies. Defines the wire format.
-2. **Unit 2: MCP Handler** — parse `"resources"` include in `spectator-server`
+2. **Unit 2: MCP Handler** — parse `"resources"` include in `stage-server`
    - Depends on Unit 1 (needs `InspectCategory::Resources`).
-3. **Unit 3: GDExtension Collector** — `collect_inspect_resources` in `spectator-godot`
+3. **Unit 3: GDExtension Collector** — `collect_inspect_resources` in `stage-godot`
    - Depends on Unit 1 (needs `InspectResources` struct).
 4. **Unit 4: Query Handler** — no-op, verify existing dispatch works
    - Depends on Unit 3.
@@ -1017,7 +1017,7 @@ Units 2 and 3 can proceed in parallel after Unit 1.
 
 ## Testing
 
-### Unit Tests: `crates/spectator-protocol/src/query.rs`
+### Unit Tests: `crates/stage-protocol/src/query.rs`
 
 ```rust
 #[test]
@@ -1084,7 +1084,7 @@ fn inspect_category_resources_deserializes() {
 }
 ```
 
-### Unit Tests: `crates/spectator-server/src/mcp/inspect.rs`
+### Unit Tests: `crates/stage-server/src/mcp/inspect.rs`
 
 ```rust
 #[test]
@@ -1102,7 +1102,7 @@ fn default_include_excludes_resources() {
 }
 ```
 
-### Integration Tests: `crates/spectator-server/tests/tcp_mock.rs`
+### Integration Tests: `crates/stage-server/tests/tcp_mock.rs`
 
 See Unit 5 above.
 

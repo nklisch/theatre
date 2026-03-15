@@ -2,7 +2,7 @@
 
 ## Problem
 
-The GDExtension crate (`spectator-godot`) has ~2500 lines of code with zero
+The GDExtension crate (`stage-godot`) has ~2500 lines of code with zero
 automated tests that exercise it inside Godot. The existing unit tests in
 `recorder.rs` only cover SQLite schema and MessagePack serialization — logic
 that doesn't touch Godot APIs.
@@ -38,9 +38,9 @@ they cover the full GDExtension surface.
 ### Concept
 
 A standalone Rust test binary connects directly to the GDExtension's TCP
-listener in a headless Godot instance. It speaks the spectator protocol —
+listener in a headless Godot instance. It speaks the stage protocol —
 handshake, queries, actions — and asserts on responses. This tests the
-GDExtension's half of the stack without spectator-server in the loop.
+GDExtension's half of the stack without stage-server in the loop.
 
 ```
 Rust test binary (tokio TcpStream)
@@ -65,7 +65,7 @@ either half.
 ```
 tests/
     wire-tests/
-        Cargo.toml          → binary test crate, depends on spectator-protocol
+        Cargo.toml          → binary test crate, depends on stage-protocol
         src/
             main.rs         → test runner entry point
             harness.rs      → GodotProcess + TCP client
@@ -82,23 +82,23 @@ tests/
         test_scene_3d.gd
         test_scene_2d.tscn
         test_scene_2d.gd
-        addons/spectator/   → symlink or copy
+        addons/stage/   → symlink or copy
 ```
 
 The wire-tests crate is a `[[test]]` target, not part of the default workspace
-build. It depends only on `spectator-protocol` (for codec + message types) and
+build. It depends only on `stage-protocol` (for codec + message types) and
 `tokio`.
 
 ```toml
 # tests/wire-tests/Cargo.toml
 [package]
-name = "spectator-wire-tests"
+name = "stage-wire-tests"
 version = "0.0.0"
 edition = "2024"
 publish = false
 
 [dependencies]
-spectator-protocol = { path = "../../crates/spectator-protocol" }
+stage-protocol = { path = "../../crates/stage-protocol" }
 tokio = { version = "1", features = ["full"] }
 serde_json = "1"
 anyhow = "1"
@@ -109,7 +109,7 @@ anyhow = "1"
 ```rust
 // tests/wire-tests/src/harness.rs
 
-use spectator_protocol::{codec, handshake::Handshake, messages::Message};
+use stage_protocol::{codec, handshake::Handshake, messages::Message};
 use std::net::TcpStream;
 use std::process::{Child, Command, Stdio};
 use std::time::{Duration, Instant};
@@ -154,7 +154,7 @@ impl GodotFixture {
         };
 
         // Send HandshakeAck
-        let ack = Message::HandshakeAck(spectator_protocol::handshake::HandshakeAck {
+        let ack = Message::HandshakeAck(stage_protocol::handshake::HandshakeAck {
             session_id: "wire-test-session".into(),
         });
         codec::write_message(&stream, &ack)?;
@@ -510,7 +510,7 @@ fn recording_start_status_stop_lifecycle() {
 
     let start = f.query("recording_start", serde_json::json!({
         "name": "wire_test",
-        "storage_path": "/tmp/spectator-wire-test/",
+        "storage_path": "/tmp/stage-wire-test/",
         "capture_interval": 1,
         "max_frames": 100
     })).unwrap().unwrap_data();
@@ -531,10 +531,10 @@ fn recording_start_status_stop_lifecycle() {
 
 ```bash
 # Requires Godot binary in PATH (or GODOT_BIN set)
-cargo test -p spectator-wire-tests
+cargo test -p stage-wire-tests
 
 # Single test
-cargo test -p spectator-wire-tests -- test_handshake
+cargo test -p stage-wire-tests -- test_handshake
 ```
 
 ### What this catches
@@ -570,7 +570,7 @@ failure. Captures exactly the class of bug where "the buttons don't work."
 ```
 godot --headless --script res://tests/test_runner.gd --path tests/godot-project
     │
-    ├── Instantiates GDExtension classes directly (SpectatorCollector, etc.)
+    ├── Instantiates GDExtension classes directly (StageCollector, etc.)
     ├── Instantiates runtime.gd, verifies wiring
     ├── Simulates dock interactions
     ├── Checks signal connections and emission
@@ -751,25 +751,25 @@ static func approx(actual: float, expected: float,
 extends RefCounted
 
 func test_classes_registered() -> String:
-    for cls in ["SpectatorTCPServer", "SpectatorCollector", "SpectatorRecorder"]:
+    for cls in ["StageTCPServer", "StageCollector", "StageRecorder"]:
         if not ClassDB.class_exists(cls):
             return "class %s not registered" % cls
     return ""
 
 func test_collector_instantiates() -> String:
-    var c := SpectatorCollector.new()
-    return Assert.not_null(c, "SpectatorCollector.new()")
+    var c := StageCollector.new()
+    return Assert.not_null(c, "StageCollector.new()")
 
 func test_tcp_server_instantiates() -> String:
-    var s := SpectatorTCPServer.new()
-    return Assert.not_null(s, "SpectatorTCPServer.new()")
+    var s := StageTCPServer.new()
+    return Assert.not_null(s, "StageTCPServer.new()")
 
 func test_recorder_instantiates() -> String:
-    var r := SpectatorRecorder.new()
-    return Assert.not_null(r, "SpectatorRecorder.new()")
+    var r := StageRecorder.new()
+    return Assert.not_null(r, "StageRecorder.new()")
 
 func test_tcp_server_starts_and_stops() -> String:
-    var s := SpectatorTCPServer.new()
+    var s := StageTCPServer.new()
     s.start(0)  # ephemeral port
     var err := Assert.true_(s.get_port() > 0, "port assigned")
     if err: return err
@@ -779,19 +779,19 @@ func test_tcp_server_starts_and_stops() -> String:
     return Assert.eq(s.get_connection_status(), "stopped", "status after stop")
 
 func test_tcp_server_has_activity_signal() -> String:
-    var s := SpectatorTCPServer.new()
+    var s := StageTCPServer.new()
     return Assert.true_(s.has_signal("activity_received"),
         "activity_received signal")
 
 func test_recorder_has_signals() -> String:
-    var r := SpectatorRecorder.new()
+    var r := StageRecorder.new()
     for sig in ["recording_started", "recording_stopped", "marker_added"]:
         if not r.has_signal(sig):
             return "missing signal: %s" % sig
     return ""
 
 func test_collector_initial_counts() -> String:
-    var c := SpectatorCollector.new()
+    var c := StageCollector.new()
     var err := Assert.eq(c.get_tracked_count(), 0, "tracked count")
     if err: return err
     return Assert.eq(c.get_group_count(), 0, "group count")
@@ -809,12 +809,12 @@ func setup(root: Window) -> void:
     _root = root
 
 func test_runtime_loads() -> String:
-    var script: GDScript = load("res://addons/spectator/runtime.gd")
+    var script: GDScript = load("res://addons/stage/runtime.gd")
     return Assert.not_null(script, "runtime.gd loads")
 
 func test_runtime_creates_children() -> String:
     # Instantiate runtime like the autoload would
-    var rt = load("res://addons/spectator/runtime.gd").new()
+    var rt = load("res://addons/stage/runtime.gd").new()
     _root.add_child(rt)
 
     # runtime._ready() should create collector, tcp_server, recorder
@@ -833,7 +833,7 @@ func test_runtime_creates_children() -> String:
     return err
 
 func test_runtime_wires_collector_to_server() -> String:
-    var rt = load("res://addons/spectator/runtime.gd").new()
+    var rt = load("res://addons/stage/runtime.gd").new()
     _root.add_child(rt)
     await _root.get_tree().process_frame
 
@@ -850,11 +850,11 @@ func test_runtime_wires_collector_to_server() -> String:
     return err
 
 func test_runtime_static_instance_set() -> String:
-    var rt = load("res://addons/spectator/runtime.gd").new()
+    var rt = load("res://addons/stage/runtime.gd").new()
     _root.add_child(rt)
     await _root.get_tree().process_frame
 
-    var script: GDScript = load("res://addons/spectator/runtime.gd")
+    var script: GDScript = load("res://addons/stage/runtime.gd")
     var instance = script.get("instance")
     var err := Assert.eq(instance, rt, "static instance points to runtime node")
 
@@ -862,14 +862,14 @@ func test_runtime_static_instance_set() -> String:
     return err
 
 func test_runtime_clears_instance_on_exit() -> String:
-    var rt = load("res://addons/spectator/runtime.gd").new()
+    var rt = load("res://addons/stage/runtime.gd").new()
     _root.add_child(rt)
     await _root.get_tree().process_frame
 
     rt.queue_free()
     await _root.get_tree().process_frame
 
-    var script: GDScript = load("res://addons/spectator/runtime.gd")
+    var script: GDScript = load("res://addons/stage/runtime.gd")
     var instance = script.get("instance")
     return Assert.eq(instance, null, "static instance cleared after exit")
 ```
@@ -890,7 +890,7 @@ func setup(root: Window) -> void:
     _root = root
 
 func test_dock_instantiates() -> String:
-    var dock_scene: PackedScene = load("res://addons/spectator/dock.tscn")
+    var dock_scene: PackedScene = load("res://addons/stage/dock.tscn")
     if not dock_scene:
         return "dock.tscn failed to load"
     var dock := dock_scene.instantiate()
@@ -898,12 +898,12 @@ func test_dock_instantiates() -> String:
 
 func test_dock_finds_runtime_in_same_process() -> String:
     # Start runtime first (simulates the game process)
-    var rt = load("res://addons/spectator/runtime.gd").new()
+    var rt = load("res://addons/stage/runtime.gd").new()
     _root.add_child(rt)
     await _root.get_tree().process_frame
 
     # Now create dock in the same tree (simulates same-process scenario)
-    var dock_scene: PackedScene = load("res://addons/spectator/dock.tscn")
+    var dock_scene: PackedScene = load("res://addons/stage/dock.tscn")
     var dock := dock_scene.instantiate()
     _root.add_child(dock)
     await _root.get_tree().process_frame
@@ -925,12 +925,12 @@ func test_dock_finds_runtime_in_same_process() -> String:
 
 func test_dock_record_button_calls_recorder() -> String:
     # Wire up runtime
-    var rt = load("res://addons/spectator/runtime.gd").new()
+    var rt = load("res://addons/stage/runtime.gd").new()
     _root.add_child(rt)
     await _root.get_tree().process_frame
 
     # Wire up dock
-    var dock_scene: PackedScene = load("res://addons/spectator/dock.tscn")
+    var dock_scene: PackedScene = load("res://addons/stage/dock.tscn")
     var dock := dock_scene.instantiate()
     _root.add_child(dock)
     await _root.get_tree().process_frame
@@ -957,11 +957,11 @@ func test_dock_record_button_calls_recorder() -> String:
     return Assert.true_(is_recording, "recording started after button press")
 
 func test_dock_stop_button_stops_recording() -> String:
-    var rt = load("res://addons/spectator/runtime.gd").new()
+    var rt = load("res://addons/stage/runtime.gd").new()
     _root.add_child(rt)
     await _root.get_tree().process_frame
 
-    var dock_scene: PackedScene = load("res://addons/spectator/dock.tscn")
+    var dock_scene: PackedScene = load("res://addons/stage/dock.tscn")
     var dock := dock_scene.instantiate()
     _root.add_child(dock)
     await _root.get_tree().process_frame
@@ -985,11 +985,11 @@ func test_dock_stop_button_stops_recording() -> String:
     return Assert.false_(still_recording, "recording stopped after stop button")
 
 func test_dock_marker_button_adds_marker() -> String:
-    var rt = load("res://addons/spectator/runtime.gd").new()
+    var rt = load("res://addons/stage/runtime.gd").new()
     _root.add_child(rt)
     await _root.get_tree().process_frame
 
-    var dock_scene: PackedScene = load("res://addons/spectator/dock.tscn")
+    var dock_scene: PackedScene = load("res://addons/stage/dock.tscn")
     var dock := dock_scene.instantiate()
     _root.add_child(dock)
     await _root.get_tree().process_frame
@@ -1030,10 +1030,10 @@ func setup(root: Window) -> void:
     _root = root
 
 func test_recorder_emits_recording_started() -> String:
-    var collector := SpectatorCollector.new()
+    var collector := StageCollector.new()
     _root.add_child(collector)
 
-    var recorder := SpectatorRecorder.new()
+    var recorder := StageRecorder.new()
     recorder.set_collector(collector)
     _root.add_child(recorder)
     await _root.get_tree().process_frame
@@ -1044,7 +1044,7 @@ func test_recorder_emits_recording_started() -> String:
         signal_data["name"] = name
     )
 
-    recorder.start_recording("test_signal", "/tmp/spectator-gdtest/", 1, 100)
+    recorder.start_recording("test_signal", "/tmp/stage-gdtest/", 1, 100)
     await _root.get_tree().process_frame
 
     var err := Assert.not_null(signal_data.get("id"), "recording_started fired")
@@ -1056,15 +1056,15 @@ func test_recorder_emits_recording_started() -> String:
     return err
 
 func test_recorder_emits_recording_stopped() -> String:
-    var collector := SpectatorCollector.new()
+    var collector := StageCollector.new()
     _root.add_child(collector)
 
-    var recorder := SpectatorRecorder.new()
+    var recorder := StageRecorder.new()
     recorder.set_collector(collector)
     _root.add_child(recorder)
     await _root.get_tree().process_frame
 
-    recorder.start_recording("test_signal", "/tmp/spectator-gdtest/", 1, 100)
+    recorder.start_recording("test_signal", "/tmp/stage-gdtest/", 1, 100)
     await _root.get_tree().process_frame
 
     var stopped := false
@@ -1089,7 +1089,7 @@ func setup(root: Window) -> void:
     _root = root
 
 func test_f10_toggles_pause() -> String:
-    var rt = load("res://addons/spectator/runtime.gd").new()
+    var rt = load("res://addons/stage/runtime.gd").new()
     _root.add_child(rt)
     await _root.get_tree().process_frame
 
@@ -1143,7 +1143,7 @@ godot --headless --script res://tests/test_runner.gd --path tests/godot-project 
 
 ### Concept
 
-Move logic out of `spectator-godot` that doesn't need Godot APIs into
+Move logic out of `stage-godot` that doesn't need Godot APIs into
 testable locations. The GDExtension becomes a thin adapter that maps between
 Godot types and pure-Rust types. The pure logic gets normal `cargo test`
 coverage.
@@ -1152,17 +1152,17 @@ coverage.
 
 #### 3a. TCP connection state machine
 
-The `SpectatorTCPServer` has implicit state management: listening → connected
+The `StageTCPServer` has implicit state management: listening → connected
 → handshaking → ready → advancing frames. The frame-advance logic in
 `check_frame_advance()` is a state machine that tracks remaining frames and
 pending request IDs. This can be a standalone struct.
 
 **Current location**: `tcp_server.rs` lines 324-382, mixed with Godot calls.
 
-**Extracted to**: `spectator-protocol/src/connection_state.rs`
+**Extracted to**: `stage-protocol/src/connection_state.rs`
 
 ```rust
-// crates/spectator-protocol/src/connection_state.rs
+// crates/stage-protocol/src/connection_state.rs
 
 /// Pure state machine for the addon-side TCP connection.
 /// No Godot types — just state transitions and message decisions.
@@ -1327,7 +1327,7 @@ The `query_handler.rs` match on method names can be expressed as a dispatch
 table that's testable without Godot:
 
 ```rust
-// crates/spectator-protocol/src/query_dispatch.rs
+// crates/stage-protocol/src/query_dispatch.rs
 
 /// Known query methods and their parameter types.
 /// Used to validate method names and deserialize params before hitting Godot.
@@ -1446,7 +1446,7 @@ expressed as a pure mapping that's testable, with the actual Godot Variant
 construction as a separate step.
 
 ```rust
-// crates/spectator-protocol/src/variant_mapping.rs
+// crates/stage-protocol/src/variant_mapping.rs
 
 /// What Godot type a JSON value should map to.
 /// Determined purely from JSON structure, no Godot dependency.
@@ -1658,7 +1658,7 @@ the same project.
 ```
 tests/godot-project/
     project.godot
-    addons/spectator/         → symlink to ../../addons/spectator/
+    addons/stage/         → symlink to ../../addons/stage/
     test_scene_3d.tscn
     test_scene_3d.gd
     test_scene_2d.tscn
@@ -1691,7 +1691,7 @@ var env_port := OS.get_environment("THEATRE_PORT")
 if not env_port.is_empty():
     port = env_port.to_int()
 if port == 0:
-    port = ProjectSettings.get_setting("spectator/connection/port", 9077)
+    port = ProjectSettings.get_setting("stage/connection/port", 9077)
 tcp_server.start(port)
 ```
 
@@ -1735,7 +1735,7 @@ gdext-tests:
         version: 4.6.1
 
     - name: Build GDExtension
-      run: cargo build -p spectator-godot
+      run: cargo build -p stage-godot
 
     - name: Setup test project
       run: ./scripts/setup-test-project.sh
@@ -1747,5 +1747,5 @@ gdext-tests:
           --path tests/godot-project
 
     - name: Wire tests (Approach 1)
-      run: cargo test -p spectator-wire-tests
+      run: cargo test -p stage-wire-tests
 ```

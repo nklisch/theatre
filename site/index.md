@@ -25,12 +25,12 @@ It's like debugging a web app without being able to open the browser.
 
 <div class="tool-cards">
 <ToolCard
-  title="Spectator"
-  icon="🔭"
-  description="Observe the running game. Spatial snapshots, real-time deltas, watches, recordings. Your AI sees what the player sees — as structured data."
+  title="Stage"
+  icon="📡"
+  description="See and interact with the running game. Spatial snapshots, real-time deltas, watches, recordings — plus live property mutation and method calls for testing hypotheses without restarting."
   tool="9 MCP tools"
   tokens="200–3000"
-  link="/spectator/"
+  link="/stage/"
 />
 <ToolCard
   title="Director"
@@ -47,10 +47,10 @@ It's like debugging a web app without being able to open the browser.
 <ArchDiagram highlight="both" />
 
 Theatre connects your AI agent to your Godot game through the
-**Model Context Protocol (MCP)**. Spectator observes the running game via a
-GDExtension addon. Director modifies scenes through the editor or headless Godot.
-Both communicate over TCP, exposing structured tools your agent already knows
-how to use.
+**Model Context Protocol (MCP)**. Stage observes and interacts with the running
+game via a GDExtension addon. Director modifies scenes through the editor or
+headless Godot. Both communicate over TCP, exposing structured tools your agent
+already knows how to use.
 
 ## The Dashcam Moment
 
@@ -117,7 +117,7 @@ skilltap install nklisch/theatre
 
 Install skilltap from [skilltap.dev](https://skilltap.dev).
 
-Teaches your agent how to use Spectator and Director effectively — tool selection, workflows, and pitfalls.
+Teaches your agent how to use Stage and Director effectively — tool selection, workflows, and pitfalls.
 
 ### 4. Run your game and ask
 
@@ -125,4 +125,4 @@ Teaches your agent how to use Spectator and Director effectively — tool select
 "Take a spatial snapshot of my scene"
 ```
 
-Your AI agent now sees your game world — via MCP tools or CLI (`spectator spatial_snapshot '{"detail":"summary"}'`).
+Your AI agent now sees your game world — via MCP tools or CLI (`stage spatial_snapshot '{"detail":"summary"}'`). Ask it to set a property or call a method on a running node to test a fix without restarting.

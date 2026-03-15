@@ -1523,7 +1523,7 @@ cargo build -p director
 cargo clippy -p director
 
 # Deploy and run E2E tests
-theatre-deploy ~/dev/spectator/tests/godot-project
+theatre-deploy ~/dev/stage/tests/godot-project
 cargo test -p director-tests -- --include-ignored
 
 # Verify all existing tests still pass

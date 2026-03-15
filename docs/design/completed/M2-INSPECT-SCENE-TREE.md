@@ -14,7 +14,7 @@ M2 delivers two high-value MCP tools: `spatial_inspect` for deep single-node inv
 
 ### Unit 1: Protocol Query Types for Inspect & Scene Tree
 
-**File:** `crates/spectator-protocol/src/query.rs`
+**File:** `crates/stage-protocol/src/query.rs`
 
 Add new request/response types alongside the existing `GetSnapshotDataParams` / `SnapshotResponse`.
 
@@ -234,12 +234,12 @@ pub struct SceneTreeResponse {
 
 ### Unit 2: GDExtension Collector — Node Inspection
 
-**File:** `crates/spectator-godot/src/collector.rs`
+**File:** `crates/stage-godot/src/collector.rs`
 
-Add methods to `SpectatorCollector` for deep node inspection. These extend the existing impl block.
+Add methods to `StageCollector` for deep node inspection. These extend the existing impl block.
 
 ```rust
-impl SpectatorCollector {
+impl StageCollector {
     /// Collect deep inspection data for a single node.
     pub fn inspect_node(&self, params: &GetNodeInspectParams) -> Result<NodeInspectResponse, String> {
         let tree = self.base().get_tree()
@@ -614,7 +614,7 @@ impl SpectatorCollector {
         result: &mut Vec<NearbyEntityRaw>,
         radius: f64,
     ) {
-        if self.is_spectator_node(node) { return; }
+        if self.is_stage_node(node) { return; }
         if node.instance_id() == exclude.instance_id() { return; }
 
         if let Ok(n3d) = node.clone().try_cast::<Node3D>() {
@@ -705,18 +705,18 @@ fn position_distance(a: &[f64], b: &[f64]) -> f64 {
 - [ ] Script methods list populates from Script API
 - [ ] Extends chain walks the full class hierarchy
 - [ ] Spatial context returns nearest 10 entities within 20 units
-- [ ] Spectator internal nodes are excluded from nearby entities
+- [ ] Stage internal nodes are excluded from nearby entities
 
 ---
 
 ### Unit 3: GDExtension Collector — Scene Tree Queries
 
-**File:** `crates/spectator-godot/src/collector.rs`
+**File:** `crates/stage-godot/src/collector.rs`
 
-Add scene tree navigation methods to `SpectatorCollector`.
+Add scene tree navigation methods to `StageCollector`.
 
 ```rust
-impl SpectatorCollector {
+impl StageCollector {
     /// Handle scene tree queries.
     pub fn query_scene_tree(
         &self,
@@ -762,7 +762,7 @@ impl SpectatorCollector {
         let count = root.get_child_count();
         for i in 0..count {
             if let Some(child) = root.get_child(i) {
-                if self.is_spectator_node(&child) { continue; }
+                if self.is_stage_node(&child) { continue; }
                 roots.push(self.node_info(&child, include));
             }
         }
@@ -780,7 +780,7 @@ impl SpectatorCollector {
         let mut children = Vec::new();
         for i in 0..count {
             if let Some(child) = node.get_child(i) {
-                if self.is_spectator_node(&child) { continue; }
+                if self.is_stage_node(&child) { continue; }
                 children.push(self.node_info(&child, include));
             }
         }
@@ -821,7 +821,7 @@ impl SpectatorCollector {
             let mut children = serde_json::Map::new();
             for i in 0..count {
                 if let Some(child) = node.get_child(i) {
-                    if self.is_spectator_node(&child) { continue; }
+                    if self.is_stage_node(&child) { continue; }
                     let name = child.get_name().to_string();
                     let child_tree = self.build_subtree(
                         &child,
@@ -906,7 +906,7 @@ impl SpectatorCollector {
         include: &[TreeInclude],
         results: &mut Vec<serde_json::Value>,
     ) {
-        if self.is_spectator_node(node) { return; }
+        if self.is_stage_node(node) { return; }
 
         let matches = match find_by {
             FindBy::Name => node.get_name().to_string().contains(value),
@@ -1006,14 +1006,14 @@ impl SpectatorCollector {
 ```
 
 **Implementation Notes:**
-- `scene_tree_roots` returns children of the viewport root (scene root + autoloads), filtering Spectator internals.
+- `scene_tree_roots` returns children of the viewport root (scene root + autoloads), filtering Stage internals.
 - `build_subtree` produces the nested object format from CONTRACT.md: `{ "name": ..., "class": ..., "children": { "child_name": { ... } } }`.
 - `scene_tree_ancestors` includes the target node first, then walks up to the scene root.
 - `find_recursive` uses substring match for `Name` (lenient) but exact match for `Class` (Godot classes are precise). `Group` uses `is_in_group`, `Script` uses exact path match.
 - `node_info` is a shared helper that builds per-node JSON based on `TreeInclude` options.
 
 **Acceptance Criteria:**
-- [ ] `roots` returns scene root and autoloads (excluding Spectator nodes)
+- [ ] `roots` returns scene root and autoloads (excluding Stage nodes)
 - [ ] `children` returns immediate children of a specified node
 - [ ] `subtree` respects max depth with `"...": "depth_limit_reached"` sentinel
 - [ ] `ancestors` returns chain from node to scene root
@@ -1028,23 +1028,23 @@ impl SpectatorCollector {
 
 ### Unit 4: Query Handler — Routing New Methods
 
-**File:** `crates/spectator-godot/src/query_handler.rs`
+**File:** `crates/stage-godot/src/query_handler.rs`
 
 Extend the query handler to dispatch the two new query methods.
 
 ```rust
-use spectator_protocol::{
+use stage_protocol::{
     messages::Message,
     query::{GetNodeInspectParams, GetSceneTreeParams, GetSnapshotDataParams},
 };
 
-use crate::collector::SpectatorCollector;
+use crate::collector::StageCollector;
 
 pub fn handle_query(
     id: String,
     method: &str,
     params: serde_json::Value,
-    collector: &SpectatorCollector,
+    collector: &StageCollector,
 ) -> Message {
     let result = match method {
         "get_snapshot_data" => handle_get_snapshot_data(params, collector),
@@ -1071,7 +1071,7 @@ pub fn handle_query(
 
 fn handle_get_node_inspect(
     params: serde_json::Value,
-    collector: &SpectatorCollector,
+    collector: &StageCollector,
 ) -> Result<serde_json::Value, QueryError> {
     let params: GetNodeInspectParams = serde_json::from_value(params)
         .map_err(|e| QueryError {
@@ -1093,7 +1093,7 @@ fn handle_get_node_inspect(
 
 fn handle_get_scene_tree(
     params: serde_json::Value,
-    collector: &SpectatorCollector,
+    collector: &StageCollector,
 ) -> Result<serde_json::Value, QueryError> {
     let params: GetSceneTreeParams = serde_json::from_value(params)
         .map_err(|e| QueryError {
@@ -1121,14 +1121,14 @@ fn handle_get_scene_tree(
 
 ### Unit 5: MCP Tool — `spatial_inspect`
 
-**File:** `crates/spectator-server/src/mcp/inspect.rs` (new file)
+**File:** `crates/stage-server/src/mcp/inspect.rs` (new file)
 
 ```rust
 use rmcp::model::ErrorData as McpError;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
-use spectator_core::{bearing, types::Position3};
-use spectator_protocol::query::{
+use stage_core::{bearing, types::Position3};
+use stage_protocol::query::{
     GetNodeInspectParams, InspectCategory, NodeInspectResponse, NearbyEntityRaw,
 };
 
@@ -1179,7 +1179,7 @@ pub fn parse_include(strings: &[String]) -> Result<Vec<InspectCategory>, McpErro
 /// Build the spatial_context block from raw addon data.
 /// Computes bearings server-side from the raw positions.
 pub fn build_spatial_context(
-    raw: &spectator_protocol::query::SpatialContextRaw,
+    raw: &stage_protocol::query::SpatialContextRaw,
 ) -> serde_json::Value {
     let node_pos: Position3 = [
         raw.node_position.first().copied().unwrap_or(0.0),
@@ -1226,7 +1226,7 @@ pub fn build_spatial_context(
 }
 ```
 
-**File:** `crates/spectator-core/src/bearing.rs`
+**File:** `crates/stage-core/src/bearing.rs`
 
 Add one new function:
 
@@ -1259,14 +1259,14 @@ pub fn perspective_from_forward(position: Position3, forward: [f64; 3]) -> Persp
 
 ### Unit 6: MCP Tool — `scene_tree`
 
-**File:** `crates/spectator-server/src/mcp/scene_tree.rs` (new file)
+**File:** `crates/stage-server/src/mcp/scene_tree.rs` (new file)
 
 ```rust
 use rmcp::model::ErrorData as McpError;
 use schemars::JsonSchema;
 use serde::Deserialize;
-use spectator_core::budget::{BudgetEnforcer, SnapshotBudgetDefaults, resolve_budget};
-use spectator_protocol::query::{
+use stage_core::budget::{BudgetEnforcer, SnapshotBudgetDefaults, resolve_budget};
+use stage_protocol::query::{
     FindBy, GetSceneTreeParams, SceneTreeAction, TreeInclude,
 };
 
@@ -1387,7 +1387,7 @@ pub fn build_scene_tree_params(
 
 ### Unit 7: MCP Tool Router — Register Both Tools
 
-**File:** `crates/spectator-server/src/mcp/mod.rs`
+**File:** `crates/stage-server/src/mcp/mod.rs`
 
 Update to add both new tools alongside `spatial_snapshot`.
 
@@ -1400,13 +1400,13 @@ use rmcp::handler::server::wrapper::Parameters;
 use rmcp::model::ErrorData as McpError;
 use rmcp::tool;
 use rmcp::tool_router;
-use spectator_core::{bearing, budget::SnapshotBudgetDefaults, budget::resolve_budget, types::Position3};
-use spectator_protocol::query::{
+use stage_core::{bearing, budget::SnapshotBudgetDefaults, budget::resolve_budget, types::Position3};
+use stage_protocol::query::{
     DetailLevel, GetNodeInspectParams, GetSceneTreeParams, GetSnapshotDataParams,
     NodeInspectResponse, SnapshotResponse,
 };
 
-use crate::server::SpectatorServer;
+use crate::server::StageServer;
 use crate::tcp::query_addon;
 use inspect::{SpatialInspectParams, build_spatial_context, parse_include};
 use scene_tree::{SceneTreeToolParams, build_scene_tree_params};
@@ -1416,7 +1416,7 @@ use snapshot::{
 };
 
 #[tool_router(vis = "pub")]
-impl SpectatorServer {
+impl StageServer {
     /// Get a spatial snapshot of the current scene from a perspective.
     #[tool(description = "Get a spatial snapshot of the current scene from a perspective. Use detail 'summary' for a cheap overview (~200 tokens), 'standard' for per-entity data (~400-800 tokens), or 'full' for everything including transforms, physics, and children (~1000+ tokens). Start with summary, then drill down.")]
     pub async fn spatial_snapshot(
@@ -1470,7 +1470,7 @@ impl SpectatorServer {
 
         // Add budget
         let json_bytes = serde_json::to_vec(&response).unwrap_or_default().len();
-        let used = spectator_core::budget::estimate_tokens(json_bytes);
+        let used = stage_core::budget::estimate_tokens(json_bytes);
         if let serde_json::Value::Object(ref mut map) = response {
             map.insert("budget".to_string(), serde_json::json!({
                 "used": used,
@@ -1504,7 +1504,7 @@ impl SpectatorServer {
 
         // Add budget
         let json_bytes = serde_json::to_vec(&data).unwrap_or_default().len();
-        let used = spectator_core::budget::estimate_tokens(json_bytes);
+        let used = stage_core::budget::estimate_tokens(json_bytes);
         let budget_limit = resolve_budget(
             params.token_budget,
             1500, // scene_tree default
@@ -1562,7 +1562,7 @@ Units 2 and 3 can be done in parallel once Unit 1 is complete. Units 5 and 6 can
 
 ## Testing
 
-### Unit Tests: `crates/spectator-protocol/src/query.rs`
+### Unit Tests: `crates/stage-protocol/src/query.rs`
 
 Add to existing `#[cfg(test)] mod tests`:
 
@@ -1628,7 +1628,7 @@ fn inspect_response_optional_fields() {
 }
 ```
 
-### Unit Tests: `crates/spectator-core/src/bearing.rs`
+### Unit Tests: `crates/stage-core/src/bearing.rs`
 
 ```rust
 #[test]
@@ -1639,7 +1639,7 @@ fn perspective_from_forward_negative_z() {
 }
 ```
 
-### Unit Tests: `crates/spectator-server/src/mcp/inspect.rs`
+### Unit Tests: `crates/stage-server/src/mcp/inspect.rs`
 
 ```rust
 #[cfg(test)]
@@ -1662,7 +1662,7 @@ mod tests {
 
     #[test]
     fn build_spatial_context_computes_bearing() {
-        let raw = spectator_protocol::query::SpatialContextRaw {
+        let raw = stage_protocol::query::SpatialContextRaw {
             nearby: vec![NearbyEntityRaw {
                 path: "enemy".into(),
                 class: "CharacterBody3D".into(),
@@ -1683,7 +1683,7 @@ mod tests {
 }
 ```
 
-### Unit Tests: `crates/spectator-server/src/mcp/scene_tree.rs`
+### Unit Tests: `crates/stage-server/src/mcp/scene_tree.rs`
 
 ```rust
 #[cfg(test)]

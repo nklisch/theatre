@@ -40,7 +40,7 @@ cross-boundary bugs that unit tests miss.
 2. **No integration scenario tests** for dashcam + explicit recording coexistence
 3. **No E2E tests** for dashcam at all — this is the biggest gap
 4. **Unit tests are logic-only** — they test the merge/eviction algorithms with
-   local variables, not the actual `SpectatorRecorder` methods (can't call gdext
+   local variables, not the actual `StageRecorder` methods (can't call gdext
    methods in unit tests, so this is expected, but the logic duplication means
    the tests might pass while the real code has wiring bugs)
 5. **No tests** for: dashcam clip appearing in `list`, dashcam clip being
@@ -55,7 +55,7 @@ cross-boundary bugs that unit tests miss.
 
 ### Unit 1: Integration Tests — Dashcam Status & Flush (Mock Addon)
 
-**File**: `crates/spectator-server/tests/tcp_mock.rs`
+**File**: `crates/stage-server/tests/tcp_mock.rs`
 
 Add to the recording section (after `test_recording_delete`):
 
@@ -262,7 +262,7 @@ async fn test_dashcam_flush_default_label() {
 
 ### Unit 2: Integration Tests — Unknown Action Error
 
-**File**: `crates/spectator-server/tests/tcp_mock.rs`
+**File**: `crates/stage-server/tests/tcp_mock.rs`
 
 ```rust
 #[tokio::test]
@@ -289,7 +289,7 @@ async fn test_recording_unknown_action_returns_error() {
 
 ### Unit 3: Scenario Tests — Dashcam + Explicit Recording Coexistence
 
-**File**: `crates/spectator-server/tests/scenarios.rs`
+**File**: `crates/stage-server/tests/scenarios.rs`
 
 Add after the recording lifecycle test:
 
@@ -508,7 +508,7 @@ async fn test_add_marker_triggers_dashcam_clip() {
 
 ### Unit 4: Scenario Tests — Dashcam Flush → Analysis Roundtrip
 
-**File**: `crates/spectator-server/tests/scenarios.rs`
+**File**: `crates/stage-server/tests/scenarios.rs`
 
 ```rust
 /// After flushing a dashcam clip, the clip should be openable for M8 analysis.
@@ -522,7 +522,7 @@ async fn test_add_marker_triggers_dashcam_clip() {
 #[tokio::test]
 async fn test_dashcam_clip_analysis_validates_recording_id() {
     let handler: QueryHandler = Arc::new(|method, _| match method {
-        "recording_resolve_path" => Ok(json!({ "path": "/tmp/spectator_test_nonexistent" })),
+        "recording_resolve_path" => Ok(json!({ "path": "/tmp/stage_test_nonexistent" })),
         _ => Err(("unknown".into(), format!("unexpected: {method}"))),
     });
 
@@ -555,7 +555,7 @@ async fn test_dashcam_clip_analysis_validates_recording_id() {
 
 ### Unit 5: E2E Journey — Dashcam Agent Workflow
 
-**File**: `crates/spectator-server/tests/e2e_journeys.rs`
+**File**: `crates/stage-server/tests/e2e_journeys.rs`
 
 This is the most important test. It exercises dashcam as an agent would use it:
 notice something wrong → check dashcam status → add a marker to trigger clip →
@@ -748,7 +748,7 @@ async fn journey_dashcam_agent_workflow() {
 
 ### Unit 6: E2E Journey — Dashcam + Explicit Recording Coexistence
 
-**File**: `crates/spectator-server/tests/e2e_journeys.rs`
+**File**: `crates/stage-server/tests/e2e_journeys.rs`
 
 ```rust
 /// Journey: Explicit recording and dashcam run simultaneously without interference.
@@ -883,7 +883,7 @@ async fn journey_dashcam_coexists_with_explicit_recording() {
 
 ### Unit 7: E2E Journey — Dashcam Clip Deletion
 
-**File**: `crates/spectator-server/tests/e2e_journeys.rs`
+**File**: `crates/stage-server/tests/e2e_journeys.rs`
 
 ```rust
 /// Journey: Flush a dashcam clip, verify it exists, delete it, verify it's gone.
@@ -965,7 +965,7 @@ async fn journey_dashcam_clip_lifecycle() {
 
 ### Unit 8: Unit Tests — Ring Buffer Time-Based Eviction
 
-**File**: `crates/spectator-godot/src/recorder.rs` (append to `mod tests`)
+**File**: `crates/stage-godot/src/recorder.rs` (append to `mod tests`)
 
 ```rust
 #[test]
@@ -1038,7 +1038,7 @@ fn dashcam_capture_interval_reduces_frame_count() {
 
 ### Unit 9: Unit Tests — Merge Policy Edge Cases
 
-**File**: `crates/spectator-godot/src/recorder.rs` (append to `mod tests`)
+**File**: `crates/stage-godot/src/recorder.rs` (append to `mod tests`)
 
 ```rust
 #[test]
@@ -1120,7 +1120,7 @@ fn dashcam_force_close_not_applied_to_deliberate() {
 
 ### Unit 10: Unit Tests — Dashcam Config JSON Partial Updates
 
-**File**: `crates/spectator-godot/src/recorder.rs` (append to `mod tests`)
+**File**: `crates/stage-godot/src/recorder.rs` (append to `mod tests`)
 
 ```rust
 #[test]
@@ -1187,24 +1187,24 @@ fn dashcam_config_enabled_toggle() {
 cargo test --workspace
 
 # Integration tests with mock addon
-cargo test -p spectator-server --features integration-tests
+cargo test -p stage-server --features integration-tests
 
 # E2E journey tests (requires Godot + built GDExtension)
-theatre-deploy ~/dev/spectator/tests/godot-project
-cargo test -p spectator-server --features e2e-tests -- --nocapture
+theatre-deploy ~/dev/stage/tests/godot-project
+cargo test -p stage-server --features e2e-tests -- --nocapture
 
 # All together
-cargo test -p spectator-server --features integration-tests,e2e-tests -- --nocapture
+cargo test -p stage-server --features integration-tests,e2e-tests -- --nocapture
 ```
 
 ### Test File → Unit Mapping
 
 | File | Units | Layer |
 |------|-------|-------|
-| `crates/spectator-godot/src/recorder.rs` | 8, 9, 10 | Unit |
-| `crates/spectator-server/tests/tcp_mock.rs` | 1, 2 | Integration |
-| `crates/spectator-server/tests/scenarios.rs` | 3, 4 | Scenario |
-| `crates/spectator-server/tests/e2e_journeys.rs` | 5, 6, 7 | E2E Journey |
+| `crates/stage-godot/src/recorder.rs` | 8, 9, 10 | Unit |
+| `crates/stage-server/tests/tcp_mock.rs` | 1, 2 | Integration |
+| `crates/stage-server/tests/scenarios.rs` | 3, 4 | Scenario |
+| `crates/stage-server/tests/e2e_journeys.rs` | 5, 6, 7 | E2E Journey |
 
 ## Verification Checklist
 
@@ -1213,10 +1213,10 @@ cargo test -p spectator-server --features integration-tests,e2e-tests -- --nocap
 cargo test --workspace 2>&1 | tail -5
 
 # 2. Integration tests pass
-cargo test -p spectator-server --features integration-tests 2>&1 | tail -10
+cargo test -p stage-server --features integration-tests 2>&1 | tail -10
 
 # 3. E2E tests pass (requires Godot)
-cargo test -p spectator-server --features e2e-tests -- --nocapture 2>&1 | tail -20
+cargo test -p stage-server --features e2e-tests -- --nocapture 2>&1 | tail -20
 
 # 4. No clippy warnings in new test code
 cargo clippy --workspace --all-features

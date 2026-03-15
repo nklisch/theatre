@@ -7,7 +7,7 @@ The headless daemon is Director's fallback when the Godot editor is not open. It
 The daemon is a Godot script (`addons/director/daemon.gd`) that runs under `godot --headless`. It:
 
 1. Loads your project (runs `_ready` on the main scene, or runs without a main scene if none is configured)
-2. Starts a TCP listener on **port 6551** (localhost only)
+2. Starts a TCP listener on **port 6550** (localhost only)
 3. Receives Director operations from the `director` binary
 4. Executes them using Godot's API (same as the editor plugin)
 5. Returns results and keeps running for the next operation
@@ -28,7 +28,7 @@ The daemon prints to stderr when ready:
 
 ```
 [Director Daemon] Loaded project: /home/user/my-game
-[Director Daemon] Listening on port 6551
+[Director Daemon] Listening on port 6550
 ```
 
 Keep the daemon running in a terminal while you work. The `director` binary will automatically use it when the editor backend is unavailable.
@@ -45,7 +45,7 @@ When stopped, the daemon closes its TCP listener cleanly.
 
 ## One-shot fallback
 
-If neither port 6550 (editor) nor port 6551 (daemon) is reachable, the `director` binary falls back to **one-shot mode**:
+If neither port 6551 (editor) nor port 6550 (daemon) is reachable, the `director` binary falls back to **one-shot mode**:
 
 1. Spawn `godot --headless --script addons/director/oneshot.gd -- <serialized_operation>`
 2. Godot loads, executes the operation, exits
@@ -57,13 +57,13 @@ One-shot is always available — it requires only `godot` on the PATH. But it is
 
 | Scenario | Backend selected |
 |---|---|
-| Editor open, project matches | Editor (port 6550) |
-| Editor open, wrong project | Daemon (port 6551) |
-| Editor closed, daemon running | Daemon (port 6551) |
+| Editor open, project matches | Editor (port 6551) |
+| Editor open, wrong project | Daemon (port 6550) |
+| Editor closed, daemon running | Daemon (port 6550) |
 | Editor closed, no daemon | One-shot |
 | CI/CD pipeline | Daemon (started by CI) or One-shot |
 
-The `director` binary tries backends in this order: port 6550 → port 6551 → one-shot. Connection attempts time out in 200ms, so the fallback chain is fast.
+The `director` binary tries backends in this order: port 6551 → port 6550 → one-shot. Connection attempts time out in 200ms, so the fallback chain is fast.
 
 ## Using the daemon in CI/CD
 
@@ -92,7 +92,7 @@ Alternatively, use one-shot mode in CI (simpler, no background process managemen
 
 ## Port configuration
 
-The default daemon port is 6551. Change it with:
+The default daemon port is 6550. Change it with:
 
 ```bash
 godot --headless --script addons/director/daemon.gd -- --port 7551

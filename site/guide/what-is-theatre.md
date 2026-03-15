@@ -31,21 +31,21 @@ The agent does not see a screenshot. It sees **structured data** — the same da
 
 ## Two Tools, One Stage
 
-### Spectator
+### Stage
 
-Spectator is a read-only observation tool for running Godot games. It consists of:
+Stage is a live observation and interaction tool for running Godot games. It consists of:
 
-- **A Rust GDExtension addon** (`addons/spectator/`) that runs inside your game and collects spatial data from the scene tree on every physics tick. It listens for incoming TCP connections on port 9077.
-- **A Rust MCP server + CLI** (`spectator`) that connects to the addon and exposes 9 tools to your AI agent — via MCP (`spectator serve`) or CLI (`spectator <tool> '<json>'`).
+- **A Rust GDExtension addon** (`addons/stage/`) that runs inside your game and collects spatial data from the scene tree on every physics tick. It listens for incoming TCP connections on port 9077.
+- **A Rust MCP server + CLI** (`stage`) that connects to the addon and exposes 9 tools to your AI agent — via MCP (`stage serve`) or CLI (`stage <tool> '<json>'`).
 
-Spectator answers questions like:
+Stage answers questions like:
 
 - "Where is the player right now?"
 - "How fast is the projectile moving when it hits that wall?"
 - "Which nodes are within 5 meters of the enemy?"
 - "What changed between frame 300 and frame 340 during the bug recording?"
 
-Spectator never modifies the game state. It is purely observational.
+Stage can also **act on the running game** — setting properties, calling methods, and emitting signals — so the agent can test hypotheses and verify fixes without restarting. These changes are ephemeral (not saved to disk); use Director for permanent modifications.
 
 ### Director
 
@@ -62,6 +62,8 @@ Director answers requests like:
 - "Create an animation that bounces the node from y=0 to y=2 over 0.5 seconds"
 
 Director never runs the game. It modifies the project files on disk through Godot's own API, so the changes are valid and immediately visible in the editor.
+
+Together, Stage and Director form a complete loop: Stage observes and tests the running game; Director makes the permanent changes. The agent can diagnose, prototype a fix at runtime, verify it works, then commit the change through Director — all without the human touching the editor.
 
 ## Who Is Theatre For?
 

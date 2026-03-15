@@ -6,19 +6,19 @@ The codebase is fully compliant with all established patterns (no violations fou
 
 ## Refactor Steps
 
-### Step 1: Share async TCP codec in Director via spectator-protocol
+### Step 1: Share async TCP codec in Director via stage-protocol
 **Priority**: High
 **Risk**: Low
-**Files**: `crates/director/Cargo.toml`, `crates/director/src/daemon.rs`, `crates/director/src/editor.rs`, `crates/spectator-protocol/Cargo.toml`
+**Files**: `crates/director/Cargo.toml`, `crates/director/src/daemon.rs`, `crates/director/src/editor.rs`, `crates/stage-protocol/Cargo.toml`
 
-**Current State**: `daemon.rs:214-248` and `editor.rs:149-183` each implement their own `write_message()`/`read_message()` functions using the exact same 4-byte BE u32 + JSON wire format that already exists in `spectator-protocol::codec::async_io`. The only difference is the error type (`DaemonError`/`EditorError` vs `CodecError`).
+**Current State**: `daemon.rs:214-248` and `editor.rs:149-183` each implement their own `write_message()`/`read_message()` functions using the exact same 4-byte BE u32 + JSON wire format that already exists in `stage-protocol::codec::async_io`. The only difference is the error type (`DaemonError`/`EditorError` vs `CodecError`).
 
-**Target State**: Both `daemon.rs` and `editor.rs` call `spectator_protocol::codec::async_io::{read_message, write_message}` and map `CodecError` to their local error types at the call site.
+**Target State**: Both `daemon.rs` and `editor.rs` call `stage_protocol::codec::async_io::{read_message, write_message}` and map `CodecError` to their local error types at the call site.
 
 **Approach**:
-1. Add `spectator-protocol = { path = "../spectator-protocol", features = ["async"] }` to `crates/director/Cargo.toml`
+1. Add `stage-protocol = { path = "../stage-protocol", features = ["async"] }` to `crates/director/Cargo.toml`
 2. Delete `write_message()` and `read_message()` from `daemon.rs`
-3. Replace usages with `spectator_protocol::codec::async_io::write_message(&mut self.stream, &request).await.map_err(|e| DaemonError::IoError(...))?`
+3. Replace usages with `stage_protocol::codec::async_io::write_message(&mut self.stream, &request).await.map_err(|e| DaemonError::IoError(...))?`
 4. Same for `editor.rs`
 5. Add `From<CodecError>` impls on `DaemonError` and `EditorError` if the mapping is cleaner that way
 
@@ -29,17 +29,17 @@ The codebase is fully compliant with all established patterns (no violations fou
 
 ---
 
-### Step 2: Share sync TCP codec in test harness via spectator-protocol
+### Step 2: Share sync TCP codec in test harness via stage-protocol
 **Priority**: High
 **Risk**: Low
 **Files**: `tests/director-tests/Cargo.toml`, `tests/director-tests/src/harness.rs`
 
-**Current State**: `harness.rs:481-500` implements `daemon_write_message()` and `daemon_read_message()` — sync versions of the same length-prefixed JSON protocol. `spectator_protocol::codec` already has sync `write_message()` and `read_message()`.
+**Current State**: `harness.rs:481-500` implements `daemon_write_message()` and `daemon_read_message()` — sync versions of the same length-prefixed JSON protocol. `stage_protocol::codec` already has sync `write_message()` and `read_message()`.
 
-**Target State**: `DaemonFixture::run()` and `EditorFixture::run()` call `spectator_protocol::codec::{write_message, read_message}` directly, with error mapping to `anyhow`.
+**Target State**: `DaemonFixture::run()` and `EditorFixture::run()` call `stage_protocol::codec::{write_message, read_message}` directly, with error mapping to `anyhow`.
 
 **Approach**:
-1. Add `spectator-protocol` dependency to `tests/director-tests/Cargo.toml`
+1. Add `stage-protocol` dependency to `tests/director-tests/Cargo.toml`
 2. Replace `daemon_write_message`/`daemon_read_message` with `codec::write_message`/`codec::read_message` calls
 3. Delete the two helper functions
 
@@ -119,12 +119,12 @@ The codebase is fully compliant with all established patterns (no violations fou
 
 ---
 
-### Step 6: Name timeout constants in spectator-server
+### Step 6: Name timeout constants in stage-server
 **Priority**: Low
 **Risk**: Low
-**Files**: `crates/spectator-server/src/tcp.rs`
+**Files**: `crates/stage-server/src/tcp.rs`
 
-**Current State**: Spectator server uses inline magic numbers for timeouts: `Duration::from_secs(10)` for handshake, `Duration::from_secs(5)` for query responses (tcp.rs, various lines). Director properly defines named constants (`READY_TIMEOUT`, `OPERATION_TIMEOUT`, `CONNECT_TIMEOUT`).
+**Current State**: Stage server uses inline magic numbers for timeouts: `Duration::from_secs(10)` for handshake, `Duration::from_secs(5)` for query responses (tcp.rs, various lines). Director properly defines named constants (`READY_TIMEOUT`, `OPERATION_TIMEOUT`, `CONNECT_TIMEOUT`).
 
 **Target State**: Named constants at module level in `tcp.rs`:
 ```rust
@@ -139,8 +139,8 @@ const RECONNECT_DELAY: Duration = Duration::from_secs(2);
 3. No behavioral change
 
 **Verification**:
-- `cargo build -p spectator-server` compiles
-- `cargo test -p spectator-server` passes
+- `cargo build -p stage-server` compiles
+- `cargo test -p stage-server` passes
 - `cargo test -p wire-tests` passes
 
 ---
@@ -152,7 +152,7 @@ const RECONNECT_DELAY: Duration = Duration::from_secs(2);
 
 **Current State**: Director defines default functions inline below each params struct (e.g., `fn default_root() -> String` in node.rs:83). Multiple params structs use `default_root()` — it's defined once but could benefit from centralization as Director grows.
 
-**Target State**: Create `crates/director/src/mcp/defaults.rs` collecting shared defaults, mirroring Spectator's `defaults.rs` pattern. Inline defaults that are used only once stay inline.
+**Target State**: Create `crates/director/src/mcp/defaults.rs` collecting shared defaults, mirroring Stage's `defaults.rs` pattern. Inline defaults that are used only once stay inline.
 
 **Approach**:
 1. Audit all `#[serde(default = "...")]` across Director params structs

@@ -1,12 +1,12 @@
-# Design: Documentation Alignment — Zero Spectator, Accurate Schemas
+# Design: Documentation Alignment — Zero Stage, Accurate Schemas
 
 ## Overview
 
 Comprehensive fix for all documentation discrepancies found during the audit.
 Two categories of work:
 
-1. **Eliminate every "spectator" reference** — site, CLAUDE.md, docs/, .claude/.
-   The codebase was renamed from `spectator-*` to `stage-*`. The binary is
+1. **Eliminate every "stage" reference** — site, CLAUDE.md, docs/, .claude/.
+   The codebase was renamed from `stage-*` to `stage-*`. The binary is
    `stage`, the addon is `addons/stage/`, the crates are `stage-server`,
    `stage-godot`, `stage-protocol`, `stage-core`. Zero legacy references remain.
 
@@ -15,11 +15,11 @@ Two categories of work:
 
 ---
 
-## Unit 1: Purge "spectator" from CLAUDE.md
+## Unit 1: Purge "stage" from CLAUDE.md
 
 **File**: `CLAUDE.md`
 
-Every occurrence of `spectator` (case-insensitive) must be replaced with the
+Every occurrence of `stage` (case-insensitive) must be replaced with the
 correct `stage` equivalent. This includes crate names, binary names, addon
 paths, class names, and prose references.
 
@@ -27,114 +27,114 @@ paths, class names, and prose references.
 
 | Line(s) | Old | New |
 |---------|-----|-----|
-| 6 | `**Spectator**: Rust MCP server + Rust GDExtension addon` | `**Stage**: Rust MCP server + Rust GDExtension addon` |
-| 15 | `spectator-server/     — Spectator MCP binary` | `stage-server/        — Stage MCP binary` |
-| 16 | `spectator-godot/      — Spectator GDExtension cdylib` | `stage-godot/         — Stage GDExtension cdylib` |
-| 17 | `spectator-protocol/   — Shared TCP wire format types` | `stage-protocol/      — Shared TCP wire format types` |
-| 18 | `spectator-core/       — Shared spatial logic` | `stage-core/          — Shared spatial logic` |
-| 21 | `addons/spectator/       — Spectator Godot addon` | `addons/stage/          — Stage Godot addon` |
-| 28 | `wire-tests/           — Spectator E2E tests` | `wire-tests/           — Stage E2E tests` |
-| 39 | `cargo build -p spectator-server` | `cargo build -p stage-server` |
-| 40 | `cargo build -p spectator-godot` | `cargo build -p stage-godot` |
-| 47 | `theatre deploy ~/dev/spectator/tests/godot-project` | `theatre deploy ~/dev/theatre/tests/godot-project` |
-| 97 | `Spectator TCP server starts` | `Stage TCP server starts` |
-| 102 | `` `spectator-godot` targets `api-4-5` `` | `` `stage-godot` targets `api-4-5` `` |
-| 105 | `classes spectator never uses` | `classes Stage never uses` |
-| 106 | `` `spectator.gdextension` `` | `` `stage.gdextension` `` |
-| 108-109 | `crates/spectator-godot/Cargo.toml` | `crates/stage-godot/Cargo.toml` |
-| 121-123 | `spectator serve`, `spectator <tool>` | `stage serve`, `stage <tool>` |
-| 124 | `spectator-godot runs on Godot's main thread` | `stage-godot runs on Godot's main thread` |
-| 137 | `spectator-server` | `stage-server` |
-| 145 | `### Spectator` | `### Stage` |
-| 146-148 | `spectator-godot depends on spectator-protocol` etc. | `stage-godot depends on stage-protocol` etc. |
-| 175 | `add SpectatorTCPServer handshake` | `add StageTCPServer handshake` |
+| 6 | `**Stage**: Rust MCP server + Rust GDExtension addon` | `**Stage**: Rust MCP server + Rust GDExtension addon` |
+| 15 | `stage-server/     — Stage MCP binary` | `stage-server/        — Stage MCP binary` |
+| 16 | `stage-godot/      — Stage GDExtension cdylib` | `stage-godot/         — Stage GDExtension cdylib` |
+| 17 | `stage-protocol/   — Shared TCP wire format types` | `stage-protocol/      — Shared TCP wire format types` |
+| 18 | `stage-core/       — Shared spatial logic` | `stage-core/          — Shared spatial logic` |
+| 21 | `addons/stage/       — Stage Godot addon` | `addons/stage/          — Stage Godot addon` |
+| 28 | `wire-tests/           — Stage E2E tests` | `wire-tests/           — Stage E2E tests` |
+| 39 | `cargo build -p stage-server` | `cargo build -p stage-server` |
+| 40 | `cargo build -p stage-godot` | `cargo build -p stage-godot` |
+| 47 | `theatre deploy ~/dev/stage/tests/godot-project` | `theatre deploy ~/dev/theatre/tests/godot-project` |
+| 97 | `Stage TCP server starts` | `Stage TCP server starts` |
+| 102 | `` `stage-godot` targets `api-4-5` `` | `` `stage-godot` targets `api-4-5` `` |
+| 105 | `classes stage never uses` | `classes Stage never uses` |
+| 106 | `` `stage.gdextension` `` | `` `stage.gdextension` `` |
+| 108-109 | `crates/stage-godot/Cargo.toml` | `crates/stage-godot/Cargo.toml` |
+| 121-123 | `stage serve`, `stage <tool>` | `stage serve`, `stage <tool>` |
+| 124 | `stage-godot runs on Godot's main thread` | `stage-godot runs on Godot's main thread` |
+| 137 | `stage-server` | `stage-server` |
+| 145 | `### Stage` | `### Stage` |
+| 146-148 | `stage-godot depends on stage-protocol` etc. | `stage-godot depends on stage-protocol` etc. |
+| 175 | `add StageTCPServer handshake` | `add StageTCPServer handshake` |
 
 **Acceptance Criteria**:
-- [ ] `grep -ci spectator CLAUDE.md` returns 0
+- [ ] `grep -ci stage CLAUDE.md` returns 0
 - [ ] All crate names reference `stage-*`
-- [ ] Binary name is `stage` not `spectator`
+- [ ] Binary name is `stage` not `stage`
 - [ ] Addon path is `addons/stage/`
 - [ ] Build commands use `-p stage-server`, `-p stage-godot`
 
 ---
 
-## Unit 2: Purge "spectator" from site source files
+## Unit 2: Purge "stage" from site source files
 
 **Files** (8 remaining occurrences across 4 files):
 
 ### `site/index.md` (line 128)
 ```
-Old: via MCP tools or CLI (`spectator spatial_snapshot '{"detail":"summary"}'`)
+Old: via MCP tools or CLI (`stage spatial_snapshot '{"detail":"summary"}'`)
 New: via MCP tools or CLI (`stage spatial_snapshot '{"detail":"summary"}'`)
 ```
 
 ### `site/guide/what-is-theatre.md` (lines 38-39)
 ```
-Old: (`addons/spectator/`) ... (`spectator`) ... (`spectator serve`) ... (`spectator <tool> '<json>'`)
+Old: (`addons/stage/`) ... (`stage`) ... (`stage serve`) ... (`stage <tool> '<json>'`)
 New: (`addons/stage/`) ... (`stage`) ... (`stage serve`) ... (`stage <tool> '<json>'`)
 ```
 
 ### `site/guide/how-it-works.md` (lines 46, 61-63, 124)
 ```
-Old: `addons/spectator/plugin.gd`
+Old: `addons/stage/plugin.gd`
 New: `addons/stage/plugin.gd`
 
-Old: The Stage server (`spectator` binary, crate: `spectator-server`)
+Old: The Stage server (`stage` binary, crate: `stage-server`)
 New: The Stage server (`stage` binary, crate: `stage-server`)
 
-Old: `spectator serve` / `spectator <tool>`
+Old: `stage serve` / `stage <tool>`
 New: `stage serve` / `stage <tool>`
 
-Old: Both Stage (`spectator serve`) and Director (`director serve`)
+Old: Both Stage (`stage serve`) and Director (`director serve`)
 New: Both Stage (`stage serve`) and Director (`director serve`)
 ```
 
 ### `site/guide/mcp-basics.md` (line 61)
 ```
-Old: ./target/release/spectator serve
+Old: ./target/release/stage serve
 New: ./target/release/stage serve
 ```
 
 ### `site/api/wire-format.md` (line 178)
 ```
-Old: `crates/spectator-protocol/src/codec.rs`
+Old: `crates/stage-protocol/src/codec.rs`
 New: `crates/stage-protocol/src/codec.rs`
 ```
 
 **Acceptance Criteria**:
-- [ ] `grep -rci spectator site/ --include='*.md' --include='*.vue' --include='*.mts' --include='*.ts' --include='*.css'` returns 0
+- [ ] `grep -rci stage site/ --include='*.md' --include='*.vue' --include='*.mts' --include='*.ts' --include='*.css'` returns 0
 - [ ] All CLI examples use `stage` binary name
 - [ ] All crate/path references use `stage-*`
 
 ---
 
-## Unit 3: Purge "spectator" from docs/ directory
+## Unit 3: Purge "stage" from docs/ directory
 
 **Files**: All markdown files in `docs/` and `docs/design/` (both active and
-completed). The user explicitly requested zero "spectator" references even in
+completed). The user explicitly requested zero "stage" references even in
 historical/archived docs.
 
 **Approach**: For each file in `docs/`, replace:
-- `spectator-server` → `stage-server`
-- `spectator-godot` → `stage-godot`
-- `spectator-protocol` → `stage-protocol`
-- `spectator-core` → `stage-core`
-- `Spectator` (capitalized, product name) → `Stage`
-- `spectator` (lowercase standalone, not part of compound) → `stage`
-- `SpectatorTCPServer` → `StageTCPServer`
-- `SpectatorCollector` → `StageCollector`
-- `SpectatorRecorder` → `StageRecorder`
-- `SpectatorExtension` → `StageExtension`
-- `SpectatorServer` → `StageServer`
-- `SpectatorRuntime` → `StageRuntime`
-- `SpectatorContributors` → `StageContributors`
-- `addons/spectator/` → `addons/stage/`
-- `spectator.gdextension` → `stage.gdextension`
-- `libspectator_godot` → `libstage_godot`
-- `/spectator/` (URL paths) → `/stage/`
-- `SPECTATOR_PORT` → `STAGE_PORT`
-- `is_spectator_node` → `is_stage_node`
-- `theatre/spectator/` (settings prefix) → `theatre/stage/`
+- `stage-server` → `stage-server`
+- `stage-godot` → `stage-godot`
+- `stage-protocol` → `stage-protocol`
+- `stage-core` → `stage-core`
+- `Stage` (capitalized, product name) → `Stage`
+- `stage` (lowercase standalone, not part of compound) → `stage`
+- `StageTCPServer` → `StageTCPServer`
+- `StageCollector` → `StageCollector`
+- `StageRecorder` → `StageRecorder`
+- `StageExtension` → `StageExtension`
+- `StageServer` → `StageServer`
+- `StageRuntime` → `StageRuntime`
+- `StageContributors` → `StageContributors`
+- `addons/stage/` → `addons/stage/`
+- `stage.gdextension` → `stage.gdextension`
+- `libstage_godot` → `libstage_godot`
+- `/stage/` (URL paths) → `/stage/`
+- `STAGE_PORT` → `STAGE_PORT`
+- `is_stage_node` → `is_stage_node`
+- `theatre/stage/` (settings prefix) → `theatre/stage/`
 
 **Files with known matches** (from audit):
 - `docs/THEATRE-MIGRATION.md`
@@ -147,13 +147,13 @@ historical/archived docs.
 - `docs/design/completed/theatre-rename.md`
 - Any others found by grep
 
-**Implementation Note**: Run `grep -rli spectator docs/` to find all files,
+**Implementation Note**: Run `grep -rli stage docs/` to find all files,
 then apply replacements file by file. Some design docs may have tables mapping
 old→new names (like `stage-rename-and-input.md`); update both columns so the
 table reads "was X (renamed to Y)" or simply uses the new names throughout.
 
 **Acceptance Criteria**:
-- [ ] `grep -rci spectator docs/` returns 0
+- [ ] `grep -rci stage docs/` returns 0
 - [ ] Completed design docs still make sense (context preserved, just names updated)
 
 ---
@@ -665,7 +665,7 @@ reference from Unit 6.
 
 **Acceptance Criteria**:
 - [ ] Port numbers correct
-- [ ] Zero "spectator" references
+- [ ] Zero "stage" references
 
 ---
 
@@ -675,13 +675,13 @@ reference from Unit 6.
 
 Scan all example pages for:
 - Incorrect parameter names in JSON examples
-- References to `spectator` binary
+- References to `stage` binary
 - Wrong port numbers
 
 Fix any found.
 
 **Acceptance Criteria**:
-- [ ] Zero "spectator" references
+- [ ] Zero "stage" references
 - [ ] JSON examples use correct parameter names
 
 ---
@@ -696,7 +696,7 @@ Fix any found.
 - `site/architecture/contributing.md` — fix build commands, crate names
 
 **Acceptance Criteria**:
-- [ ] Zero "spectator" references
+- [ ] Zero "stage" references
 - [ ] Crate names are `stage-*`
 - [ ] Port numbers correct
 
@@ -706,7 +706,7 @@ Fix any found.
 
 1. **Unit 1**: CLAUDE.md — foundational, affects all future agent sessions
 2. **Unit 3**: docs/ directory — bulk find-replace, no code dependencies
-3. **Unit 2**: site source files — remaining spectator references
+3. **Unit 2**: site source files — remaining stage references
 4. **Unit 4**: Director port numbers — critical factual fix
 5. **Unit 5**: Stage API reference rewrite — largest unit
 6. **Unit 6**: Director API reference rewrite — second largest
@@ -725,8 +725,8 @@ can be parallelized after 5-6 complete.
 ### Verification commands
 
 ```bash
-# Zero spectator references anywhere in the repo's docs
-grep -rci spectator CLAUDE.md site/ docs/ .claude/ \
+# Zero stage references anywhere in the repo's docs
+grep -rci stage CLAUDE.md site/ docs/ .claude/ \
   --include='*.md' --include='*.vue' --include='*.mts' \
   --include='*.ts' --include='*.css'
 # Expected: 0 total matches
@@ -744,15 +744,15 @@ cd site && npm run build
 - [ ] Read through the Director API reference and spot-check 3 operations
       against their actual params structs
 - [ ] Verify port numbers in ArchDiagram render correctly
-- [ ] Verify the home page renders with Stage branding (no Spectator)
+- [ ] Verify the home page renders with Stage branding (no Stage)
 
 ---
 
 ## Verification Checklist
 
 ```bash
-# 1. Zero spectator references
-grep -rci spectator CLAUDE.md site/ docs/ .claude/ --include='*.md' --include='*.vue' --include='*.mts' --include='*.ts' --include='*.css'
+# 1. Zero stage references
+grep -rci stage CLAUDE.md site/ docs/ .claude/ --include='*.md' --include='*.vue' --include='*.mts' --include='*.ts' --include='*.css'
 
 # 2. Site builds
 cd site && npm run build

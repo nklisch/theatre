@@ -56,7 +56,7 @@ wastes tokens and tool calls on a pattern that should be a single query.
 
 ### Unit 1: Enriched `condition` field description with inline schema
 
-**File**: `crates/spectator-server/src/mcp/clips.rs`
+**File**: `crates/stage-server/src/mcp/clips.rs`
 
 Replace the condition field's doc comment with a self-documenting description that
 shows every valid condition shape:
@@ -101,7 +101,7 @@ pub condition: Option<serde_json::Value>,
 
 ### Unit 2: Add `moved` condition type to query_range
 
-**File**: `crates/spectator-server/src/clip_analysis.rs`
+**File**: `crates/stage-server/src/clip_analysis.rs`
 
 Add a new condition type `"moved"` that detects frames where the target node's
 position changed by more than a threshold compared to the previous frame.
@@ -181,8 +181,8 @@ fn evaluate_moved(
 
 ### Unit 3: Add `trajectory` action to clips tool
 
-**File**: `crates/spectator-server/src/mcp/clips.rs` (params) +
-`crates/spectator-server/src/clip_analysis.rs` (implementation)
+**File**: `crates/stage-server/src/mcp/clips.rs` (params) +
+`crates/stage-server/src/clip_analysis.rs` (implementation)
 
 New action `trajectory` returns a compact timeseries of a node's position (and
 optionally other properties) sampled at regular intervals across a frame range.
@@ -281,8 +281,8 @@ When additional properties are requested:
 
 ### Unit 4: Enrich clip list metadata for agent context
 
-**File**: `crates/spectator-godot/src/recorder.rs` (write wall-clock time + build list)
-**File**: `crates/spectator-godot/src/recording_handler.rs` (list response building)
+**File**: `crates/stage-godot/src/recorder.rs` (write wall-clock time + build list)
+**File**: `crates/stage-godot/src/recording_handler.rs` (list response building)
 
 Three problems with the current clip list:
 
@@ -336,7 +336,7 @@ Three problems with the current clip list:
 
 #### 4a. Add `created_at` as ISO 8601 wall-clock timestamp
 
-**File**: `crates/spectator-godot/src/recorder.rs`
+**File**: `crates/stage-godot/src/recorder.rs`
 
 Add a `created_at_unix_ms` column to the recording table schema, populated with
 `current_time_ms()` (which is already wall-clock) at clip save time.
@@ -397,7 +397,7 @@ fn unix_ms_to_iso8601(ms: i64) -> String {
 
 #### 4b. Add `trigger_label` — the first human/agent marker label
 
-**File**: `crates/spectator-godot/src/recorder.rs`
+**File**: `crates/stage-godot/src/recorder.rs`
 
 When building the list, query the first marker in the clip that was set by a human
 or agent (not system). This is typically the reason the clip was saved.
@@ -468,7 +468,7 @@ let capture_block = capture_config.as_deref()
 
 ### Unit 5: Enrich tool descriptions across all 9 tools
 
-**File**: `crates/spectator-server/src/mcp/mod.rs` (tool descriptions)
+**File**: `crates/stage-server/src/mcp/mod.rs` (tool descriptions)
 
 The tool description is the first thing an agent reads. Current descriptions list
 actions but don't show parameter shapes for non-obvious inputs. Apply the same
@@ -553,11 +553,11 @@ Targeted spatial questions. Query types and required parameters:
 
 ### Unit 6: Enrich field-level JsonSchema descriptions
 
-**File**: `crates/spectator-server/src/mcp/clips.rs`
-**File**: `crates/spectator-server/src/mcp/action.rs`
-**File**: `crates/spectator-server/src/mcp/query.rs`
-**File**: `crates/spectator-server/src/mcp/watch.rs`
-**File**: `crates/spectator-server/src/mcp/snapshot.rs`
+**File**: `crates/stage-server/src/mcp/clips.rs`
+**File**: `crates/stage-server/src/mcp/action.rs`
+**File**: `crates/stage-server/src/mcp/query.rs`
+**File**: `crates/stage-server/src/mcp/watch.rs`
+**File**: `crates/stage-server/src/mcp/snapshot.rs`
 
 Add `#[schemars(description = "...")]` to fields where the type alone doesn't
 communicate valid values, format, or defaults.
@@ -621,7 +621,7 @@ pub detail: String,
 
 ### Unit 7: Improve error messages for invalid conditions
 
-**File**: `crates/spectator-server/src/clip_analysis.rs`
+**File**: `crates/stage-server/src/clip_analysis.rs`
 
 Currently, an unknown condition type silently returns `None` (no match), which
 produces an empty results array. The agent gets `"results": []` with no indication
@@ -760,7 +760,7 @@ come last because they reference the new capabilities.
 
 ## Testing
 
-### Unit Tests: `crates/spectator-server/src/clip_analysis.rs`
+### Unit Tests: `crates/stage-server/src/clip_analysis.rs`
 
 **New tests for `moved` condition**:
 ```rust
@@ -884,7 +884,7 @@ through the existing test infrastructure once deployed.
 cargo build --workspace
 
 # All tests pass
-theatre-deploy ~/dev/spectator/tests/godot-project
+theatre-deploy ~/dev/stage/tests/godot-project
 cargo test --workspace
 
 # Lint
@@ -897,7 +897,7 @@ cargo fmt --check
 
 ### Manual Verification
 
-1. Start a Godot project with Spectator, connect an MCP client
+1. Start a Godot project with Stage, connect an MCP client
 2. Call `clips(action: "list")` → verify `capture` block in response
 3. Call `clips(action: "query_range", condition: {"type": "foo"})` → verify
    helpful error message listing valid types

@@ -4,7 +4,7 @@
 
 Cross-crate analysis reveals three high-value refactoring targets: the director's
 30+ tool handlers that are 100% copy-paste, enum parsing boilerplate across
-spectator-server, and distance rounding duplication. Medium-value improvements
+stage-server, and distance rounding duplication. Medium-value improvements
 include sharing error conversion macros, consolidating snapshot budget injection
 paths, and extracting a `ProjectPathParams` trait for director.
 
@@ -65,14 +65,14 @@ pub async fn scene_create(&self, Parameters(params): Parameters<SceneCreateParam
 
 **Priority**: High (trivial, high clarity gain)
 **Risk**: Low
-**Files**: `crates/spectator-server/src/mcp/query.rs`, `crates/spectator-core/src/bearing.rs`
+**Files**: `crates/stage-server/src/mcp/query.rs`, `crates/stage-core/src/bearing.rs`
 
 **Current State**: Distance rounding `(x * 10.0).round() / 10.0` appears at:
 - `query.rs:113` (query_result_entry)
 - `query.rs:215` (relationship distance)
 - `query.rs:235` (nav_distance)
 
-**Target State**: A `round1` function in `spectator_core::types`:
+**Target State**: A `round1` function in `stage_core::types`:
 
 ```rust
 /// Round to 1 decimal place (0.1 precision).
@@ -84,34 +84,34 @@ pub fn round1(v: f64) -> f64 {
 Called as `types::round1(distance)` at each site.
 
 **Approach**:
-1. Add `round1` to `spectator-core/src/types.rs`
+1. Add `round1` to `stage-core/src/types.rs`
 2. Replace the three inline expressions in `query.rs`
 
 **Verification**:
-- `cargo test -p spectator-core`
-- `cargo test -p spectator-server`
+- `cargo test -p stage-core`
+- `cargo test -p stage-server`
 - Grep for `* 10.0).round()` — should be zero occurrences outside the utility
 
 ---
 
-### Step 3: Share `impl_mcp_internal!` macro via spectator-protocol
+### Step 3: Share `impl_mcp_internal!` macro via stage-protocol
 
 **Priority**: Medium
 **Risk**: Low
-**Files**: `crates/director/src/error.rs`, `crates/spectator-protocol/src/mcp_helpers.rs`
+**Files**: `crates/director/src/error.rs`, `crates/stage-protocol/src/mcp_helpers.rs`
 
 **Current State**: Director defines `impl_mcp_internal!` locally in `error.rs` to
-convert error types to `McpError::internal_error`. Spectator-server uses ad-hoc
+convert error types to `McpError::internal_error`. Stage-server uses ad-hoc
 `.map_err(|e| McpError::internal_error(...))` inline.
 
-**Target State**: `impl_mcp_internal!` lives in `spectator-protocol::mcp_helpers`
+**Target State**: `impl_mcp_internal!` lives in `stage-protocol::mcp_helpers`
 (behind the `mcp` feature flag, since it depends on `rmcp`). Director re-exports
-from there. Spectator-server can use it for any future error conversions.
+from there. Stage-server can use it for any future error conversions.
 
 **Approach**:
-1. Move the macro to `spectator-protocol/src/mcp_helpers.rs`
+1. Move the macro to `stage-protocol/src/mcp_helpers.rs`
 2. Export it: `pub use mcp_helpers::impl_mcp_internal;`
-3. Update `director/src/error.rs` to import from `spectator_protocol`
+3. Update `director/src/error.rs` to import from `stage_protocol`
 4. Keep director's `From<ResolveError>` hand-written (it maps to `invalid_params`, not `internal_error`)
 
 **Verification**:
@@ -124,7 +124,7 @@ from there. Spectator-server can use it for any future error conversions.
 
 **Priority**: Medium
 **Risk**: Medium (touches many modules)
-**Files**: `crates/spectator-server/src/mcp/mod.rs`, `*/config.rs`, `*/watch.rs`,
+**Files**: `crates/stage-server/src/mcp/mod.rs`, `*/config.rs`, `*/watch.rs`,
 `*/scene_tree.rs`, `*/snapshot.rs`, `*/inspect.rs`
 
 **Current State**: `parse_enum_param` + `parse_enum_list` at `mod.rs:72-102` are
@@ -161,9 +161,9 @@ become `DetailLevel::parse(&params.detail)?` instead of `parse_detail(&params.de
 4. Remove the now-unused wrapper functions
 
 **Verification**:
-- `cargo build -p spectator-server`
-- `cargo test -p spectator-server`
-- `cargo clippy -p spectator-server`
+- `cargo build -p stage-server`
+- `cargo test -p stage-server`
+- `cargo clippy -p stage-server`
 - Grep for `parse_enum_param` — should only appear in the trait default impl
 
 ---
@@ -172,8 +172,8 @@ become `DetailLevel::parse(&params.detail)?` instead of `parse_detail(&params.de
 
 **Priority**: Medium
 **Risk**: Medium
-**Files**: `crates/spectator-server/src/mcp/mod.rs:300-347`,
-`crates/spectator-server/src/mcp/snapshot.rs`
+**Files**: `crates/stage-server/src/mcp/mod.rs:300-347`,
+`crates/stage-server/src/mcp/snapshot.rs`
 
 **Current State**: The `spatial_snapshot` handler has two code paths that call
 `serialize_response` directly (lines 310, 344) instead of `finalize_response`.
@@ -197,7 +197,7 @@ block. The handler calls `finalize_response` uniformly like all other tools.
 4. Alternatively, keep `finalize_response` as the single budget injection point
 
 **Verification**:
-- `cargo test -p spectator-server` — all snapshot tests pass
+- `cargo test -p stage-server` — all snapshot tests pass
 - E2E journey tests pass
 - Manual verification: snapshot responses still contain `budget` block with
   correct `used`, `limit`, `hard_cap`
@@ -208,9 +208,9 @@ block. The handler calls `finalize_response` uniformly like all other tools.
 
 **Priority**: Low
 **Risk**: High (wire format change, requires coordinated addon + server update)
-**Files**: `crates/spectator-protocol/src/messages.rs`,
-`crates/spectator-server/src/tcp.rs`, `crates/spectator-godot/src/tcp_server.rs`,
-`crates/spectator-godot/src/query_handler.rs`
+**Files**: `crates/stage-protocol/src/messages.rs`,
+`crates/stage-server/src/tcp.rs`, `crates/stage-godot/src/tcp_server.rs`,
+`crates/stage-godot/src/query_handler.rs`
 
 **Current State**: `Message::Query`, `Message::Response`, and `Message::Error`
 use bare `id: String` for request correlation. This violates the contracts rule

@@ -252,7 +252,7 @@ mod tests {
 
     #[test]
     fn parse_project_godot_wrong_section() {
-        let contents = "[spectator]\nconnection/editor_port=6600\n";
+        let contents = "[stage]\nconnection/editor_port=6600\n";
         assert_eq!(parse_editor_port_from_project(contents), None);
     }
 }
@@ -649,7 +649,7 @@ func _add_setting(path: String, type: int, default_value: Variant,
   project setting > default.
 - `_process` is used (not `_physics_process`) since this runs in the editor,
   not in a game loop.
-- Settings are registered following the Spectator plugin pattern
+- Settings are registered following the Stage plugin pattern
   (`_register_settings` + `_add_setting`).
 
 **Acceptance Criteria**:
@@ -1489,7 +1489,7 @@ cargo build -p director
 cargo test -p director
 
 # E2E tests (requires Godot binary + test project deployed)
-theatre-deploy ~/dev/spectator/tests/godot-project
+theatre-deploy ~/dev/stage/tests/godot-project
 cargo test -p director-tests -- --include-ignored
 
 # Lint

@@ -7,7 +7,7 @@ project to the Theatre umbrella release.
 
 ### Environment Variable
 
-- `SPECTATOR_PORT` has been removed. Use `THEATRE_PORT` instead.
+- `STAGE_PORT` has been removed. Use `THEATRE_PORT` instead.
 
 Update your `.mcp.json`:
 ```json
@@ -73,7 +73,7 @@ These identifiers are unchanged — they are tool-specific, not project-level:
 |---|---|
 | Crate names | `stage-server`, `stage-godot`, `stage-protocol`, `stage-core`, `director` |
 | Binary names | `stage-server`, `director` |
-| GDExtension binary | `libstage_godot.so` (formerly `libspectator_godot.so`) |
+| GDExtension binary | `libstage_godot.so` (formerly `libstage_godot.so`) |
 | Addon directories | `addons/stage/`, `addons/director/` |
 | GDExtension manifest | `stage.gdextension` |
 | Wire protocol identifiers | `stage:status`, `stage:command`, `stage:activity` |

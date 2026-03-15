@@ -57,7 +57,7 @@ export default defineConfig({
 
     nav: [
       { text: 'Guide', link: '/guide/getting-started' },
-      { text: 'Spectator', link: '/spectator/' },
+      { text: 'Stage', link: '/stage/' },
       { text: 'Director', link: '/director/' },
       { text: 'Examples', link: '/examples/' },
       {
@@ -91,28 +91,28 @@ export default defineConfig({
         }
       ],
 
-      '/spectator/': [
+      '/stage/': [
         {
-          text: 'Spectator',
+          text: 'Stage',
           items: [
-            { text: 'Overview', link: '/spectator/' },
-            { text: 'Spatial Snapshot', link: '/spectator/snapshot' },
-            { text: 'Spatial Delta', link: '/spectator/delta' },
-            { text: 'Spatial Query', link: '/spectator/query' },
-            { text: 'Spatial Inspect', link: '/spectator/inspect' },
-            { text: 'Spatial Watch', link: '/spectator/watch' },
-            { text: 'Spatial Config', link: '/spectator/config' },
-            { text: 'Spatial Action', link: '/spectator/action' },
-            { text: 'Scene Tree', link: '/spectator/scene-tree' },
-            { text: 'Recording', link: '/spectator/recording' },
+            { text: 'Overview', link: '/stage/' },
+            { text: 'Spatial Snapshot', link: '/stage/snapshot' },
+            { text: 'Spatial Delta', link: '/stage/delta' },
+            { text: 'Spatial Query', link: '/stage/query' },
+            { text: 'Spatial Inspect', link: '/stage/inspect' },
+            { text: 'Spatial Watch', link: '/stage/watch' },
+            { text: 'Spatial Config', link: '/stage/config' },
+            { text: 'Spatial Action', link: '/stage/action' },
+            { text: 'Scene Tree', link: '/stage/scene-tree' },
+            { text: 'Recording', link: '/stage/recording' },
           ]
         },
         {
           text: 'Workflows',
           items: [
-            { text: 'The Dashcam', link: '/spectator/dashcam' },
-            { text: 'Watch & React', link: '/spectator/watch-workflow' },
-            { text: 'Editor Dock', link: '/spectator/editor-dock' },
+            { text: 'The Dashcam', link: '/stage/dashcam' },
+            { text: 'Watch & React', link: '/stage/watch-workflow' },
+            { text: 'Editor Dock', link: '/stage/editor-dock' },
           ]
         }
       ],
@@ -158,7 +158,7 @@ export default defineConfig({
           text: 'Building Scenarios',
           items: [
             { text: 'Level From Scratch', link: '/examples/build-level' },
-            { text: 'Director + Spectator Loop', link: '/examples/build-verify' },
+            { text: 'Director + Stage Loop', link: '/examples/build-verify' },
           ]
         }
       ],
@@ -167,7 +167,7 @@ export default defineConfig({
         {
           text: 'API Reference',
           items: [
-            { text: 'Spectator Tools', link: '/api/' },
+            { text: 'Stage Tools', link: '/api/' },
             { text: 'Director Tools', link: '/api/director' },
             { text: 'Wire Format', link: '/api/wire-format' },
             { text: 'Error Codes', link: '/api/errors' },
@@ -672,10 +672,10 @@ defineProps<{
 <script setup lang="ts">
 /**
  * Renders the Theatre architecture flow diagram.
- * Props control which path to highlight (spectator, director, or both).
+ * Props control which path to highlight (stage, director, or both).
  */
 defineProps<{
-  highlight?: 'spectator' | 'director' | 'both'
+  highlight?: 'stage' | 'director' | 'both'
 }>()
 </script>
 
@@ -687,11 +687,11 @@ defineProps<{
 │           (Claude Code, Cursor, etc.)               │
 └──────┬──────────────────────┬───────────────────────┘
        │                      │
-  Spectator (MCP)        Director (MCP)
+  Stage (MCP)        Director (MCP)
   <em>observe the game</em>      <em>build the game</em>
        │                      │
   ┌────▼────────┐      ┌──────▼──────┐
-  │  spectator  │      │  director   │
+  │  stage  │      │  director   │
   │  -server    │      │   server    │
   └────┬────────┘      └──────┬──────┘
        │ TCP :9077            │ TCP :6550/:6551
@@ -712,7 +712,7 @@ defineProps<{
   font-style: normal;
   color: var(--vp-c-text-3);
 }
-.arch-pre.spectator em:first-of-type,
+.arch-pre.stage em:first-of-type,
 .arch-pre.both em {
   color: var(--vp-c-brand-1);
 }
@@ -860,12 +860,12 @@ It's like debugging a web app without being able to open the browser.
 
 <div class="tool-cards">
 <ToolCard
-  title="Spectator"
+  title="Stage"
   icon="🔭"
   description="Observe the running game. Spatial snapshots, real-time deltas, watches, recordings. Your AI sees what the player sees — as structured data."
   tool="9 MCP tools"
   tokens="200-1500"
-  link="/spectator/"
+  link="/stage/"
 />
 <ToolCard
   title="Director"
@@ -882,7 +882,7 @@ It's like debugging a web app without being able to open the browser.
 <ArchDiagram highlight="both" />
 
 Theatre connects your AI agent to your Godot game through the
-**Model Context Protocol (MCP)**. Spectator observes the running game via a
+**Model Context Protocol (MCP)**. Stage observes the running game via a
 GDExtension addon. Director modifies scenes through the editor or headless Godot.
 Both communicate over TCP, exposing structured tools your agent already knows
 how to use.
@@ -941,13 +941,13 @@ git clone https://github.com/user/theatre
 cd theatre
 cargo build --workspace --release
 
-# Deploy Spectator to your Godot project
+# Deploy Stage to your Godot project
 theatre-deploy --release ~/your-godot-project
 ```
 
 ### 2. Enable the addons
 
-In Godot: **Project → Project Settings → Plugins → Spectator → Enable**
+In Godot: **Project → Project Settings → Plugins → Stage → Enable**
 
 For Director, copy `addons/director/` into your project and enable similarly.
 
@@ -958,9 +958,9 @@ Add to your project's `.mcp.json`:
 ```json
 {
   "mcpServers": {
-    "spectator": {
+    "stage": {
       "type": "stdio",
-      "command": "/path/to/theatre/target/release/spectator-server"
+      "command": "/path/to/theatre/target/release/stage-server"
     },
     "director": {
       "type": "stdio",
@@ -982,7 +982,7 @@ Your AI agent now sees your game world.
 
 **Acceptance Criteria**:
 - [ ] Landing page renders custom hero (not VitePress default)
-- [ ] Two ToolCards display for Spectator and Director
+- [ ] Two ToolCards display for Stage and Director
 - [ ] Architecture diagram renders with both paths highlighted
 - [ ] Dashcam conversation renders with human/agent/tool messages
 - [ ] Four scenario cards render with links to examples
@@ -991,12 +991,12 @@ Your AI agent now sees your game world.
 
 ---
 
-### Unit 5: Spectator Guide Pages
+### Unit 5: Stage Guide Pages
 
-**File**: `site/spectator/index.md` — Overview page
+**File**: `site/stage/index.md` — Overview page
 
 Content structure:
-- What Spectator does (2 paragraphs, derived from VISION.md "The Solution" section)
+- What Stage does (2 paragraphs, derived from VISION.md "The Solution" section)
 - The 9 tools as ToolCards in a grid (using data from CONTRACT.md)
 - "When to use each tool" decision flowchart in prose:
   - Starting out? → `spatial_snapshot` with `detail: "summary"`
@@ -1006,7 +1006,7 @@ Content structure:
   - Need to poke the game? → `spatial_action`
 - Link to each tool's dedicated page
 
-**Files**: `site/spectator/{snapshot,delta,query,inspect,watch,config,action,scene-tree,recording}.md`
+**Files**: `site/stage/{snapshot,delta,query,inspect,watch,config,action,scene-tree,recording}.md`
 
 Each tool page follows this template:
 
@@ -1042,7 +1042,7 @@ Each tool page follows this template:
 - {Practical tip 2}
 ```
 
-**Files**: `site/spectator/{dashcam,watch-workflow,editor-dock}.md`
+**Files**: `site/stage/{dashcam,watch-workflow,editor-dock}.md`
 
 Workflow pages that tell a story rather than document a single tool:
 - **Dashcam**: The full recording→analyze workflow with a narrative walkthrough
@@ -1056,7 +1056,7 @@ Workflow pages that tell a story rather than document a single tool:
 - Workflow pages cross-link to relevant tool pages
 
 **Acceptance Criteria**:
-- [ ] Spectator overview lists all 9 tools with descriptions and token costs
+- [ ] Stage overview lists all 9 tools with descriptions and token costs
 - [ ] Each of the 9 tool pages has parameters, example conversation, response format
 - [ ] Dashcam workflow page walks through F8→play→F9→analyze flow
 - [ ] All pages render without errors and sidebar navigation works
@@ -1100,7 +1100,7 @@ Each domain page follows:
 ```
 
 **Implementation Notes**:
-- Director pages are more reference-oriented than Spectator (less narrative, more lookup)
+- Director pages are more reference-oriented than Stage (less narrative, more lookup)
 - Batch page explains how to combine operations and why it matters (21 round-trips → 1)
 - Backend pages are short — most users don't need to think about this
 
@@ -1130,7 +1130,7 @@ Each example page is a full debugging narrative. Structure:
 
 <AgentConversation :messages="[
   // 6-10 messages showing the full debugging flow
-  // Human describes problem → Agent uses Spectator tools → diagnosis → fix
+  // Human describes problem → Agent uses Stage tools → diagnosis → fix
 ]" />
 
 ## What the Agent Found
@@ -1147,7 +1147,7 @@ Each example page is a full debugging narrative. Structure:
 
 {Brief explanation of the physics principle — e.g., CCD, collision shape thickness}
 
-## Key Spectator Tools Used
+## Key Stage Tools Used
 
 - `spatial_query` — checked proximity between ball and wall
 - `recording` — scrubbed the timeline to find the exact tunneling frame
@@ -1162,11 +1162,11 @@ Each example page is a full debugging narrative. Structure:
 - `site/examples/collision-layers.md`
 - `site/examples/ui-overlap.md`
 - `site/examples/build-level.md` — Director-focused: building a level from scratch
-- `site/examples/build-verify.md` — Full loop: Director builds, Spectator verifies
+- `site/examples/build-verify.md` — Full loop: Director builds, Stage verifies
 
 **Implementation Notes**:
 - Each debugging example should use realistic Godot class names (CharacterBody3D, NavigationAgent3D, Area3D, etc.)
-- AgentConversation tool calls should use actual Spectator/Director tool parameter format
+- AgentConversation tool calls should use actual Stage/Director tool parameter format
 - The "build-verify" example is the flagship cross-tool story
 - Keep scenarios specific and relatable — these are problems every Godot dev has hit
 
@@ -1181,7 +1181,7 @@ Each example page is a full debugging narrative. Structure:
 
 ### Unit 8: API Reference
 
-**File**: `site/api/index.md` — Spectator API Reference
+**File**: `site/api/index.md` — Stage API Reference
 
 Structured reference derived from CONTRACT.md. For each tool:
 - Full parameter schema (every field, type, default, constraints)
@@ -1210,7 +1210,7 @@ Complete error code table with descriptions and common causes.
 - Cross-link to guide pages for narrative explanations
 
 **Acceptance Criteria**:
-- [ ] Every Spectator tool parameter is documented with type and default
+- [ ] Every Stage tool parameter is documented with type and default
 - [ ] Every Director operation is documented with parameters
 - [ ] Error codes table is complete (matches CONTRACT.md)
 - [ ] Wire format page documents the TCP protocol
@@ -1226,7 +1226,7 @@ Complete error code table with descriptions and common causes.
 
 ## Unreleased
 
-### Spectator
+### Stage
 - ...
 
 ### Director
@@ -1296,7 +1296,7 @@ Open Graph image (1200x630) for social sharing. Shows title + tagline + Theatre 
 3. **Unit 3**: Vue components — needed by all content pages
 4. **Unit 10**: Static assets (placeholder SVGs) — needed for theme to render
 5. **Unit 4**: Landing page — the first thing anyone sees
-6. **Unit 5**: Spectator guide pages — the primary content
+6. **Unit 5**: Stage guide pages — the primary content
 7. **Unit 6**: Director guide pages — secondary content
 8. **Unit 7**: Example scenario pages — the differentiator
 9. **Unit 8**: API reference — the reference material

@@ -11,7 +11,7 @@ are `add_marker`, `save`, `status`, `list`, `delete`, `markers`, `snapshot_at`,
 `screenshots`.
 
 This design covers fixing all affected pages to match the real implementation,
-and catches remaining Spectator→Stage naming artifacts.
+and catches remaining Stage→Stage naming artifacts.
 
 ### Guiding Principles
 
@@ -272,7 +272,7 @@ describing dock Record/Stop buttons. Rewrite to be consistent.
 
    1. Have the tester play normally (dashcam is always running)
    2. Have them press **F9** whenever something seems wrong
-   3. Collect the clip files from `user://spectator_recordings/` afterward
+   3. Collect the clip files from `user://stage_recordings/` afterward
    4. Ask the agent to analyze all markers across clips
    ```
 

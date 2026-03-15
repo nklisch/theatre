@@ -12,9 +12,9 @@ M3 delivers two MCP tools: `spatial_action` for debugging-oriented game state ma
 
 ## Implementation Units
 
-### Unit 1: Protocol Types for Actions (`spectator-protocol`)
+### Unit 1: Protocol Types for Actions (`stage-protocol`)
 
-**File:** `crates/spectator-protocol/src/query.rs` (append to existing)
+**File:** `crates/stage-protocol/src/query.rs` (append to existing)
 
 Add request/response types for all action operations. The addon receives these via TCP and executes them against the Godot scene tree.
 
@@ -94,13 +94,13 @@ pub struct ActionResponse {
 - [ ] `ActionRequest` serde round-trip for all 9 variants
 - [ ] Tagged enum serializes with `"action"` field in snake_case
 - [ ] `ActionResponse` serializes with action, result, details, frame fields
-- [ ] `cargo test -p spectator-protocol` passes
+- [ ] `cargo test -p stage-protocol` passes
 
 ---
 
-### Unit 2: Protocol Types for Spatial Queries (`spectator-protocol`)
+### Unit 2: Protocol Types for Spatial Queries (`stage-protocol`)
 
-**File:** `crates/spectator-protocol/src/query.rs` (append to existing)
+**File:** `crates/stage-protocol/src/query.rs` (append to existing)
 
 Add request/response types for targeted spatial queries that the addon must execute (raycast, nav path) or provide raw data for (nearest, radius — server computes from index).
 
@@ -192,13 +192,13 @@ pub struct ResolveNodeResponse {
 - [ ] `SpatialQueryRequest` serde round-trip for all 3 variants
 - [ ] `QueryOrigin` deserializes both `"player"` and `[1.0, 2.0, 3.0]` correctly
 - [ ] `RaycastResponse`, `NavPathResponse`, `ResolveNodeResponse` round-trip
-- [ ] `cargo test -p spectator-protocol` passes
+- [ ] `cargo test -p stage-protocol` passes
 
 ---
 
-### Unit 3: Spatial Index (`spectator-core`)
+### Unit 3: Spatial Index (`stage-core`)
 
-**File:** `crates/spectator-core/src/index.rs` (new file)
+**File:** `crates/stage-core/src/index.rs` (new file)
 
 The spatial index enables efficient nearest-neighbor and radius queries server-side, without re-querying the addon. Uses rstar R-tree for 3D.
 
@@ -348,19 +348,19 @@ pub struct NearestResult {
 - [ ] `within_radius(point, r)` returns all entities within radius, sorted
 - [ ] Group and class filters exclude non-matching entities
 - [ ] Empty index returns empty results (no panics)
-- [ ] `cargo test -p spectator-core` passes with new index tests
+- [ ] `cargo test -p stage-core` passes with new index tests
 
 ---
 
 ### Unit 4: Index Integration in Server Session State
 
-**File:** `crates/spectator-server/src/tcp.rs` (modify existing `SessionState`)
+**File:** `crates/stage-server/src/tcp.rs` (modify existing `SessionState`)
 
 Add the spatial index to session state and rebuild it after each snapshot query.
 
 ```rust
 // Add to existing SessionState struct:
-use spectator_core::index::SpatialIndex;
+use stage_core::index::SpatialIndex;
 
 pub struct SessionState {
     // ... existing fields ...
@@ -379,7 +379,7 @@ impl Default for SessionState {
 }
 ```
 
-**File:** `crates/spectator-server/src/mcp/mod.rs` (modify `spatial_snapshot`)
+**File:** `crates/stage-server/src/mcp/mod.rs` (modify `spatial_snapshot`)
 
 After processing a snapshot response, rebuild the spatial index:
 
@@ -412,23 +412,23 @@ After processing a snapshot response, rebuild the spatial index:
 
 ---
 
-### Unit 5: Action Handler in GDExtension (`spectator-godot`)
+### Unit 5: Action Handler in GDExtension (`stage-godot`)
 
-**File:** `crates/spectator-godot/src/action_handler.rs` (new file)
+**File:** `crates/stage-godot/src/action_handler.rs` (new file)
 
 Executes action requests against the live Godot scene tree. Each action variant maps to Godot API calls.
 
 ```rust
 use godot::prelude::*;
 use godot::classes::{Engine, SceneTree, PackedScene, ResourceLoader};
-use spectator_protocol::query::{ActionRequest, ActionResponse};
-use crate::collector::SpectatorCollector;
+use stage_protocol::query::{ActionRequest, ActionResponse};
+use crate::collector::StageCollector;
 
 /// Execute an action against the Godot scene tree.
 /// Called from the query handler on the main thread.
 pub fn execute_action(
     request: &ActionRequest,
-    collector: &SpectatorCollector,
+    collector: &StageCollector,
 ) -> Result<ActionResponse, String> {
     match request {
         ActionRequest::Pause { paused } => execute_pause(*paused, collector),
@@ -453,16 +453,16 @@ pub fn execute_action(
     }
 }
 
-fn get_frame(collector: &SpectatorCollector) -> u64 {
+fn get_frame(collector: &StageCollector) -> u64 {
     collector.get_frame_info().frame
 }
 
-fn resolve_node(collector: &SpectatorCollector, path: &str) -> Result<Gd<Node>, String> {
+fn resolve_node(collector: &StageCollector, path: &str) -> Result<Gd<Node>, String> {
     // Reuse collector's existing resolve_node
     collector.resolve_node_public(path)
 }
 
-fn execute_pause(paused: bool, collector: &SpectatorCollector) -> Result<ActionResponse, String> {
+fn execute_pause(paused: bool, collector: &StageCollector) -> Result<ActionResponse, String> {
     let tree = collector.base().get_tree()
         .ok_or("Not in scene tree")?;
     tree.set_pause(paused);
@@ -478,7 +478,7 @@ fn execute_pause(paused: bool, collector: &SpectatorCollector) -> Result<ActionR
 
 fn execute_advance_frames(
     frames: u32,
-    collector: &SpectatorCollector,
+    collector: &StageCollector,
 ) -> Result<ActionResponse, String> {
     // Verify the tree is paused
     let tree = collector.base().get_tree()
@@ -515,7 +515,7 @@ fn execute_advance_frames(
 
 fn execute_advance_time(
     seconds: f64,
-    collector: &SpectatorCollector,
+    collector: &StageCollector,
 ) -> Result<ActionResponse, String> {
     let tree = collector.base().get_tree()
         .ok_or("Not in scene tree")?;
@@ -537,7 +537,7 @@ fn execute_teleport(
     path: &str,
     position: &[f64],
     rotation_deg: Option<f64>,
-    collector: &SpectatorCollector,
+    collector: &StageCollector,
 ) -> Result<ActionResponse, String> {
     let node = resolve_node(collector, path)?;
 
@@ -592,7 +592,7 @@ fn execute_set_property(
     path: &str,
     property: &str,
     value: &serde_json::Value,
-    collector: &SpectatorCollector,
+    collector: &StageCollector,
 ) -> Result<ActionResponse, String> {
     let mut node = resolve_node(collector, path)?;
     let obj = node.upcast_mut::<Object>();
@@ -624,7 +624,7 @@ fn execute_call_method(
     path: &str,
     method: &str,
     args: &[serde_json::Value],
-    collector: &SpectatorCollector,
+    collector: &StageCollector,
 ) -> Result<ActionResponse, String> {
     let mut node = resolve_node(collector, path)?;
 
@@ -660,7 +660,7 @@ fn execute_emit_signal(
     path: &str,
     signal: &str,
     args: &[serde_json::Value],
-    collector: &SpectatorCollector,
+    collector: &StageCollector,
 ) -> Result<ActionResponse, String> {
     let mut node = resolve_node(collector, path)?;
 
@@ -686,7 +686,7 @@ fn execute_spawn_node(
     parent_path: &str,
     name: Option<&str>,
     position: Option<&[f64]>,
-    collector: &SpectatorCollector,
+    collector: &StageCollector,
 ) -> Result<ActionResponse, String> {
     let mut parent = resolve_node(collector, parent_path)?;
 
@@ -740,7 +740,7 @@ fn execute_spawn_node(
 
 fn execute_remove_node(
     path: &str,
-    collector: &SpectatorCollector,
+    collector: &StageCollector,
 ) -> Result<ActionResponse, String> {
     let mut node = resolve_node(collector, path)?;
     let class = node.get_class().to_string();
@@ -829,13 +829,13 @@ fn json_to_variant(value: &serde_json::Value) -> Result<Variant, String> {
 
 ### Unit 6: Frame Advance Mechanism
 
-**File:** `crates/spectator-godot/src/tcp_server.rs` (modify existing)
+**File:** `crates/stage-godot/src/tcp_server.rs` (modify existing)
 
 Frame advance requires cooperation between the action handler and the physics tick loop. Since we can't force Godot to tick synchronously, we use a pending-advance pattern.
 
 ```rust
-// Add to SpectatorTCPServer fields:
-pub struct SpectatorTCPServer {
+// Add to StageTCPServer fields:
+pub struct StageTCPServer {
     // ... existing fields ...
     /// Number of physics frames remaining to advance.
     advance_remaining: u32,
@@ -895,7 +895,7 @@ pub struct AdvanceState {
 }
 ```
 
-Add `advance_state: RefCell<AdvanceState>` to `SpectatorCollector` since both the action handler and TCP server have access to it.
+Add `advance_state: RefCell<AdvanceState>` to `StageCollector` since both the action handler and TCP server have access to it.
 
 **Acceptance Criteria:**
 - [ ] `advance_frames(5)` causes exactly 5 physics ticks before re-pausing
@@ -906,14 +906,14 @@ Add `advance_state: RefCell<AdvanceState>` to `SpectatorCollector` since both th
 
 ---
 
-### Unit 7: Spatial Query Handler in GDExtension (`spectator-godot`)
+### Unit 7: Spatial Query Handler in GDExtension (`stage-godot`)
 
-**File:** `crates/spectator-godot/src/collector.rs` (add methods to SpectatorCollector)
+**File:** `crates/stage-godot/src/collector.rs` (add methods to StageCollector)
 
 Add raycast and navigation path methods to the collector.
 
 ```rust
-// Add to SpectatorCollector impl:
+// Add to StageCollector impl:
 
 /// Perform a physics raycast from one point to another.
 pub fn raycast(
@@ -1050,15 +1050,15 @@ pub fn resolve_node_public(&self, path: &str) -> Result<Gd<Node>, String> {
 
 ---
 
-### Unit 8: Query Handler Updates (`spectator-godot`)
+### Unit 8: Query Handler Updates (`stage-godot`)
 
-**File:** `crates/spectator-godot/src/query_handler.rs` (modify existing)
+**File:** `crates/stage-godot/src/query_handler.rs` (modify existing)
 
 Add dispatch for the new `execute_action`, `spatial_query`, and `resolve_node` methods.
 
 ```rust
 // Add to imports:
-use spectator_protocol::query::{
+use stage_protocol::query::{
     ActionRequest, ActionResponse,
     SpatialQueryRequest, RaycastResponse, NavPathResponse, ResolveNodeResponse,
 };
@@ -1069,7 +1069,7 @@ pub fn handle_query(
     id: String,
     method: &str,
     params: serde_json::Value,
-    collector: &SpectatorCollector,
+    collector: &StageCollector,
 ) -> Message {
     let result = match method {
         "get_snapshot_data" => handle_get_snapshot_data(params, collector),
@@ -1088,7 +1088,7 @@ pub fn handle_query(
 
 fn handle_execute_action(
     params: serde_json::Value,
-    collector: &SpectatorCollector,
+    collector: &StageCollector,
 ) -> Result<serde_json::Value, QueryError> {
     let request: ActionRequest = parse_params(params)?;
     let response = action_handler::execute_action(&request, collector)
@@ -1101,7 +1101,7 @@ fn handle_execute_action(
 
 fn handle_spatial_query(
     params: serde_json::Value,
-    collector: &SpectatorCollector,
+    collector: &StageCollector,
 ) -> Result<serde_json::Value, QueryError> {
     let request: SpatialQueryRequest = parse_params(params)?;
     match request {
@@ -1134,7 +1134,7 @@ fn handle_spatial_query(
 /// Resolve a QueryOrigin to a position array.
 fn resolve_query_origin(
     origin: &QueryOrigin,
-    collector: &SpectatorCollector,
+    collector: &StageCollector,
 ) -> Result<Vec<f64>, QueryError> {
     match origin {
         QueryOrigin::Position(pos) => Ok(pos.clone()),
@@ -1162,9 +1162,9 @@ fn resolve_query_origin(
 
 ---
 
-### Unit 9: MCP `spatial_action` Tool (`spectator-server`)
+### Unit 9: MCP `spatial_action` Tool (`stage-server`)
 
-**File:** `crates/spectator-server/src/mcp/action.rs` (new file)
+**File:** `crates/stage-server/src/mcp/action.rs` (new file)
 
 ```rust
 use schemars::JsonSchema;
@@ -1232,8 +1232,8 @@ pub struct SpatialActionParams {
 /// Validates required fields per action type.
 pub fn build_action_request(
     params: &SpatialActionParams,
-) -> Result<spectator_protocol::query::ActionRequest, rmcp::model::ErrorData> {
-    use spectator_protocol::query::ActionRequest;
+) -> Result<stage_protocol::query::ActionRequest, rmcp::model::ErrorData> {
+    use stage_protocol::query::ActionRequest;
     use rmcp::model::ErrorData as McpError;
 
     match params.action.as_str() {
@@ -1343,7 +1343,7 @@ pub fn build_action_request(
 }
 ```
 
-**File:** `crates/spectator-server/src/mcp/mod.rs` (add tool to router)
+**File:** `crates/stage-server/src/mcp/mod.rs` (add tool to router)
 
 ```rust
 pub mod action;
@@ -1371,7 +1371,7 @@ use action::{SpatialActionParams, build_action_request};
 
         // Inject budget
         let json_bytes = serde_json::to_vec(&response).unwrap_or_default().len();
-        let used = spectator_core::budget::estimate_tokens(json_bytes);
+        let used = stage_core::budget::estimate_tokens(json_bytes);
         inject_budget(&mut response, used, 500);
 
         // return_delta is deferred to M4 (requires delta engine)
@@ -1404,22 +1404,22 @@ use action::{SpatialActionParams, build_action_request};
 
 ---
 
-### Unit 10: MCP `spatial_query` Tool (`spectator-server`)
+### Unit 10: MCP `spatial_query` Tool (`stage-server`)
 
-**File:** `crates/spectator-server/src/mcp/query.rs` (new file)
+**File:** `crates/stage-server/src/mcp/query.rs` (new file)
 
 ```rust
 use rmcp::model::ErrorData as McpError;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
-use spectator_core::{
+use stage_core::{
     bearing::{self, perspective_from_forward, relative_position},
     budget::{estimate_tokens, resolve_budget, SnapshotBudgetDefaults},
     index::NearestResult,
     types::{vec_to_array3, Position3},
 };
-use spectator_protocol::query::{
+use stage_protocol::query::{
     NavPathResponse, QueryOrigin, RaycastResponse, ResolveNodeResponse, SpatialQueryRequest,
 };
 
@@ -1609,9 +1609,9 @@ async fn build_relationship_response(
 
     if let Some(elev) = &rel_a_to_b.elevation {
         result["elevation_diff"] = match elev {
-            spectator_core::types::Elevation::Level => serde_json::json!(0.0),
-            spectator_core::types::Elevation::Above(d) => serde_json::json!(d),
-            spectator_core::types::Elevation::Below(d) => serde_json::json!(-d),
+            stage_core::types::Elevation::Level => serde_json::json!(0.0),
+            stage_core::types::Elevation::Above(d) => serde_json::json!(d),
+            stage_core::types::Elevation::Below(d) => serde_json::json!(-d),
         };
     }
     if !raycast.clear {
@@ -1632,7 +1632,7 @@ async fn build_relationship_response(
 }
 ```
 
-**File:** `crates/spectator-server/src/mcp/mod.rs` (add tool to router)
+**File:** `crates/stage-server/src/mcp/mod.rs` (add tool to router)
 
 ```rust
 pub mod query;
@@ -1763,7 +1763,7 @@ use query::{SpatialQueryParams, parse_origin, resolve_origin, build_nearest_resp
 
 ### Unit 11: Error Handling Updates
 
-**File:** `crates/spectator-protocol/src/query.rs` (verify error codes)
+**File:** `crates/stage-protocol/src/query.rs` (verify error codes)
 
 No new types needed — errors use existing `Message::Error { code, message }`. New error codes used by M3:
 
@@ -1785,9 +1785,9 @@ Error messages should be actionable — include the node path, method name, or p
 
 ---
 
-### Unit 12: `spectator-core` lib.rs Exports and Cargo.toml Updates
+### Unit 12: `stage-core` lib.rs Exports and Cargo.toml Updates
 
-**File:** `crates/spectator-core/src/lib.rs` (add module)
+**File:** `crates/stage-core/src/lib.rs` (add module)
 
 ```rust
 pub mod bearing;
@@ -1797,7 +1797,7 @@ pub mod index;  // NEW
 pub mod types;
 ```
 
-**File:** `crates/spectator-core/Cargo.toml` (add rstar dependency)
+**File:** `crates/stage-core/Cargo.toml` (add rstar dependency)
 
 ```toml
 [dependencies]
@@ -1806,7 +1806,7 @@ serde_json = { workspace = true }
 rstar = "0.12"
 ```
 
-**File:** `crates/spectator-godot/src/lib.rs` (add module)
+**File:** `crates/stage-godot/src/lib.rs` (add module)
 
 ```rust
 mod collector;
@@ -1815,7 +1815,7 @@ mod tcp_server;
 mod action_handler;  // NEW
 ```
 
-**File:** `crates/spectator-server/src/mcp/mod.rs` (add modules)
+**File:** `crates/stage-server/src/mcp/mod.rs` (add modules)
 
 ```rust
 pub mod action;      // NEW
@@ -1853,7 +1853,7 @@ pub mod snapshot;
 
 ## Testing
 
-### Unit Tests: `crates/spectator-protocol/src/query.rs`
+### Unit Tests: `crates/stage-protocol/src/query.rs`
 
 ```rust
 #[test]
@@ -1894,7 +1894,7 @@ fn action_response_round_trip() {
 }
 ```
 
-### Unit Tests: `crates/spectator-core/src/index.rs`
+### Unit Tests: `crates/stage-core/src/index.rs`
 
 ```rust
 #[test]
@@ -1943,7 +1943,7 @@ fn empty_index_returns_empty() {
 }
 ```
 
-### Unit Tests: `crates/spectator-server/src/mcp/action.rs`
+### Unit Tests: `crates/stage-server/src/mcp/action.rs`
 
 ```rust
 #[test]
@@ -1980,7 +1980,7 @@ fn build_action_request_unknown_action() {
 }
 ```
 
-### Unit Tests: `crates/spectator-server/src/mcp/query.rs`
+### Unit Tests: `crates/stage-server/src/mcp/query.rs`
 
 ```rust
 #[test]
@@ -2020,20 +2020,20 @@ cargo clippy --workspace
 cargo fmt --check
 
 # Verify new protocol types serialize correctly
-cargo test -p spectator-protocol -- action query_origin
+cargo test -p stage-protocol -- action query_origin
 
 # Verify spatial index
-cargo test -p spectator-core -- index
+cargo test -p stage-core -- index
 
 # Verify action builder
-cargo test -p spectator-server -- action
+cargo test -p stage-server -- action
 
 # Verify query origin parsing
-cargo test -p spectator-server -- query
+cargo test -p stage-server -- query
 
 # Manual integration test (requires running Godot):
-# 1. Start Godot with spectator addon
-# 2. Start spectator-server
+# 1. Start Godot with stage addon
+# 2. Start stage-server
 # 3. Call spatial_action(action: "pause", paused: true) — game freezes
 # 4. Call spatial_action(action: "teleport", node: "some_node", position: [0,0,0])
 # 5. Call spatial_query(query_type: "nearest", from: "player", k: 3)

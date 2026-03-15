@@ -4,7 +4,7 @@
 
 M0 establishes the repo structure, builds both Rust artifacts, makes the GDExtension loadable in Godot, and proves TCP communication works with a handshake exchange. Nothing useful yet — just proof the plumbing connects.
 
-**Exit Criteria:** Run Godot with the addon enabled → hit Play → `spectator-server` connects → handshake logged on both sides → stop game → server reconnects when game restarts.
+**Exit Criteria:** Run Godot with the addon enabled → hit Play → `stage-server` connects → handshake logged on both sides → stop game → server reconnects when game restarts.
 
 ---
 
@@ -14,14 +14,14 @@ M0 establishes the repo structure, builds both Rust artifacts, makes the GDExten
 
 **Files:**
 - `Cargo.toml` (workspace root)
-- `crates/spectator-server/Cargo.toml`
-- `crates/spectator-server/src/main.rs`
-- `crates/spectator-godot/Cargo.toml`
-- `crates/spectator-godot/src/lib.rs`
-- `crates/spectator-protocol/Cargo.toml`
-- `crates/spectator-protocol/src/lib.rs`
-- `crates/spectator-core/Cargo.toml`
-- `crates/spectator-core/src/lib.rs`
+- `crates/stage-server/Cargo.toml`
+- `crates/stage-server/src/main.rs`
+- `crates/stage-godot/Cargo.toml`
+- `crates/stage-godot/src/lib.rs`
+- `crates/stage-protocol/Cargo.toml`
+- `crates/stage-protocol/src/lib.rs`
+- `crates/stage-core/Cargo.toml`
+- `crates/stage-core/src/lib.rs`
 
 #### `Cargo.toml` (workspace root)
 
@@ -29,10 +29,10 @@ M0 establishes the repo structure, builds both Rust artifacts, makes the GDExten
 [workspace]
 resolver = "2"
 members = [
-    "crates/spectator-server",
-    "crates/spectator-godot",
-    "crates/spectator-protocol",
-    "crates/spectator-core",
+    "crates/stage-server",
+    "crates/stage-godot",
+    "crates/stage-protocol",
+    "crates/stage-core",
 ]
 
 [workspace.package]
@@ -47,26 +47,26 @@ serde_json = "1"
 tokio = { version = "1", features = ["full"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
-spectator-protocol = { path = "crates/spectator-protocol" }
-spectator-core = { path = "crates/spectator-core" }
+stage-protocol = { path = "crates/stage-protocol" }
+stage-core = { path = "crates/stage-core" }
 ```
 
-#### `crates/spectator-server/Cargo.toml`
+#### `crates/stage-server/Cargo.toml`
 
 ```toml
 [package]
-name = "spectator-server"
+name = "stage-server"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "spectator-server"
+name = "stage-server"
 path = "src/main.rs"
 
 [dependencies]
-spectator-protocol.workspace = true
-spectator-core.workspace = true
+stage-protocol.workspace = true
+stage-core.workspace = true
 rmcp = { version = "0.16", features = ["server", "transport-io"] }
 tokio.workspace = true
 serde.workspace = true
@@ -78,11 +78,11 @@ anyhow = "1"
 uuid = { version = "1", features = ["v4"] }
 ```
 
-#### `crates/spectator-godot/Cargo.toml`
+#### `crates/stage-godot/Cargo.toml`
 
 ```toml
 [package]
-name = "spectator-godot"
+name = "stage-godot"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -91,18 +91,18 @@ license.workspace = true
 crate-type = ["cdylib"]
 
 [dependencies]
-spectator-protocol.workspace = true
+stage-protocol.workspace = true
 godot = { version = "0.4", features = ["api-4-2"] }
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
 ```
 
-#### `crates/spectator-protocol/Cargo.toml`
+#### `crates/stage-protocol/Cargo.toml`
 
 ```toml
 [package]
-name = "spectator-protocol"
+name = "stage-protocol"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -112,11 +112,11 @@ serde.workspace = true
 serde_json.workspace = true
 ```
 
-#### `crates/spectator-core/Cargo.toml`
+#### `crates/stage-core/Cargo.toml`
 
 ```toml
 [package]
-name = "spectator-core"
+name = "stage-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -126,16 +126,16 @@ serde.workspace = true
 serde_json.workspace = true
 ```
 
-#### `crates/spectator-core/src/lib.rs`
+#### `crates/stage-core/src/lib.rs`
 
 ```rust
-//! Shared spatial logic for Spectator.
+//! Shared spatial logic for Stage.
 //!
 //! Pure computation: bearing math, spatial indexing, delta engine, token budget.
 //! No Godot API, no MCP API — testable standalone.
 ```
 
-#### `crates/spectator-server/src/main.rs` (stub)
+#### `crates/stage-server/src/main.rs` (stub)
 
 ```rust
 use anyhow::Result;
@@ -146,32 +146,32 @@ async fn main() -> Result<()> {
         .with_writer(std::io::stderr)
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("spectator=info".parse()?),
+                .add_directive("stage=info".parse()?),
         )
         .init();
 
-    tracing::info!("spectator-server v{}", env!("CARGO_PKG_VERSION"));
+    tracing::info!("stage-server v{}", env!("CARGO_PKG_VERSION"));
     tracing::info!("waiting for connection...");
 
     Ok(())
 }
 ```
 
-#### `crates/spectator-godot/src/lib.rs` (stub)
+#### `crates/stage-godot/src/lib.rs` (stub)
 
 ```rust
 use godot::prelude::*;
 
-struct SpectatorExtension;
+struct StageExtension;
 
 #[gdextension]
-unsafe impl ExtensionLibrary for SpectatorExtension {}
+unsafe impl ExtensionLibrary for StageExtension {}
 ```
 
-#### `crates/spectator-protocol/src/lib.rs` (stub)
+#### `crates/stage-protocol/src/lib.rs` (stub)
 
 ```rust
-//! TCP wire protocol types shared between spectator-server and spectator-godot.
+//! TCP wire protocol types shared between stage-server and stage-godot.
 
 pub mod codec;
 pub mod handshake;
@@ -183,14 +183,14 @@ pub mod messages;
 - [ ] `cargo test --workspace` succeeds (no tests yet, but no compilation errors)
 - [ ] `cargo clippy --workspace` reports no warnings
 - [ ] `cargo fmt --check` passes
-- [ ] `spectator-server` binary runs, prints version and "waiting for connection"
-- [ ] `spectator-godot` produces `libspectator_godot.so` (or platform equivalent)
+- [ ] `stage-server` binary runs, prints version and "waiting for connection"
+- [ ] `stage-godot` produces `libstage_godot.so` (or platform equivalent)
 
 ---
 
 ### Unit 2: Protocol — Handshake Message Types
 
-**File:** `crates/spectator-protocol/src/handshake.rs`
+**File:** `crates/stage-protocol/src/handshake.rs`
 
 ```rust
 use serde::{Deserialize, Serialize};
@@ -202,8 +202,8 @@ pub struct Handshake {
     #[serde(rename = "type")]
     pub msg_type: String,
 
-    /// Spectator addon version (e.g., "0.1.0")
-    pub spectator_version: String,
+    /// Stage addon version (e.g., "0.1.0")
+    pub stage_version: String,
 
     /// Wire protocol version. Must match between server and addon.
     pub protocol_version: u32,
@@ -228,8 +228,8 @@ pub struct HandshakeAck {
     #[serde(rename = "type")]
     pub msg_type: String,
 
-    /// Server's spectator version
-    pub spectator_version: String,
+    /// Server's stage version
+    pub stage_version: String,
 
     /// Agreed protocol version
     pub protocol_version: u32,
@@ -248,7 +248,7 @@ pub struct HandshakeError {
     /// Human-readable error description
     pub message: String,
 
-    /// Server's spectator version
+    /// Server's stage version
     pub server_version: String,
 
     /// Protocol versions the server supports
@@ -267,7 +267,7 @@ impl Handshake {
     ) -> Self {
         Self {
             msg_type: "handshake".to_string(),
-            spectator_version: env!("CARGO_PKG_VERSION").to_string(),
+            stage_version: env!("CARGO_PKG_VERSION").to_string(),
             protocol_version: PROTOCOL_VERSION,
             godot_version,
             scene_dimensions,
@@ -281,7 +281,7 @@ impl HandshakeAck {
     pub fn new(session_id: String) -> Self {
         Self {
             msg_type: "handshake_ack".to_string(),
-            spectator_version: env!("CARGO_PKG_VERSION").to_string(),
+            stage_version: env!("CARGO_PKG_VERSION").to_string(),
             protocol_version: PROTOCOL_VERSION,
             session_id,
         }
@@ -313,7 +313,7 @@ impl HandshakeError {
 
 ### Unit 3: Protocol — Length-Prefixed JSON Codec
 
-**File:** `crates/spectator-protocol/src/codec.rs`
+**File:** `crates/stage-protocol/src/codec.rs`
 
 ```rust
 use serde::{de::DeserializeOwned, Serialize};
@@ -398,7 +398,7 @@ impl std::error::Error for CodecError {
 }
 ```
 
-**File:** `crates/spectator-protocol/src/codec.rs` — async variants for tokio
+**File:** `crates/stage-protocol/src/codec.rs` — async variants for tokio
 
 ```rust
 /// Async codec functions for use with tokio::net::TcpStream.
@@ -436,16 +436,16 @@ pub mod async_io {
 ```
 
 **Implementation Notes:**
-- The codec module provides both sync (for `spectator-godot` which uses `std::net`) and async (for `spectator-server` which uses tokio) variants
-- `spectator-protocol` gets a `tokio` dependency behind a feature flag: `tokio = { version = "1", features = ["io-util"], optional = true }` with `features = ["async"]` enabling it
-- `spectator-server` depends on `spectator-protocol = { workspace = true, features = ["async"] }`
-- `spectator-godot` depends on `spectator-protocol = { workspace = true }` (no async)
+- The codec module provides both sync (for `stage-godot` which uses `std::net`) and async (for `stage-server` which uses tokio) variants
+- `stage-protocol` gets a `tokio` dependency behind a feature flag: `tokio = { version = "1", features = ["io-util"], optional = true }` with `features = ["async"]` enabling it
+- `stage-server` depends on `stage-protocol = { workspace = true, features = ["async"] }`
+- `stage-godot` depends on `stage-protocol = { workspace = true }` (no async)
 
-Update `crates/spectator-protocol/Cargo.toml`:
+Update `crates/stage-protocol/Cargo.toml`:
 
 ```toml
 [package]
-name = "spectator-protocol"
+name = "stage-protocol"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -472,7 +472,7 @@ async = ["tokio"]
 
 ### Unit 4: Protocol — Request/Response Message Envelope
 
-**File:** `crates/spectator-protocol/src/messages.rs`
+**File:** `crates/stage-protocol/src/messages.rs`
 
 For M0, only the top-level message envelope is needed. Query methods are added in M1.
 
@@ -541,7 +541,7 @@ pub enum Message {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Handshake {
-    pub spectator_version: String,
+    pub stage_version: String,
     pub protocol_version: u32,
     pub godot_version: String,
     pub scene_dimensions: u32,
@@ -551,7 +551,7 @@ pub struct Handshake {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct HandshakeAck {
-    pub spectator_version: String,
+    pub stage_version: String,
     pub protocol_version: u32,
     pub session_id: String,
 }
@@ -566,7 +566,7 @@ pub struct HandshakeError {
 
 This way, `Message::Handshake(h)` serializes to:
 ```json
-{"type": "handshake", "spectator_version": "0.1.0", "protocol_version": 1, ...}
+{"type": "handshake", "stage_version": "0.1.0", "protocol_version": 1, ...}
 ```
 
 **Acceptance Criteria:**
@@ -578,15 +578,15 @@ This way, `Message::Handshake(h)` serializes to:
 
 ---
 
-### Unit 5: GDExtension — `SpectatorTCPServer` Class
+### Unit 5: GDExtension — `StageTCPServer` Class
 
-**File:** `crates/spectator-godot/src/tcp_server.rs`
+**File:** `crates/stage-godot/src/tcp_server.rs`
 
 This is the core networking class for M0. It manages a TCP listener that accepts a single connection and handles the handshake.
 
 ```rust
 use godot::prelude::*;
-use spectator_protocol::{
+use stage_protocol::{
     codec,
     handshake::{Handshake, PROTOCOL_VERSION},
     messages::Message,
@@ -596,7 +596,7 @@ use std::net::{TcpListener, TcpStream};
 
 #[derive(GodotClass)]
 #[class(base = Node)]
-pub struct SpectatorTCPServer {
+pub struct StageTCPServer {
     base: Base<Node>,
     listener: Option<TcpListener>,
     client: Option<TcpStream>,
@@ -605,7 +605,7 @@ pub struct SpectatorTCPServer {
 }
 
 #[godot_api]
-impl INode for SpectatorTCPServer {
+impl INode for StageTCPServer {
     fn init(base: Base<Node>) -> Self {
         Self {
             base,
@@ -618,7 +618,7 @@ impl INode for SpectatorTCPServer {
 }
 
 #[godot_api]
-impl SpectatorTCPServer {
+impl StageTCPServer {
     /// Start listening on the given port. Binds to localhost only.
     #[func]
     pub fn start(&mut self, port: i32) {
@@ -628,10 +628,10 @@ impl SpectatorTCPServer {
             Ok(listener) => {
                 listener.set_nonblocking(true).ok();
                 self.listener = Some(listener);
-                godot_print!("[Spectator] TCP server listening on {}", addr);
+                godot_print!("[Stage] TCP server listening on {}", addr);
             }
             Err(e) => {
-                godot_error!("[Spectator] Failed to bind to {}: {}", addr, e);
+                godot_error!("[Stage] Failed to bind to {}: {}", addr, e);
             }
         }
     }
@@ -642,7 +642,7 @@ impl SpectatorTCPServer {
         self.client = None;
         self.listener = None;
         self.handshake_completed = false;
-        godot_print!("[Spectator] TCP server stopped");
+        godot_print!("[Stage] TCP server stopped");
     }
 
     /// Returns true if a client is connected and handshake is complete.
@@ -667,7 +667,7 @@ impl SpectatorTCPServer {
 }
 
 // Private implementation methods (not exposed to GDScript)
-impl SpectatorTCPServer {
+impl StageTCPServer {
     fn try_accept(&mut self) {
         let listener = match &self.listener {
             Some(l) => l,
@@ -676,7 +676,7 @@ impl SpectatorTCPServer {
 
         match listener.accept() {
             Ok((stream, addr)) => {
-                godot_print!("[Spectator] Client connected from {}", addr);
+                godot_print!("[Stage] Client connected from {}", addr);
                 stream.set_nonblocking(true).ok();
                 self.client = Some(stream);
                 self.handshake_completed = false;
@@ -686,7 +686,7 @@ impl SpectatorTCPServer {
                 // No pending connection — normal for non-blocking
             }
             Err(e) => {
-                godot_error!("[Spectator] Accept error: {}", e);
+                godot_error!("[Stage] Accept error: {}", e);
             }
         }
     }
@@ -705,10 +705,10 @@ impl SpectatorTCPServer {
             stream.set_nonblocking(false).ok();
             match codec::write_message(stream, &msg) {
                 Ok(()) => {
-                    godot_print!("[Spectator] Handshake sent");
+                    godot_print!("[Stage] Handshake sent");
                 }
                 Err(e) => {
-                    godot_error!("[Spectator] Failed to send handshake: {}", e);
+                    godot_error!("[Stage] Failed to send handshake: {}", e);
                     self.disconnect_client();
                 }
             }
@@ -743,12 +743,12 @@ impl SpectatorTCPServer {
                 if e.kind() == ErrorKind::UnexpectedEof
                     || e.kind() == ErrorKind::ConnectionReset =>
             {
-                godot_print!("[Spectator] Client disconnected");
+                godot_print!("[Stage] Client disconnected");
                 self.disconnect_client();
                 return;
             }
             Err(e) => {
-                godot_error!("[Spectator] Read error: {}", e);
+                godot_error!("[Stage] Read error: {}", e);
                 self.disconnect_client();
                 return;
             }
@@ -764,18 +764,18 @@ impl SpectatorTCPServer {
         match msg {
             Message::HandshakeAck(ack) => {
                 godot_print!(
-                    "[Spectator] Handshake ACK received — session {}",
+                    "[Stage] Handshake ACK received — session {}",
                     ack.session_id
                 );
                 self.handshake_completed = true;
             }
             Message::HandshakeError(err) => {
-                godot_error!("[Spectator] Handshake rejected: {}", err.message);
+                godot_error!("[Stage] Handshake rejected: {}", err.message);
                 self.disconnect_client();
             }
             _ => {
                 // M0: ignore other message types
-                godot_print!("[Spectator] Received message (unhandled in M0)");
+                godot_print!("[Stage] Received message (unhandled in M0)");
             }
         }
     }
@@ -811,17 +811,17 @@ impl SpectatorTCPServer {
 }
 ```
 
-**File:** `crates/spectator-godot/src/lib.rs` (updated to register modules)
+**File:** `crates/stage-godot/src/lib.rs` (updated to register modules)
 
 ```rust
 use godot::prelude::*;
 
 mod tcp_server;
 
-struct SpectatorExtension;
+struct StageExtension;
 
 #[gdextension]
-unsafe impl ExtensionLibrary for SpectatorExtension {}
+unsafe impl ExtensionLibrary for StageExtension {}
 ```
 
 **Implementation Notes:**
@@ -831,7 +831,7 @@ unsafe impl ExtensionLibrary for SpectatorExtension {}
 - Scene dimension detection is hardcoded to 3 for M0; will be implemented in M9
 
 **Acceptance Criteria:**
-- [ ] `SpectatorTCPServer` class is available in GDScript after GDExtension loads
+- [ ] `StageTCPServer` class is available in GDScript after GDExtension loads
 - [ ] `start(port)` binds to `127.0.0.1:{port}` and logs success
 - [ ] `start()` with an in-use port logs a clear error, does not crash
 - [ ] `poll()` accepts incoming connections without blocking
@@ -845,11 +845,11 @@ unsafe impl ExtensionLibrary for SpectatorExtension {}
 
 ### Unit 6: MCP Server — TCP Client with Reconnection
 
-**File:** `crates/spectator-server/src/tcp.rs`
+**File:** `crates/stage-server/src/tcp.rs`
 
 ```rust
 use anyhow::Result;
-use spectator_protocol::{
+use stage_protocol::{
     codec::async_io,
     handshake::{HandshakeAck, HandshakeError, PROTOCOL_VERSION},
     messages::Message,
@@ -877,7 +877,7 @@ pub struct SessionState {
 /// Information received from the addon during handshake.
 #[derive(Debug, Clone)]
 pub struct HandshakeInfo {
-    pub spectator_version: String,
+    pub stage_version: String,
     pub godot_version: String,
     pub scene_dimensions: u32,
     pub physics_ticks_per_sec: u32,
@@ -981,7 +981,7 @@ async fn handle_connection(
         s.connected = true;
         s.session_id = Some(session_id);
         s.handshake_info = Some(HandshakeInfo {
-            spectator_version: handshake.spectator_version,
+            stage_version: handshake.stage_version,
             godot_version: handshake.godot_version,
             scene_dimensions: handshake.scene_dimensions,
             physics_ticks_per_sec: handshake.physics_ticks_per_sec,
@@ -1027,7 +1027,7 @@ async fn handle_connection(
 
 ### Unit 7: MCP Server — Stdio MCP Skeleton
 
-**File:** `crates/spectator-server/src/server.rs`
+**File:** `crates/stage-server/src/server.rs`
 
 ```rust
 use rmcp::model::{Implementation, ServerCapabilities, ServerInfo};
@@ -1039,27 +1039,27 @@ use tokio::sync::Mutex;
 use crate::tcp::SessionState;
 
 #[derive(Clone)]
-pub struct SpectatorServer {
+pub struct StageServer {
     pub state: Arc<Mutex<SessionState>>,
 }
 
-impl SpectatorServer {
+impl StageServer {
     pub fn new(state: Arc<Mutex<SessionState>>) -> Self {
         Self { state }
     }
 }
 
 #[tool_box]
-impl SpectatorServer {
+impl StageServer {
     // No tools defined in M0. The #[tool_box] macro is present to establish
     // the pattern. Tools are added in M1+.
 }
 
-impl ServerHandler for SpectatorServer {
+impl ServerHandler for StageServer {
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
             server_info: Implementation {
-                name: "spectator-server".to_string(),
+                name: "stage-server".to_string(),
                 version: env!("CARGO_PKG_VERSION").to_string(),
             },
             capabilities: ServerCapabilities::builder()
@@ -1071,7 +1071,7 @@ impl ServerHandler for SpectatorServer {
 }
 ```
 
-**File:** `crates/spectator-server/src/main.rs` (full M0 version)
+**File:** `crates/stage-server/src/main.rs` (full M0 version)
 
 ```rust
 mod server;
@@ -1082,7 +1082,7 @@ use rmcp::{transport::stdio, ServiceExt};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use server::SpectatorServer;
+use server::StageServer;
 use tcp::SessionState;
 
 /// Default TCP port for connecting to the Godot addon.
@@ -1095,11 +1095,11 @@ async fn main() -> Result<()> {
         .with_writer(std::io::stderr)
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("spectator=info".parse()?),
+                .add_directive("stage=info".parse()?),
         )
         .init();
 
-    tracing::info!("spectator-server v{}", env!("CARGO_PKG_VERSION"));
+    tracing::info!("stage-server v{}", env!("CARGO_PKG_VERSION"));
 
     // Parse port from env or use default
     let port: u16 = std::env::var("THEATRE_PORT")
@@ -1117,7 +1117,7 @@ async fn main() -> Result<()> {
     });
 
     // Start MCP server on stdio — blocks until AI client disconnects
-    let server = SpectatorServer::new(state);
+    let server = StageServer::new(state);
     let service = server.serve(stdio()).await?;
     service.waiting().await?;
 
@@ -1133,8 +1133,8 @@ async fn main() -> Result<()> {
 - TCP client is spawned before `.serve()` so it starts connecting immediately
 
 **Acceptance Criteria:**
-- [ ] `spectator-server` starts, logs version to stderr
-- [ ] MCP handshake completes on stdio (AI client sees server info with name "spectator-server")
+- [ ] `stage-server` starts, logs version to stderr
+- [ ] MCP handshake completes on stdio (AI client sees server info with name "stage-server")
 - [ ] `tools/list` returns empty tool list
 - [ ] TCP client loop runs concurrently with MCP handler
 - [ ] `THEATRE_PORT=9078` makes server connect to port 9078 instead of 9077
@@ -1144,7 +1144,7 @@ async fn main() -> Result<()> {
 
 ### Unit 8: GDExtension Manifest
 
-**File:** `addons/spectator/spectator.gdextension`
+**File:** `addons/stage/stage.gdextension`
 
 ```ini
 [configuration]
@@ -1153,8 +1153,8 @@ compatibility_minimum = "4.5"
 reloadable = true
 
 [libraries]
-linux.debug.x86_64 = "res://addons/spectator/bin/linux/libspectator_godot.so"
-linux.release.x86_64 = "res://addons/spectator/bin/linux/libspectator_godot.so"
+linux.debug.x86_64 = "res://addons/stage/bin/linux/libstage_godot.so"
+linux.release.x86_64 = "res://addons/stage/bin/linux/libstage_godot.so"
 ```
 
 **Implementation Notes:**
@@ -1167,25 +1167,25 @@ linux.release.x86_64 = "res://addons/spectator/bin/linux/libspectator_godot.so"
 **Acceptance Criteria:**
 - [ ] Godot 4.5+ recognizes the `.gdextension` file when present in the project
 - [ ] GDExtension loads without errors when the `.so` binary is present
-- [ ] `SpectatorTCPServer` class is available in GDScript after loading
+- [ ] `StageTCPServer` class is available in GDScript after loading
 - [ ] Error logged (not crash) if binary is missing for the current platform
 
 ---
 
 ### Unit 9: GDScript Plugin
 
-**File:** `addons/spectator/plugin.cfg`
+**File:** `addons/stage/plugin.cfg`
 
 ```ini
 [plugin]
-name="Spectator"
+name="Stage"
 description="Spatial debugging for AI agents — gives your AI eyes into the running game"
-author="Spectator Contributors"
+author="Stage Contributors"
 version="0.1.0"
 script="plugin.gd"
 ```
 
-**File:** `addons/spectator/plugin.gd`
+**File:** `addons/stage/plugin.gd`
 
 ```gdscript
 @tool
@@ -1193,20 +1193,20 @@ extends EditorPlugin
 
 
 func _enable_plugin() -> void:
-    add_autoload_singleton("SpectatorRuntime", "res://addons/spectator/runtime.gd")
+    add_autoload_singleton("StageRuntime", "res://addons/stage/runtime.gd")
 
 
 func _disable_plugin() -> void:
-    remove_autoload_singleton("SpectatorRuntime")
+    remove_autoload_singleton("StageRuntime")
 ```
 
 **Implementation Notes:**
 - Uses `_enable_plugin` / `_disable_plugin` (NOT `_enter_tree` / `_exit_tree`) to avoid the autoload timing bug documented in the godot-addon skill
 - M0 has no dock panel — that's M6. The plugin only manages the autoload registration.
-- The autoload name `SpectatorRuntime` is the global singleton name accessible via `get_node("/root/SpectatorRuntime")`
+- The autoload name `StageRuntime` is the global singleton name accessible via `get_node("/root/StageRuntime")`
 
 **Acceptance Criteria:**
-- [ ] Enabling plugin in Project Settings → Plugins → Spectator registers the autoload without errors
+- [ ] Enabling plugin in Project Settings → Plugins → Stage registers the autoload without errors
 - [ ] Disabling plugin removes the autoload
 - [ ] No errors in Output panel during enable/disable
 - [ ] Re-enabling after disable works correctly (no duplicate autoloads)
@@ -1215,24 +1215,24 @@ func _disable_plugin() -> void:
 
 ### Unit 10: GDScript Runtime Autoload
 
-**File:** `addons/spectator/runtime.gd`
+**File:** `addons/stage/runtime.gd`
 
 ```gdscript
 extends Node
 
-var tcp_server: SpectatorTCPServer
+var tcp_server: StageTCPServer
 
 
 func _ready() -> void:
     # Check that GDExtension classes are available
-    if not ClassDB.class_exists(&"SpectatorTCPServer"):
-        push_error("[Spectator] GDExtension not loaded — SpectatorTCPServer class not found. Check that the spectator.gdextension binary exists for your platform.")
+    if not ClassDB.class_exists(&"StageTCPServer"):
+        push_error("[Stage] GDExtension not loaded — StageTCPServer class not found. Check that the stage.gdextension binary exists for your platform.")
         return
 
-    tcp_server = SpectatorTCPServer.new()
+    tcp_server = StageTCPServer.new()
     add_child(tcp_server)
 
-    var port: int = ProjectSettings.get_setting("spectator/connection/port", 9077)
+    var port: int = ProjectSettings.get_setting("stage/connection/port", 9077)
     tcp_server.start(port)
 
 
@@ -1254,7 +1254,7 @@ func _exit_tree() -> void:
 
 **Acceptance Criteria:**
 - [ ] Autoload initializes when game starts (Play button in editor)
-- [ ] `SpectatorTCPServer` is created and starts listening on the configured port
+- [ ] `StageTCPServer` is created and starts listening on the configured port
 - [ ] `poll()` is called every physics frame
 - [ ] Clear error message if GDExtension binary is missing
 - [ ] TCP server is stopped when game stops
@@ -1266,11 +1266,11 @@ func _exit_tree() -> void:
 **File:** `CLAUDE.md`
 
 ```markdown
-# Spectator — Agent Instructions
+# Stage — Agent Instructions
 
 ## What This Is
 
-Spectator: Rust MCP server + Rust GDExtension addon giving AI agents spatial
+Stage: Rust MCP server + Rust GDExtension addon giving AI agents spatial
 awareness of running Godot games. Two Rust compilation targets that communicate
 over TCP.
 
@@ -1278,11 +1278,11 @@ over TCP.
 
 ```
 crates/
-  spectator-server/     — MCP binary (rmcp + tokio), stdio transport
-  spectator-godot/      — GDExtension cdylib (gdext), loaded by Godot
-  spectator-protocol/   — Shared TCP wire format types
-  spectator-core/       — Shared spatial logic (no Godot, no MCP)
-addons/spectator/       — Godot addon (GDScript + GDExtension manifest)
+  stage-server/     — MCP binary (rmcp + tokio), stdio transport
+  stage-godot/      — GDExtension cdylib (gdext), loaded by Godot
+  stage-protocol/   — Shared TCP wire format types
+  stage-core/       — Shared spatial logic (no Godot, no MCP)
+addons/stage/       — Godot addon (GDScript + GDExtension manifest)
 docs/                   — Design documents
 docs/design/            — Implementation designs per milestone
 ```
@@ -1294,8 +1294,8 @@ docs/design/            — Implementation designs per milestone
 cargo build --workspace
 
 # Build specific crate
-cargo build -p spectator-server
-cargo build -p spectator-godot
+cargo build -p stage-server
+cargo build -p stage-godot
 
 # Run tests
 cargo test --workspace
@@ -1305,14 +1305,14 @@ cargo clippy --workspace
 cargo fmt --check
 
 # Copy GDExtension to addon (Linux)
-cp target/debug/libspectator_godot.so addons/spectator/bin/linux/
+cp target/debug/libstage_godot.so addons/stage/bin/linux/
 ```
 
 ## Key Constraints
 
-- **stdout is sacred**: spectator-server uses stdout for MCP protocol. ALL
+- **stdout is sacred**: stage-server uses stdout for MCP protocol. ALL
   logging goes to stderr via `tracing` / `eprintln!`. Never use `println!`.
-- **Main thread only**: spectator-godot runs on Godot's main thread. No
+- **Main thread only**: stage-godot runs on Godot's main thread. No
   `Gd<T>` across thread boundaries. All scene tree access in _physics_process.
 - **GDExtension ≠ EditorPlugin**: GDExtension classes can't be EditorPlugin
   bases (godot#85268). GDScript `plugin.gd` is the EditorPlugin; Rust classes
@@ -1325,7 +1325,7 @@ cp target/debug/libspectator_godot.so addons/spectator/bin/linux/
 - Rust edition 2024, workspace versioning
 - `tracing` for all logging (never `println!`, use `eprintln!` only for
   one-off debugging)
-- `anyhow` for application errors in spectator-server
+- `anyhow` for application errors in stage-server
 - `thiserror` or manual `impl Error` for library errors in protocol/core
 - serde for all serialization, `#[serde(rename_all = "snake_case")]` for enums
 - Tests alongside source in `#[cfg(test)] mod tests`
@@ -1333,9 +1333,9 @@ cp target/debug/libspectator_godot.so addons/spectator/bin/linux/
 
 ## Architecture Rules
 
-- spectator-godot depends on spectator-protocol, NOT on spectator-core
-- spectator-server depends on both spectator-protocol and spectator-core
-- spectator-core has zero Godot or MCP dependencies — pure logic
+- stage-godot depends on stage-protocol, NOT on stage-core
+- stage-server depends on both stage-protocol and stage-core
+- stage-core has zero Godot or MCP dependencies — pure logic
 - TCP protocol: length-prefixed JSON (4-byte BE u32 + JSON payload)
 - Addon listens (port 9077), server connects (ephemeral)
 ```
@@ -1418,10 +1418,10 @@ jobs:
             ${{ runner.os }}-cargo-release-
 
       - name: Build server (release)
-        run: cargo build --release -p spectator-server
+        run: cargo build --release -p stage-server
 
       - name: Build GDExtension (release)
-        run: cargo build --release -p spectator-godot
+        run: cargo build --release -p stage-godot
 ```
 
 **Implementation Notes:**
@@ -1434,8 +1434,8 @@ jobs:
 - [ ] `cargo fmt --check --all` passes
 - [ ] `cargo clippy --workspace --all-targets` passes with no warnings
 - [ ] `cargo test --workspace` passes
-- [ ] `cargo build --release -p spectator-server` produces binary
-- [ ] `cargo build --release -p spectator-godot` produces `.so`
+- [ ] `cargo build --release -p stage-server` produces binary
+- [ ] `cargo build --release -p stage-godot` produces `.so`
 
 ---
 
@@ -1446,9 +1446,9 @@ jobs:
 ```json
 {
   "mcpServers": {
-    "spectator": {
+    "stage": {
       "type": "stdio",
-      "command": "./target/release/spectator-server",
+      "command": "./target/release/stage-server",
       "env": {
         "THEATRE_PORT": "9077"
       }
@@ -1463,8 +1463,8 @@ jobs:
 - `THEATRE_PORT` env var is optional (defaults to 9077)
 
 **Acceptance Criteria:**
-- [ ] Claude Code recognizes the MCP config and spawns `spectator-server`
-- [ ] Server appears in the MCP server list with name "spectator-server"
+- [ ] Claude Code recognizes the MCP config and spawns `stage-server`
+- [ ] Server appears in the MCP server list with name "stage-server"
 
 ---
 
@@ -1473,7 +1473,7 @@ jobs:
 Create the addon binary directory and a convenience script:
 
 **Directories to create:**
-- `addons/spectator/bin/linux/`
+- `addons/stage/bin/linux/`
 
 **File:** `scripts/copy-gdext.sh`
 
@@ -1485,11 +1485,11 @@ Create the addon binary directory and a convenience script:
 set -euo pipefail
 
 MODE="${1:-debug}"
-SRC="target/${MODE}/libspectator_godot.so"
-DST="addons/spectator/bin/linux/"
+SRC="target/${MODE}/libstage_godot.so"
+DST="addons/stage/bin/linux/"
 
 if [ ! -f "$SRC" ]; then
-    echo "Error: $SRC not found. Run 'cargo build -p spectator-godot' first."
+    echo "Error: $SRC not found. Run 'cargo build -p stage-godot' first."
     exit 1
 fi
 
@@ -1499,7 +1499,7 @@ echo "Copied $SRC → $DST"
 ```
 
 **Acceptance Criteria:**
-- [ ] `addons/spectator/bin/linux/` directory exists
+- [ ] `addons/stage/bin/linux/` directory exists
 - [ ] `scripts/copy-gdext.sh` copies the built library to the correct location
 - [ ] Script reports an error if the library hasn't been built yet
 
@@ -1514,7 +1514,7 @@ Dependencies flow top-down; implement in this order:
 3. **Unit 3: Length-Prefixed Codec** — needed by both TCP endpoints
 4. **Unit 4: Message Envelope** — needed by both TCP endpoints
 5. **Unit 8: GDExtension Manifest** — needed before GDScript can reference Rust classes
-6. **Unit 5: SpectatorTCPServer** — the addon-side TCP implementation
+6. **Unit 5: StageTCPServer** — the addon-side TCP implementation
 7. **Unit 14: Directory Structure** — needed to place the built binary
 8. **Unit 9: Plugin GDScript** — depends on GDExtension being loadable
 9. **Unit 10: Runtime GDScript** — depends on plugin + GDExtension classes
@@ -1530,7 +1530,7 @@ Dependencies flow top-down; implement in this order:
 
 ## Testing
 
-### Unit Tests: `crates/spectator-protocol/src/handshake.rs`
+### Unit Tests: `crates/stage-protocol/src/handshake.rs`
 
 ```rust
 #[cfg(test)]
@@ -1575,7 +1575,7 @@ mod tests {
 }
 ```
 
-### Unit Tests: `crates/spectator-protocol/src/codec.rs`
+### Unit Tests: `crates/stage-protocol/src/codec.rs`
 
 ```rust
 #[cfg(test)]
@@ -1637,12 +1637,12 @@ No automated Godot integration tests in M0 (requires a running Godot instance). 
 
 1. Build: `cargo build --workspace`
 2. Copy GDExtension: `./scripts/copy-gdext.sh debug`
-3. Open a Godot 4.5+ project with `addons/spectator/` copied in
+3. Open a Godot 4.5+ project with `addons/stage/` copied in
 4. Enable plugin in Project Settings → Plugins
-5. Press Play — check Output panel for `[Spectator] TCP server listening on 127.0.0.1:9077`
-6. Run: `cargo run -p spectator-server` in a terminal
+5. Press Play — check Output panel for `[Stage] TCP server listening on 127.0.0.1:9077`
+6. Run: `cargo run -p stage-server` in a terminal
 7. Verify server logs: `Connected to addon`, `Handshake received`, `Handshake complete`
-8. Verify Godot Output: `[Spectator] Client connected`, `[Spectator] Handshake ACK received`
+8. Verify Godot Output: `[Stage] Client connected`, `[Stage] Handshake ACK received`
 9. Stop game in Godot — verify server logs: `Addon disconnected, will retry in 2s`
 10. Press Play again — verify server reconnects and handshake succeeds again
 
@@ -1664,15 +1664,15 @@ cargo fmt --check --all
 cargo test --workspace
 
 # 5. Server binary runs
-cargo run -p spectator-server 2>&1 | head -3
-# Should show: spectator-server v0.1.0, then connection attempts
+cargo run -p stage-server 2>&1 | head -3
+# Should show: stage-server v0.1.0, then connection attempts
 
 # 6. GDExtension produces shared library
-ls target/debug/libspectator_godot.so
+ls target/debug/libstage_godot.so
 
 # 7. Addon structure is correct
-ls addons/spectator/plugin.cfg addons/spectator/plugin.gd \
-   addons/spectator/runtime.gd addons/spectator/spectator.gdextension
+ls addons/stage/plugin.cfg addons/stage/plugin.gd \
+   addons/stage/runtime.gd addons/stage/stage.gdextension
 
 # 8. CLAUDE.md exists
 test -f CLAUDE.md && echo "OK"

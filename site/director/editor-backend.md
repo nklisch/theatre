@@ -4,9 +4,9 @@ The editor plugin backend is Director's preferred mode of operation. When you ha
 
 ## How it works
 
-When the Director addon is enabled in the Godot editor (**Project Settings → Plugins → Director → Enable**), the `plugin.gd` EditorPlugin starts a TCP listener on **port 6550** (localhost only).
+When the Director addon is enabled in the Godot editor (**Project Settings → Plugins → Director → Enable**), the `plugin.gd` EditorPlugin starts a TCP listener on **port 6551** (localhost only).
 
-When the `director` binary receives an MCP tool call, it attempts to connect to port 6550. If the connection succeeds, the operation is forwarded to the running editor over the TCP connection, executed inside the editor process, and the result is returned.
+When the `director` binary receives an MCP tool call, it attempts to connect to port 6551. If the connection succeeds, the operation is forwarded to the running editor over the TCP connection, executed inside the editor process, and the result is returned.
 
 The editor process has access to:
 - Full `EditorInterface` — can save resources, reload scenes, update the editor UI
@@ -34,7 +34,7 @@ The editor process has access to:
 
 ## Port configuration
 
-The default port is 6550. To change it:
+The default port is 6551. To change it:
 
 In **Project Settings → Theatre → Director → Editor Port**, set a different port number.
 
@@ -43,25 +43,25 @@ Update the same port in your Director configuration if you change it:
 ```json
 {
   "director": {
-    "editor_port": 6551
+    "editor_port": 6552
   }
 }
 ```
 
-(Note: if you use 6551 for the editor port, set the daemon port to something else to avoid conflicts.)
+(Note: if you use a custom editor port, set the daemon port to something else to avoid conflicts.)
 
 ## Verifying the backend is active
 
 When the editor backend is listening, the Godot output panel shows:
 
 ```
-[Director] Editor plugin listening on port 6550
+[Director] Editor plugin listening on port 6551
 ```
 
 You can also check the Director dock (right side of the editor), which shows:
 
 ```
-● Director: Editor backend active (port 6550)
+● Director: Editor backend active (port 6551)
 ```
 
 ## Editor dock

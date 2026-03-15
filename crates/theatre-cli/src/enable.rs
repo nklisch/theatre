@@ -13,7 +13,8 @@ const STAGE_RUNTIME_SCRIPT: &str = "res://addons/stage/runtime.gd";
 
 #[derive(Args)]
 pub struct EnableArgs {
-    /// Godot project path
+    /// Godot project path (default: current directory)
+    #[arg(default_value = ".")]
     project: PathBuf,
 
     /// Enable only Stage (default: both)

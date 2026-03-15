@@ -2,8 +2,8 @@
 
 ## Overview
 
-Rename the umbrella project from "Spectator" to "Theatre" to reflect that it
-now contains two tools: **Spectator** (runtime observer) and **Director**
+Rename the umbrella project from "Stage" to "Theatre" to reflect that it
+now contains two tools: **Stage** (runtime observer) and **Director**
 (editor-time scene operator). This is a naming/branding change, not an
 architectural change.
 
@@ -11,15 +11,15 @@ architectural change.
 
 | Item | Before | After |
 |---|---|---|
-| Project name | Spectator | Theatre |
+| Project name | Stage | Theatre |
 | GitHub org/repo | `theatre-godot/theatre` | `theatre-godot/theatre` |
 | Cargo.toml repository URL | `theatre-godot/theatre` | `theatre-godot/theatre` |
-| Env var for Spectator port | `THEATRE_PORT` | `THEATRE_PORT` (fallback: `THEATRE_PORT`) |
-| Godot settings prefix | `spectator/connection/...` | `theatre/spectator/...` |
-| Plugin author fields | "Spectator Contributors" | "Theatre Contributors" |
-| README | Spectator-only intro | Theatre umbrella intro |
-| CLAUDE.md | "Spectator" project header | "Theatre" project header |
-| Skill files | Spectator-as-project references | Theatre-as-project references |
+| Env var for Stage port | `THEATRE_PORT` | `THEATRE_PORT` (fallback: `THEATRE_PORT`) |
+| Godot settings prefix | `stage/connection/...` | `theatre/stage/...` |
+| Plugin author fields | "Stage Contributors" | "Theatre Contributors" |
+| README | Stage-only intro | Theatre umbrella intro |
+| CLAUDE.md | "Stage" project header | "Theatre" project header |
+| Skill files | Stage-as-project references | Theatre-as-project references |
 | `theatre-deploy` script | `theatre-deploy` | `theatre-deploy` |
 | docs/ prose | "the Theatre project" | "the Theatre project" |
 
@@ -27,17 +27,17 @@ architectural change.
 
 | Item | Reason |
 |---|---|
-| Crate names (`spectator-server`, `spectator-godot`, `spectator-protocol`, `spectator-core`, `director`) | Tool-specific, not project-level |
-| Crate directory paths (`crates/spectator-server/`, etc.) | Follow crate names |
-| Binary names (`spectator-server`, `director`) | Tool-specific |
-| GDExtension binary (`libspectator_godot.so`) | Follows crate name |
-| Addon directories (`addons/spectator/`, `addons/director/`) | Tool-specific |
-| GDExtension manifest (`spectator.gdextension`) | Follows addon/crate name |
-| Wire protocol identifiers (`spectator:status`, `spectator:command`) | Runtime protocol, tied to tool |
-| GDExtension class names (`SpectatorTCPServer`, `SpectatorCollector`, etc.) | Godot API surface |
-| MCP server name in `.mcp.json` (`"spectator"`) | Tool-specific MCP identity |
-| Autoload name (`SpectatorRuntime`) | Godot API surface |
-| `spectator_internal` group name | Runtime marker |
+| Crate names (`stage-server`, `stage-godot`, `stage-protocol`, `stage-core`, `director`) | Tool-specific, not project-level |
+| Crate directory paths (`crates/stage-server/`, etc.) | Follow crate names |
+| Binary names (`stage-server`, `director`) | Tool-specific |
+| GDExtension binary (`libstage_godot.so`) | Follows crate name |
+| Addon directories (`addons/stage/`, `addons/director/`) | Tool-specific |
+| GDExtension manifest (`stage.gdextension`) | Follows addon/crate name |
+| Wire protocol identifiers (`stage:status`, `stage:command`) | Runtime protocol, tied to tool |
+| GDExtension class names (`StageTCPServer`, `StageCollector`, etc.) | Godot API surface |
+| MCP server name in `.mcp.json` (`"stage"`) | Tool-specific MCP identity |
+| Autoload name (`StageRuntime`) | Godot API surface |
+| `stage_internal` group name | Runtime marker |
 
 ---
 
@@ -52,7 +52,7 @@ redirects from the old URL.
 # Rename repo (GitHub sets up redirects automatically)
 gh repo rename theatre
 
-# Note: GitHub org rename (spectator-godot → theatre-godot) requires manual
+# Note: GitHub org rename (stage-godot → theatre-godot) requires manual
 # steps in GitHub settings. Document this for the human.
 ```
 
@@ -91,8 +91,8 @@ dependency declarations all stay.
 ### Unit 3: Environment Variable Rename
 
 **Files**:
-- `crates/spectator-server/src/main.rs`
-- `crates/spectator-server/tests/support/godot_process.rs`
+- `crates/stage-server/src/main.rs`
+- `crates/stage-server/tests/support/godot_process.rs`
 - `.mcp.json`
 
 #### main.rs (line ~24)
@@ -137,9 +137,9 @@ if deprecated {
 ```json
 {
   "mcpServers": {
-    "spectator": {
+    "stage": {
       "type": "stdio",
-      "command": "./target/release/spectator-server",
+      "command": "./target/release/stage-server",
       "env": {
         "THEATRE_PORT": "9077"
       }
@@ -148,12 +148,12 @@ if deprecated {
 }
 ```
 
-Note: MCP server key stays `"spectator"` (tool name). Binary path stays
-`spectator-server` (crate name).
+Note: MCP server key stays `"stage"` (tool name). Binary path stays
+`stage-server` (crate name).
 
 **Acceptance Criteria**:
-- [ ] `THEATRE_PORT=9077 cargo run -p spectator-server` starts on port 9077
-- [ ] `THEATRE_PORT=9077 cargo run -p spectator-server` still works (with deprecation warning)
+- [ ] `THEATRE_PORT=9077 cargo run -p stage-server` starts on port 9077
+- [ ] `THEATRE_PORT=9077 cargo run -p stage-server` still works (with deprecation warning)
 - [ ] Neither set → default 9077
 
 ---
@@ -161,72 +161,72 @@ Note: MCP server key stays `"spectator"` (tool name). Binary path stays
 ### Unit 4: Godot Settings Prefix
 
 **Files**:
-- `addons/spectator/plugin.gd`
-- `addons/spectator/runtime.gd`
+- `addons/stage/plugin.gd`
+- `addons/stage/runtime.gd`
 
-Change the Godot ProjectSettings prefix from `spectator/` to
-`theatre/spectator/` to namespace under the Theatre umbrella while keeping
+Change the Godot ProjectSettings prefix from `stage/` to
+`theatre/stage/` to namespace under the Theatre umbrella while keeping
 tool-specific separation (Director would use `theatre/director/`).
 
 #### plugin.gd — settings registration
 
 ```gdscript
 # Before
-_add_setting("spectator/connection/port", TYPE_INT, 9077, ...)
-_add_setting("spectator/connection/auto_start", TYPE_BOOL, true)
-_add_setting("spectator/connection/client_idle_timeout_secs", TYPE_INT, 10, ...)
-_add_setting("spectator/display/show_agent_notifications", TYPE_BOOL, true)
-_add_setting("spectator/tracking/default_static_patterns", ...)
-_add_setting("spectator/tracking/token_hard_cap", TYPE_INT, 5000, ...)
+_add_setting("stage/connection/port", TYPE_INT, 9077, ...)
+_add_setting("stage/connection/auto_start", TYPE_BOOL, true)
+_add_setting("stage/connection/client_idle_timeout_secs", TYPE_INT, 10, ...)
+_add_setting("stage/display/show_agent_notifications", TYPE_BOOL, true)
+_add_setting("stage/tracking/default_static_patterns", ...)
+_add_setting("stage/tracking/token_hard_cap", TYPE_INT, 5000, ...)
 
 # After
-_add_setting("theatre/spectator/connection/port", TYPE_INT, 9077, ...)
-_add_setting("theatre/spectator/connection/auto_start", TYPE_BOOL, true)
-_add_setting("theatre/spectator/connection/client_idle_timeout_secs", TYPE_INT, 10, ...)
-_add_setting("theatre/spectator/display/show_agent_notifications", TYPE_BOOL, true)
-_add_setting("theatre/spectator/tracking/default_static_patterns", ...)
-_add_setting("theatre/spectator/tracking/token_hard_cap", TYPE_INT, 5000, ...)
+_add_setting("theatre/stage/connection/port", TYPE_INT, 9077, ...)
+_add_setting("theatre/stage/connection/auto_start", TYPE_BOOL, true)
+_add_setting("theatre/stage/connection/client_idle_timeout_secs", TYPE_INT, 10, ...)
+_add_setting("theatre/stage/display/show_agent_notifications", TYPE_BOOL, true)
+_add_setting("theatre/stage/tracking/default_static_patterns", ...)
+_add_setting("theatre/stage/tracking/token_hard_cap", TYPE_INT, 5000, ...)
 ```
 
 #### runtime.gd — settings reads
 
 ```gdscript
 # Before
-ProjectSettings.get_setting("spectator/connection/auto_start", true)
-ProjectSettings.get_setting("spectator/connection/port", 9077)
-ProjectSettings.get_setting("spectator/connection/client_idle_timeout_secs", 10)
-ProjectSettings.get_setting("spectator/display/show_agent_notifications", true)
+ProjectSettings.get_setting("stage/connection/auto_start", true)
+ProjectSettings.get_setting("stage/connection/port", 9077)
+ProjectSettings.get_setting("stage/connection/client_idle_timeout_secs", 10)
+ProjectSettings.get_setting("stage/display/show_agent_notifications", true)
 
 # After
-ProjectSettings.get_setting("theatre/spectator/connection/auto_start", true)
-ProjectSettings.get_setting("theatre/spectator/connection/port", 9077)
-ProjectSettings.get_setting("theatre/spectator/connection/client_idle_timeout_secs", 10)
-ProjectSettings.get_setting("theatre/spectator/display/show_agent_notifications", true)
+ProjectSettings.get_setting("theatre/stage/connection/auto_start", true)
+ProjectSettings.get_setting("theatre/stage/connection/port", 9077)
+ProjectSettings.get_setting("theatre/stage/connection/client_idle_timeout_secs", 10)
+ProjectSettings.get_setting("theatre/stage/display/show_agent_notifications", true)
 ```
 
 #### plugin.gd — cleanup on disable
 
 The `_disable_plugin()` function removes settings. Update all
-`ProjectSettings.clear("spectator/...")` calls to use the new prefix.
+`ProjectSettings.clear("stage/...")` calls to use the new prefix.
 
-**Breaking change**: Existing Godot projects with `spectator/connection/port`
+**Breaking change**: Existing Godot projects with `stage/connection/port`
 in their `project.godot` will need to update the key prefix. No automatic
 migration — the default values apply when the old keys aren't found.
 
 **Acceptance Criteria**:
-- [ ] New project: settings appear under `theatre/spectator/` in Project Settings
-- [ ] Plugin disable: all `theatre/spectator/` settings removed
+- [ ] New project: settings appear under `theatre/stage/` in Project Settings
+- [ ] Plugin disable: all `theatre/stage/` settings removed
 - [ ] Default values work when no settings are present
 
 ---
 
 ### Unit 5: Plugin Author Fields
 
-**File**: `addons/spectator/plugin.cfg`
+**File**: `addons/stage/plugin.cfg`
 
 ```ini
 # Before
-author="Spectator Contributors"
+author="Stage Contributors"
 
 # After
 author="Theatre Contributors"
@@ -258,7 +258,7 @@ Full rewrite. New structure:
 # Theatre
 
 A toolkit giving AI agents the ability to build and debug Godot games.
-Two MCP servers — **Director** (build) and **Spectator** (observe) — that
+Two MCP servers — **Director** (build) and **Stage** (observe) — that
 work together or independently.
 
 ## Tools
@@ -266,13 +266,13 @@ work together or independently.
 | Tool | Purpose | MCP Server | Godot Side |
 |---|---|---|---|
 | **Director** | Create/modify scenes, resources, tilemaps, animations | `director serve` | GDScript addon (`addons/director/`) |
-| **Spectator** | Observe spatial state of a running game | `spectator-server` | GDExtension + GDScript (`addons/spectator/`) |
+| **Stage** | Observe spatial state of a running game | `stage-server` | GDExtension + GDScript (`addons/stage/`) |
 
 ## Quick Start
 
-### Spectator — Runtime Observation
+### Stage — Runtime Observation
 
-[existing Spectator setup content, updated references]
+[existing Stage setup content, updated references]
 
 ### Director — Scene Manipulation
 
@@ -293,9 +293,9 @@ docs. Link to `docs/director-spec.md` and `docs/SPEC.md` for details.
 
 **Acceptance Criteria**:
 - [ ] README introduces Theatre as the umbrella
-- [ ] Both Spectator and Director have setup sections
+- [ ] Both Stage and Director have setup sections
 - [ ] All command examples use correct binary/crate names
-- [ ] No stale references to "Spectator" as the project name
+- [ ] No stale references to "Stage" as the project name
 
 ---
 
@@ -304,14 +304,14 @@ docs. Link to `docs/director-spec.md` and `docs/SPEC.md` for details.
 **File**: `CLAUDE.md`
 
 Changes:
-1. Header: `# Spectator — Agent Instructions` → `# Theatre — Agent Instructions`
+1. Header: `# Stage — Agent Instructions` → `# Theatre — Agent Instructions`
 2. "What This Is" section: describe Theatre as the umbrella with two tools
 3. Repository Layout: add Director entries (they may already be there)
 4. Build Commands: ensure Director commands are listed
 5. `THEATRE_PORT` references → `THEATRE_PORT`
 6. `theatre-deploy` → `theatre-deploy`
 7. Key Constraints: generalize where appropriate
-8. Architecture Rules: add Director rules alongside Spectator rules
+8. Architecture Rules: add Director rules alongside Stage rules
 
 The project name in Agent Tracker section already says "theatre" — no change
 needed there.
@@ -327,21 +327,21 @@ needed there.
 
 ### Unit 8: Skill Files
 
-#### `.agents/skills/spectator-dev/SKILL.md`
+#### `.agents/skills/stage-dev/SKILL.md`
 
 Update orientation text:
 ```markdown
 # Before (line 6-8)
-# Spectator — Developer Orientation
-Spectator is a **Rust MCP server** ...
+# Stage — Developer Orientation
+Stage is a **Rust MCP server** ...
 
 # After
 # Theatre — Developer Orientation
 Theatre is a Godot AI agent toolkit containing two tools:
-- **Spectator**: Rust MCP server + GDExtension for runtime spatial observation
+- **Stage**: Rust MCP server + GDExtension for runtime spatial observation
 - **Director**: Rust MCP server + GDScript addon for editor-time scene manipulation
 
-This skill covers Spectator development. See the Director crate and
+This skill covers Stage development. See the Director crate and
 `docs/director-spec.md` for Director specifics.
 ```
 
@@ -349,32 +349,32 @@ Update the crate map to include Director:
 ```
 theatre/
 ├── crates/
-│   ├── spectator-server/     # Spectator MCP binary
-│   ├── spectator-godot/      # Spectator GDExtension cdylib
-│   ├── spectator-protocol/   # Shared: TCP wire format, message types
-│   ├── spectator-core/       # Shared: spatial math, bearing, indexing
+│   ├── stage-server/     # Stage MCP binary
+│   ├── stage-godot/      # Stage GDExtension cdylib
+│   ├── stage-protocol/   # Shared: TCP wire format, message types
+│   ├── stage-core/       # Shared: spatial math, bearing, indexing
 │   └── director/             # Director MCP binary
-├── addons/spectator/         # Spectator Godot addon
+├── addons/stage/         # Stage Godot addon
 ├── addons/director/          # Director Godot addon
 ├── docs/                     # All design docs
 └── tests/
-    ├── wire-tests/           # Spectator E2E tests
+    ├── wire-tests/           # Stage E2E tests
     └── director-tests/       # Director E2E tests
 ```
 
 Update `THEATRE_PORT` references to `THEATRE_PORT`.
 
-#### `.agents/skills/spectator/SKILL.md`
+#### `.agents/skills/stage/SKILL.md`
 
-This is the end-user skill for using Spectator MCP tools. The tool name stays
-"Spectator". Only update:
-- Line 6: Add context that Spectator is part of the Theatre toolkit
+This is the end-user skill for using Stage MCP tools. The tool name stays
+"Stage". Only update:
+- Line 6: Add context that Stage is part of the Theatre toolkit
 - Any references to `THEATRE_PORT` → `THEATRE_PORT`
 
 #### `.agents/skills/godot-addon/SKILL.md`
 
-Read and update any "Spectator project" references to "Theatre project" while
-keeping "Spectator addon" references.
+Read and update any "Stage project" references to "Theatre project" while
+keeping "Stage addon" references.
 
 #### `.claude/skills/patterns/godot-e2e-harness.md`
 
@@ -386,8 +386,8 @@ Audit all pattern files. Most reference crate names (keep) but check for
 project-name references to update.
 
 **Acceptance Criteria**:
-- [ ] spectator-dev skill introduces Theatre as the umbrella
-- [ ] spectator skill mentions Theatre context
+- [ ] stage-dev skill introduces Theatre as the umbrella
+- [ ] stage skill mentions Theatre context
 - [ ] All `THEATRE_PORT` references updated
 - [ ] Crate name references unchanged
 
@@ -404,16 +404,16 @@ for project-level references only:
 2. **Repository references** (`theatre-godot/theatre` URL) → new URL
 3. **`THEATRE_PORT`** → `THEATRE_PORT`
 4. **`theatre-deploy`** → `theatre-deploy`
-5. **`spectator.toml`** (if referenced) → `theatre.toml`
+5. **`stage.toml`** (if referenced) → `theatre.toml`
 
 Do NOT change:
-- Crate name references (`spectator-server`, `spectator-godot`, etc.)
-- Tool name references ("Spectator gives you 9 MCP tools...")
+- Crate name references (`stage-server`, `stage-godot`, etc.)
+- Tool name references ("Stage gives you 9 MCP tools...")
 - Code examples referencing crate imports
 - Wire protocol identifiers
 
 Files requiring significant prose changes (not just find-replace):
-- `docs/VISION.md` — project vision, likely says "Spectator" as project name
+- `docs/VISION.md` — project vision, likely says "Stage" as project name
 - `docs/SPEC.md` — may have project-level language
 - `docs/TECH.md` — similar
 - `docs/director-spec.md` — already uses "Theatre" terminology, verify consistency
@@ -455,14 +455,14 @@ TARGETS=("${@:-$HOME/godot/test-harness}")
 THEATRE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 # Build GDExtension
-cargo build -p spectator-godot ${MODE:+--$MODE}
+cargo build -p stage-godot ${MODE:+--$MODE}
 
-SRC="$THEATRE_ROOT/target/$MODE/libspectator_godot.so"
+SRC="$THEATRE_ROOT/target/$MODE/libstage_godot.so"
 for PROJECT in "${TARGETS[@]}"; do
-    DST="$PROJECT/addons/spectator/bin/linux/"
+    DST="$PROJECT/addons/stage/bin/linux/"
     mkdir -p "$DST"
     cp "$SRC" "$DST"
-    echo "Deployed spectator-godot → $PROJECT"
+    echo "Deployed stage-godot → $PROJECT"
 done
 ```
 
@@ -482,16 +482,16 @@ Also update `scripts/copy-gdext.sh` comments to reference Theatre.
 **File**: `.github/workflows/ci.yml`
 
 The CI file references crate names in build commands (`cargo build -p
-spectator-server`), which stay. Update only:
+stage-server`), which stay. Update only:
 
 ```yaml
 # Before (line 67)
 - name: Build server (release)
-  run: cargo build --release -p spectator-server
+  run: cargo build --release -p stage-server
 
 # After
-- name: Build Spectator server (release)
-  run: cargo build --release -p spectator-server
+- name: Build Stage server (release)
+  run: cargo build --release -p stage-server
 
 - name: Build Director server (release)
   run: cargo build --release -p director
@@ -500,7 +500,7 @@ spectator-server`), which stay. Update only:
 Add Director to the release build if not already present.
 
 **Acceptance Criteria**:
-- [ ] CI builds both spectator-server and director
+- [ ] CI builds both stage-server and director
 - [ ] Step names clarify which tool is being built
 - [ ] CI passes
 
@@ -516,7 +516,7 @@ Add Director to the release build if not already present.
 
 ```ini
 # Before
-config/name="SpectatorTests"
+config/name="StageTests"
 
 # After
 config/name="TheatreTests"
@@ -524,18 +524,18 @@ config/name="TheatreTests"
 
 Update Godot settings prefix references if present:
 ```ini
-# Before (in [spectator] section if exists)
-spectator/connection/port=9077
+# Before (in [stage] section if exists)
+stage/connection/port=9077
 
 # After
-theatre/spectator/connection/port=9077
+theatre/stage/connection/port=9077
 ```
 
 #### examples/2d-platformer-demo/project.godot
 
 ```ini
 # Before
-config/name="Spectator 2D Demo"
+config/name="Stage 2D Demo"
 
 # After
 config/name="Theatre 2D Demo"
@@ -557,23 +557,23 @@ Create a migration guide for existing users:
 ```markdown
 # Migrating to Theatre
 
-## For Users of Spectator Addon
+## For Users of Stage Addon
 
 ### Environment Variable
 - `THEATRE_PORT` → `THEATRE_PORT`
 - The old variable still works but logs a deprecation warning
 
 ### Godot Project Settings
-- Settings prefix changed from `spectator/` to `theatre/spectator/`
+- Settings prefix changed from `stage/` to `theatre/stage/`
 - If you had custom settings in project.godot, update the keys:
-  - `spectator/connection/port` → `theatre/spectator/connection/port`
-  - `spectator/connection/auto_start` → `theatre/spectator/connection/auto_start`
+  - `stage/connection/port` → `theatre/stage/connection/port`
+  - `stage/connection/auto_start` → `theatre/stage/connection/auto_start`
   - etc.
 - Or delete the old keys and re-enable the plugin (defaults apply)
 
 ### MCP Configuration
 - Update `.mcp.json` env block: `THEATRE_PORT` → `THEATRE_PORT`
-- The `spectator` MCP server name is unchanged
+- The `stage` MCP server name is unchanged
 
 ### Deploy Script
 - `theatre-deploy` → `theatre-deploy`
@@ -619,7 +619,7 @@ Dependencies:
 - Unit 13 should be written last (references all other changes)
 
 Suggested commit grouping:
-1. `rename: GitHub repo spectator → theatre` (Unit 1, if done via gh)
+1. `rename: GitHub repo stage → theatre` (Unit 1, if done via gh)
 2. `rename: env var THEATRE_PORT → THEATRE_PORT with fallback` (Units 2, 3, 4, 5)
 3. `rename: rewrite README and CLAUDE.md for Theatre umbrella` (Units 6, 7)
 4. `rename: update skill files and docs for Theatre` (Units 8, 9)
@@ -639,9 +639,9 @@ cargo test --workspace
 ### Manual Verification
 ```bash
 # Env var works
-THEATRE_PORT=9077 cargo run -p spectator-server
+THEATRE_PORT=9077 cargo run -p stage-server
 # Backward compat
-THEATRE_PORT=9077 cargo run -p spectator-server  # expect deprecation warning
+THEATRE_PORT=9077 cargo run -p stage-server  # expect deprecation warning
 # theatre-deploy script
 ./scripts/theatre-deploy ~/godot/test-harness
 ```
@@ -654,9 +654,9 @@ grep -r "THEATRE_PORT" --include="*.rs" --include="*.json" --include="*.md" \
   | grep -v "deprecated\|fallback\|migration\|THEATRE_PORT"
 
 # Should still find results (tool-name references preserved):
-grep -r "spectator-server" crates/
-grep -r "SpectatorTCPServer" crates/
-grep -r "addons/spectator" addons/
+grep -r "stage-server" crates/
+grep -r "StageTCPServer" crates/
+grep -r "addons/stage" addons/
 ```
 
 ## Verification Checklist

@@ -956,7 +956,7 @@ cargo fmt --check
 cargo test -p director
 
 # E2E tests (requires GODOT_BIN)
-theatre-deploy ~/dev/spectator/tests/godot-project
+theatre-deploy ~/dev/stage/tests/godot-project
 cargo test -p director-tests -- --include-ignored
 
 # Specific new tests

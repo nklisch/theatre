@@ -3,7 +3,7 @@
 ## What This Is
 
 Theatre is a Godot AI agent toolkit containing two tools:
-- **Spectator**: Rust MCP server + Rust GDExtension addon giving AI agents spatial awareness of running Godot games.
+- **Stage**: Rust MCP server + Rust GDExtension addon giving AI agents spatial awareness of running Godot games.
 - **Director**: Rust MCP server + GDScript addon giving AI agents the ability to create and modify Godot scenes, resources, tilemaps, and animations.
 
 Both tools communicate with Godot over TCP.
@@ -12,20 +12,20 @@ Both tools communicate with Godot over TCP.
 
 ```
 crates/
-  spectator-server/     — Spectator MCP binary (rmcp + tokio), stdio transport
-  spectator-godot/      — Spectator GDExtension cdylib (gdext), loaded by Godot
-  spectator-protocol/   — Shared TCP wire format types
-  spectator-core/       — Shared spatial logic (no Godot, no MCP)
+  stage-server/         — Stage MCP binary (rmcp + tokio), stdio transport
+  stage-godot/          — Stage GDExtension cdylib (gdext), loaded by Godot
+  stage-protocol/       — Shared TCP wire format types
+  stage-core/           — Shared spatial logic (no Godot, no MCP)
   director/             — Director MCP binary
   theatre-cli/          — CLI binary: install, init, deploy, enable (clap + dialoguer)
-addons/spectator/       — Spectator Godot addon (GDScript + GDExtension manifest)
+addons/stage/           — Stage Godot addon (GDScript + GDExtension manifest)
 addons/director/        — Director Godot addon (GDScript)
 docs/                   — Design documents & audit report
 docs/design/            — Active (in-progress) designs
 docs/design/completed/  — Archived completed designs (see warning below)
 scripts/                — Release and install helper scripts
 tests/
-  wire-tests/           — Spectator E2E tests
+  wire-tests/           — Stage E2E tests
   director-tests/       — Director E2E tests
 ```
 
@@ -36,15 +36,15 @@ tests/
 cargo build --workspace
 
 # Build specific crate
-cargo build -p spectator-server
-cargo build -p spectator-godot
+cargo build -p stage-server
+cargo build -p stage-godot
 cargo build -p director
 cargo build -p theatre-cli
 
 # Run ALL tests — unit + integration + scenarios + E2E journeys
 # No feature flags — all tests run unconditionally
 # E2E tests require deploying GDExtension first:
-theatre deploy ~/dev/spectator/tests/godot-project
+theatre deploy ~/dev/theatre/tests/godot-project
 cargo test --workspace
 # IMPORTANT: All test layers must pass. Never skip E2E journey tests.
 
@@ -94,19 +94,19 @@ but is superseded by `theatre deploy`. Use `theatre deploy` for new workflows.
 godot --headless --quit --path ~/godot/test-harness 2>&1
 ```
 
-Expected: no `SCRIPT ERROR` or `[panic]` lines; Spectator TCP server starts
+Expected: no `SCRIPT ERROR` or `[panic]` lines; Stage TCP server starts
 and stops cleanly.
 
 ## GDExtension Compatibility
 
-- `spectator-godot` targets `api-4-5` with `lazy-function-tables` enabled.
+- `stage-godot` targets `api-4-5` with `lazy-function-tables` enabled.
 - `lazy-function-tables` defers method hash validation to first call, providing
   forward compatibility with Godot 4.6+ without panicking on method hash
-  changes in classes spectator never uses.
-- `compatibility_minimum = "4.5"` in `spectator.gdextension`. The `api-4-5`
+  changes in classes stage never uses.
+- `compatibility_minimum = "4.5"` in `stage.gdextension`. The `api-4-5`
   feature flag requires Godot 4.5+ at runtime (API version ≤ runtime version).
 - To target a newer API, bump `api-4-5` to `api-4-6` (etc.) in
-  `crates/spectator-godot/Cargo.toml` once godot-rust adds that feature flag.
+  `crates/stage-godot/Cargo.toml` once godot-rust adds that feature flag.
 
 ## GDScript Adapter Notes
 
@@ -118,10 +118,10 @@ graceful degradation if the binary is missing.
 
 ## Key Constraints
 
-- **stdout is sacred**: `spectator serve` uses stdout for MCP protocol. In CLI
-  mode (`spectator <tool>`), stdout carries JSON results. ALL logging goes to
+- **stdout is sacred**: `stage serve` uses stdout for MCP protocol. In CLI
+  mode (`stage <tool>`), stdout carries JSON results. ALL logging goes to
   stderr via `tracing` / `eprintln!`. Never use `println!` for log messages.
-- **Main thread only**: spectator-godot runs on Godot's main thread. No
+- **Main thread only**: stage-godot runs on Godot's main thread. No
   `Gd<T>` across thread boundaries. All scene tree access in _physics_process.
 - **GDExtension ≠ EditorPlugin**: GDExtension classes can't be EditorPlugin
   bases (godot#85268). GDScript `plugin.gd` is the EditorPlugin; Rust classes
@@ -134,7 +134,7 @@ graceful degradation if the binary is missing.
 - Rust edition 2024, workspace versioning
 - `tracing` for all logging (never `println!`, use `eprintln!` only for
   one-off debugging)
-- `anyhow` for application errors in spectator-server
+- `anyhow` for application errors in stage-server
 - `thiserror` or manual `impl Error` for library errors in protocol/core
 - serde for all serialization, `#[serde(rename_all = "snake_case")]` for enums
 - Tests alongside source in `#[cfg(test)] mod tests`
@@ -142,10 +142,10 @@ graceful degradation if the binary is missing.
 
 ## Architecture Rules
 
-### Spectator
-- spectator-godot depends on spectator-protocol, NOT on spectator-core
-- spectator-server depends on both spectator-protocol and spectator-core
-- spectator-core has zero Godot or MCP dependencies — pure logic
+### Stage
+- stage-godot depends on stage-protocol, NOT on stage-core
+- stage-server depends on both stage-protocol and stage-core
+- stage-core has zero Godot or MCP dependencies — pure logic
 - TCP protocol: length-prefixed JSON (4-byte BE u32 + JSON payload)
 - Addon listens (port 9077), server connects (ephemeral)
 
@@ -172,7 +172,7 @@ graceful degradation if the binary is missing.
 ## Git Conventions
 
 - Commit messages: short imperative subject line (≤72 chars), no body needed
-  for routine work. Example: `add SpectatorTCPServer handshake`
+  for routine work. Example: `add StageTCPServer handshake`
 - Do NOT add `Co-Authored-By: Claude` trailers to commits
 - Do NOT add AI attribution footers of any kind
 

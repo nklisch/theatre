@@ -25,7 +25,7 @@ const messages4 = [
 
 # Your First Debugging Session
 
-This is a worked example of a complete Theatre debugging session. We will find and fix a real bug — an enemy that sometimes fails to detect the player — using Spectator's spatial tools with Claude Code.
+This is a worked example of a complete Theatre debugging session. We will find and fix a real bug — an enemy that sometimes fails to detect the player — using Stage's spatial tools with Claude Code.
 
 ## The setup
 

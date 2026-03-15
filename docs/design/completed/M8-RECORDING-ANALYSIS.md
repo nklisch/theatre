@@ -4,7 +4,7 @@
 
 M8 delivers the analysis side of the recording system: the agent can scrub through recorded timelines, query across frame ranges with spatial conditions, diff frames, search for events, and receive system-generated markers. This completes the collaborative debugging workflow: human records, agent analyzes.
 
-**Depends on:** M7 (recording capture, SQLite storage, SpectatorRecorder, FrameEntityData format)
+**Depends on:** M7 (recording capture, SQLite storage, StageRecorder, FrameEntityData format)
 
 **Exit Criteria:** The full workflow from UX.md works: human records, marks a bug with F9, stops recording. Agent queries markers, snapshots the frame before the bug, runs a proximity query to find when the enemy breached the wall, diffs the before/after frames, adds its own marker with the root cause. Agent reports findings with frame references.
 
@@ -15,9 +15,9 @@ M8 delivers the analysis side of the recording system: the agent can scrub throu
 **Decision:** The MCP server opens recording SQLite files directly (read-only) for all analysis queries. No TCP round-trips to the addon for frame scanning.
 
 **Rationale:**
-- SPEC.md explicitly assigns "Recording analysis (query_range, diff)" to spectator-server
+- SPEC.md explicitly assigns "Recording analysis (query_range, diff)" to stage-server
 - Scanning 1800 frames of MessagePack over TCP would be prohibitively slow
-- Spatial condition evaluation (proximity, velocity spike) requires Rust spatial logic from spectator-core
+- Spatial condition evaluation (proximity, velocity spike) requires Rust spatial logic from stage-core
 - The server and addon run on the same machine — SQLite files are directly accessible
 - WAL mode (set during M7 capture) allows concurrent reads while recording is active
 
@@ -25,14 +25,14 @@ M8 delivers the analysis side of the recording system: the agent can scrub throu
 
 ---
 
-## Architecture Decision: FrameEntityData in spectator-protocol
+## Architecture Decision: FrameEntityData in stage-protocol
 
-**Decision:** Move `FrameEntityData` from `spectator-godot/src/recorder.rs` (private) to `spectator-protocol/src/recording.rs` (public). Both crates depend on spectator-protocol.
+**Decision:** Move `FrameEntityData` from `stage-godot/src/recorder.rs` (private) to `stage-protocol/src/recording.rs` (public). Both crates depend on stage-protocol.
 
 **Rationale:**
 - `FrameEntityData` is a wire format — the binary schema of frame BLOBs stored in SQLite
-- Both spectator-godot (writer) and spectator-server (reader) must agree on the format
-- spectator-protocol is the shared types crate; spectator-godot already depends on it
+- Both stage-godot (writer) and stage-server (reader) must agree on the format
+- stage-protocol is the shared types crate; stage-godot already depends on it
 - Moving it ensures format changes are caught at compile time across both crates
 
 ---
@@ -40,7 +40,7 @@ M8 delivers the analysis side of the recording system: the agent can scrub throu
 ## Current State Analysis
 
 ### What M7 provides:
-1. **SpectatorRecorder** — captures frames to SQLite via `capture_frame()` → MessagePack → `flush_to_db()`
+1. **StageRecorder** — captures frames to SQLite via `capture_frame()` → MessagePack → `flush_to_db()`
 2. **SQLite schema** — 4 tables: `recording`, `frames`, `events`, `markers` with indexes
 3. **Recording MCP tool** — 7 actions: start, stop, status, list, delete, markers, add_marker
 4. **FrameEntityData** — compact struct serialized as MessagePack per frame (path, class, position, rotation_deg, velocity, groups, visible, state)
@@ -48,7 +48,7 @@ M8 delivers the analysis side of the recording system: the agent can scrub throu
 
 ### What M8 adds:
 1. **4 new recording actions**: `snapshot_at`, `query_range`, `diff_frames`, `find_event`
-2. **Recording analysis engine** in spectator-server (SQLite reads, MessagePack deserialization, spatial condition evaluation)
+2. **Recording analysis engine** in stage-server (SQLite reads, MessagePack deserialization, spatial condition evaluation)
 3. **System marker generation** (velocity spike, property threshold detection during query_range scans)
 4. **Storage path resolution** (addon TCP method to globalize `user://` paths)
 5. **Token budget enforcement** on analysis query results
@@ -57,16 +57,16 @@ M8 delivers the analysis side of the recording system: the agent can scrub throu
 
 ## Implementation Units
 
-### Unit 1: FrameEntityData in spectator-protocol
+### Unit 1: FrameEntityData in stage-protocol
 
-**File**: `crates/spectator-protocol/src/recording.rs` (new)
+**File**: `crates/stage-protocol/src/recording.rs` (new)
 
 ```rust
 use serde::{Deserialize, Serialize};
 
 /// Compact entity snapshot stored as MessagePack in recording frame BLOBs.
-/// This is the wire format agreed upon by spectator-godot (writer) and
-/// spectator-server (reader). Changes here require coordinated updates.
+/// This is the wire format agreed upon by stage-godot (writer) and
+/// stage-server (reader). Changes here require coordinated updates.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FrameEntityData {
     pub path: String,
@@ -80,14 +80,14 @@ pub struct FrameEntityData {
 }
 ```
 
-**File**: `crates/spectator-protocol/src/lib.rs` — add `pub mod recording;`
+**File**: `crates/stage-protocol/src/lib.rs` — add `pub mod recording;`
 
-**File**: `crates/spectator-godot/src/recorder.rs` — replace private `FrameEntityData` with `use spectator_protocol::recording::FrameEntityData;`
+**File**: `crates/stage-godot/src/recorder.rs` — replace private `FrameEntityData` with `use stage_protocol::recording::FrameEntityData;`
 
 **Acceptance Criteria:**
-- [ ] `FrameEntityData` is defined in spectator-protocol with `pub` visibility
-- [ ] spectator-godot imports from spectator-protocol (no local copy)
-- [ ] spectator-server can import `spectator_protocol::recording::FrameEntityData`
+- [ ] `FrameEntityData` is defined in stage-protocol with `pub` visibility
+- [ ] stage-godot imports from stage-protocol (no local copy)
+- [ ] stage-server can import `stage_protocol::recording::FrameEntityData`
 - [ ] Existing M7 tests in recorder.rs still pass with the import change
 - [ ] `cargo test --workspace` passes
 
@@ -95,7 +95,7 @@ pub struct FrameEntityData {
 
 ### Unit 2: Storage Path Resolution
 
-**File**: `crates/spectator-godot/src/recording_handler.rs` — add handler
+**File**: `crates/stage-godot/src/recording_handler.rs` — add handler
 
 ```rust
 /// Handle "recording_resolve_path" — returns the globalized filesystem path
@@ -103,13 +103,13 @@ pub struct FrameEntityData {
 fn handle_resolve_path(
     _params: &Value,
 ) -> Result<Value, (String, String)> {
-    let storage = "user://spectator_recordings/";
+    let storage = "user://stage_recordings/";
     let globalized = crate::recorder::globalize_path(storage);
     Ok(serde_json::json!({ "path": globalized }))
 }
 ```
 
-**File**: `crates/spectator-godot/src/recorder.rs` — make `globalize_path` pub(crate)
+**File**: `crates/stage-godot/src/recorder.rs` — make `globalize_path` pub(crate)
 
 ```rust
 pub(crate) fn globalize_path(godot_path: &str) -> String {
@@ -117,7 +117,7 @@ pub(crate) fn globalize_path(godot_path: &str) -> String {
 }
 ```
 
-**File**: `crates/spectator-server/src/tcp.rs` — add cached storage path to SessionState
+**File**: `crates/stage-server/src/tcp.rs` — add cached storage path to SessionState
 
 ```rust
 pub struct SessionState {
@@ -127,7 +127,7 @@ pub struct SessionState {
 }
 ```
 
-**File**: `crates/spectator-server/src/recording_analysis.rs` — path resolution helper
+**File**: `crates/stage-server/src/recording_analysis.rs` — path resolution helper
 
 ```rust
 /// Resolve the recording storage path, caching the result in SessionState.
@@ -179,7 +179,7 @@ pub fn open_recording_db(storage_path: &str, recording_id: &str) -> Result<Conne
 
 ### Unit 3: Recording Analysis Engine
 
-**File**: `crates/spectator-server/src/recording_analysis.rs` (new)
+**File**: `crates/stage-server/src/recording_analysis.rs` (new)
 
 This is the core analysis module. It reads SQLite and evaluates conditions in Rust.
 
@@ -187,7 +187,7 @@ This is the core analysis module. It reads SQLite and evaluates conditions in Ru
 
 ```rust
 use rusqlite::Connection;
-use spectator_protocol::recording::FrameEntityData;
+use stage_protocol::recording::FrameEntityData;
 
 /// Read and deserialize a single frame's entity data from SQLite.
 pub fn read_frame(db: &Connection, frame: u64) -> Result<Vec<FrameEntityData>, McpError> {
@@ -262,7 +262,7 @@ pub struct RecordingMeta {
 
 ```rust
 use serde_json::json;
-use spectator_core::{bearing, types::Position3};
+use stage_core::{bearing, types::Position3};
 
 /// Reconstruct spatial state at a specific recorded frame.
 /// Returns the same shape as spatial_snapshot (standard detail).
@@ -289,7 +289,7 @@ pub fn snapshot_at(
     let mut entity_list: Vec<serde_json::Value> = entities
         .iter()
         .map(|e| {
-            let pos: Position3 = spectator_core::types::vec_to_array3(&e.position);
+            let pos: Position3 = stage_core::types::vec_to_array3(&e.position);
             let rel = bearing::relative_position(&perspective, pos, !e.visible);
             let mut entry = json!({
                 "path": e.path,
@@ -329,7 +329,7 @@ pub fn snapshot_at(
         .iter()
         .zip(entity_list.drain(..))
         .map(|(e, entry)| {
-            let pos: Position3 = spectator_core::types::vec_to_array3(&e.position);
+            let pos: Position3 = stage_core::types::vec_to_array3(&e.position);
             let dist = bearing::distance(perspective_pos, pos);
             (dist, entry)
         })
@@ -367,8 +367,8 @@ fn budget_truncate(entities: &[serde_json::Value], budget_limit: u32) -> Vec<ser
     let mut bytes_used: usize = 100; // overhead for frame metadata
     for entity in entities {
         let entity_bytes = serde_json::to_vec(entity).unwrap_or_default().len();
-        let entity_tokens = spectator_core::budget::estimate_tokens(entity_bytes);
-        if spectator_core::budget::estimate_tokens(bytes_used) + entity_tokens > budget_limit {
+        let entity_tokens = stage_core::budget::estimate_tokens(entity_bytes);
+        if stage_core::budget::estimate_tokens(bytes_used) + entity_tokens > budget_limit {
             break;
         }
         bytes_used += entity_bytes;
@@ -552,7 +552,7 @@ fn evaluate_proximity(
     let target_pattern = condition.target.as_deref()?;
 
     let node_entity = entities.iter().find(|e| e.path == node)?;
-    let node_pos = spectator_core::types::vec_to_array3(&node_entity.position);
+    let node_pos = stage_core::types::vec_to_array3(&node_entity.position);
 
     // Find closest matching target (supports glob-style trailing wildcard)
     let mut min_dist = f64::MAX;
@@ -560,8 +560,8 @@ fn evaluate_proximity(
         if !path_matches(&entity.path, target_pattern) {
             continue;
         }
-        let target_pos = spectator_core::types::vec_to_array3(&entity.position);
-        let dist = spectator_core::bearing::distance(node_pos, target_pos);
+        let target_pos = stage_core::types::vec_to_array3(&entity.position);
+        let dist = stage_core::bearing::distance(node_pos, target_pos);
         if dist < min_dist {
             min_dist = dist;
         }
@@ -630,7 +630,7 @@ fn evaluate_property_change(
     let curr_val = curr.state.get(property)?;
     let prev_val = prev_entity.state.get(property)?;
 
-    if !spectator_core::delta::values_equal(prev_val, curr_val) {
+    if !stage_core::delta::values_equal(prev_val, curr_val) {
         Some(RangeMatch {
             frame,
             time_ms,
@@ -674,7 +674,7 @@ fn budget_truncate_count(matches: &[RangeMatch], budget_limit: u32) -> usize {
     for (i, m) in matches.iter().enumerate() {
         let entry_bytes = serde_json::to_vec(m).unwrap_or_default().len();
         bytes += entry_bytes;
-        if spectator_core::budget::estimate_tokens(bytes) > budget_limit {
+        if stage_core::budget::estimate_tokens(bytes) > budget_limit {
             return i.max(1); // at least 1 result
         }
     }
@@ -718,10 +718,10 @@ pub fn diff_frames(
             let mut has_change = false;
 
             // Position change
-            let pos_a = spectator_core::types::vec_to_array3(&a_entity.position);
-            let pos_b = spectator_core::types::vec_to_array3(&b_entity.position);
-            let dist = spectator_core::bearing::distance(pos_a, pos_b);
-            if dist > spectator_core::delta::POSITION_THRESHOLD {
+            let pos_a = stage_core::types::vec_to_array3(&a_entity.position);
+            let pos_b = stage_core::types::vec_to_array3(&b_entity.position);
+            let dist = stage_core::bearing::distance(pos_a, pos_b);
+            if dist > stage_core::delta::POSITION_THRESHOLD {
                 entry["position"] = json!({ "a": a_entity.position, "b": b_entity.position });
                 entry["delta_pos"] = json!([
                     pos_b[0] - pos_a[0],
@@ -735,7 +735,7 @@ pub fn diff_frames(
             let mut state_changes = serde_json::Map::new();
             for (key, val_b) in &b_entity.state {
                 match a_entity.state.get(key) {
-                    Some(val_a) if !spectator_core::delta::values_equal(val_a, val_b) => {
+                    Some(val_a) if !stage_core::delta::values_equal(val_a, val_b) => {
                         state_changes.insert(key.clone(), json!({ "a": val_a, "b": val_b }));
                         has_change = true;
                     }
@@ -948,7 +948,7 @@ fn budget_truncate_count_json(items: &[serde_json::Value], budget_limit: u32) ->
     let mut bytes = 100;
     for (i, item) in items.iter().enumerate() {
         bytes += serde_json::to_vec(item).unwrap_or_default().len();
-        if spectator_core::budget::estimate_tokens(bytes) > budget_limit {
+        if stage_core::budget::estimate_tokens(bytes) > budget_limit {
             return i.max(1);
         }
     }
@@ -957,7 +957,7 @@ fn budget_truncate_count_json(items: &[serde_json::Value], budget_limit: u32) ->
 ```
 
 **Implementation Notes:**
-- `values_equal` from `spectator_core::delta` needs to be made `pub` (currently `pub(crate)`)
+- `values_equal` from `stage_core::delta` needs to be made `pub` (currently `pub(crate)`)
 - `signal_emitted` condition uses the events table, not frame data scanning
 - `entered_area` is evaluated via events table (`area_enter` events)
 - `velocity_spike` requires two consecutive frames (prev + curr)
@@ -981,7 +981,7 @@ fn budget_truncate_count_json(items: &[serde_json::Value], budget_limit: u32) ->
 
 ### Unit 4: Extend RecordingParams for Analysis Actions
 
-**File**: `crates/spectator-server/src/mcp/recording.rs`
+**File**: `crates/stage-server/src/mcp/recording.rs`
 
 Add new fields to `RecordingParams` for the 4 analysis actions:
 
@@ -1053,7 +1053,7 @@ pub struct RecordingParams {
 
 ### Unit 5: Recording Handler — Analysis Action Routing
 
-**File**: `crates/spectator-server/src/mcp/recording.rs`
+**File**: `crates/stage-server/src/mcp/recording.rs`
 
 Add 4 new action handlers that use the analysis engine:
 
@@ -1252,7 +1252,7 @@ fn most_recent_recording(storage_path: &str) -> Option<String> {
 
 ### Unit 6: Activity Logging for Analysis Actions
 
-**File**: `crates/spectator-server/src/activity.rs`
+**File**: `crates/stage-server/src/activity.rs`
 
 Extend `recording_summary` to cover the 4 new actions:
 
@@ -1319,7 +1319,7 @@ pub fn recording_summary(params: &RecordingParams) -> String {
 
 ### Unit 7: Update MCP Tool Description
 
-**File**: `crates/spectator-server/src/mcp/mod.rs`
+**File**: `crates/stage-server/src/mcp/mod.rs`
 
 Update the `recording` tool's `#[tool(description = "...")]`:
 
@@ -1343,7 +1343,7 @@ Update the `recording` tool's `#[tool(description = "...")]`:
 
 ### Unit 8: Dependencies
 
-**File**: `crates/spectator-server/Cargo.toml`
+**File**: `crates/stage-server/Cargo.toml`
 
 ```toml
 [dependencies]
@@ -1352,23 +1352,23 @@ rusqlite = { workspace = true }
 rmp-serde = { workspace = true }
 ```
 
-**File**: `crates/spectator-protocol/Cargo.toml`
+**File**: `crates/stage-protocol/Cargo.toml`
 
 Verify `serde` and `serde_json` workspace dependencies are present (they are — needed for `FrameEntityData`).
 
 **Implementation Notes:**
-- Both `rusqlite` and `rmp-serde` are already workspace dependencies (used by spectator-godot)
+- Both `rusqlite` and `rmp-serde` are already workspace dependencies (used by stage-godot)
 - `rusqlite` bundled feature ensures SQLite is statically linked (no system dependency)
 
 **Acceptance Criteria:**
-- [ ] `cargo build -p spectator-server` compiles with new dependencies
+- [ ] `cargo build -p stage-server` compiles with new dependencies
 - [ ] No duplicate SQLite library versions in the dependency tree
 
 ---
 
 ### Unit 9: Make `values_equal` Public
 
-**File**: `crates/spectator-core/src/delta.rs`
+**File**: `crates/stage-core/src/delta.rs`
 
 Change visibility of `values_equal` from `pub(crate)` to `pub`:
 
@@ -1386,15 +1386,15 @@ pub const POSITION_THRESHOLD: f64 = 0.01;
 ```
 
 **Acceptance Criteria:**
-- [ ] `spectator_core::delta::values_equal` is callable from spectator-server
-- [ ] `spectator_core::delta::POSITION_THRESHOLD` is accessible from spectator-server
+- [ ] `stage_core::delta::values_equal` is callable from stage-server
+- [ ] `stage_core::delta::POSITION_THRESHOLD` is accessible from stage-server
 - [ ] No changes to the function behavior
 
 ---
 
 ### Unit 10: System Marker Generation
 
-**File**: `crates/spectator-server/src/recording_analysis.rs`
+**File**: `crates/stage-server/src/recording_analysis.rs`
 
 System markers are generated as a side effect of `query_range` scans. When a velocity spike or property threshold crossing is detected, a system marker is inserted into the recording's SQLite database.
 
@@ -1473,7 +1473,7 @@ if condition.condition_type == "velocity_spike" || condition.condition_type == "
 
 ### Unit 11: TCP Dispatch for recording_resolve_path
 
-**File**: `crates/spectator-godot/src/tcp_server.rs`
+**File**: `crates/stage-godot/src/tcp_server.rs`
 
 Add routing for the new TCP method in the message dispatch:
 
@@ -1484,13 +1484,13 @@ Add routing for the new TCP method in the message dispatch:
 }
 ```
 
-**File**: `crates/spectator-godot/src/recording_handler.rs`
+**File**: `crates/stage-godot/src/recording_handler.rs`
 
 Add the method to the dispatcher:
 
 ```rust
 pub fn handle_recording_query(
-    recorder: &mut Gd<SpectatorRecorder>,
+    recorder: &mut Gd<StageRecorder>,
     method: &str,
     params: &Value,
 ) -> Result<Value, (String, String)> {
@@ -1510,8 +1510,8 @@ pub fn handle_recording_query(
 
 ## Implementation Order
 
-1. **Unit 8: Dependencies** — add rusqlite, rmp-serde to spectator-server Cargo.toml
-2. **Unit 1: FrameEntityData** — move to spectator-protocol, update imports
+1. **Unit 8: Dependencies** — add rusqlite, rmp-serde to stage-server Cargo.toml
+2. **Unit 1: FrameEntityData** — move to stage-protocol, update imports
 3. **Unit 9: values_equal visibility** — make pub for cross-crate use
 4. **Unit 11: TCP dispatch** — add recording_resolve_path route in addon
 5. **Unit 2: Storage path resolution** — addon handler + server caching
@@ -1528,7 +1528,7 @@ pub fn handle_recording_query(
 
 ## Testing
 
-### Unit Tests: `crates/spectator-protocol/src/recording.rs`
+### Unit Tests: `crates/stage-protocol/src/recording.rs`
 
 ```rust
 #[cfg(test)]
@@ -1542,7 +1542,7 @@ mod tests {
 }
 ```
 
-### Unit Tests: `crates/spectator-server/src/recording_analysis.rs`
+### Unit Tests: `crates/stage-server/src/recording_analysis.rs`
 
 ```rust
 #[cfg(test)]
@@ -1838,7 +1838,7 @@ mod tests {
 }
 ```
 
-### Tests in `crates/spectator-server/src/mcp/recording.rs`
+### Tests in `crates/stage-server/src/mcp/recording.rs`
 
 Add alongside existing tests:
 
@@ -1874,19 +1874,19 @@ cargo clippy --workspace
 cargo fmt --check
 
 # Verify new module compiles
-cargo build -p spectator-server
+cargo build -p stage-server
 
-# Verify spectator-godot still compiles with FrameEntityData import change
-cargo build -p spectator-godot
+# Verify stage-godot still compiles with FrameEntityData import change
+cargo build -p stage-godot
 
 # Run recording analysis tests specifically
-cargo test -p spectator-server recording_analysis
+cargo test -p stage-server recording_analysis
 
 # Run recording param tests
-cargo test -p spectator-server recording_params
+cargo test -p stage-server recording_params
 
 # Verify no SQLite library duplication
-cargo tree -p spectator-server | grep rusqlite
+cargo tree -p stage-server | grep rusqlite
 ```
 
 ---
@@ -1895,16 +1895,16 @@ cargo tree -p spectator-server | grep rusqlite
 
 | File | Change Type | Description |
 |------|------------|-------------|
-| `crates/spectator-protocol/src/recording.rs` | **new** | FrameEntityData shared type |
-| `crates/spectator-protocol/src/lib.rs` | edit | Add `pub mod recording` |
-| `crates/spectator-server/Cargo.toml` | edit | Add rusqlite, rmp-serde deps |
-| `crates/spectator-server/src/recording_analysis.rs` | **new** | Core analysis engine (520+ lines) |
-| `crates/spectator-server/src/mcp/recording.rs` | edit | Extended params + 4 new handlers |
-| `crates/spectator-server/src/mcp/mod.rs` | edit | Updated tool description, add mod |
-| `crates/spectator-server/src/main.rs` | edit | Add `mod recording_analysis` |
-| `crates/spectator-server/src/tcp.rs` | edit | Add `recording_storage_path` to SessionState |
-| `crates/spectator-server/src/activity.rs` | edit | Extend recording_summary |
-| `crates/spectator-core/src/delta.rs` | edit | Make `values_equal` and `POSITION_THRESHOLD` pub |
-| `crates/spectator-godot/src/recorder.rs` | edit | Import FrameEntityData from protocol, make globalize_path pub(crate) |
-| `crates/spectator-godot/src/recording_handler.rs` | edit | Add `recording_resolve_path` handler |
-| `crates/spectator-godot/src/tcp_server.rs` | edit | Route `recording_resolve_path` |
+| `crates/stage-protocol/src/recording.rs` | **new** | FrameEntityData shared type |
+| `crates/stage-protocol/src/lib.rs` | edit | Add `pub mod recording` |
+| `crates/stage-server/Cargo.toml` | edit | Add rusqlite, rmp-serde deps |
+| `crates/stage-server/src/recording_analysis.rs` | **new** | Core analysis engine (520+ lines) |
+| `crates/stage-server/src/mcp/recording.rs` | edit | Extended params + 4 new handlers |
+| `crates/stage-server/src/mcp/mod.rs` | edit | Updated tool description, add mod |
+| `crates/stage-server/src/main.rs` | edit | Add `mod recording_analysis` |
+| `crates/stage-server/src/tcp.rs` | edit | Add `recording_storage_path` to SessionState |
+| `crates/stage-server/src/activity.rs` | edit | Extend recording_summary |
+| `crates/stage-core/src/delta.rs` | edit | Make `values_equal` and `POSITION_THRESHOLD` pub |
+| `crates/stage-godot/src/recorder.rs` | edit | Import FrameEntityData from protocol, make globalize_path pub(crate) |
+| `crates/stage-godot/src/recording_handler.rs` | edit | Add `recording_resolve_path` handler |
+| `crates/stage-godot/src/tcp_server.rs` | edit | Route `recording_resolve_path` |

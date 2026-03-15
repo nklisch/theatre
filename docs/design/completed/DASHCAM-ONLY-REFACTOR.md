@@ -16,15 +16,15 @@ saved clips, and dashcam clips are structurally identical to explicit recordings
 **What disappears:**
 - `recording(action: "start")` / `"stop"` / `"status"` MCP actions
 - `CaptureConfig` parameter struct (capture_interval, max_frames)
-- Explicit recording state in SpectatorRecorder (recording flag, frame_buffer,
+- Explicit recording state in StageRecorder (recording flag, frame_buffer,
   event_buffer, marker_buffer, periodic flush_to_db, db connection)
 - `recording_started` / `recording_stopped` signals
 - F12 keybind (toggle recording)
 - Record/Stop buttons in editor dock
 - Recording indicator (red dot overlay)
-- `spectator/recording/*` project settings (storage_path, max_frames,
+- `stage/recording/*` project settings (storage_path, max_frames,
   capture_interval, show_recording_indicator, record_key)
-- `spectator:recording` debugger message
+- `stage:recording` debugger message
 - CapturedEvent, CapturedMarker buffer types
 
 **What stays (unchanged in behavior):**
@@ -34,7 +34,7 @@ saved clips, and dashcam clips are structurally identical to explicit recordings
 - `list`, `delete`, `markers` actions (query saved clips)
 - `snapshot_at`, `query_range`, `diff_frames`, `find_event` (analysis on clips)
 - `recording_analysis.rs` (entire module stays)
-- `rusqlite` + `rmp-serde` in spectator-server (needed for analysis)
+- `rusqlite` + `rmp-serde` in stage-server (needed for analysis)
 - Storage path resolution in SessionState (needed by analysis)
 - SQLite schema, FrameEntityData, MessagePack serialization
 - `dashcam_clip_saved`, `dashcam_clip_started`, `marker_added` signals
@@ -169,7 +169,7 @@ When updating docs (SPEC.md, VISION.md, etc.):
 
 ### Unit 1: Rename and Slim MCP Tool
 
-**Files**: `crates/spectator-server/src/mcp/recording.rs` → rename to `crates/spectator-server/src/mcp/clips.rs`
+**Files**: `crates/stage-server/src/mcp/recording.rs` → rename to `crates/stage-server/src/mcp/clips.rs`
 
 Rename the tool, remove explicit recording actions, slim params.
 
@@ -314,7 +314,7 @@ async fn handle_delete(params: &ClipsParams, ...) -> Result<String, McpError> {
 
 ### Unit 2: Rename recording_analysis → clip_analysis
 
-**File**: `crates/spectator-server/src/recording_analysis.rs` → `crates/spectator-server/src/clip_analysis.rs`
+**File**: `crates/stage-server/src/recording_analysis.rs` → `crates/stage-server/src/clip_analysis.rs`
 
 Rename types and update all JSON output field names:
 
@@ -362,7 +362,7 @@ pub clip_storage_path: Option<String>,  // was: recording_storage_path
 
 ### Unit 3: Update Activity Summaries
 
-**File**: `crates/spectator-server/src/activity.rs`
+**File**: `crates/stage-server/src/activity.rs`
 
 Rename function, update to use `ClipsParams`, remove old actions, add `save`:
 
@@ -409,7 +409,7 @@ pub fn clips_summary(params: &ClipsParams) -> String {
 
 ### Unit 4: Update MCP Tool Router
 
-**File**: `crates/spectator-server/src/mcp/mod.rs`
+**File**: `crates/stage-server/src/mcp/mod.rs`
 
 ```rust
 // mod recording;  →
@@ -440,9 +440,9 @@ pub async fn clips(
 
 ---
 
-### Unit 5: Strip Explicit Recording from SpectatorRecorder
+### Unit 5: Strip Explicit Recording from StageRecorder
 
-**File**: `crates/spectator-godot/src/recorder.rs`
+**File**: `crates/stage-godot/src/recorder.rs`
 
 Remove all explicit recording state, methods, signals. Keep dashcam and shared
 infrastructure (list, delete, get_markers).
@@ -509,7 +509,7 @@ and just update JSON output fields).
 
 ### Unit 6: Update TCP Recording Handler
 
-**File**: `crates/spectator-godot/src/recording_handler.rs`
+**File**: `crates/stage-godot/src/recording_handler.rs`
 
 Remove `recording_start`, `recording_stop`, `recording_status` handlers.
 Update all JSON response fields from `recording_id` to `clip_id`.
@@ -548,7 +548,7 @@ pub fn handle_recording_query(...) -> Result<Value, String> {
 
 ### Unit 7: Simplify GDScript Runtime
 
-**File**: `addons/spectator/runtime.gd`
+**File**: `addons/stage/runtime.gd`
 
 **Remove:**
 - `_recording_dot` field + overlay creation
@@ -556,7 +556,7 @@ pub fn handle_recording_query(...) -> Result<Value, String> {
 - `_toggle_recording()`, `_set_recording_indicator()`
 - `_on_recording_started()`, `_on_recording_stopped()`
 - Signal connections for `recording_started`, `recording_stopped`
-- `spectator:recording` debugger message in `_push_status_to_editor()`
+- `stage:recording` debugger message in `_push_status_to_editor()`
 - `"start_recording"` / `"stop_recording"` in `_on_debugger_command()`
 - `recorder.stop_recording()` in `_exit_tree()`
 
@@ -573,7 +573,7 @@ pub fn handle_recording_query(...) -> Result<Value, String> {
 
 ### Unit 8: Simplify Editor Dock
 
-**Files**: `addons/spectator/dock.gd` + `addons/spectator/dock.tscn`
+**Files**: `addons/stage/dock.gd` + `addons/stage/dock.tscn`
 
 **Remove**: `record_btn`, `stop_btn`, `marker_btn`, `recording_stats`,
 `_recording_active`, `receive_recording()`, all recording button handlers,
@@ -591,20 +591,20 @@ pub fn handle_recording_query(...) -> Result<Value, String> {
 
 ### Unit 9: Simplify Debugger Plugin + Plugin Settings
 
-**File**: `addons/spectator/debugger_plugin.gd`
+**File**: `addons/stage/debugger_plugin.gd`
 
-Remove `spectator:recording` handler, `send_command()`.
+Remove `stage:recording` handler, `send_command()`.
 
-**File**: `addons/spectator/plugin.gd`
+**File**: `addons/stage/plugin.gd`
 
 Remove `_dock._debugger_plugin` wiring (dock is read-only now).
 
 Remove settings:
-- `spectator/recording/storage_path`
-- `spectator/recording/max_frames`
-- `spectator/recording/capture_interval`
-- `spectator/display/show_recording_indicator`
-- `spectator/shortcuts/record_key`
+- `stage/recording/storage_path`
+- `stage/recording/max_frames`
+- `stage/recording/capture_interval`
+- `stage/display/show_recording_indicator`
+- `stage/shortcuts/record_key`
 
 **Acceptance Criteria:**
 - [ ] No recording debugger messages
@@ -615,14 +615,14 @@ Remove settings:
 
 ### Unit 10: Rename TOML Config Section
 
-**File**: `crates/spectator-server/src/config.rs`
+**File**: `crates/stage-server/src/config.rs`
 
 `RecordingConfig` → `DashcamTomlConfig`, section `[recording]` → `[dashcam]`,
 drop `dashcam_` prefix from field names.
 
 ```rust
 #[derive(Debug, Default, Deserialize)]
-pub struct SpectatorToml {
+pub struct StageToml {
     pub connection: Option<ConnectionConfig>,
     pub tracking: Option<TrackingConfig>,
     pub dashcam: Option<DashcamTomlConfig>,
@@ -666,7 +666,7 @@ use `clip_id` not `recording_id`.
 
 ### Unit 12: Update Tests — Server Scenarios + E2E
 
-**Files**: `crates/spectator-server/tests/scenarios.rs`, `e2e_journeys.rs`
+**Files**: `crates/stage-server/tests/scenarios.rs`, `e2e_journeys.rs`
 
 - DELETE `journey_recording_lifecycle()` and
   `test_recording_lifecycle_ids_consistent()`
@@ -731,7 +731,7 @@ Update all prose mentioning `recording_id`.
 **Update CLAUDE.md**: "9 MCP tools" — update tool list to show `clips` not
 `recording`.
 
-**`.agents/skills/spectator/SKILL.md`**: Update any references to `recording`
+**`.agents/skills/stage/SKILL.md`**: Update any references to `recording`
 tool → `clips`, `recording_id` → `clip_id`.
 
 **Acceptance Criteria:**
@@ -750,7 +750,7 @@ tool → `clips`, `recording_id` → `clip_id`.
 3. **Unit 3**: Activity summaries
 4. **Unit 4**: MCP tool router
 5. **Unit 10**: TOML config rename
-6. **Unit 5**: SpectatorRecorder — strip explicit recording (biggest unit)
+6. **Unit 5**: StageRecorder — strip explicit recording (biggest unit)
 7. **Unit 6**: TCP recording handler
 8. **Unit 7**: runtime.gd
 9. **Unit 8**: dock
@@ -767,9 +767,9 @@ tool → `clips`, `recording_id` → `clip_id`.
 cargo build --workspace
 cargo clippy --workspace
 cargo fmt --check
-theatre-deploy ~/dev/spectator/tests/godot-project
+theatre-deploy ~/dev/stage/tests/godot-project
 cargo test --workspace
-godot --headless --quit --path ~/dev/spectator/tests/godot-project 2>&1
+godot --headless --quit --path ~/dev/stage/tests/godot-project 2>&1
 ```
 
 ### End-to-End Workflow
@@ -795,7 +795,7 @@ godot --headless --quit --path ~/dev/spectator/tests/godot-project 2>&1
 - [ ] No `recording_started`/`recording_stopped` signals
 - [ ] No `CaptureConfig` struct
 - [ ] No record/stop buttons in dock, no F12 keybind
-- [ ] No `spectator/recording/*` project settings
-- [ ] `spectator.toml` `[dashcam]` section works
+- [ ] No `stage/recording/*` project settings
+- [ ] `stage.toml` `[dashcam]` section works
 - [ ] Analysis tools work on saved clips
 - [ ] Tool description reads as agent workflow, not implementation details

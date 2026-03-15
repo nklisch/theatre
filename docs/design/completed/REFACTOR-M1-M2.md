@@ -15,11 +15,11 @@ may depend on earlier ones.
 
 ## Refactor Steps
 
-### Step 1: Extract `vec_to_position3` / `vec_to_array3` helper in spectator-core
+### Step 1: Extract `vec_to_position3` / `vec_to_array3` helper in stage-core
 
 **Priority**: High
 **Risk**: Low
-**Files**: `crates/spectator-core/src/types.rs`, `crates/spectator-server/src/mcp/snapshot.rs`, `crates/spectator-server/src/mcp/inspect.rs`, `crates/spectator-server/src/mcp/mod.rs`
+**Files**: `crates/stage-core/src/types.rs`, `crates/stage-server/src/mcp/snapshot.rs`, `crates/stage-server/src/mcp/inspect.rs`, `crates/stage-server/src/mcp/mod.rs`
 
 **Current State**: Four+ call sites manually index into `Vec<f64>` with
 `.first().copied().unwrap_or(0.0)`, `.get(1)...`, `.get(2)...` to produce a
@@ -34,14 +34,14 @@ may depend on earlier ones.
 - `inspect.rs:75-78` (target position)
 
 **Target State**: A single `pub fn vec_to_array3(v: &[f64]) -> [f64; 3]` in
-`spectator-core/src/types.rs`, with an optional default parameter variant
+`stage-core/src/types.rs`, with an optional default parameter variant
 `vec_to_array3_default(v: &[f64], default: f64) -> [f64; 3]` for the
 `node_forward` case (defaults to -1.0 for z). All call sites use it.
 
 **Approach**:
-1. Add `vec_to_array3` to `spectator-core/src/types.rs`
+1. Add `vec_to_array3` to `stage-core/src/types.rs`
 2. Replace all manual indexing in snapshot.rs, inspect.rs, mod.rs
-3. Re-export from `spectator_core` lib.rs if not already visible
+3. Re-export from `stage_core` lib.rs if not already visible
 
 **Verification**:
 - `cargo build --workspace`
@@ -51,11 +51,11 @@ may depend on earlier ones.
 
 ---
 
-### Step 2: Extract `vector3_to_vec` helper in spectator-godot
+### Step 2: Extract `vector3_to_vec` helper in stage-godot
 
 **Priority**: High
 **Risk**: Low
-**Files**: `crates/spectator-godot/src/collector.rs`
+**Files**: `crates/stage-godot/src/collector.rs`
 
 **Current State**: 15+ instances of `vec![v.x as f64, v.y as f64, v.z as f64]`
 scattered through collector.rs (lines 93-95, 111-113, 195-196, 227, 231,
@@ -71,16 +71,16 @@ top of collector.rs. All conversions use it. Negated-forward cases use
 3. For negated forward vectors: pass `-fwd` to the helper (Vector3 supports Neg)
 
 **Verification**:
-- `cargo build -p spectator-godot`
+- `cargo build -p stage-godot`
 - Grep for `as f64, v.y as f64` in collector.rs — should be zero hits
 
 ---
 
-### Step 3: Consolidate static class lists into spectator-core
+### Step 3: Consolidate static class lists into stage-core
 
 **Priority**: High (bug fix — lists are out of sync)
 **Risk**: Low
-**Files**: `crates/spectator-core/src/types.rs` (or new `static_classes.rs`), `crates/spectator-server/src/mcp/snapshot.rs`, `crates/spectator-godot/src/collector.rs`
+**Files**: `crates/stage-core/src/types.rs` (or new `static_classes.rs`), `crates/stage-server/src/mcp/snapshot.rs`, `crates/stage-godot/src/collector.rs`
 
 **Current State**: Two independent static class definitions that disagree:
 - `collector.rs:15-32`: `STATIC_CLASSES` array includes `MeshInstance3D`
@@ -90,35 +90,35 @@ This means the addon treats MeshInstance3D as static but the server doesn't,
 leading to inconsistent entity categorization.
 
 **Target State**: Single `STATIC_CLASSES` list and `is_static_class()` /
-`classify_static_category()` functions in `spectator-core`. Both crates import
+`classify_static_category()` functions in `stage-core`. Both crates import
 from there.
 
-Note: spectator-godot depends on spectator-protocol, NOT spectator-core. So the
-shared list must go in spectator-protocol (which both depend on) or we accept
-that spectator-godot duplicates a simple `contains` check. Best approach: put the
-canonical list in spectator-protocol since it's the shared wire-format crate both
+Note: stage-godot depends on stage-protocol, NOT stage-core. So the
+shared list must go in stage-protocol (which both depend on) or we accept
+that stage-godot duplicates a simple `contains` check. Best approach: put the
+canonical list in stage-protocol since it's the shared wire-format crate both
 already depend on.
 
 **Approach**:
-1. Add `static_classes` module to spectator-protocol with the list and helpers
-2. Update spectator-server/snapshot.rs to use `spectator_protocol::static_classes::*`
-3. Update spectator-godot/collector.rs to use `spectator_protocol::static_classes::STATIC_CLASSES`
+1. Add `static_classes` module to stage-protocol with the list and helpers
+2. Update stage-server/snapshot.rs to use `stage_protocol::static_classes::*`
+3. Update stage-godot/collector.rs to use `stage_protocol::static_classes::STATIC_CLASSES`
 4. Ensure the list is consistent (include MeshInstance3D or not — decide once)
 5. Delete the duplicated definitions
 
 **Verification**:
 - `cargo build --workspace`
 - `cargo test --workspace`
-- Grep for `STATIC_CLASSES` — should only appear in spectator-protocol
-- Grep for `is_static_class` — should only appear in spectator-protocol + call sites
+- Grep for `STATIC_CLASSES` — should only appear in stage-protocol
+- Grep for `is_static_class` — should only appear in stage-protocol + call sites
 
 ---
 
-### Step 4: Extract MCP serde helpers in spectator-server
+### Step 4: Extract MCP serde helpers in stage-server
 
 **Priority**: High
 **Risk**: Low
-**Files**: `crates/spectator-server/src/mcp/mod.rs` (new helpers or new `mcp/helpers.rs`)
+**Files**: `crates/stage-server/src/mcp/mod.rs` (new helpers or new `mcp/helpers.rs`)
 
 **Current State**: 8+ identical serde error-wrapping blocks across the three
 tool handlers in mod.rs:
@@ -142,17 +142,17 @@ fn serialize_response<T: Serialize>(response: &T) -> Result<String, McpError>;
    query_addon + deserialize_response (used identically by snapshot and inspect)
 
 **Verification**:
-- `cargo build -p spectator-server`
-- `cargo test -p spectator-server`
+- `cargo build -p stage-server`
+- `cargo test -p stage-server`
 - Grep for `Param serialization error` — should appear only in the helper
 
 ---
 
-### Step 5: Extract query handler serde helpers in spectator-godot
+### Step 5: Extract query handler serde helpers in stage-godot
 
 **Priority**: Medium
 **Risk**: Low
-**Files**: `crates/spectator-godot/src/query_handler.rs`
+**Files**: `crates/stage-godot/src/query_handler.rs`
 
 **Current State**: Four handler functions repeat identical `QueryError` wrapping
 for deserialization (lines 46, 70, 90) and serialization (lines 52, 60, 80):
@@ -177,7 +177,7 @@ fn to_json_value<T: Serialize>(data: &T) -> Result<serde_json::Value, QueryError
 3. Each handler becomes 2-3 lines shorter
 
 **Verification**:
-- `cargo build -p spectator-godot`
+- `cargo build -p stage-godot`
 - Grep for `"invalid_params".to_string()` — should appear only in the helper
 
 ---
@@ -186,7 +186,7 @@ fn to_json_value<T: Serialize>(data: &T) -> Result<serde_json::Value, QueryError
 
 **Priority**: Medium
 **Risk**: Low
-**Files**: `crates/spectator-server/src/mcp/mod.rs`
+**Files**: `crates/stage-server/src/mcp/mod.rs`
 
 **Current State**: spatial_inspect (lines 177-186) and scene_tree (lines 220-229)
 both manually inject a budget JSON block into a `serde_json::Value::Object`:
@@ -213,8 +213,8 @@ fn inject_budget(response: &mut serde_json::Value, used: u32, limit: u32);
 2. Replace the two manual injection blocks
 
 **Verification**:
-- `cargo build -p spectator-server`
-- `cargo test -p spectator-server`
+- `cargo build -p stage-server`
+- `cargo test -p stage-server`
 
 ---
 
@@ -222,7 +222,7 @@ fn inject_budget(response: &mut serde_json::Value, used: u32, limit: u32);
 
 **Priority**: Medium
 **Risk**: Low
-**Files**: `crates/spectator-server/src/mcp/snapshot.rs`
+**Files**: `crates/stage-server/src/mcp/snapshot.rs`
 
 **Current State**: The perspective JSON block is built identically in
 build_summary_response (line 288), build_standard_response (lines 341, 358),
@@ -247,8 +247,8 @@ fn perspective_json(raw: &PerspectiveData, persp: &Perspective) -> serde_json::V
 2. Replace all inline perspective blocks with the helper call
 
 **Verification**:
-- `cargo build -p spectator-server`
-- `cargo test -p spectator-server`
+- `cargo build -p stage-server`
+- `cargo test -p stage-server`
 - Grep for `"facing_deg"` in snapshot.rs — should appear only in the helper
 
 ---
@@ -257,7 +257,7 @@ fn perspective_json(raw: &PerspectiveData, persp: &Perspective) -> serde_json::V
 
 **Priority**: Low
 **Risk**: Low
-**Files**: `crates/spectator-server/src/mcp/snapshot.rs`
+**Files**: `crates/stage-server/src/mcp/snapshot.rs`
 
 **Current State**: Several functions are `pub` but only used within the mcp
 module:
@@ -275,7 +275,7 @@ class functions are removed from this file.
 2. Confirm is_static_class/classify_static_category have been moved (step 3)
 
 **Verification**:
-- `cargo build -p spectator-server`
+- `cargo build -p stage-server`
 - `cargo clippy --workspace` — no dead_code warnings
 
 ---
@@ -284,7 +284,7 @@ class functions are removed from this file.
 
 **Priority**: Low
 **Risk**: Medium (touches I/O code paths)
-**Files**: `crates/spectator-godot/src/tcp_server.rs`
+**Files**: `crates/stage-godot/src/tcp_server.rs`
 
 **Current State**: Three methods (`send_handshake`, `try_read`, `send_response`)
 each manually toggle `set_nonblocking(false)` before I/O and
@@ -311,7 +311,7 @@ paths currently skip the restore in some cases.
 3. Test manually with a running Godot scene (no automated test for TCP I/O)
 
 **Verification**:
-- `cargo build -p spectator-godot`
+- `cargo build -p stage-godot`
 - Manual test: connect MCP server to running Godot game, verify handshake + queries work
 - Grep for `set_nonblocking` — should appear only in the guard
 
@@ -328,8 +328,8 @@ These were identified but not worth refactoring now:
   worth it for 5 instances. Reconsider if M3-M9 add more tools.
 
 - **Spatial logic in collector.rs**: The structural agent flagged
-  `collect_nearby_recursive` and `collect_containing_areas` in spectator-godot
-  as "spatial reasoning that should be in spectator-core." However, these
+  `collect_nearby_recursive` and `collect_containing_areas` in stage-godot
+  as "spatial reasoning that should be in stage-core." However, these
   functions traverse the live Godot scene tree (using `Gd<Node>`, `try_cast`,
   etc.) and cannot run outside the Godot process. The addon collects raw spatial
   data; the server computes bearings and relative positions. This split is

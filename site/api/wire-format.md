@@ -4,7 +4,7 @@ The TCP protocol used between Theatre's MCP servers and the Godot addons.
 
 ## Overview
 
-Both Spectator and Director communicate with their Godot-side components over TCP using **length-prefixed JSON**:
+Both Stage and Director communicate with their Godot-side components over TCP using **length-prefixed JSON**:
 
 ```
 [4 bytes: big-endian u32 length][JSON payload of exactly `length` bytes]
@@ -16,13 +16,13 @@ This framing ensures that both sides can read exactly one complete message per c
 
 | Component | Port | Direction |
 |---|---|---|
-| Spectator | `9077` | Addon listens; server connects |
-| Director (editor plugin) | `6550` | Plugin listens; director binary connects |
-| Director (headless daemon) | `6551` | Daemon listens; director binary connects |
+| Stage | `9077` | Addon listens; server connects |
+| Director (editor plugin) | `6551` | Plugin listens; director binary connects |
+| Director (headless daemon) | `6550` | Daemon listens; director binary connects |
 
 All ports bind to `127.0.0.1` only. No remote access.
 
-The **addon listens, server connects** pattern for Spectator means the MCP server can be started and stopped without affecting the running game — the game always has a socket open. The server connects when it needs data and can reconnect automatically after a game restart.
+The **addon listens, server connects** pattern for Stage means the MCP server can be started and stopped without affecting the running game — the game always has a socket open. The server connects when it needs data and can reconnect automatically after a game restart.
 
 ## Message framing
 
@@ -53,7 +53,7 @@ To receive a message:
 
 If either read returns fewer bytes than requested (socket closed), the connection has terminated.
 
-## Spectator protocol
+## Stage protocol
 
 ### Request types
 
@@ -130,7 +130,7 @@ Responses:
 
 ## Connection lifecycle
 
-### Spectator
+### Stage
 
 ```
 [Game starts] → addon starts TCP listener on 0.0.0.0:9077 (only accepts 127.0.0.1)
@@ -147,13 +147,13 @@ The server keeps the connection open across multiple tool calls (persistent conn
 ### Director
 
 ```
-[Editor opens] → plugin starts TCP listener on 127.0.0.1:6550
-[Tool call]    → director binary connects to 127.0.0.1:6550
+[Editor opens] → plugin starts TCP listener on 127.0.0.1:6551
+[Tool call]    → director binary connects to 127.0.0.1:6551
                → sends operation JSON
                → receives response JSON
                → closes connection (not persistent)
 [Editor closes] → plugin stops listener
-[Next call]    → director binary tries 6550 (fail), tries 6551 (daemon), or uses one-shot
+[Next call]    → director binary tries 6551 (fail), tries 6550 (daemon), or uses one-shot
 ```
 
 Director uses a per-request connection model — each operation is a new TCP connection. This keeps the protocol simple and avoids state management on the director binary side.
@@ -164,8 +164,8 @@ Director uses a per-request connection model — each operation is a new TCP con
 
 If the TCP connection fails or is reset:
 
-- **Spectator server**: returns an MCP error to the agent with the message "Game not running or not reachable. Start the game and try again."
-- **Director binary**: tries the next backend (6551, then one-shot).
+- **Stage server**: returns an MCP error to the agent with the message "Game not running or not reachable. Start the game and try again."
+- **Director binary**: tries the next backend (6550, then one-shot).
 
 ### Message errors
 
@@ -175,7 +175,7 @@ If a request refers to a non-existent node or resource, the response includes `"
 
 ## Implementation notes
 
-The codec is implemented in `crates/spectator-protocol/src/codec.rs` (shared between server and GDExtension):
+The codec is implemented in `crates/stage-protocol/src/codec.rs` (shared between server and GDExtension):
 
 ```rust
 // Synchronous write
