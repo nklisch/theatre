@@ -129,6 +129,9 @@ jobs:
           done
           ls -la release-assets/
 
+      - name: Copy standalone install script
+        run: cp scripts/install-standalone.sh release-assets/install.sh
+
       - name: Generate checksums
         working-directory: release-assets
         run: sha256sum * > SHA256SUMS.txt
