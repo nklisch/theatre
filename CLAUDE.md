@@ -197,22 +197,9 @@ Use the release script to automate version bumping, tagging, and pushing:
 ./scripts/release.sh 2.0.0    # explicit version
 ```
 
-The script syncs version strings across all locations, commits, tags, and
-pushes. The `release.yml` GitHub Actions workflow then builds cross-platform
-binaries (Linux x86_64, macOS arm64, Windows x86_64) and creates a GitHub
-Release with tarballs containing binaries + addons + install script.
+The script syncs version strings across all locations (`Cargo.toml`,
+`plugin.cfg` files, changelog, site docs, `Cargo.lock`), commits, tags, and
+pushes. CI then builds cross-platform binaries and creates a GitHub Release.
 
-Files updated by the release script:
-- `Cargo.toml` — workspace version (all Rust crates inherit automatically)
-- `addons/stage/plugin.cfg` — Godot plugin version
-- `addons/director/plugin.cfg` — Godot plugin version
-- `site/changelog.md` — new version header + footer compare links
-- `site/guide/installation.md` — version in CLI output examples
-- `site/api/wire-format.md` — handshake version examples
-- `Cargo.lock` — regenerated
-
-**Do not update version strings manually.** Always use the release script to
-keep everything in sync. If you need to add a new versioned location, add a
-`sed` rule to `scripts/release.sh`.
-
-Verify release at https://github.com/nklisch/theatre/releases
+Never update version strings manually — always use the release script.
+To add a new versioned file, add a `sed` rule to `scripts/release.sh`.
