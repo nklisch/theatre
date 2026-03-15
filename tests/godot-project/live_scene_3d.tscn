@@ -1,0 +1,133 @@
+[gd_scene load_steps=20 format=3 uid="uid://blive3dscene"]
+
+[ext_resource type="Script" path="res://live_scene_3d.gd" id="1_root"]
+[ext_resource type="Script" path="res://live_player.gd" id="2_player"]
+[ext_resource type="Script" path="res://live_patrol.gd" id="3_patrol"]
+[ext_resource type="Script" path="res://live_enemy.gd" id="4_enemy"]
+[ext_resource type="Script" path="res://live_crate.gd" id="5_crate"]
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_player"]
+radius = 0.4
+height = 1.8
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_player"]
+radius = 0.4
+height = 1.8
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_patrol"]
+radius = 0.4
+height = 1.8
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_red"]
+albedo_color = Color(0.8, 0.1, 0.1, 1)
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_patrol"]
+radius = 0.4
+height = 1.8
+
+[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_stationary"]
+radius = 0.4
+height = 1.8
+
+[sub_resource type="StandardMaterial3D" id="StandardMaterial3D_blue"]
+albedo_color = Color(0.1, 0.2, 0.8, 1)
+
+[sub_resource type="CapsuleMesh" id="CapsuleMesh_stationary"]
+radius = 0.4
+height = 1.8
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_crate"]
+size = Vector3(1, 1, 1)
+
+[sub_resource type="BoxMesh" id="BoxMesh_crate"]
+size = Vector3(1, 1, 1)
+
+[sub_resource type="SphereShape3D" id="SphereShape3D_ball"]
+radius = 0.5
+
+[sub_resource type="SphereMesh" id="SphereMesh_ball"]
+radius = 0.5
+
+[sub_resource type="BoxShape3D" id="BoxShape3D_floor"]
+size = Vector3(20, 0.2, 20)
+
+[sub_resource type="BoxMesh" id="BoxMesh_floor"]
+size = Vector3(20, 0.2, 20)
+
+[sub_resource type="Environment" id="Environment_live"]
+
+[node name="LiveScene3D" type="Node3D"]
+script = ExtResource("1_root")
+
+[node name="Camera3D" type="Camera3D" parent="."]
+transform = Transform3D(0.707107, -0.408248, 0.57735, 0, 0.816497, 0.57735, -0.707107, -0.408248, 0.57735, 8, 6, 8)
+
+[node name="Player" type="CharacterBody3D" parent="." groups=["player"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0)
+script = ExtResource("2_player")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Player"]
+shape = SubResource("CapsuleShape3D_player")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Player"]
+mesh = SubResource("CapsuleMesh_player")
+
+[node name="Enemies" type="Node3D" parent="."]
+
+[node name="Patrol" type="CharacterBody3D" parent="Enemies" groups=["enemies"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 0)
+script = ExtResource("3_patrol")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Enemies/Patrol"]
+shape = SubResource("CapsuleShape3D_patrol")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Enemies/Patrol"]
+mesh = SubResource("CapsuleMesh_patrol")
+surface_material_override/0 = SubResource("StandardMaterial3D_red")
+
+[node name="Stationary" type="CharacterBody3D" parent="Enemies" groups=["enemies"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0, 3)
+script = ExtResource("4_enemy")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Enemies/Stationary"]
+shape = SubResource("CapsuleShape3D_stationary")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Enemies/Stationary"]
+mesh = SubResource("CapsuleMesh_stationary")
+surface_material_override/0 = SubResource("StandardMaterial3D_blue")
+
+[node name="Props" type="Node3D" parent="."]
+
+[node name="Crate" type="RigidBody3D" parent="Props" groups=["props"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 2, 0.5, -2)
+script = ExtResource("5_crate")
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Props/Crate"]
+shape = SubResource("BoxShape3D_crate")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Props/Crate"]
+mesh = SubResource("BoxMesh_crate")
+
+[node name="Ball" type="RigidBody3D" parent="Props" groups=["props"]]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -2, 0.5, -3)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Props/Ball"]
+shape = SubResource("SphereShape3D_ball")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Props/Ball"]
+mesh = SubResource("SphereMesh_ball")
+
+[node name="Floor" type="StaticBody3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.1, 0)
+
+[node name="CollisionShape3D" type="CollisionShape3D" parent="Floor"]
+shape = SubResource("BoxShape3D_floor")
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="Floor"]
+mesh = SubResource("BoxMesh_floor")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, -0.5, 0.866025, 0, -0.866025, -0.5, 0, 5, 5)
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_live")
