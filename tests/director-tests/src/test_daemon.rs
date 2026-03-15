@@ -1,6 +1,6 @@
 use serde_json::json;
 
-use crate::harness::{DaemonFixture, DirectorFixture};
+use crate::harness::{DaemonFixture, DirectorFixture, OperationResultExt};
 
 /// Full lifecycle: spawn → ping → operation → quit.
 #[test]
@@ -68,6 +68,66 @@ fn daemon_unknown_operation() {
             .unwrap_or("")
             .contains("Unknown operation"),
         "error message should mention Unknown operation"
+    );
+
+    d.quit().expect("quit failed");
+}
+
+/// Verify project_reload returns script count and autoloads via daemon path.
+#[test]
+#[ignore = "requires Godot binary"]
+fn daemon_project_reload() {
+    let mut d = DaemonFixture::start_with_port(16556);
+
+    let data = d
+        .run(
+            "project_reload",
+            json!({
+                "project_path": d.project_dir().to_string_lossy().as_ref(),
+            }),
+        )
+        .unwrap()
+        .unwrap_data();
+
+    assert!(
+        data["scripts_checked"].as_u64().unwrap() > 0,
+        "daemon project_reload should report at least one .gd script"
+    );
+    assert!(
+        data["autoloads"].is_object(),
+        "daemon project_reload should return autoloads dict"
+    );
+
+    d.quit().expect("quit failed");
+}
+
+/// Verify editor_status returns headless state via daemon path.
+#[test]
+#[ignore = "requires Godot binary"]
+fn daemon_editor_status() {
+    let mut d = DaemonFixture::start_with_port(16557);
+
+    let data = d
+        .run(
+            "editor_status",
+            json!({
+                "project_path": d.project_dir().to_string_lossy().as_ref(),
+            }),
+        )
+        .unwrap()
+        .unwrap_data();
+
+    assert_eq!(
+        data["editor_connected"], false,
+        "daemon editor_status should report editor_connected: false in headless mode"
+    );
+    assert!(
+        data["autoloads"].is_object(),
+        "daemon editor_status should return autoloads dict"
+    );
+    assert!(
+        data["recent_log"].is_array(),
+        "daemon editor_status should return recent_log array"
     );
 
     d.quit().expect("quit failed");

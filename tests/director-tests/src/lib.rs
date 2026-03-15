@@ -61,6 +61,10 @@ mod test_physics;
 #[cfg(test)]
 mod test_project;
 #[cfg(test)]
+mod test_project_reload;
+#[cfg(test)]
+mod test_journey_project_settings;
+#[cfg(test)]
 mod test_reparent;
 #[cfg(test)]
 mod test_resource;
