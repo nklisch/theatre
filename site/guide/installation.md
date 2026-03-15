@@ -55,7 +55,7 @@ Supported platforms: Linux x86_64, macOS arm64, macOS x86_64 (Rosetta), Windows 
 ### Install a specific version
 
 ```bash
-curl -LsSf https://github.com/nklisch/theatre/releases/latest/download/install.sh | sh -s -- --version 0.2.1
+curl -LsSf https://github.com/nklisch/theatre/releases/latest/download/install.sh | sh -s -- --version 0.2.2
 ```
 
 ## Install from source
@@ -246,7 +246,7 @@ echo '{"detail": "summary"}' | stage spatial_snapshot
 # Help and version
 stage --help
 director --help
-stage --version   # {"version": "0.2.1"}
+stage --version   # {"version": "0.2.2"}
 ```
 
 CLI output is always JSON to stdout. Errors are structured JSON with exit codes: 0 (success), 1 (runtime error), 2 (usage error).

@@ -10,25 +10,48 @@ Theatre uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [Unreleased]
 
 ### Stage
-- `spatial_query` type `relationship` now returns `in_fov` field for Camera3D `from` nodes
-- `clips` query conditions: added `velocity_above` and `property_equals` filter types
-- `spatial_config`: added `auto_record` and `max_clip_duration_s` for continuous background recording
-- `spatial_snapshot`: `include_properties` now supports dot-notation for nested properties
+- `spatial_query` type `relationship` returns `in_fov` field for Camera3D `from` nodes
+- `spatial_config`: `auto_record` and `max_clip_duration_s` for continuous background recording
+- `spatial_snapshot`: `include_properties` supports dot-notation for nested properties
 
 ### Director
-- `batch`: added `stop_on_error: false` mode for partial application
-- `animation_add_track`: keyframes now support `easing` parameter with `linear`, `ease_in`, `ease_out`, `ease_in_out` options
-- `scene_diff`: new operation to compare two scene files
-- `gridmap_fill`: new operation for batch-filling 3D regions in GridMap
+- `animation_add_track`: keyframes support `easing` parameter (`linear`, `ease_in`, `ease_out`, `ease_in_out`)
+- `gridmap_fill`: batch-fill 3D regions in GridMap
 - Daemon backend: improved startup detection (no longer requires a 3-second sleep in CI)
 
-### Infrastructure
-- Codec: enforce 16MB maximum message size to prevent memory exhaustion
-- E2E test harness: `DirectorFixture::new()` now supports one-shot and daemon modes
-- All crates updated to Rust edition 2024
 
+## [0.2.2] — 2026-03-14
+---
 
 ## [0.2.1] — 2026-03-14
+
+### Site
+- Architecture diagrams: replaced ASCII art with interactive Vue components
+
+### Infrastructure
+- Release workflow: cross-platform fix — replaced rsync with cp/find
+
+---
+
+## [0.2.0] — 2026-03-14
+
+### Breaking Changes
+- Renamed `spectator` → `stage` across the codebase: binary name, env vars, GDScript class names, addon paths
+
+### Stage
+- Agent-first CLI mode: `stage <tool>` runs a single MCP tool and exits with JSON on stdout
+- Input injection actions on `spatial_action`: `action_press`, `action_release`, `inject_key`, `inject_mouse_button`
+- GDScript code markers: `StageRuntime.marker()` for tagging moments from game code
+
+### Director
+- `batch`: `stop_on_error` parameter for partial-application mode
+
+### Infrastructure
+- One-liner install script (`install.sh`) for external users
+- All crates updated to Rust edition 2024
+- E2E test harness: `DirectorFixture` and `StageCliFixture` with windowed Godot support
+- Full API docs alignment audit across all site pages
+
 ---
 
 ## [0.1.0] — 2026-03-12
@@ -120,7 +143,8 @@ Batch: `batch`
 - E2E journey tests in `tests/wire-tests/` and `tests/director-tests/`
 - E2E tests marked `#[ignore = "requires Godot binary"]`
 
-[Unreleased]: https://github.com/nklisch/theatre/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/nklisch/theatre/compare/v0.2.2...HEAD
+[0.2.2]: https://github.com/nklisch/theatre/releases/tag/v0.2.2
 [0.2.1]: https://github.com/nklisch/theatre/releases/tag/v0.2.1
 [0.2.0]: https://github.com/nklisch/theatre/releases/tag/v0.2.0
 [0.1.0]: https://github.com/nklisch/theatre/releases/tag/v0.1.0
