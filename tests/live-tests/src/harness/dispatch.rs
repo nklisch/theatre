@@ -1,6 +1,6 @@
 #![allow(dead_code)]
-/// Shared tool dispatch: routes tool name + JSON params to StageServer handler methods.
-/// Mirrors the dispatch logic from stage-server's test support module.
+//! Shared tool dispatch: routes tool name + JSON params to StageServer handler methods.
+//! Mirrors the dispatch logic from stage-server's test support module.
 
 pub async fn dispatch_tool(
     server: &stage_server::server::StageServer,

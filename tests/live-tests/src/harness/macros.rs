@@ -9,6 +9,7 @@
 macro_rules! dual_test {
     ($name:ident, $scene:expr, $body:ident) => {
         mod $name {
+            #[allow(unused_imports)]
             use super::*;
 
             #[tokio::test]
@@ -44,6 +45,7 @@ macro_rules! dual_test {
 macro_rules! stateful_test {
     ($name:ident, $scene:expr, $body:ident) => {
         mod $name {
+            #[allow(unused_imports)]
             use super::*;
 
             #[tokio::test]

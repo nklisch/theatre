@@ -2,6 +2,7 @@
 use serde_json::Value;
 
 /// Result of a tool invocation.
+#[allow(clippy::enum_variant_names)]
 pub enum ToolResult {
     Ok(Value),
     Err { code: String, message: String },
@@ -30,6 +31,7 @@ impl ToolResult {
 }
 
 /// Abstraction over CLI subprocess vs in-process MCP server.
+#[allow(async_fn_in_trait)]
 pub trait LiveBackend: Send + Sync {
     /// Invoke a Stage tool.
     async fn stage(&self, tool: &str, params: Value) -> anyhow::Result<ToolResult>;
