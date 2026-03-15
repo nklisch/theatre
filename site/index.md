@@ -26,7 +26,7 @@ It's like debugging a web app without being able to open the browser.
 <div class="tool-cards">
 <ToolCard
   title="Stage"
-  icon="📡"
+  icon="🎭"
   description="See and interact with the running game. Spatial snapshots, real-time deltas, watches, recordings — plus live property mutation and method calls for testing hypotheses without restarting."
   tool="9 MCP tools"
   tokens="200–3000"

@@ -12,7 +12,10 @@ defineProps<{
 
 <template>
   <a :href="withBase(link)" class="tool-card">
-    <div class="tool-card-icon">{{ icon }}</div>
+    <div class="tool-card-icon">
+      <img v-if="icon.startsWith('/')" :src="withBase(icon)" :alt="title + ' icon'" class="tool-card-svg" />
+      <span v-else>{{ icon }}</span>
+    </div>
     <h3 class="tool-card-title">{{ title }}</h3>
     <p class="tool-card-desc">{{ description }}</p>
     <div class="tool-card-footer">
@@ -38,6 +41,7 @@ defineProps<{
   box-shadow: 0 0 20px rgba(71, 140, 191, 0.1);
 }
 .tool-card-icon { font-size: 2rem; margin-bottom: 0.75rem; }
+.tool-card-svg { width: 48px; height: 48px; }
 .tool-card-title {
   font-size: 1.1rem;
   font-weight: 600;
