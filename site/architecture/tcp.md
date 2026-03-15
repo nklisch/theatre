@@ -19,13 +19,10 @@ TCP is a stream protocol — there are no inherent message boundaries. A single 
 
 Theatre solves this with a 4-byte big-endian length prefix before every message:
 
-```
-┌────────────────────────────┐
-│  length (4 bytes, BE u32)  │
-├────────────────────────────┤
-│  JSON payload (N bytes)    │
-└────────────────────────────┘
-```
+<FrameDiagram :sections="[
+  { label: 'length', detail: '4 bytes, BE u32', flex: 1 },
+  { label: 'JSON payload', detail: 'N bytes', flex: 3 },
+]" />
 
 The decoder always:
 1. Reads exactly 4 bytes → `length`
@@ -54,27 +51,16 @@ In practice, Theatre messages are much smaller — even a large snapshot respons
 
 ### Initial connection
 
-```
-Server                          Addon (Godot)
-  │                                 │
-  │     TCP connect (port 9077)     │
-  │ ──────────────────────────────► │
-  │                                 │
-  │  ◄── handshake message ─────── │
-  │  {                              │
-  │    "type": "handshake",         │
-  │    "version": "0.1.0",         │
-  │    "godot_version": "4.3",     │
-  │    "project": "my-game"         │
-  │  }                              │
-  │                                 │
-  │  ──── handshake_ack ──────────► │
-  │  { "type": "handshake_ack",    │
-  │    "version": "0.1.0" }        │
-  │                                 │
-  │  ◄── request/response ────────  │
-  │       (normal operation)        │
-```
+<SequenceDiagram
+  :left="{ label: 'Server', highlight: 'brand' }"
+  :right="{ label: 'Addon (Godot)', highlight: 'amber' }"
+  :messages="[
+    { from: 'left', to: 'right', label: 'TCP connect (port 9077)' },
+    { from: 'right', to: 'left', label: 'handshake', body: '{ type, version, godot_version, project }' },
+    { from: 'left', to: 'right', label: 'handshake_ack', body: '{ type, version }' },
+    { from: 'right', to: 'left', label: 'request / response', style: 'dashed' },
+  ]"
+/>
 
 The addon sends the handshake immediately after accepting the connection — before any request is made. This allows the server to validate version compatibility.
 
@@ -82,11 +68,15 @@ The addon sends the handshake immediately after accepting the connection — bef
 
 The server keeps the TCP connection open across multiple tool calls. Each tool call is a request-response pair on the existing connection:
 
-```
-[Tool call 1]  server → request → addon → response → server
-[Tool call 2]  server → request → addon → response → server
-[Tool call 3]  server → request → addon → response → server
-```
+<SequenceDiagram
+  :left="{ label: 'Server' }"
+  :right="{ label: 'Addon' }"
+  :messages="[
+    { from: 'left', to: 'right', label: 'Tool call 1: request → response' },
+    { from: 'left', to: 'right', label: 'Tool call 2: request → response' },
+    { from: 'left', to: 'right', label: 'Tool call 3: request → response' },
+  ]"
+/>
 
 The server uses a background tokio task to manage the connection. Tool handlers send requests via a channel and receive responses via `oneshot` channels, allowing the connection management to be decoupled from the MCP handler logic.
 
@@ -126,17 +116,13 @@ Tool call requests have a 5-second timeout. If the addon does not respond within
 
 Director uses a simpler connection model — one connection per operation (not persistent):
 
-```
-[Tool call]
-  → director binary connects to port 6551 (editor) or 6550 (daemon)
-  → sends operation JSON
-  → reads response JSON
-  → closes connection
-
-[Next tool call]
-  → new connection
-  → ...
-```
+<FlowDiagram compact :steps="[
+  { label: 'Tool call' },
+  { label: 'Connect to port 6551 or 6550' },
+  { label: 'Send operation JSON' },
+  { label: 'Read response JSON' },
+  { label: 'Close connection' },
+]" />
 
 No handshake is needed for Director — the first message is the operation request. The connection is closed after the response is received.
 
@@ -216,14 +202,15 @@ pub enum CodecError {
 
 ### Server error layering
 
-```
-CodecError (protocol)
-    ↓ wrapped by
-TcpSessionError (session.rs)
-    ↓ wrapped by
-anyhow::Error (tool handlers)
-    ↓ converted to
-McpError::internal_error (tool response)
-```
+<FlowDiagram compact :steps="[
+  { label: 'CodecError', subtitle: 'protocol' },
+  { label: 'TcpSessionError', subtitle: 'session.rs' },
+  { label: 'anyhow::Error', subtitle: 'tool handlers' },
+  { label: 'McpError::internal_error', subtitle: 'tool response' },
+]" :connectors="[
+  { label: 'wrapped by' },
+  { label: 'wrapped by' },
+  { label: 'converted to' },
+]" />
 
 Connection errors become agent-visible error messages explaining the game is not running. Protocol errors become internal errors (should not happen in normal operation — they indicate a version mismatch or memory corruption).

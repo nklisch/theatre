@@ -153,16 +153,21 @@ Shared dependency versions are defined once in the workspace and referenced with
 
 ## Dependency graph
 
-```
-stage-godot  ──────────────────────────┐
-                                            ▼
-stage-protocol ──────────────── stage-server
-                                            │
-stage-core   ──────────────────────────┘
-
-director ─── (no stage deps)
-
-theatre-cli ─── (no stage/director/MCP deps, only clap + filesystem)
-```
+<DepGraph
+  :cols="3" :rows="3"
+  :nodes="[
+    { id: 'godot', label: 'stage-godot', row: 0, col: 0, highlight: 'amber' },
+    { id: 'protocol', label: 'stage-protocol', row: 1, col: 1 },
+    { id: 'server', label: 'stage-server', row: 0, col: 2, highlight: 'brand' },
+    { id: 'core', label: 'stage-core', row: 2, col: 1 },
+    { id: 'director', label: 'director', row: 2, col: 0, note: 'no stage deps', highlight: 'muted' },
+    { id: 'cli', label: 'theatre-cli', row: 2, col: 2, note: 'clap + filesystem', highlight: 'muted' },
+  ]"
+  :edges="[
+    { from: 'godot', to: 'protocol' },
+    { from: 'server', to: 'protocol' },
+    { from: 'server', to: 'core' },
+  ]"
+/>
 
 The diamond dependency (both `stage-godot` and `stage-server` depend on `stage-protocol`) is intentional — they both need the same wire format types.

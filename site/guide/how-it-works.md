@@ -4,32 +4,16 @@ This page explains Theatre's architecture: how data flows from the running Godot
 
 ## The big picture
 
-```
-┌─────────────────────────────────┐
-│         AI Agent (Claude)       │
-│  "Where is the player?"         │
-└──────────────┬──────────────────┘
-               │ MCP (stdio)
-               ▼
-┌─────────────────────────────────┐
-│      stage server (Rust)        │
-│  Translates MCP ↔ TCP protocol  │
-└──────────────┬──────────────────┘
-               │ TCP port 9077
-               │ (length-prefixed JSON)
-               ▼
-┌─────────────────────────────────┐
-│  stage GDExtension (Rust)       │
-│   Runs inside your Godot game   │
-│   Reads scene tree every tick   │
-└──────────────┬──────────────────┘
-               │ Godot engine APIs
-               ▼
-┌─────────────────────────────────┐
-│         Running Godot game      │
-│   CharacterBody3D, Area3D, ...  │
-└─────────────────────────────────┘
-```
+<FlowDiagram :steps="[
+  { label: 'AI Agent (Claude)', subtitle: '&quot;Where is the player?&quot;' },
+  { label: 'stage server (Rust)', subtitle: 'Translates MCP ↔ TCP protocol' },
+  { label: 'stage GDExtension (Rust)', subtitle: 'Runs inside your Godot game' },
+  { label: 'Running Godot game', subtitle: 'CharacterBody3D, Area3D, ...' },
+]" :connectors="[
+  { label: 'MCP (stdio)' },
+  { label: 'TCP port 9077' },
+  { label: 'Godot engine APIs' },
+]" />
 
 The flow is always initiated by the AI agent (via the MCP server). The GDExtension does not push data unprompted — it collects data on every physics tick and serves it when the server requests.
 

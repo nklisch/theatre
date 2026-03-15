@@ -26,6 +26,19 @@
     BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
   --vp-font-family-mono: 'JetBrains Mono', ui-monospace, 'Cascadia Code',
     'Source Code Pro', Menlo, Monaco, Consolas, monospace;
+
+  /* === Diagram tokens === */
+  --diagram-bg: var(--vp-c-bg-alt);
+  --diagram-border: var(--vp-c-border);
+  --diagram-box-bg: var(--vp-c-bg-soft);
+  --diagram-box-border: var(--vp-c-border);
+  --diagram-box-radius: 8px;
+  --diagram-arrow: var(--vp-c-text-3);
+  --diagram-label: var(--vp-c-text-2);
+  --diagram-label-font: var(--vp-font-family-mono);
+  --diagram-title: var(--vp-c-text-1);
+  --diagram-accent: var(--vp-c-brand-1);
+  --diagram-accent-alt: var(--theatre-amber);
 }
 
 /* Dark mode (default) */
@@ -156,6 +169,16 @@
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+/* Diagram base */
+.diagram {
+  padding: 2rem;
+  background: var(--diagram-bg);
+  border-radius: 12px;
+  border: 1px solid var(--diagram-border);
+  margin: 2rem 0;
+  overflow-x: auto;
 }
 
 /* Architecture diagram */
