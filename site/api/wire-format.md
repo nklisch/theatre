@@ -100,19 +100,19 @@ Responses always have a `"result"` field (`"ok"` on success) or `"error"` field 
 On connection, the addon sends a handshake message:
 
 ```json
-{"type": "handshake", "version": "0.2.2", "godot_version": "4.3.stable", "project": "my-game"}
+{"type": "handshake", "version": "0.2.3", "godot_version": "4.3.stable", "project": "my-game"}
 ```
 
 The server responds:
 
 ```json
-{"type": "handshake_ack", "version": "0.2.2"}
+{"type": "handshake_ack", "version": "0.2.3"}
 ```
 
 If versions are incompatible, the server sends:
 
 ```json
-{"type": "handshake_reject", "reason": "Version mismatch: server 0.2.2, addon 0.0.9"}
+{"type": "handshake_reject", "reason": "Version mismatch: server 0.2.3, addon 0.0.9"}
 ```
 
 And closes the connection.

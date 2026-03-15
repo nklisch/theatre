@@ -25,6 +25,8 @@ Theatre uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 
 ## [0.2.2] — 2026-03-14
+
+## [0.2.3] — 2026-03-15
 ---
 
 ## [0.2.1] — 2026-03-14
@@ -147,7 +149,8 @@ Batch: `batch`
 - E2E journey tests in `tests/wire-tests/` and `tests/director-tests/`
 - E2E tests marked `#[ignore = "requires Godot binary"]`
 
-[Unreleased]: https://github.com/nklisch/theatre/compare/v0.2.2...HEAD
+[Unreleased]: https://github.com/nklisch/theatre/compare/v0.2.3...HEAD
+[0.2.3]: https://github.com/nklisch/theatre/releases/tag/v0.2.3
 [0.2.2]: https://github.com/nklisch/theatre/releases/tag/v0.2.2
 [0.2.1]: https://github.com/nklisch/theatre/releases/tag/v0.2.1
 [0.2.0]: https://github.com/nklisch/theatre/releases/tag/v0.2.0
