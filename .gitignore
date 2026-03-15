@@ -8,6 +8,9 @@
 addons/stage/bin/
 addons/spectator/bin/
 
+# Stage clip storage cache (generated at runtime)
+.stage/
+
 # VitePress build output
 site/.vitepress/dist/
 site/.vitepress/cache/
