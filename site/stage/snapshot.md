@@ -33,6 +33,8 @@ Do **not** use `spatial_snapshot` repeatedly to detect changes — use `spatial_
 
 ### `detail` values
 
+**`"standard"` (default)** — Position, velocity, rotation, scale, and common flags (approximately 150-250 tokens per node).
+
 **`"summary"`** — Position and velocity only (approximately 80-120 tokens per node):
 ```json
 {
@@ -57,8 +59,6 @@ Do **not** use `spatial_snapshot` repeatedly to detect changes — use `spatial_
   "on_wall": false
 }
 ```
-
-**`"standard"`** — Position, velocity, rotation, scale, and common flags (approximately 150-250 tokens per node).
 
 ### `focal_node`
 

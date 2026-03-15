@@ -36,31 +36,63 @@ Use `spatial_snapshot` when you need spatial data. Use `scene_tree` when you nee
 
 <ParamTable :params="params" />
 
-### `root`
+### Actions
 
-Limit the tree to a subtree. For example, `"root": "Player"` returns only the player's hierarchy:
+| Action | Description |
+|---|---|
+| `"roots"` | Return all top-level nodes in the scene |
+| `"children"` | Return direct children of `node` |
+| `"subtree"` | Return the full subtree rooted at `node` (respects `depth`) |
+| `"ancestors"` | Return the parent chain from `node` up to the root |
+| `"find"` | Search for nodes matching `find_by` + `find_value` |
 
-```json
-{
-  "root": "Player",
-  "max_depth": 3
-}
-```
+### `node`
 
-### `max_depth`
-
-Controls tree depth. Depth 1 returns only the root's direct children; depth 5 returns 5 levels. For large scenes, keep depth low (2-3) to avoid enormous responses.
-
-### `show_properties`
-
-Add a few key properties inline without switching to `spatial_snapshot`:
+Required for `children`, `subtree`, and `ancestors`. Specify the node by name or scene path:
 
 ```json
 {
-  "max_depth": 3,
-  "show_properties": ["class", "visible", "collision_layer"]
+  "action": "subtree",
+  "node": "Player",
+  "depth": 3
 }
 ```
+
+### `depth`
+
+Controls how many levels deep to return (default: 3). For large scenes, keep depth low (2-3) to avoid enormous responses.
+
+### `find_by` and `find_value`
+
+Used with `action: "find"` to locate nodes by name, class, group, or script:
+
+```json
+{
+  "action": "find",
+  "find_by": "Class",
+  "find_value": "NavigationAgent3D"
+}
+```
+
+```json
+{
+  "action": "find",
+  "find_by": "Group",
+  "find_value": "enemies"
+}
+```
+
+### `include`
+
+Controls which metadata is included per node (default: `["Class", "Groups"]`):
+
+| Value | Description |
+|---|---|
+| `"Class"` | Godot class name |
+| `"Groups"` | Godot groups the node belongs to |
+| `"Script"` | Attached script path |
+| `"Visible"` | Visibility state |
+| `"ProcessMode"` | Process mode setting |
 
 ## Response format
 
@@ -96,17 +128,18 @@ Add a few key properties inline without switching to `spatial_snapshot`:
 }
 ```
 
-### With `show_properties`
+### With `include: ["Class", "Groups", "Visible"]`
 
 ```json
 {
-  "root": "Enemies",
-  "max_depth": 2,
-  "show_properties": ["collision_layer", "collision_mask"]
+  "action": "subtree",
+  "node": "Enemies",
+  "depth": 2,
+  "include": ["Class", "Groups", "Visible"]
 }
 ```
 
-Response includes inline properties:
+Response includes the requested metadata inline:
 
 ```json
 {
@@ -117,14 +150,14 @@ Response includes inline properties:
       {
         "name": "Enemy_0",
         "class": "CharacterBody3D",
-        "collision_layer": 2,
-        "collision_mask": 1,
+        "groups": ["enemies"],
+        "visible": true,
         "children": [
           {
             "name": "EnemyDetectionZone",
             "class": "Area3D",
-            "collision_layer": 2,
-            "collision_mask": 0,
+            "groups": [],
+            "visible": true,
             "children": []
           }
         ]
@@ -150,10 +183,12 @@ Response includes inline properties:
 
 ## Tips
 
-**Use `max_depth: 2-3` for large scenes.** Deep trees with many nodes can still produce large responses. Limit depth until you know where to drill.
+**Use `depth: 2-3` for large scenes.** Deep trees with many nodes can still produce large responses. Limit depth until you know where to drill.
 
-**Use `root` to scope to a subsystem.** If debugging enemies, `root: "Enemies"` gives you only the enemy hierarchy without the full scene.
+**Use `action: "subtree"` with `node` to scope to a subsystem.** If debugging enemies, `node: "Enemies"` gives you only the enemy hierarchy without the full scene.
 
-**`show_properties` is a quick audit tool.** If you want to check one specific property across many nodes (like `visible` or `collision_layer`), `show_properties` is more efficient than calling `spatial_inspect` on each node.
+**Use `action: "find"` to locate nodes by class or group.** Finding all `NavigationAgent3D` nodes or all nodes in the `"enemies"` group is faster than scanning the whole tree manually.
+
+**Use `include: ["Visible"]` for quick visibility audits.** Checking visibility across many nodes is more efficient than calling `spatial_inspect` on each one.
 
 **Scene tree paths use node names, not indices.** The path `"Enemies/Enemy_0"` refers to the node named `Enemy_0` inside `Enemies`, not the first child. If two nodes have the same name, Godot appends `@2` — this appears in the tree response.

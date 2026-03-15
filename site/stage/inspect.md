@@ -39,16 +39,21 @@ Do **not** use `spatial_inspect` to scan many nodes — it is designed for targe
 
 | Value | Description |
 |---|---|
-| `"properties"` | All tracked Godot properties of this node |
-| `"signals"` | Signal connections: which signals are connected, to which targets |
+| `"transform"` | Global position, rotation, and scale |
+| `"physics"` | Velocity, collision layers, floor/wall/ceiling flags |
+| `"state"` | Visibility and class-specific state properties |
 | `"children"` | Direct children with their classes and positions |
+| `"signals"` | Signal connections: which signals are connected, to which targets |
+| `"script"` | Script path and exported script properties |
 | `"spatial_context"` | Nearby nodes (within 10m), parent info, and relative position |
+| `"resources"` | Resource references attached to this node |
 
-You can combine any set:
+The default includes all categories except `"resources"`. You can pass a subset to limit the response:
+
 ```json
 {
   "node": "Player",
-  "include": ["properties", "signals", "children", "spatial_context"]
+  "include": ["transform", "physics", "signals"]
 }
 ```
 
@@ -60,16 +65,20 @@ You can combine any set:
   "path": "World/Player",
   "class": "CharacterBody3D",
   "frame": 450,
-  "properties": {
+  "transform": {
     "global_position": [2.3, 0.0, -1.7],
     "rotation_deg": [0.0, 45.0, 0.0],
+    "scale": [1.0, 1.0, 1.0]
+  },
+  "physics": {
     "velocity": [2.0, 0.0, 0.0],
-    "scale": [1.0, 1.0, 1.0],
-    "visible": true,
     "collision_layer": 1,
     "collision_mask": 3,
     "on_floor": true,
-    "on_wall": false,
+    "on_wall": false
+  },
+  "state": {
+    "visible": true,
     "floor_snap_length": 0.1,
     "motion_mode": "grounded"
   },
@@ -133,7 +142,7 @@ Properties returned by Stage depend on the node class. Here are the most common:
 
 ## Tips
 
-**Start with `include: ["properties"]`** unless you know you need signals or children. It keeps the response focused.
+**Start with `include: ["transform", "physics", "state"]`** unless you know you need signals or children. It keeps the response focused.
 
 **Add `"spatial_context"` for relational debugging.** Spatial context shows nearby nodes with distances, which often reveals the cause of detection or collision problems without additional queries.
 

@@ -4,15 +4,20 @@ Complete parameter schemas for all 9 Stage MCP tools.
 
 ## `spatial_snapshot`
 
-Get an instant snapshot of all tracked nodes.
+Get an instant picture of every tracked node in the running game.
 
 ```typescript
 {
-  detail?: "summary" | "standard" | "full"  // default: "summary"
-  token_budget?: number                      // default: 2000
-  focal_node?: string                        // node name or path
-  class_filter?: string[]                    // Godot class names to include
-  include_properties?: string[]              // for detail="full"
+  perspective?: "Camera" | "Node" | "Point"  // default: "Camera"
+  focal_node?: string                         // node name or path; anchors perspective for "Node"
+  focal_point?: [number, number, number]      // world-space point; used for "Point" perspective
+  radius?: number                             // default: 50.0
+  detail?: "summary" | "standard" | "full"   // default: "standard"
+  groups?: string[]                           // filter to nodes belonging to these groups
+  class_filter?: string[]                     // Godot class names to include
+  include_offscreen?: boolean                 // default: false
+  token_budget?: number                       // default: 1500 (standard tier)
+  expand?: string                             // node path to expand with extra detail
 }
 ```
 
@@ -47,29 +52,30 @@ Get an instant snapshot of all tracked nodes.
 
 ## `spatial_delta`
 
-Get only what changed since a specific frame.
+Get only what changed since the last `spatial_snapshot` baseline.
 
 ```typescript
 {
-  since_frame: number                      // required
-  token_budget?: number                    // default: 1000
+  perspective?: "Camera" | "Node" | "Point"  // default: "Camera"
+  radius?: number                             // default: 50.0
+  groups?: string[]                           // filter to nodes in these groups
   class_filter?: string[]
-  min_distance_change?: number             // default: 0.01 (meters)
-  min_velocity_change?: number             // default: 0.1
+  token_budget?: number
 }
 ```
+
+Delta computes changes against the baseline established by the most recent `spatial_snapshot` call. There is no `since_frame` parameter — the baseline is stored automatically when you call `spatial_snapshot`.
 
 **Response:**
 ```typescript
 {
-  from_frame: number
-  to_frame: number
+  frame: number
+  baseline_frame: number
   elapsed_ms: number
   changed_node_count: number
-  unchanged_node_count: number
   nodes: {
     [name: string]: {
-      // Only fields that changed since from_frame
+      // Only fields that changed since the baseline snapshot
       global_position?: [number, number, number]
       velocity?: [number, number, number]
       // ...any other changed properties
@@ -78,48 +84,22 @@ Get only what changed since a specific frame.
 }
 ```
 
-**Errors:**
-- `since_frame` older than ring buffer depth → `"Frame out of buffer range"`
-
 ---
 
 ## `spatial_query`
 
-Run geometric queries against the scene.
+Run geometric queries against the current game state.
 
 ```typescript
 {
   query_type: "nearest" | "radius" | "area" | "raycast" | "path_distance" | "relationship"
-
-  // For query_type="nearest":
-  from: string | [number, number, number]
-  k?: number                               // max results, default: 10
+  from: string | [number, number, number]   // node name/path or [x, y, z] coordinate
+  to?: string | [number, number, number]    // used by path_distance and relationship
+  k?: number                               // max results for nearest, default: 5
+  radius?: number                          // search radius for radius query, default: 20.0
+  groups?: string[]
   class_filter?: string[]
-
-  // For query_type="radius":
-  from: string | [number, number, number]
-  radius: number
-  k?: number
-  class_filter?: string[]
-
-  // For query_type="area":
-  min: [number, number, number]
-  max: [number, number, number]
-  class_filter?: string[]
-
-  // For query_type="raycast":
-  from: string | [number, number, number]
-  direction: [number, number, number]      // normalized
-  max_distance?: number                    // default: 100.0
-  collision_mask?: number                  // default: 0xFFFFFFFF
-
-  // For query_type="path_distance":
-  from: string | [number, number, number]
-  to: string | [number, number, number]
-
-  // For query_type="relationship":
-  from: string
-  to: string
+  token_budget?: number
 }
 ```
 
@@ -187,10 +167,10 @@ Run geometric queries against the scene.
     from: string
     to: string
     distance: number
-    bearing_deg: number
-    relative: [number, number, number]
+    bearing_from_a: number               // horizontal bearing from A to B (degrees)
+    bearing_from_b: number               // horizontal bearing from B to A (degrees)
+    relative: [number, number, number]   // offset from A to B in world space
     occluded: boolean
-    in_fov: boolean
   }
 }
 ```
@@ -204,8 +184,11 @@ Deep inspection of a single node.
 ```typescript
 {
   node: string                             // node name or scene path; required
-  include?: Array<"properties" | "signals" | "children" | "spatial_context">
-  // default: ["properties", "spatial_context"]
+  include?: Array<
+    "transform" | "physics" | "state" | "children" |
+    "signals" | "script" | "spatial_context" | "resources"
+  >
+  // default: ["transform", "physics", "state", "children", "signals", "script", "spatial_context"]
 }
 ```
 
@@ -216,21 +199,36 @@ Deep inspection of a single node.
   path: string
   class: string
   frame: number
-  properties?: {
+  transform?: {
     global_position: [number, number, number]
-    // ...all tracked properties for this class
+    rotation_deg: [number, number, number]
+    scale: [number, number, number]
   }
-  signals?: Array<{
-    signal: string
-    connected_to: string
-    method: string
-    flags: number
-  }>
+  physics?: {
+    velocity?: [number, number, number]
+    collision_layer?: number
+    collision_mask?: number
+    on_floor?: boolean
+    on_wall?: boolean
+  }
+  state?: {
+    visible: boolean
+    // ...node-class-specific state properties
+  }
   children?: Array<{
     name: string
     class: string
     relative_position: [number, number, number]
   }>
+  signals?: Array<{
+    signal: string
+    connected_to: string
+    method: string
+  }>
+  script?: {
+    path: string
+    // ...exported script properties
+  }
   spatial_context?: {
     parent: {
       name: string
@@ -243,6 +241,9 @@ Deep inspection of a single node.
       distance: number
     }>
   }
+  resources?: {
+    // ...resource references attached to this node
+  }
 }
 ```
 
@@ -250,34 +251,42 @@ Deep inspection of a single node.
 
 ## `spatial_watch`
 
-Monitor nodes for continuous change tracking.
+Monitor nodes continuously for changes.
 
 ```typescript
-// Create
+// Add a watch
 {
-  action: "create"
-  node: string
-  track?: string[]                         // default: ["position", "velocity"]
+  action: "add"
+  watch: {
+    node: string
+    conditions?: Array<{
+      property: string
+      operator: "Lt" | "Gt" | "Eq" | "Changed"
+      value?: any
+    }>              // default: []
+    track?: Array<"Position" | "State" | "Signals" | "Physics" | "All">
+                    // default: ["All"]
+  }
 }
 
-// List
+// Remove a watch
+{
+  action: "remove"
+  watch_id: string
+}
+
+// List active watches
 {
   action: "list"
 }
 
-// Delete
-{
-  action: "delete"
-  watch_id: string
-}
-
-// Clear all
+// Remove all watches
 {
   action: "clear"
 }
 ```
 
-**Create response:**
+**Add response:**
 ```typescript
 {
   watch_id: string
@@ -299,7 +308,7 @@ Monitor nodes for continuous change tracking.
 }
 ```
 
-**Delete response:**
+**Remove response:**
 ```typescript
 {
   watch_id: string
@@ -311,77 +320,136 @@ Monitor nodes for continuous change tracking.
 
 ## `spatial_config`
 
-Configure collection behavior.
+Configure MCP behavior (clustering, bearing format, token limits, static patterns).
 
 ```typescript
 {
-  tick_rate?: number                       // 1-120, default: 60
-  capture_radius?: number                  // meters, default: 200.0
-  capture_center?: string | null           // node to follow, default: null (origin)
-  tracked_types?: string[] | null          // null = restore defaults
-  extra_tracked_types?: string[]
-  buffer_depth_frames?: number             // default: 600
-  default_token_budget?: number            // default: 2000
-  default_detail?: "summary" | "standard" | "full"
-  record_path?: string                     // directory for clip files
+  static_patterns?: string[]               // node name patterns treated as static (not tracked)
+  state_properties?: { [class: string]: string[] }  // extra properties to capture per class
+  cluster_by?: "Group" | "Class" | "Proximity" | "None"
+  bearing_format?: "Cardinal" | "Degrees" | "Both"
+  expose_internals?: boolean               // include internal/hidden nodes
+  poll_interval?: number                   // polling interval in ms
+  token_hard_cap?: number                  // hard cap on response tokens
 }
 ```
 
 **No parameters → returns current config:**
 ```typescript
 {
-  tick_rate: number
-  capture_radius: number
-  capture_center: string | null
-  buffer_depth_frames: number
-  buffer_depth_seconds: number
-  default_token_budget: number
-  default_detail: string
-  record_path: string
-  tracked_types: string[]
-  extra_tracked_types: string[]
+  static_patterns: string[]
+  state_properties: { [class: string]: string[] }
+  cluster_by: string
+  bearing_format: string
+  expose_internals: boolean
+  poll_interval: number
+  token_hard_cap: number
 }
 ```
+
+**When parameters are set, the response echoes the new values with `"result": "ok"`.**
 
 ---
 
 ## `spatial_action`
 
-Set properties, call methods, or emit signals on running game nodes.
+Interact with the running game: control execution, modify state, inject input, spawn/remove nodes.
 
 ```typescript
-// Set property
+// Pause or unpause the game
+{ action: "pause", paused: boolean }
+
+// Step N physics frames (game must be paused)
+{ action: "advance_frames", frames: number }
+
+// Advance by N seconds (game must be paused)
+{ action: "advance_time", seconds: number }
+
+// Move a node to a position
 {
+  action: "teleport"
   node: string
+  position: [number, number, number]
+  rotation_deg?: number
+}
+
+// Set a property on a node
+{
   action: "set_property"
+  node: string
   property: string
   value: any
 }
 
-// Call method
+// Call a method on a node
 {
-  node: string
   action: "call_method"
+  node: string
   method: string
   args?: any[]
 }
 
-// Emit signal
+// Emit a signal from a node
 {
-  node: string
   action: "emit_signal"
+  node: string
   signal: string
-  signal_args?: any[]
+  args?: any[]
+}
+
+// Instantiate a scene as a child node
+{
+  action: "spawn_node"
+  scene_path: string
+  parent: string
+  name?: string
+}
+
+// Remove a node from the scene tree
+{
+  action: "remove_node"
+  node: string
+}
+
+// Simulate input action press
+{
+  action: "action_press"
+  input_action: string
+  strength?: number
+}
+
+// Simulate input action release
+{
+  action: "action_release"
+  input_action: string
+}
+
+// Simulate keyboard input
+{
+  action: "inject_key"
+  keycode: string
+  pressed?: boolean
+  echo?: boolean
+}
+
+// Simulate mouse button click
+{
+  action: "inject_mouse_button"
+  button: string
+  pressed?: boolean
+  position?: [number, number]
 }
 ```
+
+All actions accept an optional `return_delta: boolean` (default: `false`) that appends a `spatial_delta` to the response.
 
 **Response:**
 ```typescript
 {
-  node: string
   action: string
   result: "ok" | "error"
   return_value?: any                       // for call_method with return value
+  delta?: object                           // if return_delta: true
   error?: string                           // on failure
 }
 ```
@@ -390,15 +458,18 @@ Set properties, call methods, or emit signals on running game nodes.
 
 ## `scene_tree`
 
-Get scene tree structure.
+Get scene tree structure without spatial data.
 
 ```typescript
 {
-  root?: string                            // default: "/" (full tree)
-  max_depth?: number                       // default: 5
-  find_by?: string                         // filter by property name
-  find_value?: any                         // match value for find_by
-  show_properties?: string[]               // inline properties to include
+  action: "roots" | "children" | "subtree" | "ancestors" | "find"
+  node?: string                            // required for children/subtree/ancestors
+  depth?: number                           // default: 3
+  find_by?: "Name" | "Class" | "Group" | "Script"
+  find_value?: string                      // search term for find action
+  include?: Array<"Class" | "Groups" | "Script" | "Visible" | "ProcessMode">
+                                           // default: ["Class", "Groups"]
+  token_budget?: number
 }
 ```
 
@@ -411,7 +482,7 @@ Get scene tree structure.
   tree: {
     name: string
     class: string
-    // inline properties if show_properties set
+    groups?: string[]
     children: Array</* recursive */>
   }
 }
@@ -421,10 +492,10 @@ Get scene tree structure.
 
 ## `clips`
 
-Manage dashcam clips and analyze recorded gameplay.
+Manage dashcam clips and analyze recorded gameplay frame by frame.
 
 ```typescript
-// Mark current moment + trigger clip capture
+// Mark the current moment and trigger clip capture
 {
   action: "add_marker"
   marker_label?: string
@@ -490,6 +561,7 @@ Manage dashcam clips and analyze recorded gameplay.
         | "state_transition" | "signal_emitted" | "entered_area" | "collision"
     // + type-specific fields (target, threshold, property, signal)
   }
+  token_budget?: number
 }
 
 // Compare two frames
@@ -534,8 +606,9 @@ Manage dashcam clips and analyze recorded gameplay.
     duration_ms: number
     created_at: string               // ISO 8601
     markers: Array<{
+      marker_id: string
       frame: number
-      label: string
+      marker_label: string
     }>
   }>
 }

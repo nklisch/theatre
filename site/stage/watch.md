@@ -37,31 +37,30 @@ Do **not** set a watch on every node in your scene — watches add tracking over
 | Action | Parameters | Description |
 |---|---|---|
 | `"list"` | — | List all active watches |
-| `"delete"` | `watch_id: string` | Remove a watch |
+| `"remove"` | `watch_id: string` | Remove a watch |
 | `"clear"` | — | Remove all watches |
 
-## Trackable properties
+## Track categories
 
-The `track` array specifies which properties to monitor. Common values:
+The `track` array uses these category values (default: `["All"]`):
 
-| Track value | Godot property | Node types |
-|---|---|---|
-| `"position"` | `global_position` | All spatial nodes |
-| `"velocity"` | `velocity` / `linear_velocity` | Physics bodies |
-| `"rotation"` | `rotation_deg` | All spatial nodes |
-| `"health"` | User-defined export | Any node with `@export var health` |
-| `"animation"` | `current_animation` | AnimationPlayer |
-| `"animation_position"` | `current_animation_position` | AnimationPlayer |
-| `"visible"` | `visible` | All nodes |
-| `"collision_layer"` | `collision_layer` | Physics bodies, Area3D |
-| `"target_position"` | `target_position` | NavigationAgent3D |
-| `"is_navigation_finished"` | `is_navigation_finished` | NavigationAgent3D |
+| Track value | What it includes |
+|---|---|
+| `"Position"` | `global_position` and related transform properties |
+| `"Physics"` | `velocity`, `linear_velocity`, collision flags, floor/wall state |
+| `"State"` | `visible`, class-specific state, exported script properties |
+| `"Signals"` | Signal emission events |
+| `"All"` | Everything above (default) |
 
-For user-defined properties (like `health`), use the exported property name exactly as defined in GDScript.
+To track specific aspects without noise, combine categories explicitly:
+
+```json
+{ "action": "add", "watch": { "node": "Player", "track": ["Position", "State"] } }
+```
 
 ## Response format
 
-### Create response
+### Add response
 
 ```json
 {
@@ -95,7 +94,7 @@ The `watch_id` is used to delete or reference this specific watch. It is stable 
 }
 ```
 
-### Delete response
+### Remove response
 
 ```json
 {
@@ -113,9 +112,9 @@ The `watch_id` is used to delete or reference this specific watch. It is stable 
 You can create multiple watches — one per `spatial_watch` call:
 
 ```json
-{ "action": "create", "node": "Player", "track": ["position", "health"] }
-{ "action": "create", "node": "Boss", "track": ["position", "velocity", "phase"] }
-{ "action": "create", "node": "Boss/HealthBar", "track": ["health"] }
+{ "action": "add", "watch": { "node": "Player", "track": ["Position", "State"] } }
+{ "action": "add", "watch": { "node": "Boss", "track": ["Position", "Physics"] } }
+{ "action": "add", "watch": { "node": "Boss/HealthBar", "track": ["State"] } }
 ```
 
 All watched nodes appear in subsequent `spatial_delta` responses whenever their tracked properties change.

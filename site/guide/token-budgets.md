@@ -18,7 +18,11 @@ Theatre solves this with a **budget-first design**: every data-returning tool ac
 
 The `detail` parameter controls how much information is included per node.
 
-### `summary` (default)
+### `standard` (default)
+
+Returns position, velocity, rotation, scale, and common flags (approximately 150-250 tokens per node). This is the default detail level — a good middle ground that gives orientation plus basic properties without noise.
+
+### `summary`
 
 Returns only the essential spatial information for each node:
 
@@ -57,13 +61,9 @@ Returns all tracked properties:
 
 This is roughly 300-500 tokens per node. Good when you need the complete picture for a specific set of nodes.
 
-### `standard`
-
-Returns position, velocity, rotation, scale, and common flags. More information than `summary` but less than `full` — a good middle ground when you need orientation plus basic properties.
-
 ## The `token_budget` parameter
 
-Every snapshot-style tool accepts `token_budget` (integer, default 2000):
+Every snapshot-style tool accepts `token_budget` (integer). The default varies by detail tier: `summary` defaults to 500, `standard` to 1500, and `full` to 3000.
 
 ```json
 {
@@ -102,21 +102,24 @@ This means `token_budget: 500` with `focal_node: "Player"` gives you the player 
 
 | Scenario | Recommended settings |
 |---|---|
-| "Where is everything?" overview | `detail: summary`, `token_budget: 2000` |
-| Focus on one area of the scene | `detail: summary`, `focal_node: "Player"`, `token_budget: 1000` |
+| "Where is everything?" overview | `detail: "standard"`, `token_budget: 1500` (tier default) |
+| Focus on one area of the scene | `detail: "summary"`, `focal_node: "Player"`, `token_budget: 500` |
 | Debug a specific node | Use `spatial_inspect` instead of `snapshot` |
 | Monitor changes over time | Use `spatial_delta` — only changed nodes included |
 | Check scene structure (no spatial data) | Use `scene_tree` — very compact |
-| Small scene (< 20 nodes) | `detail: full`, `token_budget: 5000` |
+| Small scene (< 20 nodes) | `detail: "full"`, `token_budget: 3000` (tier default) |
 
 ## `spatial_delta` as the budget-friendly choice
 
-When the game is running and you want to know what changed since the last snapshot, use `spatial_delta` instead of `spatial_snapshot`. Delta responses only include nodes whose tracked properties changed since the given frame:
+When the game is running and you want to know what changed since the last snapshot, use `spatial_delta` instead of `spatial_snapshot`. Delta computes changes against the baseline established by the most recent `spatial_snapshot` call — there is no `since_frame` parameter. Delta responses only include nodes whose tracked properties changed since that baseline:
 
 ```json
 {
-  "since_frame": 400,
-  "changed_nodes": {
+  "frame": 450,
+  "baseline_frame": 400,
+  "elapsed_ms": 833,
+  "changed_node_count": 1,
+  "nodes": {
     "Player": {
       "global_position": [3.1, 0.0, -2.3],
       "velocity": [2.0, 0.0, 0.0]
@@ -134,7 +137,7 @@ When you need full detail on exactly one node, `spatial_inspect` is more efficie
 ```json
 {
   "node": "EnemyDetectionZone",
-  "include": ["properties", "spatial_context"]
+  "include": ["transform", "physics", "spatial_context"]
 }
 ```
 
@@ -157,15 +160,14 @@ The `clips` tool's `query_range` action has its own budget parameter (`max_frame
 
 Specifying `nodes` limits data to only those nodes across all frames. `detail: summary` keeps per-frame data compact.
 
-## Adjusting the default budget
+## Capping the maximum budget
 
-If you consistently want a different default budget, set `token_budget` in `spatial_config`:
+If you want to enforce a server-side ceiling on response size regardless of what the caller requests, use `token_hard_cap` in `spatial_config`:
 
 ```json
 {
-  "default_token_budget": 3000,
-  "default_detail": "summary"
+  "token_hard_cap": 4000
 }
 ```
 
-This persists for the duration of the server session.
+This hard cap persists for the duration of the server session. Individual tool calls can still request smaller budgets, but they cannot exceed the cap. Useful when you want to protect your context window across a long session.

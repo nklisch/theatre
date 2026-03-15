@@ -193,10 +193,10 @@ Describe the spatial relationship between two specific nodes.
     "from": "Player",
     "to": "Enemy_0",
     "distance": 6.4,
-    "bearing_deg": 142.3,
+    "bearing_from_a": 142.3,
+    "bearing_from_b": 322.3,
     "relative": [-5.4, 0.0, 6.0],
-    "occluded": false,
-    "in_fov": true
+    "occluded": false
   }
 }
 ```
@@ -204,10 +204,10 @@ Describe the spatial relationship between two specific nodes.
 | Field | Description |
 |---|---|
 | `distance` | Euclidean distance in world units |
-| `bearing_deg` | Horizontal angle from `from` to `to`, relative to `from`'s forward vector |
-| `relative` | `[x, y, z]` offset from `from` to `to` in `from`'s local space |
-| `occluded` | `true` if there is a `StaticBody3D` or `CSGShape3D` between them (line-of-sight check) |
-| `in_fov` | `true` if `to` is within `from`'s frustum (for Camera3D `from`) |
+| `bearing_from_a` | Horizontal bearing from `from` toward `to` (degrees, 0–360) |
+| `bearing_from_b` | Horizontal bearing from `to` toward `from` (degrees, 0–360) |
+| `relative` | `[x, y, z]` offset from `from` to `to` in world space |
+| `occluded` | `true` if there is geometry blocking line-of-sight between them |
 
 ## All parameters
 
