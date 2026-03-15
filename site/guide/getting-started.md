@@ -4,7 +4,7 @@ description: "Get your first spatial snapshot in under 10 minutes. Connect your 
 
 # Getting Started
 
-This guide walks you through getting your first `spatial_snapshot` in under 10 minutes. We assume you have completed [Installation](/guide/installation).
+[Theatre](/guide/what-is-theatre) gives AI agents spatial awareness of running Godot games via MCP tools. This guide walks you through getting your first `spatial_snapshot` in under 10 minutes. We assume you have completed [Installation](/guide/installation).
 
 ## The goal
 

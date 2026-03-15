@@ -4,7 +4,9 @@ description: "Real debugging scenarios with full AI session transcripts — phys
 
 # Examples
 
-Real debugging and development scenarios using Theatre. Each example is a complete story — from problem identification through diagnosis to fix.
+Real debugging and development scenarios using [Theatre](/guide/what-is-theatre), an AI agent toolkit for Godot. Each example is a complete story — from problem identification through diagnosis to fix — written as a real AI agent session transcript. You can see exactly which MCP tools the agent calls, in what order, and why.
+
+Every scenario uses a real Godot project as the debugging target. The agent connects via Theatre's Stage tools to observe spatial data from the running game, then uses that data to diagnose and fix the issue — no screenshots, no guessing from code alone.
 
 ## Debugging Examples
 
@@ -60,12 +62,24 @@ Real debugging and development scenarios using Theatre. Each example is a comple
 
 ## What these examples teach
 
-Each example is written as a real session transcript — you can see exactly what tool calls the AI agent makes, in what order, and why. The pattern across all examples is the same:
+Each example follows the same five-step debugging methodology. The tools are always the same — what differs is which tool surfaces the evidence for each category of bug.
 
-1. **Observe** — spatial_snapshot, scene_tree, or clips to understand current state
-2. **Narrow** — spatial_inspect, spatial_query, or clips query_range to focus on the problem
-3. **Diagnose** — read property values, compare nodes, analyze the spatial timeline
-4. **Fix** — Director operation or source code edit
-5. **Verify** — spatial_inspect or snapshot to confirm the fix
+| Step | Purpose | Typical Tools |
+|------|---------|---------------|
+| **Observe** | Understand current game state | `spatial_snapshot`, `scene_tree`, recording playback |
+| **Narrow** | Focus on the problem area | `spatial_inspect`, `spatial_query`, `clips query_range` |
+| **Diagnose** | Read property values, compare nodes, analyze timeline | `spatial_inspect`, `spatial_delta`, `spatial_watch` |
+| **Fix** | Apply the correction | Director operations or source code edits |
+| **Verify** | Confirm the fix works | `spatial_snapshot`, `spatial_inspect` |
 
-The tools are always the same. What differs is which tool surfaces the evidence for each category of bug.
+## Tools used across examples
+
+| Example | Primary Tools | Key Insight |
+|---------|---------------|-------------|
+| Physics Tunneling | Recording, `spatial_inspect` | Velocity spike exceeds collision shape thickness |
+| Pathfinding | `spatial_query`, `scene_tree` | NavMesh region gaps or agent radius mismatches |
+| Animation Sync | `spatial_watch`, `spatial_action` | Track keyframe timing against hitbox activation |
+| Collision Layers | `spatial_inspect` | Layer and mask bit comparison across node pairs |
+| UI Overlap | `spatial_query`, `spatial_inspect` | Control node rect overlaps and z-index ordering |
+| Build a Level | Director `scene`, `node`, `tilemap` ops | End-to-end level construction from scratch |
+| Build & Verify | Director + Stage loop | Build with Director, verify with Stage snapshots |
