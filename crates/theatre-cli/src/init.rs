@@ -131,6 +131,12 @@ pub fn run(args: InitArgs) -> Result<()> {
                 style("⚠").yellow()
             );
         }
+    } else {
+        eprintln!(
+            "  {} Skipped .mcp.json — run `theatre mcp {}` to generate it later",
+            style("ℹ").cyan(),
+            args.project.display()
+        );
     }
 
     // Step 6c: Enable plugins

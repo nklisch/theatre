@@ -142,6 +142,30 @@ theatre enable ~/path/to/your-godot-project --stage   # stage only
 theatre enable ~/path/to/your-godot-project --disable     # disable both
 ```
 
+## Regenerate MCP config
+
+If you skipped `.mcp.json` generation during `theatre init`, or need to update it after changing the port or binary location, run:
+
+```bash
+theatre mcp ~/path/to/your-godot-project
+```
+
+This generates (or overwrites) `.mcp.json` with the correct absolute paths to the installed `stage` and `director` binaries. It detects which addons are installed and includes only those in the config.
+
+Use `--yes` to skip prompts (accepts port 9077 and overwrites any existing file):
+
+```bash
+theatre mcp ~/path/to/your-godot-project --yes
+```
+
+Use `--port` to specify a non-default port:
+
+```bash
+theatre mcp ~/path/to/your-godot-project --port 9078
+```
+
+After regenerating, restart your AI agent to pick up the updated server configuration.
+
 ## Manual setup (alternative)
 
 If you prefer not to use the CLI, you can set things up manually.

@@ -64,6 +64,7 @@ Open your Godot project, press F5, then ask your agent: `"Take a spatial snapsho
 | `theatre deploy <project...>` | Rebuild and redeploy to project(s) |
 | `theatre enable <project>` | Enable or disable plugins in `project.godot` |
 | `theatre rules <project>` | Generate agent rules file to prevent hand-editing Godot files |
+| `theatre mcp <project>` | Generate or regenerate `.mcp.json` without reinstalling addons |
 
 ## Agent CLI
 

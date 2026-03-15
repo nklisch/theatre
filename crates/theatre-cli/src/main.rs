@@ -5,6 +5,7 @@ mod deploy;
 mod enable;
 mod init;
 mod install;
+mod mcp;
 mod paths;
 mod project;
 mod rules;
@@ -29,6 +30,8 @@ enum Command {
     Enable(enable::EnableArgs),
     /// Generate AI agent rules to prevent hand-editing Godot files
     Rules(rules::RulesArgs),
+    /// Generate or regenerate .mcp.json for a Godot project
+    Mcp(mcp::McpArgs),
 }
 
 fn main() -> Result<()> {
@@ -39,5 +42,6 @@ fn main() -> Result<()> {
         Command::Deploy(args) => deploy::run(args),
         Command::Enable(args) => enable::run(args),
         Command::Rules(args) => rules::run(args),
+        Command::Mcp(args) => mcp::run(args),
     }
 }
