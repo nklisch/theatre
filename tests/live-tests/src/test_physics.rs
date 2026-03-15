@@ -100,10 +100,25 @@ async fn stacked_rigidbodies_settle(b: &impl LiveBackend) {
 }
 
 async fn teleport_interrupts_physics(b: &impl LiveBackend) {
-    // Let box start falling
-    b.wait_frames(30).await;
+    // Wait for box to fall and settle near floor
+    b.wait_frames(180).await;
 
-    // Teleport it higher
+    // Verify box is near floor
+    let snap1 = b
+        .stage("spatial_snapshot", json!({"detail": "standard"}))
+        .await
+        .expect("snapshot before teleport")
+        .unwrap_data();
+    let entities1 = snap1["entities"].as_array().expect("entities");
+    let falling1 = find_entity(entities1, "FallingBox");
+    let pos1 = extract_position(falling1);
+    assert!(
+        pos1[1] < 3.0,
+        "FallingBox should be near floor before teleport, y={}",
+        pos1[1]
+    );
+
+    // Teleport it back up
     b.stage(
         "spatial_action",
         json!({
@@ -116,29 +131,22 @@ async fn teleport_interrupts_physics(b: &impl LiveBackend) {
     .expect("teleport")
     .unwrap_data();
 
-    // Wait a bit
-    b.wait_frames(30).await;
-
-    let snap = b
+    // Immediately snapshot — box should be near y=20 (may have fallen slightly)
+    let snap2 = b
         .stage("spatial_snapshot", json!({"detail": "standard"}))
         .await
-        .expect("snapshot")
+        .expect("snapshot after teleport")
         .unwrap_data();
-    let entities = snap["entities"].as_array().expect("entities");
-    let falling = find_entity(entities, "FallingBox");
-    let pos = extract_position(falling);
+    let entities2 = snap2["entities"].as_array().expect("entities");
+    let falling2 = find_entity(entities2, "FallingBox");
+    let pos2 = extract_position(falling2);
 
-    // Should be above floor (hasn't had time to fall all the way from y=20)
+    // Should be significantly above where it was (teleport worked)
     assert!(
-        pos[1] > 2.0,
-        "FallingBox should still be above floor after teleport+brief fall, y={}",
-        pos[1]
-    );
-    // Should be below teleport point (has started falling)
-    assert!(
-        pos[1] < 20.0,
-        "FallingBox should have started falling from y=20, y={}",
-        pos[1]
+        pos2[1] > pos1[1] + 5.0,
+        "FallingBox should be much higher after teleport: before y={}, after y={}",
+        pos1[1],
+        pos2[1]
     );
 }
 

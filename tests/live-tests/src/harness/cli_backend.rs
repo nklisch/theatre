@@ -94,12 +94,18 @@ impl LiveBackend for CliBackend {
             anyhow::anyhow!("director output is not valid JSON: {e}\nstdout: {stdout}")
         })?;
 
-        if exit_code == 0 {
-            Ok(ToolResult::Ok(json))
+        // Director CLI exits 0 even on operation failure — check success field
+        // Unwrap the "data" envelope so callers get the payload directly
+        if exit_code == 0 && json["success"].as_bool() != Some(false) {
+            let data = json.get("data").cloned().unwrap_or(json.clone());
+            Ok(ToolResult::Ok(data))
         } else {
             Ok(ToolResult::Err {
                 code: "director_error".to_string(),
-                message: json.to_string(),
+                message: json["error"]
+                    .as_str()
+                    .unwrap_or(&json.to_string())
+                    .to_string(),
             })
         }
     }

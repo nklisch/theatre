@@ -166,7 +166,7 @@ async fn delta_captures_concurrent_changes(b: &impl LiveBackend) {
 
 async fn config_state_properties_tracked_in_delta(b: &impl LiveBackend) {
     // Configure state tracking
-    b.stage("spatial_config", json!({"state_properties": ["health"]}))
+    b.stage("spatial_config", json!({"state_properties": {"enemies": ["health"]}}))
         .await
         .expect("config")
         .unwrap_data();
