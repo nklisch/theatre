@@ -54,6 +54,8 @@ jobs:
             ${{ matrix.target }}-cargo-release-
 
       - name: Build release binaries
+        env:
+          THEATRE_GA_API_SECRET: ${{ secrets.THEATRE_GA_API_SECRET }}
         run: >
           cargo build --release --target ${{ matrix.target }}
           -p stage-server -p director -p theatre-cli -p stage-godot
@@ -76,7 +78,7 @@ jobs:
           cp "target/${{ matrix.target }}/release/theatre${BIN_EXT}" "${ARCHIVE_NAME}/bin/"
 
           # Copy addon templates (stage without bin/)
-          rsync -a --exclude='bin/' addons/stage/ "${ARCHIVE_NAME}/share/theatre/addons/stage/"
+          find addons/stage -maxdepth 1 -type f -exec cp {} "${ARCHIVE_NAME}/share/theatre/addons/stage/" \;
 
           # Copy GDExtension binary into correct platform dir
           mkdir -p "${ARCHIVE_NAME}/share/theatre/addons/stage/bin/${{ matrix.platform }}"
@@ -84,7 +86,7 @@ jobs:
             "${ARCHIVE_NAME}/share/theatre/addons/stage/bin/${{ matrix.platform }}/"
 
           # Copy director addon (pure GDScript)
-          rsync -a addons/director/ "${ARCHIVE_NAME}/share/theatre/addons/director/"
+          cp -r addons/director/* "${ARCHIVE_NAME}/share/theatre/addons/director/"
 
           # Include install script and README
           cp scripts/install-release.sh "${ARCHIVE_NAME}/install.sh" || true
