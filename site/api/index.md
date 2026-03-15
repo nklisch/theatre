@@ -1,3 +1,7 @@
+---
+description: "Complete API reference for Theatre's Stage MCP tools — input schemas, response formats, and parameter documentation."
+---
+
 # Stage API Reference
 
 Complete parameter schemas for all 9 Stage MCP tools.

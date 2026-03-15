@@ -1,3 +1,7 @@
+---
+description: "How Theatre connects AI agents to Godot games — GDExtension addon, TCP protocol, and MCP tool architecture."
+---
+
 # How It Works
 
 This page explains Theatre's architecture: how data flows from the running Godot engine to your AI agent's tool call response.

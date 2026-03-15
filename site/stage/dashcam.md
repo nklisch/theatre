@@ -1,3 +1,7 @@
+---
+description: "The Dashcam workflow — human plays, presses F9 to mark bugs, AI scrubs through 60 seconds of recorded spatial data."
+---
+
 <script setup>
 const messages0 = [
   { role: 'human', text: `I captured the detection miss. The marker is around frame 2712. Can you figure out what happened?` },

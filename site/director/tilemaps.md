@@ -1,3 +1,7 @@
+---
+description: "TileMap and GridMap operations — set tiles, configure tile sets, and build levels programmatically with Director."
+---
+
 <script setup>
 import { data } from '../.vitepress/data/tools.data'
 

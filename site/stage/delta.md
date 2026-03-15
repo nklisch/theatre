@@ -1,3 +1,7 @@
+---
+description: "Spatial Delta tracks what changed between snapshots — moved nodes, new nodes, removed nodes, and property changes."
+---
+
 <script setup>
 import { data } from '../.vitepress/data/tools.data'
 const params = data.params['spatial_delta'] ?? []

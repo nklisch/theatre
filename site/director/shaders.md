@@ -1,3 +1,7 @@
+---
+description: "Shader operations — create and modify shader materials, set shader parameters, and manage visual effects via Director."
+---
+
 <script setup>
 import { data } from '../.vitepress/data/tools.data'
 

@@ -1,3 +1,7 @@
+---
+description: "Spatial Config controls Theatre observation settings — tracked nodes, update frequency, and detail levels."
+---
+
 <script setup>
 import { data } from '../.vitepress/data/tools.data'
 const params = data.params['spatial_config'] ?? []

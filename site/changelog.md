@@ -1,3 +1,7 @@
+---
+description: "Theatre release notes — version history, new features, bug fixes, and breaking changes for each release."
+---
+
 # Changelog
 
 All notable changes to Theatre are documented here.

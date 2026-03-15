@@ -1,3 +1,7 @@
+---
+description: "Debug physics tunneling — AI agent analyzes dashcam recording to find why fast objects pass through collision shapes."
+---
+
 <script setup>
 const messages0 = [
   { role: 'human', text: `I recorded several bullets. Some went through the wall. Find the tunneling events.` },

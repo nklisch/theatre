@@ -1,3 +1,7 @@
+---
+description: "Spatial Snapshot captures full 3D scene state — node positions, rotations, scales, and properties in a single MCP call."
+---
+
 <script setup>
 import { data } from '../.vitepress/data/tools.data'
 const tool = data.tools.find(t => t.name === 'spatial_snapshot')

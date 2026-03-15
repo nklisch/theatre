@@ -1,3 +1,7 @@
+---
+description: "Watch and React workflow — set up continuous monitoring with automatic alerts when spatial conditions are met."
+---
+
 <script setup>
 const messages0 = [
   { role: 'human', text: `I want to monitor the player health, shield, and position during this combat encounter.` },

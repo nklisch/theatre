@@ -1,3 +1,7 @@
+---
+description: "Debug UI overlap and layout issues — AI agent uses spatial query to find overlapping Control nodes and z-index problems."
+---
+
 <script setup>
 const messages0 = [
   { role: 'human', text: `The HUD overlaps on non-standard resolutions. I am running the game at 2560x1440. Show me the UI node positions and sizes.` },

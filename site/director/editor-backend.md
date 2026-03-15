@@ -1,3 +1,7 @@
+---
+description: "Editor Plugin backend — Director operations that run through Godot's editor for full API access and undo support."
+---
+
 # Editor Plugin Backend
 
 The editor plugin backend is Director's preferred mode of operation. When you have the Godot editor open with the Director addon enabled, all Director operations route through this backend automatically.

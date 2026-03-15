@@ -1,3 +1,7 @@
+---
+description: "Animation tools — create AnimationPlayers, add tracks, set keyframes, and configure animation trees via Director."
+---
+
 <script setup>
 import { data } from '../.vitepress/data/tools.data'
 

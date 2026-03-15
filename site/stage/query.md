@@ -1,3 +1,7 @@
+---
+description: "Spatial Query filters nodes by name, type, group, area, or property conditions. Find exactly what you need in the scene."
+---
+
 <script setup>
 import { data } from '../.vitepress/data/tools.data'
 const params = data.params['spatial_query'] ?? []

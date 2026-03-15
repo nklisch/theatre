@@ -1,3 +1,7 @@
+---
+description: "Physics layer management — configure collision layers, masks, and physics material properties through Director."
+---
+
 <script setup>
 import { data } from '../.vitepress/data/tools.data'
 

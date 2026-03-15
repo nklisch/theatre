@@ -1,3 +1,7 @@
+---
+description: "Scene Tree retrieves the full Godot scene hierarchy — every node, its type, path, and children in structured format."
+---
+
 <script setup>
 import { data } from '../.vitepress/data/tools.data'
 const params = data.params['scene_tree'] ?? []

@@ -1,3 +1,7 @@
+---
+description: "Theatre's TCP protocol — message framing, connection handshake, keepalive, and port allocation details."
+---
+
 # TCP Protocol Deep Dive
 
 A detailed look at Theatre's TCP protocol: framing, connection lifecycle, error handling, and implementation.

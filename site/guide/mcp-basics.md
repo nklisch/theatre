@@ -1,3 +1,7 @@
+---
+description: "Understanding the Model Context Protocol (MCP) and how AI agents use Theatre's tools to interact with Godot."
+---
+
 # MCP & Your AI Agent
 
 This page explains what MCP is, how Theatre uses it, and what tool call patterns your agent will use when working with Theatre.

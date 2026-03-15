@@ -1,3 +1,7 @@
+---
+description: "Spatial Action lets AI agents call methods and set properties on running game nodes to test fixes without restarting."
+---
+
 <script setup>
 import { data } from '../.vitepress/data/tools.data'
 const params = data.params['spatial_action'] ?? []

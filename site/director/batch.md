@@ -1,3 +1,7 @@
+---
+description: "Batch operations — execute multiple Director commands in a single MCP call for efficient scene construction."
+---
+
 <script setup>
 import { data } from '../.vitepress/data/tools.data'
 

@@ -1,3 +1,7 @@
+---
+description: "Install Theatre CLI and the Godot GDExtension addon. Supports macOS, Linux, and Windows."
+---
+
 # Installation
 
 This guide covers everything you need to install Theatre and connect it to your Godot project.

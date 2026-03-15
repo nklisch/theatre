@@ -1,3 +1,7 @@
+---
+description: "Walk through your first Theatre debugging session — observe game state, test hypotheses, and fix bugs with AI assistance."
+---
+
 <script setup>
 const messages0 = [
   { role: 'human', text: `I just recorded a clip where the enemy fails to detect the player. Bug was marked around frame 312. Can you investigate?` },

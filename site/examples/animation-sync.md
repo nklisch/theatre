@@ -1,3 +1,7 @@
+---
+description: "Debug animation sync issues — AI agent uses spatial watch to find timing mismatches between animations and hitboxes."
+---
+
 <script setup>
 const messages0 = [
   { role: 'human', text: `I recorded attacks against the enemy. Hits should happen when the player swing connects visually but damage is not registering. Investigate.` },

@@ -1,3 +1,7 @@
+---
+description: "Spatial Inspect retrieves detailed properties, methods, and signals for a specific node in your running Godot game."
+---
+
 <script setup>
 import { data } from '../.vitepress/data/tools.data'
 const params = data.params['spatial_inspect'] ?? []

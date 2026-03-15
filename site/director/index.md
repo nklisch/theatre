@@ -1,3 +1,7 @@
+---
+description: "Director provides 38+ operations for building Godot scenes, nodes, resources, tilemaps, animations, and shaders via MCP."
+---
+
 # Director
 
 Director gives your AI agent the ability to build and modify Godot scenes, resources, tilemaps, and animations — through Godot's own API, not by hand-editing text files.

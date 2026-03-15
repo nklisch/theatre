@@ -1,3 +1,7 @@
+---
+description: "Theatre is an AI agent toolkit that gives coding assistants spatial awareness of running Godot games via MCP tools."
+---
+
 # What is Theatre?
 
 Theatre is an AI agent toolkit for Godot game engine. It bridges the gap between what your AI coding agent can read — source files, logs, error messages — and what it needs to truly understand your game: **spatial data from the running engine**.

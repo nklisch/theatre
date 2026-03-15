@@ -1,3 +1,7 @@
+---
+description: "Build a game level from scratch — AI agent uses Director to create scenes, place nodes, and configure tilemaps."
+---
+
 <script setup>
 const messages0 = [
   { role: 'human', text: `Create a new level scene called level_02 and set up the basic structure.` },

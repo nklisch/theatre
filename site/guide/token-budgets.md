@@ -1,3 +1,7 @@
+---
+description: "Managing AI context window costs with Theatre's token-efficient spatial tools. Each tool uses 200-3000 tokens."
+---
+
 # Token Budgets
 
 Large Godot scenes can have hundreds of nodes. A fully detailed snapshot of a 200-node scene would easily exceed 50,000 tokens — blowing up your context window and making the response useless. Theatre manages this problem through token budgets and detail levels.

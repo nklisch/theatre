@@ -1,6 +1,7 @@
 ---
 layout: home
 hero: false
+description: "Theatre — AI agent toolkit giving coding assistants spatial awareness of running Godot games via MCP tools."
 ---
 
 <script setup>

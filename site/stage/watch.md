@@ -1,3 +1,7 @@
+---
+description: "Spatial Watch monitors specific nodes and properties continuously, reporting changes as they happen in real time."
+---
+
 <script setup>
 import { data } from '../.vitepress/data/tools.data'
 const params = data.params['spatial_watch'] ?? []

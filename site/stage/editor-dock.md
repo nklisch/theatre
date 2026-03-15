@@ -1,3 +1,7 @@
+---
+description: "Theatre's Editor Dock provides a visual interface for spatial observations directly inside the Godot editor."
+---
+
 # Stage Editor Dock
 
 The Stage editor dock shows connection status and agent activity. It appears

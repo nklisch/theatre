@@ -1,3 +1,7 @@
+---
+description: "Theatre's Rust crate structure — addon, server, protocol, and shared library organization and dependencies."
+---
+
 # Crate Structure
 
 Theatre's Rust workspace contains 5 crates. Each has a specific scope and dependency set designed to keep concerns separated.

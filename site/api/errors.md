@@ -1,3 +1,7 @@
+---
+description: "Theatre error codes and troubleshooting — connection errors, tool failures, and common debugging solutions."
+---
+
 # Error Reference
 
 Error codes and messages returned by Theatre's MCP tools.

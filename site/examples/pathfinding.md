@@ -1,3 +1,7 @@
+---
+description: "Debug pathfinding failures — AI agent inspects navigation meshes and agent properties to fix stuck NPCs."
+---
+
 <script setup>
 const messages0 = [
   { role: 'human', text: `The enemy near the south doorway is not moving. It just stands there. Game is running.` },

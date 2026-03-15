@@ -1,3 +1,7 @@
+---
+description: "Complete API reference for Theatre's Director MCP tools — scene building operations, schemas, and response formats."
+---
+
 # Director API Reference
 
 Complete parameter schemas for all Director operations. All operations require `project_path` as the first field.

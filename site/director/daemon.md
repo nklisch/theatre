@@ -1,3 +1,7 @@
+---
+description: "Headless Daemon backend — Director operations via a background Godot process, no editor window required."
+---
+
 # Headless Daemon Backend
 
 The headless daemon is Director's fallback when the Godot editor is not open. It runs a Godot process in headless mode — no window, no GUI — and processes Director operations over TCP.

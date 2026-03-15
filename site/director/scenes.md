@@ -1,3 +1,7 @@
+---
+description: "Scene operations — create, load, save, and instantiate Godot scenes programmatically through Director MCP tools."
+---
+
 <script setup>
 import { data } from '../.vitepress/data/tools.data'
 

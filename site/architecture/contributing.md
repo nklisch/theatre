@@ -1,3 +1,7 @@
+---
+description: "Contributing to Theatre — development setup, code style, testing, and pull request guidelines."
+---
+
 # Contributing
 
 How to build, test, and submit changes to Theatre.

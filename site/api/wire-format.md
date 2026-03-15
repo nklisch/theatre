@@ -1,3 +1,7 @@
+---
+description: "Theatre's TCP wire format — JSON message structure, framing protocol, and connection lifecycle documentation."
+---
+
 # Wire Format
 
 The TCP protocol used between Theatre's MCP servers and the Godot addons.

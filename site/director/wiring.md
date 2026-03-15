@@ -1,3 +1,7 @@
+---
+description: "Scene wiring — connect signals, set up node references, and configure inter-node communication via Director."
+---
+
 <script setup>
 import { data } from '../.vitepress/data/tools.data'
 

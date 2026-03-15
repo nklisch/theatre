@@ -1,3 +1,7 @@
+---
+description: "Debug collision layer bugs — AI agent inspects layer and mask bit assignments to fix missing or unwanted collisions."
+---
+
 <script setup>
 const messages0 = [
   { role: 'human', text: `Bullets are not hitting anything. Check all the collision layers across the relevant nodes.` },

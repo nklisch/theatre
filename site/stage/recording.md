@@ -1,3 +1,7 @@
+---
+description: "Recording captures spatial data over time for playback analysis. The foundation for Theatre dashcam workflow."
+---
+
 <script setup>
 import { data } from '../.vitepress/data/tools.data'
 const params = data.params['clips'] ?? []

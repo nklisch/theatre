@@ -1,3 +1,7 @@
+---
+description: "Director + Stage verification loop — build with Director, verify with Stage, iterate until the scene is correct."
+---
+
 <script setup>
 const messages0 = [
   { role: 'human', text: `Build the corridor room connecting Chamber_A to Chamber_B.` },

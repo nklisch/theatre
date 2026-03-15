@@ -1,3 +1,7 @@
+---
+description: "Resource management — create and modify materials, textures, meshes, and other Godot resources through Director."
+---
+
 <script setup>
 import { data } from '../.vitepress/data/tools.data'
 

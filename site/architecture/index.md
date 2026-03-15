@@ -1,3 +1,7 @@
+---
+description: "Theatre's architecture — GDExtension addon, TCP protocol, MCP server, thread model, and security boundaries."
+---
+
 # Architecture Overview
 
 Theatre's architecture is built around three principles: thin addon, smart server, and zero game impact.

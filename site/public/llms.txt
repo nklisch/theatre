@@ -1,0 +1,29 @@
+# Theatre
+
+> AI agent toolkit for building and debugging Godot games via the Model Context Protocol (MCP).
+
+Theatre gives AI agents spatial awareness of running Godot games, live interaction for testing hypotheses, and the ability to build scenes, resources, and animations — all through MCP tools.
+
+## Key Pages
+
+- [What is Theatre?](https://godot-theatre.dev/guide/what-is-theatre): Overview and core concepts
+- [Getting Started](https://godot-theatre.dev/guide/getting-started): 10-minute quickstart guide
+- [Installation](https://godot-theatre.dev/guide/installation): Install Theatre CLI and Godot addon
+- [Stage Tools](https://godot-theatre.dev/stage/): 9 MCP tools for observing running games
+- [Director Tools](https://godot-theatre.dev/director/): 38+ operations for building scenes
+- [API Reference](https://godot-theatre.dev/api/): Complete tool schemas and wire format
+- [Architecture](https://godot-theatre.dev/architecture/): System design and internals
+- [Examples](https://godot-theatre.dev/examples/): Real debugging scenarios with session transcripts
+
+## Core Concepts
+
+- **Stage**: Observation layer — spatial snapshots, deltas, queries, watches, recordings, live property/method interaction
+- **Director**: Build layer — create/modify scenes, nodes, resources, tilemaps, animations, shaders, physics layers
+- **MCP**: Model Context Protocol — the standard interface AI agents use to call Theatre's tools
+- **Dashcam**: Record last 60 seconds of spatial data, mark bug moments with F9, agent scrubs timeline
+
+## Technical Details
+
+- Godot GDExtension addon (Rust) communicates over TCP on port 9077
+- Zero game performance impact (< 0.1ms/frame for 100 tracked nodes)
+- MIT licensed, open source: https://github.com/nklisch/theatre

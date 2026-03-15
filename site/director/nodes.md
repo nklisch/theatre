@@ -1,3 +1,7 @@
+---
+description: "Node manipulation — add, remove, reparent, and configure nodes in the Godot scene tree via Director."
+---
+
 <script setup>
 import { data } from '../.vitepress/data/tools.data'
 

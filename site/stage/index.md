@@ -1,3 +1,7 @@
+---
+description: "Stage provides 9 MCP tools for observing running Godot games — spatial snapshots, deltas, queries, watches, and recordings."
+---
+
 # Stage
 
 Stage gives your AI agent spatial awareness of your running Godot game. It is a read-only observation layer — it never modifies game state, never affects physics, and has negligible performance impact.

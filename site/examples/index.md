@@ -1,3 +1,7 @@
+---
+description: "Real debugging scenarios with full AI session transcripts — physics tunneling, pathfinding, collision layers, and more."
+---
+
 # Examples
 
 Real debugging and development scenarios using Theatre. Each example is a complete story — from problem identification through diagnosis to fix.
