@@ -63,26 +63,18 @@ function computeEdges() {
     const x2 = toRect.left + toRect.width / 2 - containerRect.left
     const y2 = toRect.top + toRect.height / 2 - containerRect.top
 
-    // Adjust endpoint to stop at target box border
+    // Clip endpoint to target box edge
     const dx = x2 - x1
     const dy = y2 - y1
     const dist = Math.sqrt(dx * dx + dy * dy)
-    const halfW = toRect.width / 2
-    const halfH = toRect.height / 2
-    const t = Math.min(halfW / Math.abs(dx || 0.001), halfH / Math.abs(dy || 0.001))
-    const ax2 = x2 - dx * t * (dist > 0 ? 1 / dist * Math.min(dist, halfW < halfH ? halfW : halfH) : 0)
-    const ay2 = y2 - dy * t * (dist > 0 ? 1 / dist * Math.min(dist, halfW < halfH ? halfW : halfH) : 0)
-
-    // Simpler: just clip to box edge
     let ex = x2
     let ey = y2
     if (dist > 0) {
       const ux = dx / dist
       const uy = dy / dist
-      // find intersection with target box
-      const txW = halfW / (Math.abs(ux) || 0.0001)
-      const txH = halfH / (Math.abs(uy) || 0.0001)
-      const tEdge = Math.min(txW, txH)
+      const halfW = toRect.width / 2
+      const halfH = toRect.height / 2
+      const tEdge = Math.min(halfW / (Math.abs(ux) || 0.0001), halfH / (Math.abs(uy) || 0.0001))
       ex = x2 - ux * tEdge
       ey = y2 - uy * tEdge
     }
