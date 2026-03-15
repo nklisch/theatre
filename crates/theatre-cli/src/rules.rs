@@ -113,10 +113,7 @@ fn write_claude_rules(project: &Path) -> Result<()> {
     std::fs::create_dir_all(&rules_dir).context("Failed to create .claude/rules/ directory")?;
     std::fs::write(&rules_file, RULES_CONTENT).context("Failed to write .claude/rules/godot.md")?;
 
-    eprintln!(
-        "  {} Generated .claude/rules/godot.md",
-        style("✓").green()
-    );
+    eprintln!("  {} Generated .claude/rules/godot.md", style("✓").green());
     Ok(())
 }
 
@@ -124,8 +121,7 @@ fn append_to_file(project: &Path, filename: &str) -> Result<()> {
     let file_path = project.join(filename);
 
     let existing = if file_path.exists() {
-        std::fs::read_to_string(&file_path)
-            .with_context(|| format!("Failed to read {filename}"))?
+        std::fs::read_to_string(&file_path).with_context(|| format!("Failed to read {filename}"))?
     } else {
         String::new()
     };
@@ -146,8 +142,7 @@ fn append_to_file(project: &Path, filename: &str) -> Result<()> {
     };
 
     let content = format!("{existing}{separator}\n{RULES_CONTENT}");
-    std::fs::write(&file_path, content)
-        .with_context(|| format!("Failed to write {filename}"))?;
+    std::fs::write(&file_path, content).with_context(|| format!("Failed to write {filename}"))?;
 
     if existing.is_empty() {
         eprintln!("  {} Created {filename}", style("✓").green());
