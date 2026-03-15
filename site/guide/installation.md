@@ -36,24 +36,39 @@ Theatre exposes tools via [Model Context Protocol](https://modelcontextprotocol.
 - **Windsurf** — MCP support via settings
 - Any agent that supports stdio MCP servers
 
-## Install from source (recommended)
+## Install (recommended)
 
-The `theatre` CLI handles the entire build and install process:
+The fastest way to install Theatre — downloads a pre-built release for your platform:
 
 ```bash
-# Clone the repository
-git clone https://github.com/nklisch/theatre
-cd theatre
-
-# Build and install everything
-cargo run -p theatre-cli -- install
+curl -LsSf https://github.com/nklisch/theatre/releases/latest/download/install.sh | sh
 ```
 
-This builds all crates in release mode and installs to:
+This detects your OS and architecture, downloads the correct release, verifies the SHA256 checksum, and installs to:
 - `~/.local/bin/` — `theatre`, `stage`, `director` binaries
 - `~/.local/share/theatre/` — addon templates and GDExtension binary
 
-Override install locations with `--bin-dir` and `--share-dir` flags.
+Override install locations with `--bin-dir` and `--share-dir` flags. Use `--no-modify-path` to skip adding `~/.local/bin` to your shell profile.
+
+Supported platforms: Linux x86_64, macOS arm64, macOS x86_64 (Rosetta), Windows x86_64 (MINGW/MSYS).
+
+### Install a specific version
+
+```bash
+curl -LsSf https://github.com/nklisch/theatre/releases/latest/download/install.sh | sh -s -- --version 0.1.0
+```
+
+## Install from source
+
+If you prefer to build from source, the `theatre` CLI handles the entire process:
+
+```bash
+git clone https://github.com/nklisch/theatre
+cd theatre
+cargo run -p theatre-cli -- install
+```
+
+This builds all crates in release mode and installs to the same locations as the one-liner above.
 
 If `~/.local/bin` is not in your PATH, the installer will print a warning with the export command to add.
 

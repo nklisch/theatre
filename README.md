@@ -26,13 +26,18 @@ or standalone CLI, working together or independently.
 ### 1. Install Theatre
 
 ```bash
+curl -LsSf https://github.com/nklisch/theatre/releases/latest/download/install.sh | sh
+```
+
+Or build from source:
+
+```bash
 git clone https://github.com/nklisch/theatre
 cd theatre
 cargo run -p theatre-cli -- install
 ```
 
-This builds all binaries in release mode and installs them to `~/.local/bin/`
-and `~/.local/share/theatre/`. Make sure `~/.local/bin` is in your PATH.
+Both install binaries to `~/.local/bin/` and addons to `~/.local/share/theatre/`.
 
 ### 2. Set up a Godot project
 

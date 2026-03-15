@@ -96,10 +96,10 @@ screenshots, no narration, no guessing from code.
 ### 1. Install Theatre
 
 ```bash
-git clone https://github.com/nklisch/theatre
-cd theatre
-cargo run -p theatre-cli -- install
+curl -LsSf https://github.com/nklisch/theatre/releases/latest/download/install.sh | sh
 ```
+
+Or [build from source](/guide/installation#install-from-source).
 
 ### 2. Set up your Godot project
 
