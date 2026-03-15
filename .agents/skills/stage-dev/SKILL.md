@@ -21,7 +21,8 @@ theatre/
 │   ├── stage-godot/      # Stage GDExtension cdylib — Godot loads this
 │   ├── stage-protocol/   # Shared: TCP wire format, message types
 │   ├── stage-core/       # Shared: spatial math, bearing, indexing, budget
-│   └── director/             # Director MCP binary
+│   ├── director/             # Director MCP binary
+│   └── theatre-cli/         # CLI binary: install, init, deploy, enable
 ├── addons/stage/         # Stage Godot addon (copy into user projects)
 │   ├── plugin.gd             # @tool EditorPlugin (GDScript)
 │   ├── runtime.gd            # Autoload singleton (GDScript)
@@ -31,7 +32,9 @@ theatre/
 ├── docs/                     # All design docs
 └── tests/
     ├── wire-tests/           # Stage E2E tests
-    └── director-tests/       # Director E2E tests
+    ├── director-tests/       # Director E2E tests
+    ├── live-tests/           # Live integration tests (dual CLI/MCP backend)
+    └── godot-project/        # Test Godot project for E2E
 ```
 
 ## The Two-Artifact Rule

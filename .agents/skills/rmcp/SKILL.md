@@ -46,7 +46,7 @@ async fn main() -> Result<()> {
 
 **stderr for logging:** stdout is MCP protocol only. Use `eprintln!` or a logger configured to write to stderr.
 
-## Defining Tools — The `#[tool_box]` Pattern
+## Defining Tools — The `#[tool_router]` Pattern
 
 Tools live on a struct that derives `Clone` (required for shared state pattern):
 
@@ -56,7 +56,7 @@ pub struct StageServer {
     pub state: Arc<Mutex<SessionState>>,
 }
 
-#[tool_box]
+#[tool_router]
 impl StageServer {
     #[tool(description = "Get a spatial snapshot of the current scene from a perspective")]
     async fn spatial_snapshot(
@@ -70,7 +70,7 @@ impl StageServer {
 }
 ```
 
-`#[tool_box]` on the impl block auto-generates tool listing and routing. `#[tool(description = "...")]` on each method registers it as an MCP tool. The description is what the AI model sees — write it from the agent's perspective ("Get", "Returns", "Query").
+`#[tool_router]` on the impl block auto-generates tool listing and routing. `#[tool(description = "...")]` on each method registers it as an MCP tool. The description is what the AI model sees — write it from the agent's perspective ("Get", "Returns", "Query").
 
 ## Parameter Structs
 
@@ -83,24 +83,22 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Deserialize, JsonSchema)]
 pub struct SpatialSnapshotParams {
     /// Where to look from. Defaults to active camera.
-    #[schemars(description = "Perspective type: camera, node, or point")]
-    #[serde(default = "default_perspective")]
-    pub perspective: String,
+    #[serde(default)]
+    pub perspective: PerspectiveMode,  // enum with #[default] Camera
 
     /// Node path when perspective is "node"
-    #[schemars(description = "Node path, required when perspective is 'node'")]
     pub focal_node: Option<String>,
 
     /// World position when perspective is "point"
-    pub focal_point: Option<Vec<f32>>,
+    pub focal_point: Option<Vec<f64>>,
 
     /// Max distance from focal point
     #[serde(default = "default_radius")]
-    pub radius: f32,
+    pub radius: f64,
 
     /// Detail tier: summary, standard, or full
-    #[serde(default = "default_detail")]
-    pub detail: String,
+    #[serde(default)]
+    pub detail: DetailLevel,  // enum with #[default] Standard
 
     pub groups: Option<Vec<String>>,
     pub class_filter: Option<Vec<String>>,
@@ -109,13 +107,12 @@ pub struct SpatialSnapshotParams {
     pub include_offscreen: bool,
 
     pub token_budget: Option<u32>,
-    pub cursor: Option<String>,
     pub expand: Option<String>,
 }
 
-fn default_perspective() -> String { "camera".to_string() }
-fn default_radius() -> f32 { 50.0 }
-fn default_detail() -> String { "standard".to_string() }
+// In defaults.rs:
+fn default_radius() -> f64 { 50.0 }
+// perspective and detail use #[derive(Default)] on their enum types
 ```
 
 **Required derives:**
@@ -151,7 +148,6 @@ Err(McpError::internal_error("TCP connection lost", None))
 **Standard error constructors on `McpError`:**
 - `McpError::invalid_params(message, data)` — bad agent input
 - `McpError::internal_error(message, data)` — server/addon side failure
-- `McpError::not_found(message, data)` — resource doesn't exist
 - For Stage's custom codes, use `McpError::new(code, message, data)` with our error code enum
 
 **Distinguish agent errors from server errors:**
@@ -160,7 +156,7 @@ Err(McpError::internal_error("TCP connection lost", None))
 
 ## Implementing `ServerHandler`
 
-`#[tool_box]` generates much of `ServerHandler` automatically, but you still implement:
+`#[tool_router]` generates much of `ServerHandler` automatically, but you still implement:
 
 ```rust
 impl ServerHandler for StageServer {
@@ -179,7 +175,7 @@ impl ServerHandler for StageServer {
 }
 ```
 
-When using `#[tool_box]`, the `list_tools` and `call_tool` methods are generated automatically. You only need `get_info`.
+When using `#[tool_router]`, the `list_tools` and `call_tool` methods are generated automatically. You only need `get_info`.
 
 ## Shared State
 
@@ -190,18 +186,22 @@ pub struct StageServer {
 }
 
 pub struct SessionState {
-    pub last_frame: Option<u64>,
+    pub tcp_writer: Option<TcpClientHandle>,
+    pub connected: bool,
+    pub session_id: Option<String>,
+    pub handshake_info: Option<HandshakeInfo>,
+    pub pending_queries: HashMap<String, oneshot::Sender<QueryResult>>,
     pub spatial_index: SpatialIndex,
-    pub watches: Vec<Watch>,
-    pub config: StageConfig,
-    pub tcp_client: Option<TcpClientHandle>,
+    pub delta_engine: DeltaEngine,
+    pub watch_engine: WatchEngine,
+    pub config: SessionConfig,
+    pub clip_storage_path: Option<String>,
+    pub scene_dimensions: SceneDimensions,
 }
 
 impl StageServer {
-    pub async fn new() -> anyhow::Result<Self> {
-        Ok(Self {
-            state: Arc::new(Mutex::new(SessionState::default())),
-        })
+    pub fn new(state: Arc<Mutex<SessionState>>) -> Self {
+        Self { state }
     }
 }
 ```
@@ -273,10 +273,9 @@ Each MCP tool gets its own module in `crates/stage-server/src/mcp/`:
 src/
 ├── main.rs
 ├── server.rs          # StageServer struct, ServerHandler impl
-├── state.rs           # SessionState, config types
-├── tcp/               # TCP client, codec, reconnection
+├── tcp.rs             # SessionState, TCP client, codec, reconnection
 └── mcp/
-    ├── mod.rs         # #[tool_box] impl block pulling in all tools
+    ├── mod.rs         # #[tool_router] impl block pulling in all tools
     ├── snapshot.rs    # spatial_snapshot implementation
     ├── delta.rs       # spatial_delta
     ├── query.rs       # spatial_query
@@ -285,10 +284,13 @@ src/
     ├── config.rs      # spatial_config
     ├── action.rs      # spatial_action
     ├── scene_tree.rs  # scene_tree
-    └── recording.rs   # recording
+    ├── clips.rs       # clips (markers, dashcam, analysis)
+    ├── defaults.rs    # shared default value functions
+    ├── conversions.rs # type conversion helpers
+    └── responses.rs   # shared response types
 ```
 
-The `#[tool_box]` can be split across multiple impl blocks if you use `#[tool_box(context = MyServer)]` on secondary impl blocks. Keep each tool's logic in its own module and `pub use` what's needed.
+The `#[tool_router]` can be split across multiple impl blocks. Keep each tool's logic in its own module and `pub use` what's needed.
 
 ## Common Gotchas
 

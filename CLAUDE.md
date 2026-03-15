@@ -110,10 +110,10 @@ and stops cleanly.
 
 ## GDScript Adapter Notes
 
-`addons/stage/runtime.gd` avoids static type annotations for GDExtension
-types (`StageTCPServer`, `StageCollector`, `StageRecorder`) and uses direct
-constructors (`StageTCPServer.new()`, etc.). The `ClassDB.class_exists` guard
-checks whether the extension loaded before attempting instantiation, providing
+`addons/stage/runtime.gd` uses typed annotations for GDExtension types
+(`var tcp_server: StageTCPServer`, etc.) and direct constructors
+(`StageTCPServer.new()`, etc.). The `ClassDB.class_exists` guard checks
+whether the extension loaded before attempting instantiation, providing
 graceful degradation if the binary is missing.
 
 ## Key Constraints

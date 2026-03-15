@@ -14,7 +14,7 @@ This skill covers the `godot-rust/gdext` crate used in `crates/stage-godot`. Tha
 crate-type = ["cdylib"]   # Required — produces .so/.dll/.dylib
 
 [dependencies]
-godot = { version = "0.4", features = ["api-4-5"] }
+godot = { version = "0.4", features = ["api-4-5", "experimental-godot-api", "lazy-function-tables"] }
 # api-4-5 = minimum Godot version we target (requires Godot 4.5+)
 ```
 
@@ -295,9 +295,13 @@ collector.bind_mut().poll();                      // calls &mut self method
 [configuration]
 entry_symbol = "gdext_rust_init"
 compatibility_minimum = "4.5"
-reloading = true           # enables hot-reload in Godot 4.5+
+reloadable = true          # enables hot-reload in Godot 4.5+
 
 [libraries]
-linux.debug.x86_64 = "bin/linux/libstage_godot.debug.so"
-linux.release.x86_64 = "bin/linux/libstage_godot.so"
+linux.debug.x86_64 = "res://addons/stage/bin/linux/libstage_godot.so"
+linux.release.x86_64 = "res://addons/stage/bin/linux/libstage_godot.so"
+macos.debug.arm64 = "res://addons/stage/bin/macos/libstage_godot.dylib"
+macos.release.arm64 = "res://addons/stage/bin/macos/libstage_godot.dylib"
+windows.debug.x86_64 = "res://addons/stage/bin/windows/stage_godot.dll"
+windows.release.x86_64 = "res://addons/stage/bin/windows/stage_godot.dll"
 ```

@@ -10,7 +10,7 @@ description: >
 
 # Director — Godot Scene & Resource Authoring
 
-Director is part of the **Theatre** toolkit (alongside Stage). It gives you 31 tools to create and modify Godot project files: scenes, nodes, resources, tilemaps, gridmaps, animations, physics, signals, and shaders.
+Director is part of the **Theatre** toolkit (alongside Stage). It gives you 38 tools to create and modify Godot project files: scenes, nodes, resources, tilemaps, gridmaps, animations, physics, signals, and shaders.
 
 **Two interfaces, identical capabilities:**
 
@@ -236,4 +236,4 @@ Director auto-converts string property values to Godot types:
 
 ## Full Parameter Reference
 
-See [references/director-tools.md](references/director-tools.md) for complete parameter specifications for all 31 tools.
+See [references/director-tools.md](references/director-tools.md) for complete parameter specifications for all 38 tools.

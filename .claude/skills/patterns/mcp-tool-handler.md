@@ -46,7 +46,7 @@ pub async fn spatial_inspect(
 ```
 
 ### Example 3: Shared helpers used by all handlers
-**File**: `crates/stage-server/src/mcp/mod.rs:32-76`
+**File**: `crates/stage-protocol/src/mcp_helpers.rs` (serialize_params, deserialize_response, serialize_response) and `crates/stage-server/src/mcp/mod.rs` (finalize_response)
 ```rust
 fn serialize_params<T: Serialize>(params: &T) -> Result<serde_json::Value, McpError> {
     serde_json::to_value(params).map_err(|e| {

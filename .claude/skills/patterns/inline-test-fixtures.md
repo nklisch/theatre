@@ -66,7 +66,7 @@ fn make_entity(path: &str, groups: &[&str], is_static: bool) -> RawEntityData {
 }
 
 fn make_rel(dist: f64) -> RelativePosition {
-    RelativePosition { dist, bearing: Cardinal::Ahead, bearing_deg: 0.0, elevation: Elevation::Level, occluded: false }
+    RelativePosition { distance: dist, bearing: Cardinal::Ahead, bearing_deg: 0.0, elevation: None, occluded: false }
 }
 ```
 

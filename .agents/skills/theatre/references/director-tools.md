@@ -1,6 +1,6 @@
 # Director Tools — Full Parameter Reference
 
-All tools require `project_path` (string, required) as the first parameter.
+All 38 tools require `project_path` (string, required) as the first parameter.
 
 ## Scene Tools
 
@@ -64,9 +64,11 @@ Move a node to a new parent.
 Search for nodes in a scene.
 - `scene_path` (string, required)
 - `class_name` (string, optional) — Filter by class
-- `name` (string, optional) — Filter by name pattern
+- `name_pattern` (string, optional) — Filter by name pattern
 - `group` (string, optional) — Filter by group
-- `script` (string, optional) — Filter by script path
+- `property` (string, optional) — Filter by property name
+- `property_value` (value, optional) — Filter by property value (requires `property`)
+- `limit` (int, default 100) — Max results to return
 
 ### node_set_groups
 Add/remove node from groups.

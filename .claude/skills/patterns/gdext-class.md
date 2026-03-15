@@ -15,15 +15,19 @@ GDExtension registers classes at library load time through gdext's macro system.
 pub struct StageTCPServer {
     base: Base<Node>,
     listener: Option<TcpListener>,
-    client: Option<TcpStream>,
+    clients: Vec<Option<ClientSlot>>,
     port: i32,
+    conn_state: ConnectionState,
+    pending_advance: Option<PendingAdvance>,
     collector: Option<Gd<StageCollector>>,
+    recorder: Option<Gd<StageRecorder>>,
+    client_idle_timeout_secs: u64,
 }
 
 #[godot_api]
 impl INode for StageTCPServer {
     fn init(base: Base<Node>) -> Self {
-        Self { base, listener: None, client: None, port: 9077, collector: None, ... }
+        Self { base, listener: None, clients: Vec::new(), port: 9077, conn_state: ConnectionState::Idle, pending_advance: None, collector: None, recorder: None, client_idle_timeout_secs: 30, ... }
     }
 }
 

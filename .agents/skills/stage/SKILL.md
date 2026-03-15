@@ -10,7 +10,7 @@ description: >
 
 # Stage — Spatial Debugging for Godot
 
-Stage is part of the **Theatre** toolkit (alongside Director). It gives you 9 tools to observe and interact with a running Godot game: positions, distances, relationships, physics, signals — organized in space, not as code.
+Stage is part of the **Theatre** toolkit (alongside Director). It gives you 9 MCP tools to observe and interact with a running Godot game: positions, distances, relationships, physics, signals — organized in space, not as code.
 
 **Two interfaces, identical capabilities:**
 
@@ -150,7 +150,7 @@ Response includes: `from_frame`, `to_frame`, and any non-empty of: `moved`, `sta
 { "node": "enemies/scout_02", "include": ["physics", "state"] }
 
 // Available categories:
-// transform, physics, state, children, signals, script, spatial_context
+// transform, physics, state, children, signals, script, spatial_context, resources
 ```
 
 **Useful include combos:**
@@ -212,7 +212,7 @@ Watch triggers arrive in `spatial_delta` responses under `watch_triggers`.
 { "action": "set_property", "node": "enemies/scout_02", "property": "collision_mask", "value": 7 }
 
 // Call a method
-{ "action": "call_method", "node": "enemies/scout_02", "method": "take_damage", "method_args": [50] }
+{ "action": "call_method", "node": "enemies/scout_02", "method": "take_damage", "args": [50] }
 
 // Emit a signal
 { "action": "emit_signal", "node": "enemies/scout_02", "signal": "health_changed", "args": [10] }
@@ -225,6 +225,22 @@ Watch triggers arrive in `spatial_delta` responses under `watch_triggers`.
   "name": "test_scout",
   "position": [10.0, 0.0, 0.0]
 }
+
+// Advance time (physics frames at given delta)
+{ "action": "advance_time", "duration": 0.5, "delta": 0.016 }
+
+// Remove a node
+{ "action": "remove_node", "node": "enemies/scout_02" }
+
+// Simulate input action
+{ "action": "action_press", "input_action": "jump" }
+{ "action": "action_release", "input_action": "jump" }
+
+// Inject key event
+{ "action": "inject_key", "keycode": "space", "pressed": true }
+
+// Inject mouse button event
+{ "action": "inject_mouse_button", "button": "left", "pressed": true, "position": [400, 300] }
 ```
 
 ## scene_tree — Navigate Hierarchy
@@ -232,6 +248,9 @@ Watch triggers arrive in `spatial_delta` responses under `watch_triggers`.
 ```jsonc
 // Top-level structure
 { "action": "roots" }
+
+// Immediate children
+{ "action": "children", "node": "enemies" }
 
 // Recursive tree (depth 3 default)
 { "action": "subtree", "node": "enemies", "depth": 4 }
@@ -259,7 +278,10 @@ Call at the start of a session to tune what Stage tracks:
     "*": ["visible"]
   },
   "cluster_by": "group",
-  "token_hard_cap": 3000
+  "bearing_format": "cardinal",
+  "token_hard_cap": 3000,
+  "poll_interval": 1,
+  "expose_internals": false
 }
 ```
 
@@ -311,6 +333,18 @@ Clips are captured by the dashcam ring buffer. Mark a moment to save; analyze sa
   "node": "enemies/guard_01",
   "from_frame": 4500, "to_frame": 5000
 }
+
+// Delete a clip
+{ "action": "delete", "clip_id": "clip_001a2b3c" }
+
+// Node trajectory over time
+{ "action": "trajectory", "node": "enemies/guard_01", "from_frame": 4500, "to_frame": 5000 }
+
+// Screenshot at a frame
+{ "action": "screenshot_at", "at_frame": 4582 }
+
+// List available screenshots
+{ "action": "screenshots", "clip_id": "clip_001a2b3c" }
 ```
 
 ## Common Debugging Workflows

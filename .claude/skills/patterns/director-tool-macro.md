@@ -21,7 +21,7 @@ pub async fn scene_create(
     &self,
     Parameters(params): Parameters<SceneCreateParams>,
 ) -> Result<String, McpError> {
-    director_tool!(self, params, "scene_create")
+    director_tool!(self, params, "scene_create", SceneCreateResponse)
 }
 ```
 
@@ -29,10 +29,11 @@ pub async fn scene_create(
 **File**: `crates/director/src/mcp/mod.rs:48-54`
 ```rust
 macro_rules! director_tool {
-    ($self:expr, $params:expr, $op:expr) => {{
+    ($self:expr, $params:expr, $op:expr, $resp:ty) => {{
         let op_params = serialize_params(&$params)?;
         let data = run_operation(&$self.backend, &$params.project_path, $op, &op_params).await?;
-        serialize_response(&data)
+        let typed: $resp = deserialize_response(data)?;
+        serialize_response(&typed)
     }};
 }
 ```
@@ -56,8 +57,9 @@ pub struct NodeAddParams {
 ```
 
 ## When to Use
-- Every new Director MCP tool: place the handler body as `director_tool!(self, params, "op_name")`
+- Every new Director MCP tool: place the handler body as `director_tool!(self, params, "op_name", ResponseType)`
 - The operation name string (`"op_name"`) must match the GDScript `match` arm in `operations.gd`
+- The response type (`ResponseType`) must be a struct that implements `Deserialize + Serialize`
 
 ## When NOT to Use
 - Stage tools — they use `query_addon` + `finalize_response` + `log_activity` instead

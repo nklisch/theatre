@@ -13,11 +13,15 @@ MCP handlers and the TCP read loop run on different tokio tasks. `Arc<Mutex<>>` 
 pub struct SessionState {
     pub tcp_writer: Option<TcpClientHandle>,
     pub connected: bool,
+    pub session_id: Option<String>,
+    pub handshake_info: Option<HandshakeInfo>,
     pub pending_queries: HashMap<String, oneshot::Sender<QueryResult>>,
     pub spatial_index: SpatialIndex,
     pub delta_engine: DeltaEngine,
     pub watch_engine: WatchEngine,
     pub config: SessionConfig,
+    pub clip_storage_path: Option<String>,
+    pub scene_dimensions: SceneDimensions,
 }
 ```
 

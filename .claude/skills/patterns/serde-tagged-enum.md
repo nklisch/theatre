@@ -1,6 +1,6 @@
 # Pattern: Serde Tagged Enum
 
-Protocol enums use `#[serde(tag = "type")]` (internally tagged) or `#[serde(rename_all = "snake_case")]` for wire-format dispatch. All enum variants have explicit `#[serde(rename = "...")]` snake_case names to ensure stable JSON keys.
+Protocol enums use `#[serde(tag = "type")]` or `#[serde(tag = "action")]` (internally tagged) with `#[serde(rename_all = "snake_case")]` for wire-format dispatch. Top-level `Message` variants have explicit per-variant `#[serde(rename = "...")]`; other tagged enums use `rename_all` for consistent snake_case JSON keys.
 
 ## Rationale
 Tagged enums map cleanly to the JSON `"type"` field pattern used across the TCP protocol. `rename_all = "snake_case"` ensures Rust PascalCase enum variants serialize to snake_case without per-variant annotations. Used consistently across `stage-protocol` and `stage-core`.
@@ -16,17 +16,17 @@ pub enum Message {
     #[serde(rename = "handshake")]
     Handshake(crate::handshake::Handshake),
     #[serde(rename = "query")]
-    Query { id: String, method: String, #[serde(default)] params: serde_json::Value },
+    Query { request_id: String, method: String, #[serde(default)] params: serde_json::Value },
     #[serde(rename = "response")]
-    Response { id: String, data: serde_json::Value },
+    Response { request_id: String, data: serde_json::Value },
     #[serde(rename = "error")]
-    Error { id: String, code: String, message: String },
+    Error { request_id: String, code: String, message: String },
     // ...
 }
 ```
 
 ### Example 2: Action request dispatch (internally tagged)
-**File**: `crates/stage-protocol/src/query.rs` — `ActionRequest` enum uses `#[serde(tag = "type")]` so that `{"type":"teleport","path":"...","position":[...]}` deserializes directly.
+**File**: `crates/stage-protocol/src/query.rs` — `ActionRequest` enum uses `#[serde(tag = "action", rename_all = "snake_case")]` so that `{"action":"teleport","path":"...","position":[...]}` deserializes directly.
 
 ### Example 3: Internal enums with rename_all
 **File**: `crates/stage-core/src/delta.rs:44-50`
@@ -40,8 +40,8 @@ pub enum BufferedEventType {
 }
 ```
 
-### Example 4: PerspectiveParam — externally-tagged with inline structs
-**File**: `crates/stage-protocol/src/query.rs` — `PerspectiveParam` uses `#[serde(tag = "type")]` for `Camera`, `Node { path }`, `Point { position }` variants.
+### Example 4: PerspectiveParam — internally tagged with rename_all
+**File**: `crates/stage-protocol/src/query.rs` — `PerspectiveParam` uses `#[serde(tag = "type", rename_all = "snake_case")]` for `Camera`, `Node { path }`, `Point { position }` variants.
 
 ## When to Use
 - Any enum that appears in JSON and needs a discriminant field: use `#[serde(tag = "type")]`

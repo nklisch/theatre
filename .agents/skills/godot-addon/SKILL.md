@@ -5,10 +5,11 @@ description: Working with the Godot addon GDScript layer in addons/stage/. Cover
 
 # Godot Addon — GDScript Layer
 
-This skill covers `addons/stage/` — the GDScript side of Stage. There are three GDScript files:
+This skill covers `addons/stage/` — the GDScript side of Stage. There are four GDScript files:
 - `plugin.gd` — `@tool` EditorPlugin (dock, autoload registration)
 - `runtime.gd` — Autoload singleton (instantiates GDExtension classes, input handling)
 - `dock.gd` — Dock panel script
+- `debugger_plugin.gd` — Editor debugger plugin for agent activity
 
 ## Plugin Structure
 
@@ -44,33 +45,33 @@ extends EditorPlugin
 
 var dock: Control
 
-func _enable_plugin() -> void:
-    # Use _enable_plugin, NOT _enter_tree, for autoload management
-    # _enter_tree has a timing bug: autoloads aren't immediately
-    # accessible when the editor starts with plugin already enabled
-    add_autoload_singleton("StageRuntime", "res://addons/stage/runtime.gd")
-
+func _enter_tree() -> void:
+    # Dock setup goes in _enter_tree (not _enable_plugin)
     dock = preload("res://addons/stage/dock.tscn").instantiate()
-    add_control_to_dock(DOCK_SLOT_RIGHT_UL, dock)
+    add_control_to_dock(DOCK_SLOT_RIGHT_BL, dock)
 
-func _disable_plugin() -> void:
-    # Always pair with _enable_plugin
-    remove_autoload_singleton("StageRuntime")
-
+func _exit_tree() -> void:
     if dock:
         remove_control_from_docks(dock)
         dock.queue_free()
         dock = null
+
+func _enable_plugin() -> void:
+    # Autoload + settings go in _enable_plugin (fires on explicit enable)
+    add_autoload_singleton("StageRuntime", "res://addons/stage/runtime.gd")
+
+func _disable_plugin() -> void:
+    remove_autoload_singleton("StageRuntime")
 ```
 
-**CRITICAL: Use `_enable_plugin` / `_disable_plugin` instead of `_enter_tree` / `_exit_tree` for autoload management.** The `_enter_tree` version has a known race condition when the editor starts with the plugin already enabled — the autoload isn't immediately accessible to other code. `_enable_plugin` fires only when the user explicitly enables the plugin, avoiding this.
+**CRITICAL: Use `_enable_plugin` / `_disable_plugin` for autoload management** (fires on explicit enable, avoiding timing issues). Use `_enter_tree` / `_exit_tree` for dock setup (fires every time the plugin loads).
 
 **Dock slot options:**
 ```gdscript
 DOCK_SLOT_LEFT_UL   # Left sidebar, upper-left tab
 DOCK_SLOT_LEFT_BL   # Left sidebar, bottom-left tab
-DOCK_SLOT_RIGHT_UL  # Right sidebar, upper-left tab (default for Stage)
-DOCK_SLOT_RIGHT_BL  # Right sidebar, bottom-left tab
+DOCK_SLOT_RIGHT_UL  # Right sidebar, upper-left tab
+DOCK_SLOT_RIGHT_BL  # Right sidebar, bottom-left tab (used by Stage)
 # add_control_to_bottom_panel(control, title) for the bottom bar
 ```
 
@@ -112,7 +113,7 @@ func _shortcut_input(event: InputEvent) -> void:
 
 func _drop_marker() -> void:
     # Flush dashcam clip — captures the ring buffer around this moment
-    recorder.flush_dashcam_clip("human marker")
+    recorder.flush_dashcam_clip("human")
 
 func _toggle_pause() -> void:
     get_tree().paused = not get_tree().paused
@@ -193,14 +194,17 @@ Use `_shortcut_input` for Stage's hotkeys to intercept before the game does.
 ## Dock Panel — `dock.gd`
 
 ```gdscript
-extends Control
+extends VBoxContainer
 
-@onready var connection_label: Label = $ConnectionStatus/Label
-@onready var record_btn: Button = $Recording/RecordButton
-@onready var stop_btn: Button = $Recording/StopButton
-@onready var marker_btn: Button = $Recording/MarkerButton
-@onready var timer_label: Label = $Recording/Timer
-@onready var activity_list: ItemList = $AgentActivity/List
+@onready var status_dot: ColorRect = $StatusBar/StatusDot
+@onready var status_label: Label = $StatusBar/StatusLabel
+@onready var port_label: Label = $Details/Port
+@onready var tracking_label: Label = $Details/Tracking
+@onready var watches_label: Label = $Details/Watches
+@onready var frame_label: Label = $Details/Frame
+@onready var activity_list: VBoxContainer = $Activity/ScrollContainer/List
+@onready var activity_scroll: ScrollContainer = $Activity/ScrollContainer
+@onready var collapse_btn: Button = $Activity/CollapseButton
 
 func _ready() -> void:
     record_btn.pressed.connect(_on_record_pressed)

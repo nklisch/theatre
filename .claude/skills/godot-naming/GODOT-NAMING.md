@@ -297,8 +297,7 @@ property they map to — they are computed or aggregated by Stage.
 | `bearing_deg` | Exact bearing in degrees (0=ahead, CW) | Computed server-side |
 | `distance` | Straight-line Euclidean distance | Computed server-side from positions |
 | `occluded` | Whether line-of-sight is blocked | Physics raycast result |
-| `global_origin` | Rename of `Transform3D.origin` for clarity in inspect output | `global_transform.origin` |
-| `local_origin` | Local position (from local transform) | `transform.origin` |
+| `origin` | Transform3D origin vector in transform data | `global_transform.origin` |
 | `is_static` | Whether node is a `StaticBody*` | class check |
 | `timestamp_ms` | Milliseconds since game start | `Time.get_ticks_msec()` |
 | `camera_visible` | Whether node is in camera frustum | Godot frustum culling / raycast |
@@ -316,6 +315,6 @@ property they map to — they are computed or aggregated by Stage.
 | Godot `get_X()` method → API field | Drop `get_` prefix: `get_class()` → `class` |
 | Godot `is_X()` method → API field | Drop `is_` prefix: `is_on_floor()` → `on_floor` |
 | Godot abbreviation for API | `rotation_degrees` → `rotation_deg` (Stage convention) |
-| Computed fields | Use descriptive snake_case: `bearing_deg`, `global_origin` |
+| Computed fields | Use descriptive snake_case: `bearing_deg`, `distance`, `occluded` |
 | Boolean state | No `is_` prefix in JSON output: `on_floor: true`, not `is_on_floor: true` |
 | Enum values in JSON | Use `snake_case` (serde `rename_all = "snake_case"`) |

@@ -11,23 +11,20 @@ Rust's `Default` trait returns `0`, `false`, `""`, or `None` — wrong for most 
 ### Example 1: Shared defaults module (Stage)
 **File**: `crates/stage-server/src/mcp/defaults.rs`
 ```rust
-pub fn default_perspective() -> String { "camera".to_string() }
 pub fn default_radius() -> f64 { 50.0 }
-pub fn default_detail() -> String { "standard".to_string() }
 pub fn default_k() -> usize { 5 }
 pub fn default_query_radius() -> f64 { 20.0 }
 ```
 
 Used by parameter structs in the same crate:
 ```rust
-// crates/stage-server/src/mcp/snapshot.rs:21,34,38
-#[serde(default = "default_perspective")]
-pub perspective: String,
 #[serde(default = "default_radius")]
 pub radius: f64,
-#[serde(default = "default_detail")]
-pub detail: String,
+#[serde(default = "default_k")]
+pub k: usize,
 ```
+
+Note: `perspective` and `detail` use `#[serde(default)]` with `#[derive(Default)]` on their enum types (`PerspectiveMode`, `DetailLevel`) rather than named default functions.
 
 ### Example 2: Inline defaults (Director)
 **File**: `crates/director/src/mcp/node.rs:15-16`
@@ -43,13 +40,13 @@ fn default_root() -> String { ".".to_string() }
 **File**: `crates/stage-core/src/config.rs:45-80`
 ```rust
 #[serde(default = "default_poll_interval")]
-pub poll_interval: u64,
+pub poll_interval: u32,
 #[serde(default = "default_token_hard_cap")]
 pub token_hard_cap: u32,
 #[serde(default = "default_dashcam_enabled")]
 pub dashcam_enabled: bool,
 
-fn default_poll_interval() -> u64 { 1 }
+fn default_poll_interval() -> u32 { 1 }
 fn default_token_hard_cap() -> u32 { 5000 }
 fn default_dashcam_enabled() -> bool { true }
 ```
