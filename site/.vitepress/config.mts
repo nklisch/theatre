@@ -252,7 +252,7 @@ export default defineConfig({
 
 		footer: {
 			message: 'Open source under the MIT License.',
-			copyright: 'Theatre — AI toolkit for Godot'
+			copyright: 'By <a href="https://nathanklisch.dev">Nathan Klisch</a> · Also: <a href="https://skilltap.dev">skilltap</a> · <a href="https://krometrail.dev">Krometrail</a> · <a href="https://ffmpegkit.dev">ffmpeg-kit</a>'
 		},
 
 		editLink: {
