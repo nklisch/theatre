@@ -292,7 +292,7 @@ dependencies = [
 
 [[package]]
 name = "director"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "anyhow",
  "regex",
@@ -1467,7 +1467,7 @@ checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 
 [[package]]
 name = "stage-core"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "rstar",
  "schemars 1.2.1",
@@ -1477,7 +1477,7 @@ dependencies = [
 
 [[package]]
 name = "stage-godot"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "godot",
  "rmp-serde",
@@ -1490,7 +1490,7 @@ dependencies = [
 
 [[package]]
 name = "stage-protocol"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "rmcp",
  "rmp-serde",
@@ -1502,7 +1502,7 @@ dependencies = [
 
 [[package]]
 name = "stage-server"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "anyhow",
  "base64",
@@ -1570,7 +1570,7 @@ dependencies = [
 
 [[package]]
 name = "theatre-cli"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -1584,7 +1584,7 @@ dependencies = [
 
 [[package]]
 name = "theatre-docs-gen"
-version = "0.3.1"
+version = "0.3.2"
 dependencies = [
  "director",
  "serde",
