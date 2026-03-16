@@ -916,9 +916,8 @@ async fn test_recording_list() {
 
 #[tokio::test]
 async fn test_recording_delete() {
-    let handler: QueryHandler = Arc::new(|method, _| match method {
-        _ => Err(("unknown_method".into(), method.to_string())),
-    });
+    let handler: QueryHandler =
+        Arc::new(|method, _| Err(("unknown_method".into(), method.to_string())));
 
     let harness = TestHarness::new(handler).await;
 

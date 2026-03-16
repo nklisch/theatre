@@ -2446,7 +2446,7 @@ CREATE INDEX IF NOT EXISTS idx_markers_frame ON markers(frame);
         assert_eq!(clip["clip_id"].as_str().unwrap(), "clip_aaa");
         assert_eq!(clip["frames_captured"].as_u64().unwrap(), 3);
         assert_eq!(clip["markers_count"].as_u64().unwrap(), 1);
-        assert_eq!(clip["dashcam"].as_bool().unwrap(), true);
+        assert!(clip["dashcam"].as_bool().unwrap());
         assert_eq!(clip["tier"].as_str().unwrap(), "deliberate");
         assert!(clip["frame_range"].is_array());
         assert!(clip["duration_ms"].as_i64().unwrap() > 0);
