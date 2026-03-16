@@ -103,7 +103,11 @@ async fn run_subprocess(
 }
 
 /// Parse the last JSON-like line from stdout into an `OperationResult`.
-fn parse_stdout(stdout: &str, stderr: &str, status: &std::process::ExitStatus) -> Result<OperationResult, OperationError> {
+fn parse_stdout(
+    stdout: &str,
+    stderr: &str,
+    status: &std::process::ExitStatus,
+) -> Result<OperationResult, OperationError> {
     // Parse the last JSON-like line of stdout (starts with '{').
     // Non-JSON lines like "[Stage] TCP server stopped" may appear after
     // the result when the GDExtension prints during Godot's shutdown.
@@ -134,7 +138,8 @@ pub async fn run_oneshot(
     operation: &str,
     params: &serde_json::Value,
 ) -> Result<OperationResult, OperationError> {
-    let (stdout, stderr, status) = run_subprocess(godot_bin, project_path, operation, params).await?;
+    let (stdout, stderr, status) =
+        run_subprocess(godot_bin, project_path, operation, params).await?;
     parse_stdout(&stdout, &stderr, &status)
 }
 
@@ -148,7 +153,8 @@ pub async fn run_validation(
     operation: &str,
     params: &serde_json::Value,
 ) -> Result<ValidationOutput, OperationError> {
-    let (stdout, stderr, status) = run_subprocess(godot_bin, project_path, operation, params).await?;
+    let (stdout, stderr, status) =
+        run_subprocess(godot_bin, project_path, operation, params).await?;
     let result = parse_stdout(&stdout, &stderr, &status)?;
     Ok(ValidationOutput { result, stderr })
 }

@@ -52,10 +52,7 @@ pub async fn resolve_clip_storage_path(
             let path = data["path"]
                 .as_str()
                 .ok_or_else(|| {
-                    McpError::internal_error(
-                        "Invalid storage path response".to_string(),
-                        None,
-                    )
+                    McpError::internal_error("Invalid storage path response".to_string(), None)
                 })?
                 .to_string();
             // Cache to memory + disk
@@ -135,11 +132,9 @@ pub fn list_clips_from_disk(storage_path: &str) -> Result<serde_json::Value, Mcp
 
         // Try to extract dashcam info from capture_config
         let capture_json: Option<String> = db
-            .query_row(
-                "SELECT capture_config FROM recording LIMIT 1",
-                [],
-                |row| row.get(0),
-            )
+            .query_row("SELECT capture_config FROM recording LIMIT 1", [], |row| {
+                row.get(0)
+            })
             .ok();
         let capture: Option<serde_json::Value> =
             capture_json.and_then(|s| serde_json::from_str(&s).ok());
@@ -2512,8 +2507,7 @@ CREATE INDEX IF NOT EXISTS idx_markers_frame ON markers(frame);
         add_marker_on_disk(tmp.path(), "clip_001", 100, "start");
         add_marker_on_disk(tmp.path(), "clip_001", 150, "middle");
 
-        let result =
-            list_markers_from_disk(tmp.path().to_str().unwrap(), "clip_001").unwrap();
+        let result = list_markers_from_disk(tmp.path().to_str().unwrap(), "clip_001").unwrap();
         assert_eq!(result["clip_id"].as_str().unwrap(), "clip_001");
 
         let markers = result["markers"].as_array().unwrap();
@@ -2530,8 +2524,7 @@ CREATE INDEX IF NOT EXISTS idx_markers_frame ON markers(frame);
         let tmp = tempfile::TempDir::new().unwrap();
         create_clip_on_disk(tmp.path(), "clip_001", 1710000000000);
 
-        let result =
-            list_markers_from_disk(tmp.path().to_str().unwrap(), "clip_001").unwrap();
+        let result = list_markers_from_disk(tmp.path().to_str().unwrap(), "clip_001").unwrap();
         let markers = result["markers"].as_array().unwrap();
         assert!(markers.is_empty());
     }
@@ -2553,8 +2546,7 @@ CREATE INDEX IF NOT EXISTS idx_markers_frame ON markers(frame);
         let db_path = tmp.path().join("clip_del.sqlite");
         assert!(db_path.exists());
 
-        let result =
-            delete_clip_from_disk(tmp.path().to_str().unwrap(), "clip_del").unwrap();
+        let result = delete_clip_from_disk(tmp.path().to_str().unwrap(), "clip_del").unwrap();
         assert_eq!(result["result"].as_str().unwrap(), "ok");
         assert_eq!(result["clip_id"].as_str().unwrap(), "clip_del");
         assert!(!db_path.exists());
@@ -2630,7 +2622,10 @@ CREATE INDEX IF NOT EXISTS idx_markers_frame ON markers(frame);
 
         // Should also cache in memory now
         let s = state.lock().await;
-        assert_eq!(s.clip_storage_path.as_deref(), Some(storage_dir.to_str().unwrap()));
+        assert_eq!(
+            s.clip_storage_path.as_deref(),
+            Some(storage_dir.to_str().unwrap())
+        );
     }
 
     #[tokio::test]

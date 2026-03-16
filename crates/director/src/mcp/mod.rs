@@ -536,7 +536,12 @@ impl DirectorServer {
         &self,
         Parameters(params): Parameters<ProjectSettingsSetParams>,
     ) -> Result<String, McpError> {
-        director_tool!(self, params, "project_settings_set", ProjectSettingsSetResponse)
+        director_tool!(
+            self,
+            params,
+            "project_settings_set",
+            ProjectSettingsSetResponse
+        )
     }
 
     #[tool(
@@ -614,9 +619,13 @@ impl DirectorServer {
         Parameters(params): Parameters<EditorStatusParams>,
     ) -> Result<String, McpError> {
         let op_params = serialize_params(&params)?;
-        let data =
-            run_operation(&self.backend, &params.project_path, "editor_status", &op_params)
-                .await?;
+        let data = run_operation(
+            &self.backend,
+            &params.project_path,
+            "editor_status",
+            &op_params,
+        )
+        .await?;
 
         // Deserialize the GDScript response.
         let raw: EditorStatusRawResponse = deserialize_response(data)?;

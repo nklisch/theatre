@@ -24,10 +24,8 @@ pub struct GodotDiagnostic {
 pub fn parse_godot_stderr(stderr: &str) -> Vec<GodotDiagnostic> {
     // Matches: ERROR: res://path/file.gd:42 - message
     // or:      WARNING: res://path/file.gd:10 - message
-    let script_re = regex::Regex::new(
-        r"(?m)^(ERROR|WARNING): (res://[^\s:]+):(\d+) - (.+)$",
-    )
-    .expect("static regex is valid");
+    let script_re = regex::Regex::new(r"(?m)^(ERROR|WARNING): (res://[^\s:]+):(\d+) - (.+)$")
+        .expect("static regex is valid");
 
     // Matches the modules/gdscript summary line: extract res:// path from message body
     // ERROR: modules/gdscript/gdscript.cpp:2907 - Failed to load script "res://file.gd" ...

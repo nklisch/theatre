@@ -269,9 +269,8 @@ async fn handle_markers(
     let storage_path = clip_analysis::resolve_clip_storage_path(state).await?;
     let clip_id = match params.clip_id.as_deref() {
         Some(id) => id.to_string(),
-        None => clip_analysis::most_recent_clip_id(&storage_path).ok_or_else(|| {
-            McpError::invalid_params("clip_id is required for markers", None)
-        })?,
+        None => clip_analysis::most_recent_clip_id(&storage_path)
+            .ok_or_else(|| McpError::invalid_params("clip_id is required for markers", None))?,
     };
     let mut data = clip_analysis::list_markers_from_disk(&storage_path, &clip_id)?;
     finalize_response(&mut data, budget_limit, hard_cap)
