@@ -1610,7 +1610,7 @@ pub fn infer_screenshot_gaps(
     let mut gaps = Vec::new();
     for pair in shots.windows(2) {
         let delta = pair[1].frame.saturating_sub(pair[0].frame);
-        if delta > interval_frames {
+        if delta >= interval_frames.saturating_mul(2) {
             gaps.push(ClipGap {
                 start_frame: pair[0].frame + interval_frames,
                 end_frame: pair[1].frame - interval_frames,
@@ -1803,6 +1803,40 @@ CREATE INDEX IF NOT EXISTS idx_markers_frame ON markers(frame);
             rusqlite::params![frame, ts_ms, &data],
         )
         .unwrap();
+    }
+
+    fn insert_screenshot_meta(db: &Connection, frame: u64) {
+        db.execute_batch(
+            "CREATE TABLE IF NOT EXISTS screenshots (frame INTEGER, timestamp_ms INTEGER, image_data BLOB, width INTEGER, height INTEGER)",
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO screenshots (frame, timestamp_ms, image_data, width, height) VALUES (?1, ?2, X'', 1, 1)",
+            rusqlite::params![frame, frame * 10],
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn inferred_gaps_require_a_missing_frame() {
+        for (name, frames, expected_start, expected_end, expected_dropped) in [
+            ("exact cadence", vec![0, 10], None, None, 0),
+            ("one point five cadence", vec![0, 15], None, None, 0),
+            ("two times cadence", vec![0, 20], Some(10), Some(10), 1),
+            ("five times cadence", vec![0, 50], Some(10), Some(40), 4),
+        ] {
+            let db = test_db();
+            for frame in frames {
+                insert_screenshot_meta(&db, frame);
+            }
+            let gaps = infer_screenshot_gaps(&db, 10).unwrap();
+            assert_eq!(gaps.len(), usize::from(expected_start.is_some()), "{name}");
+            if let Some(gap) = gaps.first() {
+                assert_eq!(gap.start_frame, expected_start.unwrap());
+                assert_eq!(gap.end_frame, expected_end.unwrap());
+                assert_eq!(gap.dropped, expected_dropped);
+            }
+        }
     }
 
     // --- read_frame tests ---

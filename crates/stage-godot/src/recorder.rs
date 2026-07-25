@@ -45,9 +45,10 @@ struct RawShot {
 struct EncodedShot {
     frame: u64,
     timestamp_ms: u64,
-    jpeg_data: Vec<u8>,
+    jpeg_data: Option<Vec<u8>>,
     width: u32,
     height: u32,
+    error: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -301,6 +302,7 @@ pub struct StageRecorder {
     capture_probe: CaptureProbe,
     burst_until_frame: Option<u64>,
     physics_tick_count: u64,
+    last_tick_instant: Option<Instant>,
 
     /// Silent markers waiting to be attached to the next saved clip.
     pending_silent_markers: Vec<DashcamTrigger>,
@@ -355,13 +357,20 @@ impl INode for StageRecorder {
             capture_probe: CaptureProbe::default(),
             burst_until_frame: None,
             physics_tick_count: 0,
+            last_tick_instant: None,
             pending_silent_markers: Vec::new(),
         }
     }
 
-    fn physics_process(&mut self, delta: f64) {
+    fn physics_process(&mut self, _delta: f64) {
         self.physics_tick_count = self.physics_tick_count.saturating_add(1);
-        self.capture_probe.observe_delta(delta * 1000.0);
+        // Wall-clock pacing between ticks (engine `delta` is the fixed
+        // timestep and would hide real hitches).
+        let now = Instant::now();
+        if let Some(last) = self.last_tick_instant.replace(now) {
+            self.capture_probe
+                .observe_delta(now.duration_since(last).as_secs_f64() * 1000.0);
+        }
         self.drain_encoded_shots();
         // --- Dashcam force-close check (no capture needed) ---
         self.dashcam_check_force_close();
@@ -607,7 +616,7 @@ impl StageRecorder {
         if let Some(n) = v.get("screenshot_max_dimension").and_then(|x| x.as_u64())
             && n > 0
         {
-            self.dashcam_config.screenshot_max_dimension = n as u32;
+            self.dashcam_config.screenshot_max_dimension = (n as u32).clamp(1, 8192);
         }
         if let Some(n) = v.get("screenshot_byte_cap_mb").and_then(|x| x.as_u64())
             && n > 0
@@ -940,16 +949,29 @@ impl StageRecorder {
 // Internal implementation
 // ---------------------------------------------------------------------------
 
+fn effective_screenshot_interval(
+    frame: u64,
+    burst_until_frame: Option<u64>,
+    dense_burst_enabled: bool,
+    base_interval: u32,
+    burst_interval: u32,
+) -> u64 {
+    if dense_burst_enabled && burst_until_frame.is_some_and(|end| frame <= end) {
+        burst_interval.max(1) as u64
+    } else {
+        base_interval.max(1) as u64
+    }
+}
+
 impl StageRecorder {
     fn effective_screenshot_interval(&self) -> u64 {
-        let frame = current_physics_frame();
-        if self.dashcam_config.dense_burst_enabled
-            && self.burst_until_frame.is_some_and(|end| frame <= end)
-        {
-            self.dashcam_config.dense_burst_interval_frames.max(1) as u64
-        } else {
-            self.dashcam_config.screenshot_interval_frames.max(1) as u64
-        }
+        effective_screenshot_interval(
+            current_physics_frame(),
+            self.burst_until_frame,
+            self.dashcam_config.dense_burst_enabled,
+            self.dashcam_config.screenshot_interval_frames,
+            self.dashcam_config.dense_burst_interval_frames,
+        )
     }
 
     fn ensure_screenshot_worker(&mut self) {
@@ -964,23 +986,31 @@ impl StageRecorder {
                 let mut output = Vec::new();
                 let quality = raw.quality.clamp(1, 100);
                 let encoder = jpeg_encoder::Encoder::new(&mut output, quality);
-                if encoder
-                    .encode(
-                        &raw.rgba,
-                        raw.width,
-                        raw.height,
-                        jpeg_encoder::ColorType::Rgba,
-                    )
-                    .is_ok()
-                {
-                    let _ = encoded_tx.send(EncodedShot {
+                let result = encoder.encode(
+                    &raw.rgba,
+                    raw.width,
+                    raw.height,
+                    jpeg_encoder::ColorType::Rgba,
+                );
+                let shot = match result {
+                    Ok(()) => EncodedShot {
                         frame: raw.frame,
                         timestamp_ms: raw.timestamp_ms,
-                        jpeg_data: output,
+                        jpeg_data: Some(output),
                         width: raw.width as u32,
                         height: raw.height as u32,
-                    });
-                }
+                        error: None,
+                    },
+                    Err(error) => EncodedShot {
+                        frame: raw.frame,
+                        timestamp_ms: raw.timestamp_ms,
+                        jpeg_data: None,
+                        width: raw.width as u32,
+                        height: raw.height as u32,
+                        error: Some(error.to_string()),
+                    },
+                };
+                let _ = encoded_tx.send(shot);
             }
         });
         self.screenshot_tx = Some(tx);
@@ -1008,7 +1038,7 @@ impl StageRecorder {
         if orig_width == 0 || orig_height == 0 {
             return;
         }
-        let max_dim = self.dashcam_config.screenshot_max_dimension.max(1);
+        let max_dim = self.dashcam_config.screenshot_max_dimension.clamp(1, 8192);
         if orig_width.max(orig_height) > max_dim {
             let (w, h) = if orig_width >= orig_height {
                 (max_dim, (orig_height * max_dim / orig_width).max(1))
@@ -1064,10 +1094,18 @@ impl StageRecorder {
                 }
             };
             self.encode_depth = self.encode_depth.saturating_sub(1);
+            if shot.error.is_some() {
+                self.gap_ledger.record(shot.frame, "encode_failed");
+                continue;
+            }
+            let Some(jpeg_data) = shot.jpeg_data else {
+                self.gap_ledger.record(shot.frame, "encode_failed");
+                continue;
+            };
             self.screenshot_ingest(CapturedScreenshot {
                 frame: shot.frame,
                 timestamp_ms: shot.timestamp_ms,
-                jpeg_data: shot.jpeg_data,
+                jpeg_data,
                 width: shot.width,
                 height: shot.height,
             });
@@ -1080,6 +1118,7 @@ impl StageRecorder {
         if let Some(handle) = self.screenshot_worker.take() {
             let _ = handle.join();
         }
+        self.encode_depth = 0;
     }
 
     /// Ingest a screenshot into the ring buffer and post-capture state.
@@ -1820,13 +1859,10 @@ mod tests {
 
     #[test]
     fn effective_burst_interval_is_dense_only_inside_window() {
-        let cfg = DashcamConfig {
-            screenshot_interval_frames: 4,
-            dense_burst_interval_frames: 2,
-            ..Default::default()
-        };
-        assert_eq!(cfg.screenshot_interval_frames, 4);
-        assert_eq!(cfg.dense_burst_interval_frames, 2);
+        assert_eq!(effective_screenshot_interval(9, Some(10), true, 4, 2), 2);
+        assert_eq!(effective_screenshot_interval(10, Some(10), true, 4, 2), 2);
+        assert_eq!(effective_screenshot_interval(11, Some(10), true, 4, 2), 4);
+        assert_eq!(effective_screenshot_interval(10, Some(10), false, 4, 2), 4);
     }
 
     #[test]
@@ -1907,7 +1943,7 @@ mod tests {
             .and_then(|x| x.as_u64())
             && n > 0
         {
-            cfg.screenshot_max_dimension = n as u32;
+            cfg.screenshot_max_dimension = (n as u32).clamp(1, 8192);
         }
         if let Some(n) = json.get("screenshot_byte_cap_mb").and_then(|x| x.as_u64())
             && n > 0

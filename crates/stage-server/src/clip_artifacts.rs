@@ -15,11 +15,6 @@ use temporal_vision::{
 };
 use tokio::sync::Mutex;
 
-pub mod cache;
-pub mod frames;
-pub mod manifest;
-pub mod params;
-
 const TV_VERSION: &str = "1";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -100,20 +95,25 @@ fn decode(s: &ClipScreenshot) -> Result<(PixelDimensions, Vec<u8>), McpError> {
     }
     Ok((dims, rgba))
 }
-fn gaps_to_tv(gaps: &[ClipGap], cadence_ms: u64) -> Result<Vec<DeclaredGap<String>>, McpError> {
+fn gaps_to_tv(
+    gaps: &[ClipGap],
+    cadence_ms: u64,
+    first_frame: u64,
+    first_timestamp_ms: u64,
+    last_timestamp_ms: u64,
+) -> Result<Vec<DeclaredGap<String>>, McpError> {
+    let timestamp_for_frame = |frame: u64| {
+        let offset_ms = frame.saturating_sub(first_frame).saturating_mul(cadence_ms);
+        let timestamp_ms = first_timestamp_ms
+            .saturating_add(offset_ms)
+            .clamp(first_timestamp_ms, last_timestamp_ms);
+        Timestamp::from_nanos(timestamp_ms.saturating_mul(1_000_000))
+    };
     gaps.iter()
         .enumerate()
         .map(|(i, g)| {
-            let a = Timestamp::from_nanos(
-                g.start_frame
-                    .saturating_mul(cadence_ms)
-                    .saturating_mul(1_000_000),
-            );
-            let b = Timestamp::from_nanos(
-                g.end_frame
-                    .saturating_mul(cadence_ms)
-                    .saturating_mul(1_000_000),
-            );
+            let a = timestamp_for_frame(g.start_frame);
+            let b = timestamp_for_frame(g.end_frame);
             vision(temporal_vision::TimeRange::new(a, b)).and_then(|range| {
                 vision(DeclaredGap::new(
                     format!("gap-{i}"),
@@ -133,8 +133,9 @@ fn compact_params(
     tile_limit: Option<u8>,
     inline_image: bool,
 ) -> Value {
+    let _ = inline_image; // Response shaping only; image bytes are cache-independent.
     canonical(
-        &json!({"at_frame": at_frame, "at_time_ms": at_time_ms, "reference_frame": reference_frame, "tile_limit": tile_limit, "inline_image": inline_image}),
+        &json!({"at_frame": at_frame, "at_time_ms": at_time_ms, "reference_frame": reference_frame, "tile_limit": tile_limit}),
     )
 }
 fn canonical(value: &Value) -> Value {
@@ -179,7 +180,7 @@ fn source_anchor(
 ) -> u64 {
     markers
         .iter()
-        .find(|(_, _, source, _)| matches!(source.as_str(), "human" | "agent" | "code"))
+        .find(|(_, _, source, _)| matches!(source.as_str(), "human" | "agent"))
         .map(|(frame, _, _, _)| *frame)
         .map(|f| *frames[nearest_frame(frames, f)].id())
         .unwrap_or(fallback)
@@ -213,14 +214,23 @@ pub async fn generate_artifact(
     let kind = ArtifactKind::parse(kind)?;
     let shots = clip_analysis::list_screenshots(&session.db)?;
     let mut fp = Sha256::new();
-    for s in &shots {
-        fp.update(s.frame.to_le_bytes());
-        fp.update(s.timestamp_ms.to_le_bytes());
-        fp.update(s.size_bytes.to_le_bytes());
-        if let Some(image) = clip_analysis::read_screenshot_near_frame(&session.db, s.frame)? {
-            fp.update(&image.jpeg_data);
-        }
+    fp.update(session.clip_id.as_bytes());
+    fp.update((shots.len() as u64).to_le_bytes());
+    if let Some(first) = shots.first() {
+        fp.update(first.frame.to_le_bytes());
+        fp.update(first.timestamp_ms.to_le_bytes());
     }
+    if let Some(last) = shots.last() {
+        fp.update(last.frame.to_le_bytes());
+        fp.update(last.timestamp_ms.to_le_bytes());
+    }
+    fp.update(
+        shots
+            .iter()
+            .map(|s| s.size_bytes)
+            .sum::<u64>()
+            .to_le_bytes(),
+    );
     let fingerprint = format!("{:x}", fp.finalize());
     let params = compact_params(
         at_frame,
@@ -241,6 +251,7 @@ pub async fn generate_artifact(
         if let Some(image) = manifest.get_mut("image").and_then(Value::as_object_mut) {
             image.insert("cache".into(), json!("hit"));
         }
+        manifest["budget"] = budget_block(&manifest, token_limit, hard_cap);
         return Ok(ArtifactOutput {
             manifest,
             png,
@@ -254,9 +265,33 @@ pub async fn generate_artifact(
         ));
     }
     let mut decoded = Vec::new();
-    let mut expected = None;
     let mut mismatch = 0u64;
-    for meta in shots.iter().take(4096) {
+    let (modal_width, modal_height) = shots
+        .iter()
+        .fold(
+            std::collections::HashMap::<(u32, u32), usize>::new(),
+            |mut counts, s| {
+                *counts.entry((s.width, s.height)).or_default() += 1;
+                counts
+            },
+        )
+        .into_iter()
+        .max_by_key(|(dims, count)| (*count, *dims))
+        .map(|(dims, _)| dims)
+        .ok_or_else(|| err("screenshots have no dimensions"))?;
+    let subsample_step = if shots.len() > 1500 {
+        shots.len().div_ceil(1500)
+    } else {
+        1
+    };
+    let mut sample_indices: Vec<usize> = (0..shots.len()).step_by(subsample_step).collect();
+    if let Some(last) = shots.len().checked_sub(1)
+        && sample_indices.last().copied() != Some(last)
+    {
+        sample_indices.push(last);
+    }
+    for index in sample_indices {
+        let meta = &shots[index];
         let Some(shot) = clip_analysis::read_screenshot_near_frame(&session.db, meta.frame)? else {
             return Err(err(format!(
                 "screenshot metadata frame {} has no image",
@@ -264,10 +299,7 @@ pub async fn generate_artifact(
             )));
         };
         let (dims, rgba) = decode(&shot)?;
-        if expected.is_none() {
-            expected = Some((dims.width(), dims.height()));
-        }
-        if expected != Some((dims.width(), dims.height())) {
+        if (dims.width(), dims.height()) != (modal_width, modal_height) {
             mismatch += 1;
             continue;
         }
@@ -279,7 +311,7 @@ pub async fn generate_artifact(
             serde_json::json!({"usable": decoded.len()}),
         ));
     }
-    let (w, h) = expected.ok_or_else(|| err("decoded screenshots have no dimensions"))?;
+    let (w, h) = (modal_width, modal_height);
     let frames: Vec<Frame<u64, Box<[u8]>>> = decoded
         .into_iter()
         .map(|(f, ts, d, r)| {
@@ -353,7 +385,13 @@ pub async fn generate_artifact(
     let seq = vision(FrameSequence::new(
         frames,
         tv_markers,
-        gaps_to_tv(&gaps, cadence_ms)?,
+        gaps_to_tv(
+            &gaps,
+            cadence_ms,
+            shots.first().map(|s| s.frame).unwrap_or(0),
+            shots.first().map(|s| s.timestamp_ms).unwrap_or(0),
+            shots.last().map(|s| s.timestamp_ms).unwrap_or(0),
+        )?,
         None,
         None,
     ))?;
@@ -390,8 +428,8 @@ pub async fn generate_artifact(
                     labels,
                     limits,
                 ),
-            )
-            .map_err(err)?;
+            );
+            let a = vision(a)?;
             let selected=a.selection().selected_frames().iter().map(|s| json!({"frame":s.frame_id(),"timestamp_ms":s.timestamp().as_nanos()/1_000_000,"reasons":s.reasons().iter().map(|r|r.as_str()).collect::<Vec<_>>()})).collect::<Vec<_>>();
             (
                 a.storyboard().image().bytes().to_vec(),
@@ -415,7 +453,7 @@ pub async fn generate_artifact(
                 &normalized,
                 &p,
             ))?;
-            let a = generate_motion_history("artifact", &seq, &normalized, p).map_err(err)?;
+            let a = vision(generate_motion_history("artifact", &seq, &normalized, p))?;
             (
                 a.image().bytes().to_vec(),
                 json!({"reference_frame":seq.frames()[ref_idx].id(),"plan":{"continuity_segments":plan.continuity_segment_count(),"measured_pairs":plan.measured_pair_count(),"gap_pairs":plan.gap_pair_count()}}),
@@ -436,8 +474,12 @@ pub async fn generate_artifact(
                 Rgb8::new(0, 0, 0),
                 lim,
             );
-            let a = temporal_vision::render_difference_map("artifact", &seq, &normalized, p)
-                .map_err(err)?;
+            let a = vision(temporal_vision::render_difference_map(
+                "artifact",
+                &seq,
+                &normalized,
+                p,
+            ))?;
             (
                 a.image().bytes().to_vec(),
                 json!({"reference_frame":seq.frames()[ref_idx].id(),"mode":"count"}),
@@ -450,8 +492,10 @@ pub async fn generate_artifact(
     root.insert("kind".into(), json!(kind.as_str()));
     root.insert("anchor_frame".into(), json!(seq.frames()[anchor_idx].id()));
     root.insert("frames_analyzed".into(), json!(seq.frames().len()));
-    root.insert("subsampled".into(), json!(shots.len() > 4096));
-    root.insert("cadence".into(),json!({"interval_frames":interval,"captured":shots.len(),"dropped":gaps.iter().map(|g|g.dropped).sum::<u64>(),"coverage":{"first_frame":shots.first().map(|s|s.frame),"last_frame":shots.last().map(|s|s.frame)}}));
+    let analyzed_first = seq.frames().first().map(|f| *f.id());
+    let analyzed_last = seq.frames().last().map(|f| *f.id());
+    root.insert("subsampled".into(), json!(shots.len() > 1500));
+    root.insert("cadence".into(),json!({"interval_frames":interval,"captured":seq.frames().len(),"dropped":gaps.iter().map(|g|g.dropped).sum::<u64>(),"coverage":{"first_frame":analyzed_first,"last_frame":analyzed_last}}));
     root.insert("gaps".into(), serde_json::to_value(&gaps).map_err(err)?);
     if !extra.is_null() {
         root.insert("extra".into(), extra);
@@ -469,8 +513,16 @@ pub async fn generate_artifact(
     let cache = if clip_analysis::artifacts_table_exists(&session.db) {
         let path =
             std::path::Path::new(&session.storage_path).join(format!("{}.sqlite", session.clip_id));
+        if !path.exists() {
+            return Ok(ArtifactOutput {
+                manifest,
+                png,
+                cache: "unavailable".into(),
+            });
+        }
         match rusqlite::Connection::open(path) {
             Ok(rw) => {
+                let _ = rw.busy_timeout(std::time::Duration::from_millis(100));
                 let text = serde_json::to_string(&manifest).map_err(err)?;
                 let dims = json!({"width":w,"height":h}).to_string();
                 if rw.execute("INSERT OR REPLACE INTO artifacts (cache_key,kind,params_json,manifest_json,dims,png,created_at_ms) VALUES (?1,?2,?3,?4,?5,?6,?7)",rusqlite::params![key,kind.as_str(),serde_json::to_string(&params).map_err(err)?,text,dims,png.as_slice(),now_ms()]).is_ok() {"stored"} else {"unavailable"}
@@ -491,8 +543,48 @@ pub async fn generate_artifact(
 }
 
 #[cfg(test)]
+#[allow(clippy::items_after_test_module)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn gap_timestamps_use_clip_timeline_and_are_clamped() {
+        let gaps = gaps_to_tv(
+            &[ClipGap {
+                start_frame: 105,
+                end_frame: 115,
+                reason: "dropped".into(),
+                dropped: 1,
+            }],
+            10,
+            100,
+            1_000,
+            1_100,
+        )
+        .unwrap();
+        assert_eq!(gaps.len(), 1);
+        let clamped = gaps_to_tv(
+            &[ClipGap {
+                start_frame: 50,
+                end_frame: 200,
+                reason: "dropped".into(),
+                dropped: 1,
+            }],
+            10,
+            100,
+            1_000,
+            1_100,
+        );
+        assert!(clamped.is_ok());
+    }
+
+    #[test]
+    fn inline_image_does_not_change_cache_params() {
+        assert_eq!(
+            compact_params(Some(4), None, None, Some(8), true),
+            compact_params(Some(4), None, None, Some(8), false)
+        );
+    }
 
     #[test]
     fn cache_key_is_canonical_and_fingerprint_sensitive() {

@@ -573,8 +573,16 @@ async fn handle_visual_artifact(
             if let Some(data) = e.data.as_ref()
                 && data.get("error").is_some()
             {
+                let mut payload = data.clone();
+                if let Some(object) = payload.as_object_mut()
+                    && !object.contains_key("clip_id")
+                    && let Ok(session) =
+                        clip_analysis::ClipSession::open(state, params.clip_id.as_deref()).await
+                {
+                    object.insert("clip_id".into(), json!(session.clip_id));
+                }
                 return Ok(CallToolResult::success(vec![Content::text(
-                    data.to_string(),
+                    payload.to_string(),
                 )]));
             }
             return Err(e);
