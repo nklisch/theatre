@@ -134,6 +134,7 @@ impl ChangeLattice {
 #[derive(Debug)]
 struct AnomalyDetector {
     ema: f64,
+    have_ema: bool,
     last_proportion: f64,
     streak: u32,
     triggers_total: u64,
@@ -146,6 +147,7 @@ impl Default for AnomalyDetector {
     fn default() -> Self {
         Self {
             ema: 0.0,
+            have_ema: false,
             last_proportion: 0.0,
             streak: 0,
             triggers_total: 0,
@@ -177,15 +179,18 @@ impl AnomalyDetector {
             self.streak = 0;
             return None;
         }
-        self.ema = if self.ema == 0.0 {
-            proportion
-        } else {
-            self.ema * 0.9 + proportion * 0.1
-        };
+        if !self.have_ema {
+            self.ema = proportion;
+            self.have_ema = true;
+            self.streak = 0;
+            return None;
+        }
+        let baseline = self.ema;
         let anomalous =
-            proportion >= settings.min && proportion >= settings.relative * self.ema.max(0.02);
+            proportion >= settings.min && proportion >= settings.relative * baseline.max(0.02);
         if !anomalous {
             self.streak = 0;
+            self.ema = baseline * 0.9 + proportion * 0.1;
             return None;
         }
         self.streak = self.streak.saturating_add(1);
@@ -205,8 +210,8 @@ impl AnomalyDetector {
         self.last_trigger_proportion = Some(proportion);
         Some(format!(
             "visual_anomaly: change {proportion:.2} vs baseline {:.2} ({:.1}x)",
-            self.ema,
-            proportion / self.ema.max(0.0001)
+            baseline,
+            proportion / baseline.max(0.02)
         ))
     }
 }
@@ -681,6 +686,8 @@ impl StageRecorder {
     pub fn get_anomaly_status_json(&self) -> GString {
         let reason = if Engine::singleton().is_editor_hint() {
             "editor_hint"
+        } else if matches!(self.dashcam_state, DashcamState::Disabled) {
+            "dashcam_disabled"
         } else if !self.dashcam_config.screenshot_enabled {
             "screenshots_disabled"
         } else if !self.dashcam_config.anomaly_enabled {
@@ -1494,6 +1501,7 @@ impl StageRecorder {
                     fov_deg: object.get("fov").to::<f64>(),
                     ortho_size: object.get("size").to::<f64>(),
                     keep_aspect: object.get("keep_aspect").to::<i64>() as u8,
+                    camera_path: camera.get_path().to_string(),
                 }
             });
 
@@ -1889,7 +1897,7 @@ impl StageRecorder {
                     if let Some(camera) = &f.camera
                         && let Ok(data) = rmp_serde::to_vec(camera)
                     {
-                        let _ = stmt.execute(rusqlite::params![f.frame, f.timestamp_ms, "", data]);
+                        let _ = stmt.execute(rusqlite::params![f.frame, f.timestamp_ms, &camera.camera_path, data]);
                     }
                 }
             }
@@ -3049,6 +3057,29 @@ mod tests {
         assert_eq!(detector.suppressed_cooldown, 1);
         assert!(detector.observe(0.01, false, 9, settings).is_none());
         assert_eq!(detector.streak, 0);
+    }
+
+    #[test]
+    fn anomaly_detector_default_settings_fire_after_quiet_baseline() {
+        let mut detector = AnomalyDetector::default();
+        let settings = AnomalySettings {
+            min: 0.30,
+            relative: 4.0,
+            sustained: 4,
+            cooldown_frames: 1_000,
+        };
+        for frame in 0..30 {
+            assert!(detector.observe(0.02, false, frame, settings).is_none());
+        }
+        for frame in 30..33 {
+            assert!(detector.observe(0.8, false, frame, settings).is_none());
+        }
+        assert!(detector.observe(0.8, false, 33, settings).is_some());
+        for frame in 34..38 {
+            assert!(detector.observe(0.8, false, frame, settings).is_none());
+        }
+        assert_eq!(detector.triggers_total, 1);
+        assert_eq!(detector.suppressed_cooldown, 1);
     }
 
     #[test]

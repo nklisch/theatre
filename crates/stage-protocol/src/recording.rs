@@ -9,6 +9,8 @@ pub struct CameraFrameData {
     pub fov_deg: f64,
     pub ortho_size: f64,
     pub keep_aspect: u8,
+    #[serde(default)]
+    pub camera_path: String,
 }
 
 /// Compact entity snapshot stored as MessagePack in recording frame BLOBs.

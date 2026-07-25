@@ -307,6 +307,27 @@ pub fn read_frame(db: &Connection, frame: u64) -> Result<Vec<FrameEntityData>, M
     })
 }
 
+/// Read entity data from the nearest captured frame at or before `frame`.
+pub fn read_frame_at_frame(
+    db: &Connection,
+    frame: u64,
+    tolerance: u64,
+) -> Result<Option<Vec<FrameEntityData>>, McpError> {
+    let data: Option<Vec<u8>> = db
+        .query_row(
+            "SELECT data FROM frames WHERE frame <= ?1 AND frame >= ?2 ORDER BY frame DESC LIMIT 1",
+            rusqlite::params![frame, frame.saturating_sub(tolerance)],
+            |row| row.get(0),
+        )
+        .optional()
+        .map_err(sqlite_err)?;
+    data.map(|bytes| {
+        rmp_serde::from_slice(&bytes)
+            .map_err(|e| McpError::internal_error(format!("MessagePack decode error: {e}"), None))
+    })
+    .transpose()
+}
+
 /// Read frame data by timestamp (finds nearest frame).
 pub fn read_frame_at_time(
     db: &Connection,
@@ -352,6 +373,21 @@ pub fn read_camera_frame(
             .map_err(|e| McpError::internal_error(format!("Camera data decode error: {e}"), None))
     })
     .transpose()
+}
+
+pub fn read_camera_path(
+    db: &Connection,
+    frame: u64,
+    tolerance: u64,
+) -> Result<Option<String>, McpError> {
+    if !camera_frames_table_exists(db) {
+        return Ok(None);
+    }
+    db.query_row(
+        "SELECT camera_path FROM (SELECT frame, camera_path FROM camera_frames WHERE frame = ?1 UNION ALL SELECT frame, camera_path FROM camera_frames WHERE frame < ?1 AND frame >= ?2) ORDER BY frame DESC LIMIT 1",
+        rusqlite::params![frame, frame.saturating_sub(tolerance)],
+        |row| row.get(0),
+    ).optional().map_err(sqlite_err)
 }
 
 /// Recording metadata from the recording table.

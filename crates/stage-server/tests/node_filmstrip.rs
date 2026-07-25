@@ -81,6 +81,7 @@ fn make_clip(dir: &std::path::Path, id: &str, with_camera: bool) {
                 fov_deg: 70.0,
                 ortho_size: 10.0,
                 keep_aspect: 0,
+                camera_path: "/root/Camera3D".into(),
             };
             let camera_data = rmp_serde::to_vec(&camera).unwrap();
             db.execute(

@@ -131,7 +131,9 @@ fn gaps_to_tv(
         .collect()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn compact_params(
+    kind: &str,
     at_frame: Option<u64>,
     at_time_ms: Option<u64>,
     reference_frame: Option<u64>,
@@ -141,9 +143,12 @@ fn compact_params(
     inline_image: bool,
 ) -> Value {
     let _ = inline_image; // Response shaping only; image bytes are cache-independent.
-    canonical(
-        &json!({"at_frame": at_frame, "at_time_ms": at_time_ms, "reference_frame": reference_frame, "tile_limit": tile_limit, "node": node, "crop_fraction": crop_fraction}),
-    )
+    let mut params = json!({"at_frame": at_frame, "at_time_ms": at_time_ms, "reference_frame": reference_frame, "tile_limit": tile_limit});
+    if kind == "node_filmstrip" {
+        params["node"] = json!(node);
+        params["crop_fraction"] = json!(crop_fraction);
+    }
+    canonical(&params)
 }
 fn canonical(value: &Value) -> Value {
     match value {
@@ -242,6 +247,7 @@ pub async fn generate_artifact(
     );
     let fingerprint = format!("{:x}", fp.finalize());
     let params = compact_params(
+        kind.as_str(),
         at_frame,
         at_time_ms,
         reference_frame,
@@ -251,35 +257,6 @@ pub async fn generate_artifact(
         inline_image,
     );
     let key = cache_key(kind.as_str(), &params, &fingerprint);
-    // Validate an exact node path before the screenshot availability check. This
-    // keeps unknown-node diagnostics useful in headless recordings too.
-    if kind == ArtifactKind::NodeFilmstrip
-        && let Some(node) = node
-    {
-        let mut sample_paths = std::collections::BTreeSet::new();
-        let mut found = false;
-        let mut statement = session
-            .db
-            .prepare("SELECT frame FROM frames ORDER BY frame LIMIT 20")
-            .map_err(err)?;
-        let frame_ids = statement
-            .query_map([], |row| row.get::<_, u64>(0))
-            .map_err(err)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(err)?;
-        for frame in frame_ids {
-            for entity in clip_analysis::read_frame(&session.db, frame)? {
-                found |= entity.path == node;
-                sample_paths.insert(entity.path);
-            }
-        }
-        if !found {
-            return Err(degraded(
-                "node_not_found",
-                json!({"node":node,"sample_paths":sample_paths.into_iter().take(20).collect::<Vec<_>>() }),
-            ));
-        }
-    }
     if clip_analysis::artifacts_table_exists(&session.db)
         && let Ok((png, text)) = session.db.query_row(
             "SELECT png, manifest_json FROM artifacts WHERE cache_key = ?1",
@@ -514,6 +491,19 @@ pub async fn generate_artifact(
             let mut statuses = Vec::new();
             let mut projection_counts = serde_json::Map::new();
             let mut sample_paths = std::collections::BTreeSet::new();
+            let mut camera_paths = std::collections::BTreeSet::new();
+            let mut anchor_camera_path = None;
+            let camera_table_has_rows = clip_analysis::camera_frames_table_exists(&session.db)
+                && session
+                    .db
+                    .query_row("SELECT 1 FROM camera_frames LIMIT 1", [], |_| Ok(()))
+                    .is_ok();
+            if !camera_table_has_rows {
+                return Err(degraded(
+                    "no_camera_data",
+                    json!({"message":"No camera pose data was captured; re-record the clip with camera capture enabled"}),
+                ));
+            }
             let mut count_status = |status: &str| {
                 let entry = projection_counts
                     .entry(status.to_owned())
@@ -521,7 +511,8 @@ pub async fn generate_artifact(
                 *entry = json!(entry.as_u64().unwrap_or(0) + 1);
             };
             for (index, frame) in seq.frames().iter().enumerate() {
-                let entities = clip_analysis::read_frame(&session.db, *frame.id())?;
+                let entities = clip_analysis::read_frame_at_frame(&session.db, *frame.id(), 2)?
+                    .unwrap_or_default();
                 sample_paths.extend(entities.iter().map(|entity| entity.path.clone()));
                 let entity = entities.into_iter().find(|e| e.path == node);
                 let Some(entity) = entity else {
@@ -531,11 +522,18 @@ pub async fn generate_artifact(
                 };
                 let Some(camera) = clip_analysis::read_camera_frame(&session.db, *frame.id(), 2)?
                 else {
-                    return Err(degraded(
-                        "no_camera_data",
-                        json!({"message":"No camera pose data was captured; re-record the clip with camera capture enabled"}),
-                    ));
+                    count_status("camera_absent");
+                    statuses.push(json!({"frame":frame.id(),"status":"camera_absent"}));
+                    continue;
                 };
+                if let Some(path) = clip_analysis::read_camera_path(&session.db, *frame.id(), 2)? {
+                    if !path.is_empty() {
+                        camera_paths.insert(path.clone());
+                    }
+                    if *frame.id() == *seq.frames()[anchor_idx].id() {
+                        anchor_camera_path = Some(path);
+                    }
+                }
                 if camera.position.len() != 3
                     || camera.quaternion.len() != 4
                     || entity.position.len() != 3
@@ -550,10 +548,15 @@ pub async fn generate_artifact(
                         camera.quaternion[2],
                         camera.quaternion[3],
                     ],
-                    projection: if camera.projection == 1 {
-                        stage_core::projection::CameraProjection::Orthogonal
-                    } else {
-                        stage_core::projection::CameraProjection::Perspective
+                    projection: match camera.projection {
+                        0 => stage_core::projection::CameraProjection::Perspective,
+                        1 => stage_core::projection::CameraProjection::Orthogonal,
+                        projection => {
+                            return Err(degraded(
+                                "unsupported_projection",
+                                json!({"projection": projection}),
+                            ));
+                        }
                     },
                     fov_deg: camera.fov_deg,
                     ortho_size: camera.ortho_size,
@@ -597,12 +600,33 @@ pub async fn generate_artifact(
                 });
                 statuses.push(json!({"frame":frame.id(),"status":status,"px":px,"py":py}));
             }
-            if regions.is_empty() {
+            if regions.is_empty() && !sample_paths.contains(node) {
                 return Err(degraded(
                     "node_not_found",
-                    json!({"node":node,"sample_paths":sample_paths.into_iter().take(20).collect::<Vec<_>>()}),
+                    json!({"node":node,"sample_paths":sample_paths.into_iter().take(8).collect::<Vec<_>>()}),
                 ));
             }
+            let limit = usize::from(tile_limit.unwrap_or(8));
+            let selected_indices: std::collections::BTreeSet<usize> = if seq.frames().len() <= limit
+            {
+                (0..seq.frames().len()).collect()
+            } else {
+                (0..limit)
+                    .map(|i| i * (seq.frames().len() - 1) / (limit - 1).max(1))
+                    .collect()
+            };
+            let statuses_omitted = statuses.len().saturating_sub(selected_indices.len());
+            statuses.retain(|status| {
+                status
+                    .get("frame")
+                    .and_then(Value::as_u64)
+                    .is_some_and(|id| {
+                        seq.frames()
+                            .iter()
+                            .enumerate()
+                            .any(|(i, f)| *f.id() == id && selected_indices.contains(&i))
+                    })
+            });
             let params = TrackedFilmstripParameters::new(
                 regions,
                 seq.frames()[anchor_idx].timestamp(),
@@ -621,7 +645,7 @@ pub async fn generate_artifact(
             let a = vision(generate_tracked_region_filmstrip("artifact", &seq, params))?;
             (
                 a.image().bytes().to_vec(),
-                json!({"node":node,"crop_fraction":fraction,"tiles":statuses}),
+                json!({"node":node,"crop_fraction":fraction,"tiles":statuses,"statuses_omitted":statuses_omitted,"camera_path":anchor_camera_path,"camera_switches":camera_paths.len().saturating_sub(1)}),
                 json!({"projection_counts":projection_counts}),
             )
         }
@@ -666,7 +690,12 @@ pub async fn generate_artifact(
         if let Some(counts) = extra.get("projection_counts") {
             root.insert("projection".into(), json!({"counts": counts}));
         }
-        root.insert("extra".into(), extra);
+        if !extra
+            .as_object()
+            .is_some_and(|object| object.len() == 1 && object.contains_key("projection_counts"))
+        {
+            root.insert("extra".into(), extra);
+        }
     }
     root.extend(manifest.as_object_mut().cloned().unwrap_or_default());
     root.insert("dimension_mismatch_dropped".into(), json!(mismatch));
@@ -749,8 +778,17 @@ mod tests {
     #[test]
     fn inline_image_does_not_change_cache_params() {
         assert_eq!(
-            compact_params(Some(4), None, None, Some(8), None, None, true),
-            compact_params(Some(4), None, None, Some(8), None, None, false)
+            compact_params("storyboard", Some(4), None, None, Some(8), None, None, true),
+            compact_params(
+                "storyboard",
+                Some(4),
+                None,
+                None,
+                Some(8),
+                None,
+                None,
+                false
+            )
         );
     }
 
