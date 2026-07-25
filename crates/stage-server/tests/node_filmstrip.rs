@@ -48,19 +48,24 @@ fn make_clip(dir: &std::path::Path, id: &str, with_camera: bool) {
         [id],
     )
     .unwrap();
-    let pose = stage_core::projection::CameraPose {
-        position: [0.0, 0.0, 5.0],
-        quaternion: [0.0, 0.0, 0.0, 1.0],
-        projection: stage_core::projection::CameraProjection::Perspective,
-        fov_deg: 70.0,
-        ortho_size: 10.0,
-        keep_aspect: stage_core::projection::KeepAspect::KeepHeight,
-    };
-    for (n, x) in [(1u64, -0.75), (2, -0.25), (3, 0.25), (4, 0.75)] {
+    // Fixture geometry, computed INDEPENDENTLY of the production projection
+    // code (this is what lets the test catch projection regressions):
+    //   camera at (0,0,5), identity rotation (facing -Z), fov 70°,
+    //   keep_aspect = KEEP_HEIGHT, image 160x100.
+    //   depth = 5; tan(35°) = 0.7002075; half_h = 3.5010377;
+    //   half_w = half_h * 1.6 = 5.6016603; nx = x / half_w;
+    //   px = (nx + 1) * 80; py = 50.
+    //   x=-0.75 -> px=69.29, x=-0.25 -> 76.43, x=0.25 -> 83.57, x=0.75 -> 90.71
+    const EXPECTED_PX: [f64; 4] = [69.288909, 76.429637, 83.570363, 90.711091];
+    const EXPECTED_PY: f64 = 50.0;
+    for (i, (n, x)) in [(1u64, -0.75), (2, -0.25), (3, 0.25), (4, 0.75)]
+        .iter()
+        .enumerate()
+    {
         let entity = FrameEntityData {
             path: "Enemies/Patrol".into(),
             class: "CharacterBody3D".into(),
-            position: vec![x, 0.0, 0.0],
+            position: vec![*x, 0.0, 0.0],
             rotation_deg: vec![0.0; 3],
             velocity: vec![1.0, 0.0, 0.0],
             groups: vec![],
@@ -80,7 +85,8 @@ fn make_clip(dir: &std::path::Path, id: &str, with_camera: bool) {
                 projection: 0,
                 fov_deg: 70.0,
                 ortho_size: 10.0,
-                keep_aspect: 0,
+                // Godot 4 Camera3D.KeepAspect: KEEP_WIDTH = 0, KEEP_HEIGHT = 1.
+                keep_aspect: 1,
                 camera_path: "/root/Camera3D".into(),
             };
             let camera_data = rmp_serde::to_vec(&camera).unwrap();
@@ -90,13 +96,7 @@ fn make_clip(dir: &std::path::Path, id: &str, with_camera: bool) {
             )
             .unwrap();
         }
-        let projected =
-            stage_core::projection::project_world_to_screen(pose, [x, 0.0, 0.0], 160.0, 100.0);
-        let (px, py) = match projected {
-            stage_core::projection::ScreenProjection::OnScreen { px, py } => (px, py),
-            _ => panic!("fixture point should be on screen"),
-        };
-        let jpeg = jpeg_with_dot(160, 100, px, py);
+        let jpeg = jpeg_with_dot(160, 100, EXPECTED_PX[i], EXPECTED_PY);
         db.execute(
             "INSERT INTO screenshots VALUES (?1, ?2, ?3, 160, 100)",
             rusqlite::params![n, 1000 + (n - 1) * 20, jpeg],
@@ -151,6 +151,22 @@ async fn node_filmstrip_fixture_projects_deterministically_and_caches() {
     );
     assert!(first.manifest["tiles"].is_array());
     assert_eq!(first.cache, "stored");
+    // Anti-circularity: the crop centers in the manifest must land on the
+    // independently hand-computed screen positions from make_clip (see the
+    // geometry comment there), not on whatever the production projection
+    // happens to compute.
+    const EXPECTED_PX: [f64; 4] = [69.288909, 76.429637, 83.570363, 90.711091];
+    let tiles = first.manifest["tiles"].as_array().unwrap();
+    assert_eq!(tiles.len(), 4);
+    for (tile, expected) in tiles.iter().zip(EXPECTED_PX) {
+        let px = tile["px"].as_f64().unwrap();
+        let py = tile["py"].as_f64().unwrap();
+        assert!(
+            (px - expected).abs() < 1.0,
+            "tile px {px} deviates from analytic expectation {expected}"
+        );
+        assert!((py - 50.0).abs() < 1.0, "tile py {py} deviates from 50");
+    }
     let second = artifact(&state, "clip_track", "Enemies/Patrol")
         .await
         .unwrap();
