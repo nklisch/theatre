@@ -4,7 +4,7 @@ Version: 1.0-draft
 Protocol: MCP (Model Context Protocol)
 Transport: stdio (JSON-RPC 2.0)
 
-This document defines the complete MCP tool surface for Stage. These 9 tools are the stable API contract between Stage and any MCP-compatible AI agent. The tool surface is fixed — game-specific customization happens at the data layer (what properties are tracked, what nodes are grouped), not by adding or modifying tools.
+This document defines the current MCP tool surface for Stage — the contract between Stage and any MCP-compatible AI agent. The tool surface is project-owned and changes in place as the design improves (see the change-in-place principle in `docs/PRINCIPLES.md`); agents calling these tools adapt on each session, so no stability guarantees or versioned schemas are maintained here. Game-specific customization happens at the data layer (what properties are tracked, what nodes are grouped) rather than through per-game tool variants.
 
 ---
 

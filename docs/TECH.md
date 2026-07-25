@@ -495,14 +495,14 @@ Desirable for debugging platform-specific issues (e.g., "this only clips on the 
 
 ### Extensibility (Data Layer)
 
-The 9 MCP tools are the stable API surface. Game developers extend Stage at the **data layer**, not the tool layer:
+Game developers extend Stage at the **data layer**, not the tool layer:
 
 - Register custom properties to track per node class or group
 - Define custom state extractors (GDScript callables returning data)
 - Configure custom groups and categories
 - All custom data flows through existing tools (appears in `state`, `spatial_inspect`, etc.)
 
-This keeps the agent interface stable while allowing game-specific data richness.
+This keeps the agent interface uniform while allowing game-specific data richness. The tool surface itself is project-owned and changes in place as the design improves — see the change-in-place principle in `docs/PRINCIPLES.md`.
 
 ### Plugin Marketplace Presence
 
