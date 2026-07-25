@@ -956,3 +956,62 @@ async fn journey_screenshot_api_contract() {
     )
     .await;
 }
+
+/// Journey: visual artifact contract remains honest in headless and rendered runs.
+#[tokio::test]
+#[ignore = "requires Godot binary"]
+async fn journey_visual_artifact_contract() {
+    let mut h = support::e2e_harness::E2EHarness::start_3d()
+        .await
+        .expect("Failed to start Godot 3D scene");
+    h.wait_frames(180).await;
+    let status = h.expect(1, "clips", json!({"action":"status"})).await;
+    assert!(status["capture_probe"].is_object());
+    assert!(status["screenshot_gaps"].is_object() || status["screenshot_gaps"].is_array());
+    h.expect(
+        2,
+        "clips",
+        json!({"action":"add_marker", "marker_label":"visual contract"}),
+    )
+    .await;
+    let save = h.expect(3, "clips", json!({"action":"save"})).await;
+    let clip_id = save["clip_id"]
+        .as_str()
+        .expect("save should return clip_id")
+        .to_string();
+    let screenshots = h
+        .expect(
+            4,
+            "clips",
+            json!({"action":"screenshots", "clip_id":clip_id}),
+        )
+        .await;
+    let count = screenshots["total"].as_u64().unwrap_or(0);
+    let result = h
+        .expect_result(
+            5,
+            "clips",
+            json!({"action":"visual_artifact", "artifact":"storyboard", "clip_id":clip_id}),
+        )
+        .await;
+    if count == 0 {
+        let text = result.content[0]
+            .as_text()
+            .expect("no-screenshots response must be text");
+        assert!(text.text.contains("no_screenshots"));
+    } else {
+        assert_eq!(result.content.len(), 2);
+        let manifest: serde_json::Value =
+            serde_json::from_str(&result.content[0].as_text().expect("manifest text").text)
+                .unwrap();
+        assert!(manifest["image"].is_object());
+        assert!(manifest["selected_frames"].as_array().is_some());
+        assert!(manifest["cadence"].is_object());
+        assert!(manifest["gaps"].is_array());
+        assert!(manifest["budget"].is_object());
+        let text_only = h.expect_result(6, "clips", json!({"action":"visual_artifact", "artifact":"motion_history", "clip_id":clip_id, "inline_image":false})).await;
+        assert_eq!(text_only.content.len(), 1);
+    }
+    h.expect(7, "clips", json!({"action":"delete", "clip_id":clip_id}))
+        .await;
+}

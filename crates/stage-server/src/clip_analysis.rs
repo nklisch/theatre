@@ -1551,6 +1551,53 @@ pub fn read_screenshot_gaps(db: &Connection) -> Result<Vec<ClipGap>, McpError> {
     rows.collect::<Result<Vec<_>, _>>().map_err(sqlite_err)
 }
 
+/// Read the configured screenshot cadence, with compatibility fallbacks for old clips.
+pub fn screenshot_cadence_interval(db: &Connection) -> Result<u64, McpError> {
+    let config: Option<String> = db
+        .query_row("SELECT capture_config FROM recording LIMIT 1", [], |row| {
+            row.get(0)
+        })
+        .ok();
+    let value = config
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+        .and_then(|value| {
+            let dashcam = value
+                .get("dashcam")
+                .filter(|v| v.is_object())
+                .unwrap_or(&value);
+            dashcam
+                .get("screenshot_interval_frames")
+                .and_then(serde_json::Value::as_u64)
+                .or_else(|| {
+                    dashcam
+                        .get("screenshot_interval_sec")
+                        .and_then(serde_json::Value::as_f64)
+                        .and_then(|seconds| {
+                            let ticks = db
+                                .query_row(
+                                    "SELECT physics_ticks_per_sec FROM recording LIMIT 1",
+                                    [],
+                                    |row| row.get::<_, i64>(0),
+                                )
+                                .unwrap_or(60) as f64;
+                            let frames = (seconds * ticks).round();
+                            (frames.is_finite() && frames > 0.0).then_some(frames as u64)
+                        })
+                })
+        });
+    if let Some(interval) = value.filter(|interval| *interval > 0) {
+        return Ok(interval);
+    }
+    let shots = list_screenshots(db)?;
+    let mut deltas: Vec<u64> = shots
+        .windows(2)
+        .map(|pair| pair[1].frame.saturating_sub(pair[0].frame))
+        .filter(|delta| *delta > 0)
+        .collect();
+    deltas.sort_unstable();
+    Ok(deltas.get(deltas.len() / 2).copied().unwrap_or(1))
+}
+
 /// Infer missing screenshot intervals for legacy clips using capture cadence.
 pub fn infer_screenshot_gaps(
     db: &Connection,

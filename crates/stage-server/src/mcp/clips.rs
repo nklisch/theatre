@@ -548,6 +548,8 @@ async fn handle_visual_artifact(
             None,
         ));
     }
+    let hard_cap = 5000;
+    let budget_limit = resolve_budget(params.token_budget, 1500, hard_cap);
     let output = clip_artifacts::generate_artifact(
         state,
         params.clip_id.as_deref(),
@@ -556,6 +558,9 @@ async fn handle_visual_artifact(
         params.at_time_ms,
         params.reference_frame,
         params.tile_limit,
+        params.inline_image,
+        budget_limit,
+        hard_cap,
     )
     .await?;
     let text = serde_json::to_string(&output.manifest).map_err(|e| {
