@@ -243,18 +243,21 @@ fn codec_error_to_daemon(e: stage_protocol::codec::CodecError) -> DaemonError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    /// Serializes env-var-mutating tests (they race under parallel test threads).
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_resolve_daemon_port_default() {
-        // Remove env var if set, then check default.
-        // SAFETY: single-threaded test context.
+        let _guard = ENV_LOCK.lock().unwrap();
         unsafe { std::env::remove_var("DIRECTOR_DAEMON_PORT") };
         assert_eq!(resolve_daemon_port(), 6550);
     }
 
     #[test]
     fn test_resolve_daemon_port_from_env() {
-        // SAFETY: single-threaded test context.
+        let _guard = ENV_LOCK.lock().unwrap();
         unsafe { std::env::set_var("DIRECTOR_DAEMON_PORT", "7777") };
         assert_eq!(resolve_daemon_port(), 7777);
         unsafe { std::env::remove_var("DIRECTOR_DAEMON_PORT") };

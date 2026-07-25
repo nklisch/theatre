@@ -39,6 +39,22 @@ impl GodotProcess {
             .canonicalize()
             .map_err(|e| anyhow::anyhow!("Cannot find godot-project dir: {e}"))?;
 
+        // A fresh checkout has no .godot/imported state: the runtime loads
+        // GDExtensions from .godot/extension_list.cfg, which only an editor
+        // pass generates. Bootstrap it once so journeys can load the addon.
+        if !project_dir.join(".godot/extension_list.cfg").exists() {
+            let status = Command::new(&godot_bin)
+                .args(["--headless", "--editor", "--quit", "--path"])
+                .arg(&project_dir)
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()?;
+            anyhow::ensure!(
+                status.success(),
+                "editor bootstrap pass failed (needed to generate .godot/extension_list.cfg)"
+            );
+        }
+
         let stderr_log = std::env::temp_dir().join(format!("stage_godot_{port}.stderr"));
 
         let stderr_file = File::create(&stderr_log)?;

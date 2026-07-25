@@ -107,7 +107,7 @@ impl SourcePaths {
     /// Path to a built binary in the repo's target dir.
     pub fn built_binary(&self, name: &str, release: bool) -> PathBuf {
         let mode = if release { "release" } else { "debug" };
-        self.repo_root.join("target").join(mode).join(name)
+        workspace_target_dir(&self.repo_root).join(mode).join(name)
     }
 
     /// Path to the built GDExtension in the repo's target dir.
@@ -167,6 +167,26 @@ pub fn gdext_filename() -> &'static str {
 }
 
 /// Platform-specific subdirectory name under addons/stage/bin/.
+/// Resolve the workspace target directory, honoring a redirected
+/// CARGO_TARGET_DIR (env var or cargo config `build.target-dir`, discovered
+/// via `cargo metadata`). Falls back to `<repo>/target`.
+pub fn workspace_target_dir(repo_root: &Path) -> PathBuf {
+    if let Ok(dir) = std::env::var("CARGO_TARGET_DIR") {
+        return PathBuf::from(dir);
+    }
+    if let Ok(output) = std::process::Command::new("cargo")
+        .args(["metadata", "--no-deps", "--format-version", "1"])
+        .current_dir(repo_root)
+        .output()
+        && output.status.success()
+        && let Ok(json) = serde_json::from_slice::<serde_json::Value>(&output.stdout)
+        && let Some(dir) = json.get("target_directory").and_then(|v| v.as_str())
+    {
+        return PathBuf::from(dir);
+    }
+    repo_root.join("target")
+}
+
 pub fn platform_dir() -> &'static str {
     #[cfg(target_os = "linux")]
     {

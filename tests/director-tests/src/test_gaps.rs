@@ -32,6 +32,19 @@ fn signal_connect_with_binds() {
     )
     .unwrap();
 
+    // Godot 4.7 validates bound callables at connect time — the target must
+    // actually have the method.
+    f.run(
+        "node_set_script",
+        json!({
+            "scene_path": &scene,
+            "node_path": "H",
+            "script_path": "fixtures/signal_target.gd",
+        }),
+    )
+    .unwrap()
+    .unwrap_data();
+
     let data = f
         .run(
             "signal_connect",
@@ -48,7 +61,6 @@ fn signal_connect_with_binds() {
         .unwrap_data();
 
     assert_eq!(data["signal_name"], "pressed");
-
     // Verify binds appear in signal_list
     let list = f
         .run("signal_list", json!({"scene_path": &scene}))

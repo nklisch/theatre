@@ -25,7 +25,7 @@ impl CliBackend {
 impl LiveBackend for CliBackend {
     async fn stage(&self, tool: &str, params: Value) -> anyhow::Result<ToolResult> {
         // Find the stage binary in the workspace target directory.
-        let bin = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/debug/stage");
+        let bin = super::workspace_binary("stage");
         let params_str = params.to_string();
         let port = self.godot.port().to_string();
 
@@ -65,7 +65,7 @@ impl LiveBackend for CliBackend {
     }
 
     async fn director(&self, operation: &str, params: Value) -> anyhow::Result<ToolResult> {
-        let bin = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/debug/director");
+        let bin = super::workspace_binary("director");
 
         let mut params = params;
         if let Value::Object(ref mut map) = params {

@@ -2,8 +2,13 @@ use std::path::{Path, PathBuf};
 
 /// Resolve the Godot binary path.
 ///
-/// Priority: `GODOT_PATH` env var → `which godot`.
+/// Priority: `GODOT_BIN` env var → `GODOT_PATH` env var → `which godot`.
+/// (`GODOT_BIN` is the workspace convention used by the E2E harnesses;
+/// `GODOT_PATH` is kept as an alias.)
 pub fn resolve_godot_bin() -> Result<PathBuf, ResolveError> {
+    if let Ok(path) = std::env::var("GODOT_BIN") {
+        return Ok(PathBuf::from(path));
+    }
     if let Ok(path) = std::env::var("GODOT_PATH") {
         return Ok(PathBuf::from(path));
     }
@@ -34,7 +39,7 @@ pub fn resolve_scene_path(project_path: &Path, scene_path: &str) -> Result<PathB
 
 #[derive(Debug, thiserror::Error)]
 pub enum ResolveError {
-    #[error("Godot binary not found. Set GODOT_PATH or add `godot` to PATH")]
+    #[error("Godot binary not found. Set GODOT_BIN or add `godot` to PATH")]
     GodotNotFound,
 
     #[error("project_path '{0}' does not contain a project.godot file")]
@@ -53,15 +58,17 @@ mod tests {
     fn resolve_godot_bin_uses_env_var() {
         // SAFETY: single-threaded test environment
         unsafe {
+            std::env::set_var("GODOT_BIN", "/usr/bin/godot-fake-bin");
             std::env::set_var("GODOT_PATH", "/usr/bin/godot-fake");
         }
         let result = resolve_godot_bin();
         // SAFETY: single-threaded test environment
         unsafe {
+            std::env::remove_var("GODOT_BIN");
             std::env::remove_var("GODOT_PATH");
         }
-        // Should return whatever was set, no existence check
-        assert_eq!(result.unwrap(), PathBuf::from("/usr/bin/godot-fake"));
+        // GODOT_BIN wins; no existence check on env-provided paths
+        assert_eq!(result.unwrap(), PathBuf::from("/usr/bin/godot-fake-bin"));
     }
 
     #[test]

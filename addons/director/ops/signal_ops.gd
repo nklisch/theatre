@@ -78,7 +78,13 @@ static func op_signal_connect(params: Dictionary) -> Dictionary:
 	if raw_binds != null and raw_binds is Array and not raw_binds.is_empty():
 		callable = callable.bindv(raw_binds)
 
-	source.connect(signal_name, callable, flags)
+	var connect_err := source.connect(signal_name, callable, flags)
+	if connect_err != OK:
+		root.free()
+		return OpsUtil._error(
+			"Failed to connect '%s' (error %d). Godot 4.7+ validates bound callables at connect time — does '%s' exist on the target?" % [signal_name, connect_err, method_name],
+			"signal_connect",
+			{"source_path": source_path, "signal_name": signal_name, "method_name": method_name})
 
 	var save_result = NodeOps._repack_and_save(root, full_path)
 	root.free()
@@ -216,6 +222,7 @@ static func op_signal_list(params: Dictionary) -> Dictionary:
 			"target_path": tgt_path,
 			"method_name": meth_name,
 			"flags": conn_flags,
+			"binds": state.get_connection_binds(i),
 		})
 
 	return {"success": true, "data": {"connections": connections}}

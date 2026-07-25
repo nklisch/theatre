@@ -81,8 +81,7 @@ fn cli_rejects_missing_project_path() {
 #[test]
 #[ignore = "requires Godot binary"]
 fn cli_rejects_invalid_json() {
-    let director_bin = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../target/debug/director")
+    let director_bin = crate::harness::workspace_binary("director")
         .canonicalize()
         .expect("director binary must be built");
 
@@ -92,9 +91,11 @@ fn cli_rejects_invalid_json() {
         .unwrap();
 
     assert!(!output.status.success());
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    // The CLI emits structured JSON errors on stdout (agents parse stdout);
+    // stderr is reserved for diagnostics.
+    let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stderr.contains("Invalid JSON"),
-        "stderr should mention invalid JSON: {stderr}"
+        stdout.contains("Invalid JSON"),
+        "stdout should mention invalid JSON: {stdout}"
     );
 }

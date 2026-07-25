@@ -120,6 +120,11 @@ static func _add_shader_node(shader: VisualShader, node_def: Dictionary) -> Dict
 			"visual_shader_create", {"node_id": node_id, "type": node_type})
 
 	var vs_type: int = SHADER_FUNCTIONS[shader_function]
+	if shader.get_node_list(vs_type).has(node_id):
+		return OpsUtil._error(
+			"duplicate node_id " + str(node_id) + " in shader_function '" + shader_function + "'",
+			"visual_shader_create",
+			{"node_id": node_id, "shader_function": shader_function})
 	var node: VisualShaderNode = ClassDB.instantiate(node_type)
 
 	# Set properties if provided
