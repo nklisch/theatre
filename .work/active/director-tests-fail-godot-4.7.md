@@ -39,3 +39,38 @@ smallest coherent boundary so the full director test layer passes on this
 machine with Godot 4.7.1 — or, if genuinely environmental, document the exact
 remediation. Includes the target/-dir hardcoding and extension_list bootstrap
 papercuts where they block the suite.
+
+## Diagnosis & fixes (2026-07-25)
+
+Five root causes, all fixed in a258f91:
+
+1. **Stale cargo fingerprints across worktrees** — a test binary built in a
+   throwaway worktree (/tmp/theatre-base) was reused by the main checkout
+   (shared CARGO_TARGET_DIR), baking a deleted CARGO_MANIFEST_DIR into
+   env!() paths. Cleared via cargo clean; noted as environment hazard.
+2. **GODOT_BIN vs GODOT_PATH mismatch** — director resolved Godot only via
+   GODOT_PATH/PATH; harnesses set GODOT_BIN. resolve.rs now tries
+   GODOT_BIN → GODOT_PATH → which godot.
+3. **Godot 4.7 engine behavior changes** — (a) connect() now validates bound
+   callables at connect time (ERR 31 if method missing); signal_ops ignored
+   the return code and the test targeted a nonexistent method. Op now checks
+   the return; test attaches fixtures/signal_target.gd. (b) VisualShader
+   add_node with duplicate id now errors + no-ops; shader_ops rejects
+   duplicates per shader function. (c) op_signal_list never emitted binds;
+   added.
+4. **Stale test assertion** — CLI emits structured JSON errors on stdout (by
+   design, b4f82a6); test asserted stderr. Fixed to stdout.
+5. **Env-var test races** — editor.rs/daemon.rs port tests raced under
+   parallel threads; serialized behind per-module mutexes.
+
+Papercuts fixed: workspace target dir now resolved via CARGO_TARGET_DIR env
+→ cargo metadata → target/ fallback in theatre-cli paths.rs and all test
+harnesses (suite passes with no target symlink — verified); E2E harness
+bootstraps .godot/extension_list.cfg on fresh checkouts.
+
+Verified: director-tests 193/193, live-tests 12/12, stage-server e2e 7/7,
+workspace non-ignored green. Note: parallel suite execution (multiple Godot
+instances) causes timing flakes in live-tests physics journeys — run suites
+sequentially.
+
+Pending: cross-model review pass before closing.
