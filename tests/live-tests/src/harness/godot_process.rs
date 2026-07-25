@@ -6,12 +6,19 @@ use std::net::TcpListener;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use tokio::net::TcpStream;
+use tokio::sync::{Semaphore, SemaphorePermit};
 use tokio::time::{Duration, sleep};
+
+/// Physics journeys assert on wall-clock movement, and gamescope instances
+/// cannot share one GPU (vkCreateDevice fails for the second instance), so
+/// Godot processes are fully serialized.
+static GODOT_PROCESS_SLOTS: Semaphore = Semaphore::const_new(1);
 
 pub struct LiveGodotProcess {
     child: Child,
     port: u16,
     stderr_log: PathBuf,
+    _slot: SemaphorePermit<'static>,
 }
 
 impl LiveGodotProcess {
@@ -21,6 +28,7 @@ impl LiveGodotProcess {
     /// Waits up to LIVE_TIMEOUT_SECS seconds (default 30) for the TCP listener.
     /// Captures stderr to a temp file for debugging on failure.
     pub async fn start(scene: &str) -> anyhow::Result<Self> {
+        let slot = GODOT_PROCESS_SLOTS.acquire().await?;
         // Ephemeral port allocation: bind to :0, get the assigned port, close.
         let port = {
             let listener = TcpListener::bind("127.0.0.1:0")?;
@@ -39,8 +47,22 @@ impl LiveGodotProcess {
 
         let stderr_file = File::create(&stderr_log)?;
 
-        // NOTE: No --headless flag — requires a display for screenshot capture
-        let child = Command::new(&godot_bin)
+        // NOTE: No --headless flag — screenshot capture needs real rendering.
+        // Host compositors throttle occluded windows to ~1fps, which starves
+        // capture and makes journeys timing-flaky. Set THEATRE_LIVE_WRAPPER
+        // to run Godot inside a nested compositor that always presents —
+        // e.g. `gamescope --backend headless -W 1280 -H 720 --` (requires a
+        // gamescope version that initializes on this host's GPU).
+        let wrapper = std::env::var("THEATRE_LIVE_WRAPPER").ok();
+        let mut command = if let Some(wrapper) = wrapper {
+            let mut parts = wrapper.split_whitespace();
+            let mut c = Command::new(parts.next().expect("non-empty wrapper"));
+            c.args(parts).arg(&godot_bin);
+            c
+        } else {
+            Command::new(&godot_bin)
+        };
+        let child = command
             .args(["--fixed-fps", "60", "--path"])
             .arg(&project_dir)
             .arg(scene)
@@ -64,6 +86,7 @@ impl LiveGodotProcess {
             child,
             port,
             stderr_log,
+            _slot: slot,
         };
 
         // Wait for addon TCP listener to become connectable.

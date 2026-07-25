@@ -914,6 +914,7 @@ dependencies = [
  "stage-protocol",
  "stage-server",
  "tokio",
+ "which",
 ]
 
 [[package]]

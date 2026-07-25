@@ -970,6 +970,17 @@ async fn journey_visual_anomaly_detection() {
         .as_object()
         .expect("anomaly status block");
     assert!(anomaly.contains_key("triggers_total"));
+    // Journeys share the clip storage dir — scope clip assertions to clips
+    // created during this journey.
+    let before = h.expect(1, "clips", json!({"action":"list"})).await;
+    let before_ids: Vec<String> = before["clips"]
+        .as_array()
+        .map(|cs| {
+            cs.iter()
+                .filter_map(|c| c["clip_id"].as_str().map(str::to_owned))
+                .collect()
+        })
+        .unwrap_or_default();
     h.wait_frames(120).await;
     let quiet = h.expect(2, "clips", json!({"action":"status"})).await;
     assert_eq!(quiet["anomaly"]["triggers_total"], json!(0));
@@ -1032,14 +1043,38 @@ async fn journey_visual_anomaly_detection() {
                 .await;
         }
     } else {
-        assert!(!after["anomaly"]["active"].as_bool().unwrap_or(true));
-        assert!(!after["anomaly"]["reason"].as_str().unwrap_or("").is_empty());
+        // Headless: no readbacks, so nothing is ever analyzed — the honest
+        // signal is frames_analyzed == 0 with no triggers, not active=false
+        // (the detector *could* run; there is simply no input).
+        assert_eq!(after["anomaly"]["frames_analyzed"].as_u64(), Some(0));
+        assert_eq!(after["anomaly"]["triggers_total"].as_u64(), Some(0));
         let list = h.expect(5, "clips", json!({"action":"list"})).await;
-        assert!(
-            list["clips"]
-                .as_array()
-                .is_some_and(|cs| cs.iter().all(|c| c["dashcam"] != json!(true)))
-        );
+        // Journeys run concurrently and share the clip storage dir — the
+        // precise claim is that the anomaly detector created no clips, i.e.
+        // no new clip carries a visual_anomaly marker.
+        if let Some(cs) = list["clips"].as_array() {
+            for c in cs {
+                let Some(id) = c["clip_id"].as_str() else {
+                    continue;
+                };
+                if before_ids.iter().any(|b| b == id) {
+                    continue;
+                }
+                let markers = h
+                    .expect(6, "clips", json!({"action":"markers","clip_id":id}))
+                    .await;
+                assert!(
+                    !markers["markers"].as_array().is_some_and(|ms| {
+                        ms.iter().any(|m| {
+                            m["label"]
+                                .as_str()
+                                .is_some_and(|l| l.contains("visual_anomaly:"))
+                        })
+                    }),
+                    "headless run must not create anomaly clips, but {id} has a visual_anomaly marker"
+                );
+            }
+        }
     }
 }
 

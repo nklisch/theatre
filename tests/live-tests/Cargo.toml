@@ -19,3 +19,4 @@ tokio = { version = "1", features = ["full"] }
 stage-server = { path = "../../crates/stage-server" }
 stage-protocol = { path = "../../crates/stage-protocol" }
 rmcp = { version = "0.16", features = ["server"] }
+which = "7"
