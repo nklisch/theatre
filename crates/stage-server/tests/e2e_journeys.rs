@@ -957,6 +957,92 @@ async fn journey_screenshot_api_contract() {
     .await;
 }
 
+/// Journey: visual anomaly detection is conservative by default and honest about rendering.
+#[tokio::test]
+#[ignore = "requires Godot binary"]
+async fn journey_visual_anomaly_detection() {
+    let mut h = support::e2e_harness::E2EHarness::start_3d()
+        .await
+        .expect("Failed to start Godot 3D scene");
+
+    let initial = h.expect(1, "clips", json!({"action":"status"})).await;
+    let anomaly = initial["anomaly"]
+        .as_object()
+        .expect("anomaly status block");
+    assert!(anomaly.contains_key("triggers_total"));
+    h.wait_frames(120).await;
+    let quiet = h.expect(2, "clips", json!({"action":"status"})).await;
+    assert_eq!(quiet["anomaly"]["triggers_total"], json!(0));
+    assert!(
+        quiet["capture_probe"]["analysis_ms_ema"]
+            .as_f64()
+            .unwrap_or(-1.0)
+            >= 0.0
+    );
+
+    h.expect(
+        3,
+        "clips",
+        json!({
+            "action":"config",
+            "config": {
+                "anomaly_min_proportion":0.0,
+                "anomaly_relative_factor":1.0,
+                "anomaly_sustained_frames":1,
+                "anomaly_cooldown_sec":0
+            }
+        }),
+    )
+    .await;
+    h.wait_frames(120).await;
+    let after = h.expect(4, "clips", json!({"action":"status"})).await;
+    let screenshots_available = after["screenshots_available"].as_bool().unwrap_or(false)
+        || after["screenshot_buffer_count"].as_u64().unwrap_or(0) > 0;
+    if screenshots_available {
+        assert!(after["anomaly"]["triggers_total"].as_u64().unwrap_or(0) >= 1);
+        let list = h.expect(5, "clips", json!({"action":"list"})).await;
+        let candidates = list["clips"].as_array().expect("clips array");
+        let mut found = false;
+        let mut ids = Vec::new();
+        for clip in candidates {
+            if (clip["tier"] == json!("system") || clip["dashcam"] == json!(true))
+                && let Some(id) = clip["clip_id"].as_str()
+            {
+                let markers = h
+                    .expect(6, "clips", json!({"action":"markers","clip_id":id}))
+                    .await;
+                if markers["markers"].as_array().is_some_and(|ms| {
+                    ms.iter().any(|m| {
+                        m["label"]
+                            .as_str()
+                            .is_some_and(|l| l.contains("visual_anomaly:"))
+                    })
+                }) {
+                    found = true;
+                }
+                ids.push(id.to_owned());
+            }
+        }
+        assert!(
+            found,
+            "system clip with visual_anomaly marker not found: {list}"
+        );
+        for id in ids {
+            h.expect(7, "clips", json!({"action":"delete","clip_id":id}))
+                .await;
+        }
+    } else {
+        assert!(!after["anomaly"]["active"].as_bool().unwrap_or(true));
+        assert!(!after["anomaly"]["reason"].as_str().unwrap_or("").is_empty());
+        let list = h.expect(5, "clips", json!({"action":"list"})).await;
+        assert!(
+            list["clips"]
+                .as_array()
+                .is_some_and(|cs| cs.iter().all(|c| c["dashcam"] != json!(true)))
+        );
+    }
+}
+
 /// Journey: visual artifact contract remains honest in headless and rendered runs.
 #[tokio::test]
 #[ignore = "requires Godot binary"]

@@ -45,6 +45,10 @@ name = "e2e_journeys"
 path = "tests/e2e_journeys.rs"
 
 [[test]]
+name = "node_filmstrip"
+path = "tests/node_filmstrip.rs"
+
+[[test]]
 name = "cli_binary"
 path = "tests/cli_binary.rs"
 

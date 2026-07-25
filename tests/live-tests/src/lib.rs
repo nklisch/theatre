@@ -3,6 +3,7 @@
 pub mod harness;
 
 mod test_director_stage;
+mod test_node_filmstrip;
 mod test_physics;
 mod test_screenshots;
 mod test_watch_gameplay;

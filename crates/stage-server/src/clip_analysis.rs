@@ -345,7 +345,7 @@ pub fn read_camera_frame(
         return Ok(None);
     }
     let data: Option<Vec<u8>> = db.query_row(
-        "SELECT data FROM camera_frames WHERE frame = ?1 UNION ALL SELECT data FROM camera_frames WHERE frame < ?1 AND frame >= ?2 ORDER BY frame DESC LIMIT 1",
+        "SELECT data FROM (SELECT frame, data FROM camera_frames WHERE frame = ?1 UNION ALL SELECT frame, data FROM camera_frames WHERE frame < ?1 AND frame >= ?2) ORDER BY frame DESC LIMIT 1",
         rusqlite::params![frame, frame.saturating_sub(tolerance)], |row| row.get(0)).optional().map_err(sqlite_err)?;
     data.map(|bytes| {
         rmp_serde::from_slice(&bytes)

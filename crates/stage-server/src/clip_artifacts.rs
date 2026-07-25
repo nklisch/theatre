@@ -251,6 +251,35 @@ pub async fn generate_artifact(
         inline_image,
     );
     let key = cache_key(kind.as_str(), &params, &fingerprint);
+    // Validate an exact node path before the screenshot availability check. This
+    // keeps unknown-node diagnostics useful in headless recordings too.
+    if kind == ArtifactKind::NodeFilmstrip
+        && let Some(node) = node
+    {
+        let mut sample_paths = std::collections::BTreeSet::new();
+        let mut found = false;
+        let mut statement = session
+            .db
+            .prepare("SELECT frame FROM frames ORDER BY frame LIMIT 20")
+            .map_err(err)?;
+        let frame_ids = statement
+            .query_map([], |row| row.get::<_, u64>(0))
+            .map_err(err)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(err)?;
+        for frame in frame_ids {
+            for entity in clip_analysis::read_frame(&session.db, frame)? {
+                found |= entity.path == node;
+                sample_paths.insert(entity.path);
+            }
+        }
+        if !found {
+            return Err(degraded(
+                "node_not_found",
+                json!({"node":node,"sample_paths":sample_paths.into_iter().take(20).collect::<Vec<_>>() }),
+            ));
+        }
+    }
     if clip_analysis::artifacts_table_exists(&session.db)
         && let Ok((png, text)) = session.db.query_row(
             "SELECT png, manifest_json FROM artifacts WHERE cache_key = ?1",
@@ -483,11 +512,20 @@ pub async fn generate_artifact(
             let fraction = crop_fraction.unwrap_or(0.25).clamp(0.05, 1.0);
             let mut regions = Vec::new();
             let mut statuses = Vec::new();
+            let mut projection_counts = serde_json::Map::new();
+            let mut sample_paths = std::collections::BTreeSet::new();
+            let mut count_status = |status: &str| {
+                let entry = projection_counts
+                    .entry(status.to_owned())
+                    .or_insert(json!(0));
+                *entry = json!(entry.as_u64().unwrap_or(0) + 1);
+            };
             for (index, frame) in seq.frames().iter().enumerate() {
-                let entity = clip_analysis::read_frame(&session.db, *frame.id())?
-                    .into_iter()
-                    .find(|e| e.path == node);
+                let entities = clip_analysis::read_frame(&session.db, *frame.id())?;
+                sample_paths.extend(entities.iter().map(|entity| entity.path.clone()));
+                let entity = entities.into_iter().find(|e| e.path == node);
                 let Some(entity) = entity else {
+                    count_status("node_absent");
                     statuses.push(json!({"frame":frame.id(),"status":"node_absent"}));
                     continue;
                 };
@@ -533,12 +571,15 @@ pub async fn generate_artifact(
                 );
                 let (px, py, status) = match projected {
                     stage_core::projection::ScreenProjection::OnScreen { px, py } => {
+                        count_status("on_screen");
                         (px, py, "on_screen")
                     }
                     stage_core::projection::ScreenProjection::OffScreen { px, py } => {
+                        count_status("off_screen");
                         (px, py, "off_screen")
                     }
                     stage_core::projection::ScreenProjection::BehindCamera => {
+                        count_status("behind_camera");
                         statuses.push(json!({"frame":frame.id(),"status":"behind_camera"}));
                         continue;
                     }
@@ -559,7 +600,7 @@ pub async fn generate_artifact(
             if regions.is_empty() {
                 return Err(degraded(
                     "node_not_found",
-                    json!({"node":node,"sample_paths":[]}),
+                    json!({"node":node,"sample_paths":sample_paths.into_iter().take(20).collect::<Vec<_>>()}),
                 ));
             }
             let params = TrackedFilmstripParameters::new(
@@ -581,7 +622,7 @@ pub async fn generate_artifact(
             (
                 a.image().bytes().to_vec(),
                 json!({"node":node,"crop_fraction":fraction,"tiles":statuses}),
-                json!({"projection_counts":{"tracked":statuses.len()}}),
+                json!({"projection_counts":projection_counts}),
             )
         }
         ArtifactKind::DifferenceMap => {
@@ -622,6 +663,9 @@ pub async fn generate_artifact(
     root.insert("cadence".into(),json!({"interval_frames":interval,"captured":seq.frames().len(),"dropped":gaps.iter().map(|g|g.dropped).sum::<u64>(),"coverage":{"first_frame":analyzed_first,"last_frame":analyzed_last}}));
     root.insert("gaps".into(), serde_json::to_value(&gaps).map_err(err)?);
     if !extra.is_null() {
+        if let Some(counts) = extra.get("projection_counts") {
+            root.insert("projection".into(), json!({"counts": counts}));
+        }
         root.insert("extra".into(), extra);
     }
     root.extend(manifest.as_object_mut().cloned().unwrap_or_default());

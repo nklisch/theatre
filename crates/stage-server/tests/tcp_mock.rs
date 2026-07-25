@@ -992,6 +992,57 @@ async fn test_dashcam_status() {
 }
 
 #[tokio::test]
+async fn test_dashcam_config_forwards_anomaly_keys_and_status_exposes_block() {
+    let handler: QueryHandler = Arc::new(|method, params| match method {
+        "dashcam_config" => {
+            assert_eq!(params["anomaly_min_proportion"], json!(0.0));
+            assert_eq!(params["anomaly_relative_factor"], json!(1.0));
+            assert_eq!(params["anomaly_sustained_frames"], json!(1));
+            assert_eq!(params["anomaly_cooldown_sec"], json!(0));
+            Ok(json!({"ok":true}))
+        }
+        "dashcam_status" => Ok(json!({
+            "dashcam_enabled": true,
+            "state": "buffering",
+            "anomaly": {
+                "active": true,
+                "reason": "capturing",
+                "frames_analyzed": 12,
+                "triggers_total": 1
+            },
+            "capture_probe": {"analysis_ms_ema": 0.17},
+            "config": {}
+        })),
+        _ => Err(("unknown_method".into(), method.to_string())),
+    });
+
+    let harness = TestHarness::new(handler).await;
+    let config = harness
+        .call_tool(
+            "clips",
+            json!({
+                "action": "config",
+                "config": {
+                    "anomaly_min_proportion": 0.0,
+                    "anomaly_relative_factor": 1.0,
+                    "anomaly_sustained_frames": 1,
+                    "anomaly_cooldown_sec": 0
+                }
+            }),
+        )
+        .await
+        .unwrap();
+    assert_eq!(config["result"], json!("ok"));
+
+    let status = harness
+        .call_tool("clips", json!({"action":"status"}))
+        .await
+        .unwrap();
+    assert_eq!(status["anomaly"]["triggers_total"], json!(1));
+    assert!(status["capture_probe"]["analysis_ms_ema"].as_f64().unwrap() >= 0.0);
+}
+
+#[tokio::test]
 async fn test_dashcam_status_post_capture() {
     let handler: QueryHandler = Arc::new(|method, _| match method {
         "dashcam_status" => Ok(json!({
