@@ -9,6 +9,7 @@ use tokio::sync::Mutex;
 use stage_core::budget::resolve_budget;
 
 use crate::clip_analysis;
+use crate::clip_artifacts;
 use crate::tcp::{SessionState, query_addon};
 
 use super::{finalize_response, require_param};
@@ -47,6 +48,10 @@ pub enum ClipAction {
     ScreenshotAt,
     /// List screenshot metadata in a clip.
     Screenshots,
+    /// Generate a deterministic visual artifact from clip screenshots.
+    VisualArtifact,
+    /// Forward opaque dashcam configuration to the addon.
+    Config,
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -116,6 +121,22 @@ pub struct ClipsParams {
 
     /// Frame B for diff_frames.
     pub frame_b: Option<u64>,
+
+    /// Artifact family: storyboard, motion_history, or difference_map.
+    pub artifact: Option<String>,
+    /// Reference frame for motion/difference artifacts.
+    pub reference_frame: Option<u64>,
+    /// Storyboard tile count, constrained to 3..=12.
+    pub tile_limit: Option<u8>,
+    /// Include the generated PNG as an image content block (default true).
+    #[serde(default = "default_inline_image")]
+    pub inline_image: bool,
+    /// Opaque dashcam_config JSON forwarded to the addon.
+    pub config: Option<serde_json::Value>,
+}
+
+fn default_inline_image() -> bool {
+    true
 }
 
 // ---------------------------------------------------------------------------
@@ -180,6 +201,19 @@ pub async fn handle_clips(
         ClipAction::Screenshots => {
             let s = handle_screenshots(&params, state).await?;
             Ok(text_result(s))
+        }
+        ClipAction::VisualArtifact => handle_visual_artifact(&params, state).await,
+        ClipAction::Config => {
+            let config = params.config.clone().ok_or_else(|| {
+                McpError::invalid_params("config action requires config object", None)
+            })?;
+            let applied = query_addon(state, "dashcam_config", config).await?;
+            let status = query_addon(state, "dashcam_status", json!({}))
+                .await
+                .unwrap_or(json!({}));
+            Ok(text_result(
+                json!({"result":"ok","applied":applied,"status":status}).to_string(),
+            ))
         }
     }
 }
@@ -496,6 +530,45 @@ async fn handle_screenshot_at(
         Content::text(metadata.to_string()),
         Content::image(b64, "image/jpeg"),
     ]))
+}
+
+async fn handle_visual_artifact(
+    params: &ClipsParams,
+    state: &Arc<Mutex<SessionState>>,
+) -> Result<CallToolResult, McpError> {
+    let artifact = require_param!(
+        params.artifact.as_deref(),
+        "visual_artifact requires 'artifact'"
+    );
+    if let Some(n) = params.tile_limit
+        && !(3..=12).contains(&n)
+    {
+        return Err(McpError::invalid_params(
+            "tile_limit must be between 3 and 12",
+            None,
+        ));
+    }
+    let output = clip_artifacts::generate_artifact(
+        state,
+        params.clip_id.as_deref(),
+        artifact,
+        params.at_frame,
+        params.at_time_ms,
+        params.reference_frame,
+        params.tile_limit,
+    )
+    .await?;
+    let text = serde_json::to_string(&output.manifest).map_err(|e| {
+        McpError::internal_error(format!("manifest serialization failed: {e}"), None)
+    })?;
+    let mut blocks = vec![Content::text(text)];
+    if params.inline_image {
+        blocks.push(Content::image(
+            base64::engine::general_purpose::STANDARD.encode(output.png),
+            "image/png",
+        ));
+    }
+    Ok(CallToolResult::success(blocks))
 }
 
 async fn handle_screenshots(
