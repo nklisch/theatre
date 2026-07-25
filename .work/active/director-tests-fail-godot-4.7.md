@@ -1,6 +1,13 @@
 ---
 id: director-tests-fail-godot-4.7
+kind: story
+status: active
 tags: [director, tests, environment]
+parent: null
+blocked_by: []
+related_to: []
+research_refs: []
+mock_refs: []
 created: 2026-07-25
 updated: 2026-07-25
 ---
@@ -24,3 +31,11 @@ Also two environment papercuts found the same day:
 - Godot headless runs need `.godot/extension_list.cfg`; a fresh checkout
   requires one `--headless --editor --quit` pass before E2E journeys can load
   the GDExtension.
+
+## Scope (2026-07-25)
+
+Reproduce the 12 failures, diagnose root cause (environment vs code), fix the
+smallest coherent boundary so the full director test layer passes on this
+machine with Godot 4.7.1 — or, if genuinely environmental, document the exact
+remediation. Includes the target/-dir hardcoding and extension_list bootstrap
+papercuts where they block the suite.
