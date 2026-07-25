@@ -237,30 +237,35 @@ pub(crate) async fn handle_connection(
         });
     }
 
-    // Step 5: Push project dashcam settings after the handshake ACK.
+    // Step 5: Push project dashcam settings after the handshake ACK — but
+    // only when the project's stage.toml has an explicit [dashcam] section.
+    // Pushing built-in defaults on every one-shot connection would clobber
+    // runtime config applied via clips(config).
     let dashcam_config = {
         let s = state.lock().await;
-        serde_json::json!({
-            "enabled": s.config.dashcam_enabled,
-            "capture_interval": s.config.dashcam_capture_interval,
-            "pre_window_system_sec": s.config.dashcam_pre_window_system_sec,
-            "pre_window_deliberate_sec": s.config.dashcam_pre_window_deliberate_sec,
-            "post_window_system_sec": s.config.dashcam_post_window_system_sec,
-            "post_window_deliberate_sec": s.config.dashcam_post_window_deliberate_sec,
-            "max_window_sec": s.config.dashcam_max_window_sec,
-            "min_after_sec": s.config.dashcam_min_after_sec,
-            "system_min_interval_sec": s.config.dashcam_system_min_interval_sec,
-            "byte_cap_mb": s.config.dashcam_byte_cap_mb,
-            "screenshot_enabled": true,
-            "screenshot_interval_frames": s.config.dashcam_screenshot_interval_frames,
-            "screenshot_quality": s.config.dashcam_screenshot_quality,
-            "screenshot_max_dimension": s.config.dashcam_screenshot_max_dimension,
-            "screenshot_byte_cap_mb": s.config.dashcam_screenshot_byte_cap_mb,
-            "dense_burst_enabled": s.config.dashcam_dense_burst_enabled,
-            "dense_burst_duration_sec": s.config.dashcam_dense_burst_duration_sec,
+        s.config.dashcam_explicit.then(|| {
+            serde_json::json!({
+                "enabled": s.config.dashcam_enabled,
+                "capture_interval": s.config.dashcam_capture_interval,
+                "pre_window_system_sec": s.config.dashcam_pre_window_system_sec,
+                "pre_window_deliberate_sec": s.config.dashcam_pre_window_deliberate_sec,
+                "post_window_system_sec": s.config.dashcam_post_window_system_sec,
+                "post_window_deliberate_sec": s.config.dashcam_post_window_deliberate_sec,
+                "max_window_sec": s.config.dashcam_max_window_sec,
+                "min_after_sec": s.config.dashcam_min_after_sec,
+                "system_min_interval_sec": s.config.dashcam_system_min_interval_sec,
+                "byte_cap_mb": s.config.dashcam_byte_cap_mb,
+                "screenshot_interval_frames": s.config.dashcam_screenshot_interval_frames,
+                "screenshot_quality": s.config.dashcam_screenshot_quality,
+                "screenshot_max_dimension": s.config.dashcam_screenshot_max_dimension,
+                "screenshot_byte_cap_mb": s.config.dashcam_screenshot_byte_cap_mb,
+                "dense_burst_enabled": s.config.dashcam_dense_burst_enabled,
+                "dense_burst_interval_frames": s.config.dashcam_dense_burst_interval_frames,
+                "dense_burst_duration_sec": s.config.dashcam_dense_burst_duration_sec,
+            })
         })
     };
-    {
+    if let Some(dashcam_config) = dashcam_config {
         let mut s = state.lock().await;
         if let Some(writer) = s.tcp_writer.as_mut() {
             let id = writer.next_request_id();

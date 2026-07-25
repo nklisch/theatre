@@ -95,8 +95,17 @@ pub struct SessionConfig {
     pub dashcam_screenshot_byte_cap_mb: u32,
     #[serde(default = "default_dense_burst_enabled")]
     pub dashcam_dense_burst_enabled: bool,
+    #[serde(default = "default_dense_burst_interval_frames")]
+    pub dashcam_dense_burst_interval_frames: u32,
     #[serde(default = "default_dense_burst_duration_sec")]
     pub dashcam_dense_burst_duration_sec: u32,
+
+    /// True when the project's stage.toml actually contains a `[dashcam]`
+    /// section. The post-handshake config push only happens when explicit —
+    /// otherwise every one-shot CLI connection would clobber runtime config
+    /// applied via `clips(config)` with built-in defaults.
+    #[serde(skip)]
+    pub dashcam_explicit: bool,
 }
 
 fn default_poll_interval() -> u32 {
@@ -150,8 +159,11 @@ fn default_screenshot_byte_cap_mb() -> u32 {
 fn default_dense_burst_enabled() -> bool {
     false
 }
+fn default_dense_burst_interval_frames() -> u32 {
+    2
+}
 fn default_dense_burst_duration_sec() -> u32 {
-    5
+    15
 }
 
 impl Default for SessionConfig {
@@ -179,7 +191,9 @@ impl Default for SessionConfig {
             dashcam_screenshot_max_dimension: default_screenshot_max_dimension(),
             dashcam_screenshot_byte_cap_mb: default_screenshot_byte_cap_mb(),
             dashcam_dense_burst_enabled: default_dense_burst_enabled(),
+            dashcam_dense_burst_interval_frames: default_dense_burst_interval_frames(),
             dashcam_dense_burst_duration_sec: default_dense_burst_duration_sec(),
+            dashcam_explicit: false,
         }
     }
 }
@@ -253,6 +267,9 @@ impl SessionConfig {
         }
         if let Some(v) = update.dashcam_dense_burst_enabled {
             self.dashcam_dense_burst_enabled = v;
+        }
+        if let Some(v) = update.dashcam_dense_burst_interval_frames {
+            self.dashcam_dense_burst_interval_frames = v;
         }
         if let Some(v) = update.dashcam_dense_burst_duration_sec {
             self.dashcam_dense_burst_duration_sec = v;
@@ -336,6 +353,7 @@ pub struct ConfigUpdate {
     pub dashcam_screenshot_max_dimension: Option<u32>,
     pub dashcam_screenshot_byte_cap_mb: Option<u32>,
     pub dashcam_dense_burst_enabled: Option<bool>,
+    pub dashcam_dense_burst_interval_frames: Option<u32>,
     pub dashcam_dense_burst_duration_sec: Option<u32>,
 }
 

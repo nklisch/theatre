@@ -30,6 +30,7 @@ pub struct DashcamTomlConfig {
     pub screenshot_max_dimension: Option<u32>,
     pub screenshot_byte_cap_mb: Option<u32>,
     pub dense_burst_enabled: Option<bool>,
+    pub dense_burst_interval_frames: Option<u32>,
     pub dense_burst_duration_sec: Option<u32>,
 }
 
@@ -106,6 +107,7 @@ fn toml_to_session_config(toml: &StageToml) -> SessionConfig {
         }
     }
     if let Some(ref dc) = toml.dashcam {
+        config.dashcam_explicit = true;
         if let Some(v) = dc.enabled {
             config.dashcam_enabled = v;
         }
@@ -150,6 +152,9 @@ fn toml_to_session_config(toml: &StageToml) -> SessionConfig {
         }
         if let Some(v) = dc.dense_burst_enabled {
             config.dashcam_dense_burst_enabled = v;
+        }
+        if let Some(v) = dc.dense_burst_interval_frames {
+            config.dashcam_dense_burst_interval_frames = v;
         }
         if let Some(v) = dc.dense_burst_duration_sec {
             config.dashcam_dense_burst_duration_sec = v;
