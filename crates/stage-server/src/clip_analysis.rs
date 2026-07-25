@@ -2,12 +2,12 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use rmcp::model::ErrorData as McpError;
-use rusqlite::{Connection, OpenFlags};
+use rusqlite::{Connection, OpenFlags, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tokio::sync::Mutex;
 
-use stage_protocol::recording::FrameEntityData;
+use stage_protocol::recording::{CameraFrameData, FrameEntityData};
 
 use crate::tcp::{SessionState, query_addon};
 
@@ -322,6 +322,36 @@ pub fn read_frame_at_time(
     let entities = rmp_serde::from_slice(&data)
         .map_err(|e| McpError::internal_error(format!("MessagePack decode error: {e}"), None))?;
     Ok((frame, entities))
+}
+
+/// Whether this recording was produced with the camera pose table.
+pub fn camera_frames_table_exists(db: &Connection) -> bool {
+    db.query_row(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='camera_frames'",
+        [],
+        |_| Ok(()),
+    )
+    .is_ok()
+}
+
+/// Read the camera row at a frame, preferring an exact row and otherwise the nearest
+/// earlier row within tolerance. Older recordings intentionally return None.
+pub fn read_camera_frame(
+    db: &Connection,
+    frame: u64,
+    tolerance: u64,
+) -> Result<Option<CameraFrameData>, McpError> {
+    if !camera_frames_table_exists(db) {
+        return Ok(None);
+    }
+    let data: Option<Vec<u8>> = db.query_row(
+        "SELECT data FROM camera_frames WHERE frame = ?1 UNION ALL SELECT data FROM camera_frames WHERE frame < ?1 AND frame >= ?2 ORDER BY frame DESC LIMIT 1",
+        rusqlite::params![frame, frame.saturating_sub(tolerance)], |row| row.get(0)).optional().map_err(sqlite_err)?;
+    data.map(|bytes| {
+        rmp_serde::from_slice(&bytes)
+            .map_err(|e| McpError::internal_error(format!("Camera data decode error: {e}"), None))
+    })
+    .transpose()
 }
 
 /// Recording metadata from the recording table.

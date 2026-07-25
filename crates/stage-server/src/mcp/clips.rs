@@ -90,7 +90,7 @@ pub struct ClipsParams {
     /// End of frame range for query_range / find_event.
     pub to_frame: Option<u64>,
 
-    /// Node path for query_range.
+    /// Exact node path for query_range or node_filmstrip.
     pub node: Option<String>,
 
     /// Condition object for query_range.
@@ -122,8 +122,10 @@ pub struct ClipsParams {
     /// Frame B for diff_frames.
     pub frame_b: Option<u64>,
 
-    /// Artifact family: storyboard, motion_history, or difference_map.
+    /// Artifact family: storyboard, motion_history, difference_map, or node_filmstrip.
     pub artifact: Option<String>,
+    /// Crop size as a fraction of the viewport (default 0.25).
+    pub crop_fraction: Option<f64>,
     /// Reference frame for motion/difference artifacts.
     pub reference_frame: Option<u64>,
     /// Storyboard tile count, constrained to 3..=12.
@@ -540,6 +542,20 @@ async fn handle_visual_artifact(
         params.artifact.as_deref(),
         "visual_artifact requires 'artifact'"
     );
+    if artifact == "node_filmstrip" && params.node.as_deref().is_none_or(str::is_empty) {
+        return Err(McpError::invalid_params(
+            "node_filmstrip requires 'node'",
+            None,
+        ));
+    }
+    let crop_fraction = params.crop_fraction.unwrap_or(0.25);
+    if !crop_fraction.is_finite() {
+        return Err(McpError::invalid_params(
+            "crop_fraction must be finite",
+            None,
+        ));
+    }
+    let crop_fraction = crop_fraction.clamp(0.05, 1.0);
     if let Some(n) = params.tile_limit
         && !(3..=12).contains(&n)
     {
@@ -558,6 +574,8 @@ async fn handle_visual_artifact(
         params.at_time_ms,
         params.reference_frame,
         params.tile_limit,
+        params.node.as_deref(),
+        Some(crop_fraction),
         params.inline_image,
         budget_limit,
         hard_cap,

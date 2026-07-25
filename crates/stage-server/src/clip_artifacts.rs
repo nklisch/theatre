@@ -10,18 +10,21 @@ use temporal_vision::{
     ArtifactLabels, DeclaredGap, DifferenceMapLimits, DifferenceMapParameters, Frame,
     FrameSequence, FrequencyMode, IntegerScale, Marker, MeasurementParameters, MotionDecay,
     MotionHistoryParameters, NormalizationParameters, PixelDimensions, PixelFormat,
-    ProcessingLimits, RenderLimits, Rgb8, StoryboardParameters, StoryboardTileLimit, TimePalette,
-    Timestamp, generate_motion_history, generate_storyboard, normalize_sequence,
+    ProcessingLimits, RenderLimits, Rgb8, SignedPixelRect, StoryboardParameters,
+    StoryboardTileLimit, TimePalette, Timestamp, TrackedFilmstripParameters, TrackedRegion,
+    generate_motion_history, generate_storyboard, generate_tracked_region_filmstrip,
+    normalize_sequence,
 };
 use tokio::sync::Mutex;
 
-const TV_VERSION: &str = "1";
+const TV_VERSION: &str = "2";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ArtifactKind {
     Storyboard,
     MotionHistory,
     DifferenceMap,
+    NodeFilmstrip,
 }
 impl ArtifactKind {
     pub fn parse(s: &str) -> Result<Self, McpError> {
@@ -29,9 +32,10 @@ impl ArtifactKind {
             "storyboard" => Ok(Self::Storyboard),
             "motion_history" => Ok(Self::MotionHistory),
             "difference_map" => Ok(Self::DifferenceMap),
+            "node_filmstrip" => Ok(Self::NodeFilmstrip),
             _ => Err(McpError::invalid_params(
                 format!(
-                    "Unknown artifact '{s}'; expected storyboard, motion_history, or difference_map"
+                    "Unknown artifact '{s}'; expected storyboard, motion_history, difference_map, or node_filmstrip"
                 ),
                 None,
             )),
@@ -42,6 +46,7 @@ impl ArtifactKind {
             Self::Storyboard => "storyboard",
             Self::MotionHistory => "motion_history",
             Self::DifferenceMap => "difference_map",
+            Self::NodeFilmstrip => "node_filmstrip",
         }
     }
 }
@@ -131,11 +136,13 @@ fn compact_params(
     at_time_ms: Option<u64>,
     reference_frame: Option<u64>,
     tile_limit: Option<u8>,
+    node: Option<&str>,
+    crop_fraction: Option<f64>,
     inline_image: bool,
 ) -> Value {
     let _ = inline_image; // Response shaping only; image bytes are cache-independent.
     canonical(
-        &json!({"at_frame": at_frame, "at_time_ms": at_time_ms, "reference_frame": reference_frame, "tile_limit": tile_limit}),
+        &json!({"at_frame": at_frame, "at_time_ms": at_time_ms, "reference_frame": reference_frame, "tile_limit": tile_limit, "node": node, "crop_fraction": crop_fraction}),
     )
 }
 fn canonical(value: &Value) -> Value {
@@ -206,6 +213,8 @@ pub async fn generate_artifact(
     at_time_ms: Option<u64>,
     reference_frame: Option<u64>,
     tile_limit: Option<u8>,
+    node: Option<&str>,
+    crop_fraction: Option<f64>,
     inline_image: bool,
     token_limit: u32,
     hard_cap: u32,
@@ -237,6 +246,8 @@ pub async fn generate_artifact(
         at_time_ms,
         reference_frame,
         tile_limit,
+        node,
+        crop_fraction,
         inline_image,
     );
     let key = cache_key(kind.as_str(), &params, &fingerprint);
@@ -460,6 +471,119 @@ pub async fn generate_artifact(
                 json!({}),
             )
         }
+        ArtifactKind::NodeFilmstrip => {
+            let node = node
+                .ok_or_else(|| McpError::invalid_params("node_filmstrip requires 'node'", None))?;
+            if session.meta.scene_dimensions == 2 {
+                return Err(degraded(
+                    "unsupported_scene_2d",
+                    json!({"message":"node_filmstrip requires a 3D recording"}),
+                ));
+            }
+            let fraction = crop_fraction.unwrap_or(0.25).clamp(0.05, 1.0);
+            let mut regions = Vec::new();
+            let mut statuses = Vec::new();
+            for (index, frame) in seq.frames().iter().enumerate() {
+                let entity = clip_analysis::read_frame(&session.db, *frame.id())?
+                    .into_iter()
+                    .find(|e| e.path == node);
+                let Some(entity) = entity else {
+                    statuses.push(json!({"frame":frame.id(),"status":"node_absent"}));
+                    continue;
+                };
+                let Some(camera) = clip_analysis::read_camera_frame(&session.db, *frame.id(), 2)?
+                else {
+                    return Err(degraded(
+                        "no_camera_data",
+                        json!({"message":"No camera pose data was captured; re-record the clip with camera capture enabled"}),
+                    ));
+                };
+                if camera.position.len() != 3
+                    || camera.quaternion.len() != 4
+                    || entity.position.len() != 3
+                {
+                    continue;
+                }
+                let pose = stage_core::projection::CameraPose {
+                    position: [camera.position[0], camera.position[1], camera.position[2]],
+                    quaternion: [
+                        camera.quaternion[0],
+                        camera.quaternion[1],
+                        camera.quaternion[2],
+                        camera.quaternion[3],
+                    ],
+                    projection: if camera.projection == 1 {
+                        stage_core::projection::CameraProjection::Orthogonal
+                    } else {
+                        stage_core::projection::CameraProjection::Perspective
+                    },
+                    fov_deg: camera.fov_deg,
+                    ortho_size: camera.ortho_size,
+                    keep_aspect: if camera.keep_aspect == 1 {
+                        stage_core::projection::KeepAspect::KeepHeight
+                    } else {
+                        stage_core::projection::KeepAspect::KeepWidth
+                    },
+                };
+                let projected = stage_core::projection::project_world_to_screen(
+                    pose,
+                    [entity.position[0], entity.position[1], entity.position[2]],
+                    w as f64,
+                    h as f64,
+                );
+                let (px, py, status) = match projected {
+                    stage_core::projection::ScreenProjection::OnScreen { px, py } => {
+                        (px, py, "on_screen")
+                    }
+                    stage_core::projection::ScreenProjection::OffScreen { px, py } => {
+                        (px, py, "off_screen")
+                    }
+                    stage_core::projection::ScreenProjection::BehindCamera => {
+                        statuses.push(json!({"frame":frame.id(),"status":"behind_camera"}));
+                        continue;
+                    }
+                };
+                let rect = SignedPixelRect::from_outward_f64_bounds(
+                    px - w as f64 * fraction / 2.0,
+                    py - h as f64 * fraction / 2.0,
+                    px + w as f64 * fraction / 2.0,
+                    py + h as f64 * fraction / 2.0,
+                )
+                .map_err(|e| err(e.to_string()))?;
+                regions.push(TrackedRegion {
+                    frame_index: index,
+                    rect,
+                });
+                statuses.push(json!({"frame":frame.id(),"status":status,"px":px,"py":py}));
+            }
+            if regions.is_empty() {
+                return Err(degraded(
+                    "node_not_found",
+                    json!({"node":node,"sample_paths":[]}),
+                ));
+            }
+            let params = TrackedFilmstripParameters::new(
+                regions,
+                seq.frames()[anchor_idx].timestamp(),
+                vision(temporal_vision::FilmstripTileLimit::new(
+                    tile_limit.unwrap_or(8),
+                ))?,
+                Rgb8::new(0, 0, 0),
+                Rgb8::new(0, 0, 0),
+                IntegerScale::IDENTITY,
+                vision(temporal_vision::RegionFilmstripLabels::new(
+                    format!("TRACKING {node}"),
+                    "PER-FRAME REGION",
+                ))?,
+                temporal_vision::RegionFilmstripRenderLimits::default(),
+            );
+            let a = vision(generate_tracked_region_filmstrip("artifact", &seq, params))?;
+            (
+                a.image().bytes().to_vec(),
+                json!({"node":node,"crop_fraction":fraction,"tiles":statuses}),
+                json!({"projection_counts":{"tracked":statuses.len()}}),
+            )
+        }
         ArtifactKind::DifferenceMap => {
             let lim = DifferenceMapLimits::new(
                 NonZeroUsize::new(16 * 1024 * 1024).unwrap(),
@@ -581,8 +705,8 @@ mod tests {
     #[test]
     fn inline_image_does_not_change_cache_params() {
         assert_eq!(
-            compact_params(Some(4), None, None, Some(8), true),
-            compact_params(Some(4), None, None, Some(8), false)
+            compact_params(Some(4), None, None, Some(8), None, None, true),
+            compact_params(Some(4), None, None, Some(8), None, None, false)
         );
     }
 

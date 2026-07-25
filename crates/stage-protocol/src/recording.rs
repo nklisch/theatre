@@ -1,5 +1,16 @@
 use serde::{Deserialize, Serialize};
 
+/// Camera pose captured alongside a spatial frame.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CameraFrameData {
+    pub position: Vec<f64>,
+    pub quaternion: Vec<f64>,
+    pub projection: u8,
+    pub fov_deg: f64,
+    pub ortho_size: f64,
+    pub keep_aspect: u8,
+}
+
 /// Compact entity snapshot stored as MessagePack in recording frame BLOBs.
 /// This is the wire format agreed upon by stage-godot (writer) and
 /// stage-server (reader). Changes here require coordinated updates.

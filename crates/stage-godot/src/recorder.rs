@@ -21,6 +21,7 @@ struct CapturedFrame {
     frame: u64,
     timestamp_ms: u64,
     data: Vec<u8>, // MessagePack-encoded Vec<FrameEntityData>
+    camera: Option<stage_protocol::recording::CameraFrameData>,
 }
 
 /// A captured viewport screenshot.
@@ -1473,10 +1474,34 @@ impl StageRecorder {
             }
         };
 
+        let camera = self
+            .base()
+            .get_viewport()
+            .and_then(|viewport| viewport.get_camera_3d())
+            .map(|camera| {
+                let position = camera.get_global_position();
+                let quaternion = camera.get_global_transform().basis.get_quaternion();
+                let object = camera.clone().upcast::<godot::classes::Object>();
+                stage_protocol::recording::CameraFrameData {
+                    position: vec![position.x as f64, position.y as f64, position.z as f64],
+                    quaternion: vec![
+                        quaternion.x as f64,
+                        quaternion.y as f64,
+                        quaternion.z as f64,
+                        quaternion.w as f64,
+                    ],
+                    projection: object.get("projection").to::<i64>() as u8,
+                    fov_deg: object.get("fov").to::<f64>(),
+                    ortho_size: object.get("size").to::<f64>(),
+                    keep_aspect: object.get("keep_aspect").to::<i64>() as u8,
+                }
+            });
+
         Some(CapturedFrame {
             frame: snapshot.frame,
             timestamp_ms: snapshot.timestamp_ms,
             data,
+            camera,
         })
     }
 
@@ -1858,6 +1883,18 @@ impl StageRecorder {
             }
 
             if let Ok(mut stmt) = tx.prepare_cached(
+                "INSERT OR REPLACE INTO camera_frames (frame, timestamp_ms, camera_path, data) VALUES (?1, ?2, ?3, ?4)",
+            ) {
+                for f in &all_frames {
+                    if let Some(camera) = &f.camera
+                        && let Ok(data) = rmp_serde::to_vec(camera)
+                    {
+                        let _ = stmt.execute(rusqlite::params![f.frame, f.timestamp_ms, "", data]);
+                    }
+                }
+            }
+
+            if let Ok(mut stmt) = tx.prepare_cached(
                 "INSERT INTO markers (frame, timestamp_ms, source, label) VALUES (?1, ?2, ?3, ?4)",
             ) {
                 for m in &all_markers {
@@ -1950,6 +1987,14 @@ CREATE TABLE IF NOT EXISTS frames (
     frame INTEGER PRIMARY KEY,
     timestamp_ms INTEGER,
     data BLOB
+);
+
+CREATE TABLE IF NOT EXISTS camera_frames (
+    frame INTEGER PRIMARY KEY,
+    timestamp_ms INTEGER,
+    camera_path TEXT,
+    data BLOB,
+    FOREIGN KEY (frame) REFERENCES frames(frame)
 );
 
 CREATE TABLE IF NOT EXISTS events (
@@ -2111,7 +2156,7 @@ mod tests {
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(count, 7); // recording, frames, events, markers, screenshots, gaps, artifacts
+        assert_eq!(count, 8); // recording, frames, camera_frames, events, markers, screenshots, gaps, artifacts
     }
 
     #[test]
@@ -2418,6 +2463,7 @@ mod tests {
                 frame: i,
                 timestamp_ms: i * 16,
                 data,
+                camera: None,
             });
 
             // Evict oldest frames when byte cap exceeded

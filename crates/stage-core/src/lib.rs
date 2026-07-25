@@ -9,5 +9,6 @@ pub mod cluster;
 pub mod config;
 pub mod delta;
 pub mod index;
+pub mod projection;
 pub mod types;
 pub mod watch;
