@@ -50,20 +50,23 @@ pub fn project_world_to_screen(
         world[1] - pose.position[1],
         world[2] - pose.position[2],
     ];
-    // R^T * d, expanded from the quaternion rotation matrix.
+    // cam = B^T * d, where B's COLUMNS are the camera's world-space axes
+    // (right, up, back). The expansions below are those columns of R(q);
+    // using R's rows here computes R*d instead of B^T*d and is wrong for
+    // every non-identity rotation (identity is symmetric, so it slips tests).
     let right = [
         1.0 - 2.0 * (y * y + z * z),
-        2.0 * (x * y - z * w),
-        2.0 * (x * z + y * w),
+        2.0 * (x * y + z * w),
+        2.0 * (x * z - y * w),
     ];
     let up = [
-        2.0 * (x * y + z * w),
+        2.0 * (x * y - z * w),
         1.0 - 2.0 * (x * x + z * z),
-        2.0 * (y * z - x * w),
+        2.0 * (y * z + x * w),
     ];
     let back = [
-        2.0 * (x * z - y * w),
-        2.0 * (y * z + x * w),
+        2.0 * (x * z + y * w),
+        2.0 * (y * z - x * w),
         1.0 - 2.0 * (x * x + y * y),
     ];
     let cam = [dot(right, d), dot(up, d), dot(back, d)];
@@ -148,5 +151,77 @@ mod tests {
             project_world_to_screen(c, [0., 0., -1.], 100., 100.),
             ScreenProjection::OnScreen { px: 50., py: 50. }
         );
+    }
+
+    /// Quaternion for a yaw of `deg` about +Y (Godot convention).
+    fn yaw(deg: f64) -> [f64; 4] {
+        let h = deg.to_radians() / 2.0;
+        [0.0, h.sin(), 0.0, h.cos()]
+    }
+
+    fn assert_centered(r: ScreenProjection) {
+        match r {
+            ScreenProjection::OnScreen { px, py } => {
+                assert!((px - 50.0).abs() < 1e-6, "px={px}");
+                assert!((py - 50.0).abs() < 1e-6, "py={py}");
+            }
+            other => panic!("expected centered OnScreen, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn yaw90_camera_looks_down_negative_x() {
+        // Godot Camera3D at origin with rotation_degrees = (0, 90, 0) faces -X.
+        let mut c = p();
+        c.quaternion = yaw(90.0);
+        // Node directly ahead -> centered.
+        assert_centered(project_world_to_screen(c, [-1., 0., 0.], 100., 100.));
+        // Node behind the camera (+X) -> BehindCamera.
+        assert_eq!(
+            project_world_to_screen(c, [1., 0., 0.], 100., 100.),
+            ScreenProjection::BehindCamera
+        );
+        // Camera right points toward -Z (R(90°Y)·(1,0,0) = (0,0,-1)). A node
+        // forward-left of that axis, (-2, 0, -1), is in the frustum on the
+        // camera's right: cam.x = 1, depth = 2, nx = 0.5 -> px = 75.
+        let r = project_world_to_screen(c, [-2., 0., -1.], 100., 100.);
+        match r {
+            ScreenProjection::OnScreen { px, .. } => {
+                assert!((px - 75.0).abs() < 1e-6, "expected px=75, got {px}")
+            }
+            other => panic!("expected OnScreen px=75, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn yaw180_camera_looks_down_positive_z() {
+        let mut c = p();
+        c.quaternion = yaw(180.0);
+        assert_centered(project_world_to_screen(c, [0., 0., 1.], 100., 100.));
+        assert_eq!(
+            project_world_to_screen(c, [0., 0., -1.], 100., 100.),
+            ScreenProjection::BehindCamera
+        );
+    }
+
+    #[test]
+    fn yaw45_projects_diagonal_correctly() {
+        // Camera yawed 45° faces (-sin45, 0, -cos45). A node exactly on that
+        // axis is centered; a node on the old -Z axis sits at the right edge:
+        // camera-space x = sin45, depth = cos45, fov 90° aspect 1 → x_ndc = 1.
+        let mut c = p();
+        c.quaternion = yaw(45.0);
+        let s = std::f64::consts::FRAC_1_SQRT_2;
+        assert_centered(project_world_to_screen(c, [-s, 0., -s], 100., 100.));
+        let r = project_world_to_screen(c, [0., 0., -1.], 100., 100.);
+        match r {
+            ScreenProjection::OnScreen { px, .. } | ScreenProjection::OffScreen { px, .. } => {
+                assert!(
+                    (px - 100.0).abs() < 1e-6,
+                    "expected right edge, got px={px}"
+                );
+            }
+            other => panic!("expected projected point, got {other:?}"),
+        }
     }
 }
