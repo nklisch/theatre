@@ -761,6 +761,28 @@
       "relationships": []
     },
     {
+      "path": ".research/attestations/krometrail-repo.md",
+      "namespace": "research",
+      "kind": "attestation",
+      "id": "krometrail-repo",
+      "title": "krometrail-repo",
+      "summary": null,
+      "updated": "2026-07-25",
+      "status": null,
+      "relationships": []
+    },
+    {
+      "path": ".research/attestations/theatre-repo.md",
+      "namespace": "research",
+      "kind": "attestation",
+      "id": "theatre-repo",
+      "title": "theatre-repo",
+      "summary": null,
+      "updated": "2026-07-25",
+      "status": null,
+      "relationships": []
+    },
+    {
       "path": ".research/CONVENTIONS.md",
       "namespace": "research",
       "kind": "conventions",
@@ -768,6 +790,72 @@
       "title": "Research Conventions",
       "summary": null,
       "updated": null,
+      "status": null,
+      "relationships": []
+    },
+    {
+      "path": ".research/briefs/krometrail-visual-temporal.md",
+      "namespace": "research",
+      "kind": "research-brief",
+      "id": "krometrail-visual-temporal",
+      "title": "Krometrail visual-temporal systems as inspiration for theatre",
+      "summary": "What theatre can borrow from krometrail's temporal visual analysis for agent-facing clip storyboards",
+      "updated": "2026-07-25",
+      "status": "current",
+      "relationships": []
+    },
+    {
+      "path": ".work/backlog/agent-perception-eval-corpus.md",
+      "namespace": "work",
+      "kind": "backlog-item",
+      "id": "agent-perception-eval-corpus",
+      "title": "Committed benchmark corpus for agent perception",
+      "summary": null,
+      "updated": "2026-07-25",
+      "status": null,
+      "relationships": []
+    },
+    {
+      "path": ".work/backlog/dock-visual-timelines.md",
+      "namespace": "work",
+      "kind": "backlog-item",
+      "id": "dock-visual-timelines",
+      "title": "Human-facing filmstrips in the editor dock",
+      "summary": null,
+      "updated": "2026-07-25",
+      "status": null,
+      "relationships": []
+    },
+    {
+      "path": ".work/backlog/live-ring-visual-queries.md",
+      "namespace": "work",
+      "kind": "backlog-item",
+      "id": "live-ring-visual-queries",
+      "title": "Visual queries over the live recorder ring",
+      "summary": null,
+      "updated": "2026-07-25",
+      "status": null,
+      "relationships": []
+    },
+    {
+      "path": ".work/backlog/node-following-filmstrip.md",
+      "namespace": "work",
+      "kind": "backlog-item",
+      "id": "node-following-filmstrip",
+      "title": "Region filmstrip that follows a node",
+      "summary": null,
+      "updated": "2026-07-25",
+      "status": null,
+      "relationships": []
+    },
+    {
+      "path": ".work/backlog/visual-anomaly-markers.md",
+      "namespace": "work",
+      "kind": "backlog-item",
+      "id": "visual-anomaly-markers",
+      "title": "Visual anomaly detection → auto markers/clips",
+      "summary": null,
+      "updated": "2026-07-25",
       "status": null,
       "relationships": []
     },
@@ -780,6 +868,17 @@
       "summary": null,
       "updated": null,
       "status": null,
+      "relationships": []
+    },
+    {
+      "path": ".work/active/visual-storyboards.md",
+      "namespace": "work",
+      "kind": "feature",
+      "id": "visual-storyboards",
+      "title": "Agent-facing visual storyboards for clips",
+      "summary": null,
+      "updated": "2026-07-25",
+      "status": "active",
       "relationships": []
     }
   ]

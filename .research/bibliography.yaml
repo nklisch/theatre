@@ -1,3 +1,11 @@
 # Generated from .research/attestations. Do not edit by hand.
 schema: 1
 sources:
+  - source_handle: krometrail-repo
+    title: "krometrail repository (local checkout)"
+    source_url: "https://github.com/nklisch/krometrail/tree/3414f57b83787aaa21fb3b6cc112ca03f4df60e8"
+    fetched: "2026-07-25"
+  - source_handle: theatre-repo
+    title: "theatre repository (this project)"
+    source_url: "https://github.com/nklisch/theatre/tree/d8351e11ffcd36da9d78c254ea283209ff0b0458"
+    fetched: "2026-07-25"

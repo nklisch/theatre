@@ -12,8 +12,9 @@ repository. Aligned with `.work/CONVENTIONS.md` and `AGENTS.md`.
   `.research/attestations/<handle>.md` (frontmatter: `source_handle`,
   `fetched`, `source_title`, `source_url`) under `## Attested details`, with
   source-internal anchors.
-- Local repository sources (e.g. a neighboring checkout) may be attested with
-  a `file://` URL plus the commit or revision observed at fetch time.
+- Local repository sources are attested with their canonical remote URL
+  pinned to the commit observed at fetch time; the revision is recorded in
+  the bibliography. A neighboring checkout without a remote cannot be cited.
 - Seek disconfirming evidence before each load-bearing conclusion; every brief
   carries a `## Disconfirming evidence` section.
 
