@@ -31,3 +31,30 @@ when spatial watches are active) to bound cost.
 - Posture: conservative — high threshold + sustained-spike requirement,
   existing system-tier rate limiting applies. Never floods.
 - Thresholds/config tunable via dashcam config (server-pushable).
+
+## Design (k3, 2026-07-25)
+
+- Metric: strided-lattice changed-pixel proportion (≤16k samples, integer
+  luma via temporal-vision weights, noise floor 24) computed IN THE ENCODE
+  WORKER on RawShot RGBA pre-encode (<0.5ms/frame, no Gd off-thread).
+  EncodedShot carries FrameAnalysis{proportion, reset, analysis_ms} back.
+- Trigger: pure AnomalyDetector state machine on main thread — anomalous iff
+  proportion >= 0.30 (absolute) AND >= 4.0×max(ema, 0.02 floor) (relative);
+  sustained 4 consecutive anomalous frames; 30s fresh-trigger cooldown plus
+  existing system-tier merge rate limiting. Fires via
+  on_dashcam_marker_with_tier(system) → all existing clip machinery free.
+- Fades/cuts rule: cuts die on sustained-N, fades die on noise floor,
+  genuine sustained strobes are intended triggers. Resolution change →
+  lattice reset, streak zeroed, never a trigger.
+- Config: 6 anomaly_* DashcamConfig fields (defaults conservative, enabled
+  by default), echoed/parsed like existing; stage.toml [dashcam] fields +
+  handshake push (dashcam_explicit pattern); clips(config) works unchanged.
+- Status: dashcam_status gains "anomaly" block (active+reason honesty,
+  frames_analyzed/skipped, ema, streak, triggers, suppressed_cooldown,
+  analysis_ms_ema/max in capture_probe).
+- Trigger label: "visual_anomaly: change 0.47 vs baseline 0.06 (7.8x)";
+  list_recordings SQL prefers human/agent labels but surfaces anomaly label
+  otherwise.
+- Tests: pure-Rust unit tests for lattice + state machine (no Godot), config
+  parse, E2E journey (quiet→no triggers; hair-trigger config→triggers with
+  system clip + label; headless honesty), tcp_mock additions.
