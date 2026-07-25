@@ -128,6 +128,30 @@ Orchestrator (host) integrates, verifies, adjudicates, closes.
 Preflight: Godot 4.7.1 headless available; temporal-vision present at
 ../krometrail/crates/temporal-vision; cargo 1.95; clean worktree.
 
+## Perf probe results (2026-07-25, orchestrator-run) — PASS
+
+Environment: windowed Godot 4.7.1 under gamescope (nested compositor;
+the host Wayland session throttles occluded windows to ~1fps, making it
+unusable), 1280×720, test_scene_3d, 60s per condition, probe metrics
+wall-clock (fixed after discovering engine `delta` is the fixed timestep).
+
+- Baseline (screenshots off): pacing ema 16.637ms, p95 28.55ms
+- Dense (interval 4 = 15fps capture): pacing ema 17.044ms (+0.41ms),
+  p95 28.465ms — no regression; readback+resize+convert ema 1.69ms,
+  max 4.39ms per capture; dropped_queue_full 0; encode depth max 1
+- Gate criteria (p95 delta ≤ 1.0ms, no drop growth): **met** → dense
+  ring defaults ship; burst fallback remains available via config.
+- Caveats: small test scene at 720p; readback cost scales with viewport
+  resolution — re-validate on a real 1080p+ project scene before relying
+  on dense capture in a heavy game. Disable/re-enable semantics verified
+  (0/s when disabled, exactly 15.0/s at interval 4).
+
+Also fixed during verification: config push now only fires when the
+project's stage.toml has an explicit [dashcam] section (was clobbering
+runtime config on every one-shot connection); dense_burst_duration_sec
+default aligned (15) across stage-core and recorder; degradation errors
+surface as content-level JSON per design.
+
 ## Acceptance evidence
 
 - Perf probe numbers (frame-time impact of dense capture) recorded in this
