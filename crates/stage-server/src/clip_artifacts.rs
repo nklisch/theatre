@@ -60,14 +60,38 @@ pub struct ArtifactOutput {
 fn err(e: impl std::fmt::Display) -> McpError {
     McpError::internal_error(format!("visual artifact generation failed: {e}"), None)
 }
+
+/// A degradation condition the agent can act on, returned as a content-level
+/// JSON error object (mirroring the `no_screenshots` pattern in clips.rs)
+/// rather than a protocol error. The handler unwraps `data` into the response.
+fn degraded(code: &str, detail: serde_json::Value) -> McpError {
+    let mut obj = serde_json::Map::new();
+    obj.insert("error".into(), code.into());
+    if let serde_json::Value::Object(extra) = detail {
+        obj.extend(extra);
+    }
+    McpError::internal_error(
+        format!("{code}: visual artifact unavailable"),
+        Some(serde_json::Value::Object(obj)),
+    )
+}
+
 fn vision<T>(r: temporal_vision::Result<T>) -> Result<T, McpError> {
-    r.map_err(err)
+    r.map_err(|e| {
+        degraded(
+            "generation_failed",
+            serde_json::json!({"code": e.code.as_str(), "message": e.to_string()}),
+        )
+    })
 }
 fn decode(s: &ClipScreenshot) -> Result<(PixelDimensions, Vec<u8>), McpError> {
     let mut d = Decoder::new(s.jpeg_data.as_slice());
-    let rgb = d
-        .decode()
-        .map_err(|e| err(format!("JPEG decode failed at frame {}: {e}", s.frame)))?;
+    let rgb = d.decode().map_err(|e| {
+        degraded(
+            "decode_failed",
+            serde_json::json!({"frame": s.frame, "message": e.to_string()}),
+        )
+    })?;
     let info = d.info().ok_or_else(|| err("JPEG has no dimensions"))?;
     let dims = PixelDimensions::new(info.width as u32, info.height as u32).map_err(err)?;
     let mut rgba = Vec::with_capacity(rgb.len() / 3 * 4);
@@ -224,9 +248,9 @@ pub async fn generate_artifact(
         });
     }
     if shots.is_empty() {
-        return Err(McpError::internal_error(
-            "no_screenshots: this clip contains no visual frames",
-            None,
+        return Err(degraded(
+            "no_screenshots",
+            serde_json::json!({"message": "this clip contains no visual frames"}),
         ));
     }
     let mut decoded = Vec::new();
@@ -250,9 +274,9 @@ pub async fn generate_artifact(
         decoded.push((shot.frame, shot.timestamp_ms, dims, rgba));
     }
     if decoded.len() < 3 {
-        return Err(McpError::internal_error(
-            "insufficient_frames: at least three compatible screenshots are required",
-            None,
+        return Err(degraded(
+            "insufficient_frames",
+            serde_json::json!({"usable": decoded.len()}),
         ));
     }
     let (w, h) = expected.ok_or_else(|| err("decoded screenshots have no dimensions"))?;

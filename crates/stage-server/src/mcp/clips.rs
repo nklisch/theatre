@@ -550,7 +550,7 @@ async fn handle_visual_artifact(
     }
     let hard_cap = 5000;
     let budget_limit = resolve_budget(params.token_budget, 1500, hard_cap);
-    let output = clip_artifacts::generate_artifact(
+    let output = match clip_artifacts::generate_artifact(
         state,
         params.clip_id.as_deref(),
         artifact,
@@ -562,7 +562,24 @@ async fn handle_visual_artifact(
         budget_limit,
         hard_cap,
     )
-    .await?;
+    .await
+    {
+        Ok(output) => output,
+        Err(e) => {
+            // Degradation conditions (no_screenshots, insufficient_frames,
+            // decode_failed, generation_failed) carry a JSON error object in
+            // the error data — surface it as response content, not a protocol
+            // error, mirroring the sibling screenshot handlers.
+            if let Some(data) = e.data.as_ref()
+                && data.get("error").is_some()
+            {
+                return Ok(CallToolResult::success(vec![Content::text(
+                    data.to_string(),
+                )]));
+            }
+            return Err(e);
+        }
+    };
     let text = serde_json::to_string(&output.manifest).map_err(|e| {
         McpError::internal_error(format!("manifest serialization failed: {e}"), None)
     })?;
