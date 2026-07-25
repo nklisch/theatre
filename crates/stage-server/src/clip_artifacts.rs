@@ -600,21 +600,25 @@ pub async fn generate_artifact(
                 });
                 statuses.push(json!({"frame":frame.id(),"status":status,"px":px,"py":py}));
             }
-            if regions.is_empty() && !sample_paths.contains(node) {
+            if regions.is_empty() {
+                if sample_paths.contains(node) {
+                    return Err(degraded(
+                        "node_not_projectable",
+                        json!({"node":node,"message":"node exists in the clip but never projects on-screen (behind camera or absent in analyzed frames)"}),
+                    ));
+                }
                 return Err(degraded(
                     "node_not_found",
                     json!({"node":node,"sample_paths":sample_paths.into_iter().take(8).collect::<Vec<_>>()}),
                 ));
             }
             let limit = usize::from(tile_limit.unwrap_or(8));
-            let selected_indices: std::collections::BTreeSet<usize> = if seq.frames().len() <= limit
-            {
-                (0..seq.frames().len()).collect()
-            } else {
-                (0..limit)
-                    .map(|i| i * (seq.frames().len() - 1) / (limit - 1).max(1))
-                    .collect()
-            };
+            // Must match the renderer's tile selection exactly (hand-rolled
+            // variants diverge on rounding and mislabel manifest tiles).
+            let selected_indices: std::collections::BTreeSet<usize> =
+                temporal_vision::select_indices(seq.frames().len(), limit)
+                    .into_iter()
+                    .collect();
             let statuses_omitted = statuses.len().saturating_sub(selected_indices.len());
             statuses.retain(|status| {
                 status
