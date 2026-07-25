@@ -816,6 +816,17 @@
       "relationships": []
     },
     {
+      "path": ".work/backlog/director-tests-fail-godot-4.7.md",
+      "namespace": "work",
+      "kind": "backlog-item",
+      "id": "director-tests-fail-godot-4.7",
+      "title": "Director E2E tests fail on this machine (Godot 4.7.1)",
+      "summary": null,
+      "updated": "2026-07-25",
+      "status": null,
+      "relationships": []
+    },
+    {
       "path": ".work/backlog/dock-visual-timelines.md",
       "namespace": "work",
       "kind": "backlog-item",
@@ -849,6 +860,17 @@
       "relationships": []
     },
     {
+      "path": ".work/backlog/reconcile-contract-mcp-surface.md",
+      "namespace": "work",
+      "kind": "backlog-item",
+      "id": "reconcile-contract-mcp-surface",
+      "title": "Reconcile docs/CONTRACT.md with the actual MCP surface",
+      "summary": null,
+      "updated": "2026-07-25",
+      "status": null,
+      "relationships": []
+    },
+    {
       "path": ".work/backlog/visual-anomaly-markers.md",
       "namespace": "work",
       "kind": "backlog-item",
@@ -871,14 +893,14 @@
       "relationships": []
     },
     {
-      "path": ".work/active/visual-storyboards.md",
+      "path": ".work/completed/visual-storyboards.md",
       "namespace": "work",
       "kind": "feature",
       "id": "visual-storyboards",
       "title": "Agent-facing visual storyboards for clips",
       "summary": null,
-      "updated": "2026-07-25",
-      "status": "active",
+      "updated": null,
+      "status": null,
       "relationships": []
     }
   ]
