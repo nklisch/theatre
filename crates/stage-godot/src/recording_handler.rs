@@ -244,9 +244,14 @@ fn handle_dashcam_status(recorder: &mut Gd<StageRecorder>) -> Result<Value, (Str
     let dashcam_enabled =
         rec.is_dashcam_active() || state_str == "buffering" || state_str == "post_capture";
     let config_json_str = rec.get_dashcam_config_json().to_string();
+    let capture_probe_json = rec.get_capture_probe_json().to_string();
+    let screenshot_gaps_json = rec.get_screenshot_gaps_json().to_string();
+    let screenshots_available = rec.screenshots_available();
     drop(rec);
 
     let config: Value = serde_json::from_str(&config_json_str).unwrap_or(json!({}));
+    let capture_probe: Value = serde_json::from_str(&capture_probe_json).unwrap_or(json!({}));
+    let screenshot_gaps: Value = serde_json::from_str(&screenshot_gaps_json).unwrap_or(json!({}));
 
     Ok(json!({
         "dashcam_enabled": dashcam_enabled,
@@ -255,6 +260,9 @@ fn handle_dashcam_status(recorder: &mut Gd<StageRecorder>) -> Result<Value, (Str
         "buffer_kb": buffer_kb,
         "screenshot_buffer_count": screenshot_count,
         "screenshot_buffer_kb": screenshot_kb,
+        "screenshots_available": screenshots_available,
+        "capture_probe": capture_probe,
+        "screenshot_gaps": screenshot_gaps,
         "config": config,
     }))
 }
