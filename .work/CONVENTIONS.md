@@ -1,14 +1,7 @@
 ---
 owner: workbench
 schema: 1
-release_mode: summarized
-# Optional project overrides—omit to use Workbench defaults:
-# interaction: collaborative|checkpointed|autonomous
-# rigor: lean|standard|rigorous
-# review: inline|fresh|cross-model|convergent
-# capability: efficient|adaptive|maximum
-# execution: cohesive|adaptive|parallel
-# commits: delivery|checkpoint|granular
+completed_items: summarize
 ---
 
 # Workbench Conventions
@@ -26,10 +19,6 @@ cargo test --workspace
 
 All test layers must pass — unit, integration, scenarios, and E2E journeys.
 Never skip E2E journey tests. See CLAUDE.md for details.
-
-## Tags
-
-None yet.
 
 ## Project-specific guidance
 
