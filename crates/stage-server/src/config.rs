@@ -32,6 +32,12 @@ pub struct DashcamTomlConfig {
     pub dense_burst_enabled: Option<bool>,
     pub dense_burst_interval_frames: Option<u32>,
     pub dense_burst_duration_sec: Option<u32>,
+    pub anomaly_enabled: Option<bool>,
+    pub anomaly_min_proportion: Option<f64>,
+    pub anomaly_relative_factor: Option<f64>,
+    pub anomaly_sustained_frames: Option<u32>,
+    pub anomaly_cooldown_sec: Option<u32>,
+    pub anomaly_noise_floor: Option<u8>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -158,6 +164,24 @@ fn toml_to_session_config(toml: &StageToml) -> SessionConfig {
         }
         if let Some(v) = dc.dense_burst_duration_sec {
             config.dashcam_dense_burst_duration_sec = v;
+        }
+        if let Some(v) = dc.anomaly_enabled {
+            config.dashcam_anomaly_enabled = v;
+        }
+        if let Some(v) = dc.anomaly_min_proportion {
+            config.dashcam_anomaly_min_proportion = v;
+        }
+        if let Some(v) = dc.anomaly_relative_factor {
+            config.dashcam_anomaly_relative_factor = v;
+        }
+        if let Some(v) = dc.anomaly_sustained_frames {
+            config.dashcam_anomaly_sustained_frames = v;
+        }
+        if let Some(v) = dc.anomaly_cooldown_sec {
+            config.dashcam_anomaly_cooldown_sec = v;
+        }
+        if let Some(v) = dc.anomaly_noise_floor {
+            config.dashcam_anomaly_noise_floor = v;
         }
     }
     config

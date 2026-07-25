@@ -1974,7 +1974,7 @@ impl StageCollector {
         let engine = Engine::singleton();
         let frame = engine.get_physics_frames();
         let ticks = engine.get_physics_ticks_per_second() as u64;
-        let timestamp_ms = if ticks > 0 { (frame * 1000) / ticks } else { 0 };
+        let timestamp_ms = (frame * 1000).checked_div(ticks).unwrap_or(0);
         let delta = if ticks > 0 { 1.0 / ticks as f64 } else { 0.0 };
         FrameInfoResponse {
             frame,

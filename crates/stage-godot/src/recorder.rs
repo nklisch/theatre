@@ -40,6 +40,15 @@ struct RawShot {
     width: u16,
     height: u16,
     quality: u8,
+    analyze: bool,
+    noise_floor: u8,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct FrameAnalysis {
+    proportion: f64,
+    reset: bool,
+    analysis_ms: f64,
 }
 
 struct EncodedShot {
@@ -49,6 +58,156 @@ struct EncodedShot {
     width: u32,
     height: u32,
     error: Option<String>,
+    analysis: Option<FrameAnalysis>,
+}
+
+/// Reusable strided changed-pixel lattice. The worker owns this value, so no
+/// Godot object or mutable state crosses the thread boundary.
+struct ChangeLattice {
+    width: u16,
+    height: u16,
+    previous: Vec<u16>,
+}
+
+impl ChangeLattice {
+    const MAX_SAMPLES: usize = 16_384;
+
+    fn new() -> Self {
+        Self {
+            width: 0,
+            height: 0,
+            previous: Vec::new(),
+        }
+    }
+
+    fn analyze(&mut self, rgba: &[u8], width: u16, height: u16, noise_floor: u8) -> FrameAnalysis {
+        let started = Instant::now();
+        let count = width as usize * height as usize;
+        if rgba.len() < count.saturating_mul(4) || width == 0 || height == 0 {
+            return FrameAnalysis {
+                proportion: 0.0,
+                reset: true,
+                analysis_ms: started.elapsed().as_secs_f64() * 1000.0,
+            };
+        }
+        let reset = self.width != width || self.height != height;
+        self.width = width;
+        self.height = height;
+        let stride = ((count as f64 / Self::MAX_SAMPLES as f64).sqrt().ceil() as usize).max(1);
+        let samples_w = (width as usize).div_ceil(stride);
+        let samples_h = (height as usize).div_ceil(stride);
+        let needed = samples_w * samples_h;
+        if self.previous.len() != needed {
+            self.previous.resize(needed, 0);
+        }
+        let mut changed = 0usize;
+        let mut sampled = 0usize;
+        let mut index = 0;
+        for y in (0..height as usize).step_by(stride) {
+            for x in (0..width as usize).step_by(stride) {
+                let p = (y * width as usize + x) * 4;
+                let luma = ((rgba[p] as u32 * 13933
+                    + rgba[p + 1] as u32 * 46871
+                    + rgba[p + 2] as u32 * 4732)
+                    >> 16) as u16;
+                if !reset && luma.abs_diff(self.previous[index]) > noise_floor as u16 {
+                    changed += 1;
+                }
+                self.previous[index] = luma;
+                sampled += 1;
+                index += 1;
+            }
+        }
+        FrameAnalysis {
+            proportion: if reset || sampled == 0 {
+                0.0
+            } else {
+                changed as f64 / sampled as f64
+            },
+            reset,
+            analysis_ms: started.elapsed().as_secs_f64() * 1000.0,
+        }
+    }
+}
+
+#[derive(Debug)]
+struct AnomalyDetector {
+    ema: f64,
+    last_proportion: f64,
+    streak: u32,
+    triggers_total: u64,
+    suppressed_cooldown: u64,
+    last_trigger_frame: Option<u64>,
+    last_trigger_proportion: Option<f64>,
+}
+
+impl Default for AnomalyDetector {
+    fn default() -> Self {
+        Self {
+            ema: 0.0,
+            last_proportion: 0.0,
+            streak: 0,
+            triggers_total: 0,
+            suppressed_cooldown: 0,
+            last_trigger_frame: None,
+            last_trigger_proportion: None,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct AnomalySettings {
+    min: f64,
+    relative: f64,
+    sustained: u32,
+    cooldown_frames: u64,
+}
+
+impl AnomalyDetector {
+    fn observe(
+        &mut self,
+        proportion: f64,
+        reset: bool,
+        frame: u64,
+        settings: AnomalySettings,
+    ) -> Option<String> {
+        self.last_proportion = proportion;
+        if reset {
+            self.streak = 0;
+            return None;
+        }
+        self.ema = if self.ema == 0.0 {
+            proportion
+        } else {
+            self.ema * 0.9 + proportion * 0.1
+        };
+        let anomalous =
+            proportion >= settings.min && proportion >= settings.relative * self.ema.max(0.02);
+        if !anomalous {
+            self.streak = 0;
+            return None;
+        }
+        self.streak = self.streak.saturating_add(1);
+        if self.streak < settings.sustained.max(1) {
+            return None;
+        }
+        self.streak = 0;
+        if self
+            .last_trigger_frame
+            .is_some_and(|last| frame.saturating_sub(last) < settings.cooldown_frames)
+        {
+            self.suppressed_cooldown += 1;
+            return None;
+        }
+        self.triggers_total += 1;
+        self.last_trigger_frame = Some(frame);
+        self.last_trigger_proportion = Some(proportion);
+        Some(format!(
+            "visual_anomaly: change {proportion:.2} vs baseline {:.2} ({:.1}x)",
+            self.ema,
+            proportion / self.ema.max(0.0001)
+        ))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -111,6 +270,8 @@ struct CaptureProbe {
     encode_depth_max: usize,
     physics_delta_ms_ema: f64,
     physics_deltas: VecDeque<f64>,
+    analysis_ms_ema: f64,
+    analysis_ms_max: f64,
 }
 
 impl Default for CaptureProbe {
@@ -123,6 +284,8 @@ impl Default for CaptureProbe {
             encode_depth_max: 0,
             physics_delta_ms_ema: 0.0,
             physics_deltas: VecDeque::with_capacity(600),
+            analysis_ms_ema: 0.0,
+            analysis_ms_max: 0.0,
         }
     }
 }
@@ -158,6 +321,8 @@ impl CaptureProbe {
             "encode_depth_max": self.encode_depth_max,
             "physics_delta_ms_ema": self.physics_delta_ms_ema,
             "physics_delta_ms_p95_window": self.p95(),
+            "analysis_ms_ema": self.analysis_ms_ema,
+            "analysis_ms_max": self.analysis_ms_max,
         })
     }
 }
@@ -215,6 +380,12 @@ pub struct DashcamConfig {
     pub dense_burst_enabled: bool,
     pub dense_burst_interval_frames: u32,
     pub dense_burst_duration_sec: u32,
+    pub anomaly_enabled: bool,
+    pub anomaly_min_proportion: f64,
+    pub anomaly_relative_factor: f64,
+    pub anomaly_sustained_frames: u32,
+    pub anomaly_cooldown_sec: u32,
+    pub anomaly_noise_floor: u8,
 }
 
 impl Default for DashcamConfig {
@@ -239,6 +410,12 @@ impl Default for DashcamConfig {
             dense_burst_enabled: false,
             dense_burst_interval_frames: 2,
             dense_burst_duration_sec: 15,
+            anomaly_enabled: true,
+            anomaly_min_proportion: 0.30,
+            anomaly_relative_factor: 4.0,
+            anomaly_sustained_frames: 4,
+            anomaly_cooldown_sec: 30,
+            anomaly_noise_floor: 24,
         }
     }
 }
@@ -306,6 +483,9 @@ pub struct StageRecorder {
 
     /// Silent markers waiting to be attached to the next saved clip.
     pending_silent_markers: Vec<DashcamTrigger>,
+    anomaly_detector: AnomalyDetector,
+    anomaly_frames_analyzed: u64,
+    anomaly_frames_skipped: u64,
 }
 
 #[godot_api]
@@ -359,6 +539,9 @@ impl INode for StageRecorder {
             physics_tick_count: 0,
             last_tick_instant: None,
             pending_silent_markers: Vec::new(),
+            anomaly_detector: AnomalyDetector::default(),
+            anomaly_frames_analyzed: 0,
+            anomaly_frames_skipped: 0,
         }
     }
 
@@ -491,6 +674,28 @@ impl StageRecorder {
     #[func]
     pub fn get_screenshot_gaps_json(&self) -> GString {
         GString::from(self.gap_ledger.summary_json().to_string().as_str())
+    }
+
+    #[func]
+    pub fn get_anomaly_status_json(&self) -> GString {
+        let reason = if Engine::singleton().is_editor_hint() {
+            "editor_hint"
+        } else if !self.dashcam_config.screenshot_enabled {
+            "screenshots_disabled"
+        } else if !self.dashcam_config.anomaly_enabled {
+            "anomaly_disabled"
+        } else {
+            ""
+        };
+        GString::from(serde_json::json!({
+            "active": reason.is_empty(), "reason": reason,
+            "frames_analyzed": self.anomaly_frames_analyzed, "frames_skipped": self.anomaly_frames_skipped,
+            "metric_ema": self.anomaly_detector.ema, "last_proportion": self.anomaly_detector.last_proportion,
+            "anomalous_streak": self.anomaly_detector.streak, "triggers_total": self.anomaly_detector.triggers_total,
+            "suppressed_cooldown": self.anomaly_detector.suppressed_cooldown,
+            "last_trigger_frame": self.anomaly_detector.last_trigger_frame,
+            "last_trigger_proportion": self.anomaly_detector.last_trigger_proportion,
+        }).to_string().as_str())
     }
 
     #[func]
@@ -638,10 +843,32 @@ impl StageRecorder {
         {
             self.dashcam_config.dense_burst_interval_frames = n as u32;
         }
-        if let Some(n) = v.get("dense_burst_duration_sec").and_then(|x| x.as_u64())
+        if let Some(b) = v.get("anomaly_enabled").and_then(|x| x.as_bool()) {
+            self.dashcam_config.anomaly_enabled = b;
+        }
+        if let Some(f) = v.get("anomaly_min_proportion").and_then(|x| x.as_f64())
+            && (0.0..=1.0).contains(&f)
+        {
+            self.dashcam_config.anomaly_min_proportion = f;
+        }
+        if let Some(f) = v.get("anomaly_relative_factor").and_then(|x| x.as_f64())
+            && f.is_finite()
+            && f >= 1.0
+        {
+            self.dashcam_config.anomaly_relative_factor = f;
+        }
+        if let Some(n) = v.get("anomaly_sustained_frames").and_then(|x| x.as_u64())
             && n > 0
         {
-            self.dashcam_config.dense_burst_duration_sec = n as u32;
+            self.dashcam_config.anomaly_sustained_frames = n as u32;
+        }
+        if let Some(n) = v.get("anomaly_cooldown_sec").and_then(|x| x.as_u64()) {
+            self.dashcam_config.anomaly_cooldown_sec = n as u32;
+        }
+        if let Some(n) = v.get("anomaly_noise_floor").and_then(|x| x.as_u64())
+            && n <= 255
+        {
+            self.dashcam_config.anomaly_noise_floor = n as u8;
         }
         true
     }
@@ -668,6 +895,12 @@ impl StageRecorder {
             "dense_burst_enabled": cfg.dense_burst_enabled,
             "dense_burst_interval_frames": cfg.dense_burst_interval_frames,
             "dense_burst_duration_sec": cfg.dense_burst_duration_sec,
+            "anomaly_enabled": cfg.anomaly_enabled,
+            "anomaly_min_proportion": cfg.anomaly_min_proportion,
+            "anomaly_relative_factor": cfg.anomaly_relative_factor,
+            "anomaly_sustained_frames": cfg.anomaly_sustained_frames,
+            "anomaly_cooldown_sec": cfg.anomaly_cooldown_sec,
+            "anomaly_noise_floor": cfg.anomaly_noise_floor,
         });
         GString::from(json.to_string().as_str())
     }
@@ -821,8 +1054,7 @@ impl StageRecorder {
                     // First human/agent marker label — why this clip was saved.
                     let trigger_label: Option<String> = db
                         .query_row(
-                            "SELECT label FROM markers WHERE source IN ('human', 'agent') \
-                                 ORDER BY frame ASC LIMIT 1",
+                            "SELECT label FROM markers ORDER BY CASE WHEN source IN ('human', 'agent') THEN 0 WHEN source = 'system' THEN 1 ELSE 2 END, frame ASC LIMIT 1",
                             [],
                             |row| row.get(0),
                         )
@@ -982,7 +1214,11 @@ impl StageRecorder {
             mpsc::sync_channel::<RawShot>(self.dashcam_config.screenshot_encode_queue.max(1));
         let (encoded_tx, encoded_rx) = mpsc::channel();
         let handle = thread::spawn(move || {
+            let mut lattice = ChangeLattice::new();
             while let Ok(raw) = rx.recv() {
+                let analysis = raw
+                    .analyze
+                    .then(|| lattice.analyze(&raw.rgba, raw.width, raw.height, raw.noise_floor));
                 let mut output = Vec::new();
                 let quality = raw.quality.clamp(1, 100);
                 let encoder = jpeg_encoder::Encoder::new(&mut output, quality);
@@ -1000,6 +1236,7 @@ impl StageRecorder {
                         width: raw.width as u32,
                         height: raw.height as u32,
                         error: None,
+                        analysis,
                     },
                     Err(error) => EncodedShot {
                         frame: raw.frame,
@@ -1008,6 +1245,7 @@ impl StageRecorder {
                         width: raw.width as u32,
                         height: raw.height as u32,
                         error: Some(error.to_string()),
+                        analysis,
                     },
                 };
                 let _ = encoded_tx.send(shot);
@@ -1055,6 +1293,8 @@ impl StageRecorder {
             width: image.get_width() as u16,
             height: image.get_height() as u16,
             quality: (self.dashcam_config.screenshot_quality * 100.0).round() as u8,
+            analyze: self.dashcam_config.anomaly_enabled && self.dashcam_config.screenshot_enabled,
+            noise_floor: self.dashcam_config.anomaly_noise_floor,
         };
         let elapsed = started.elapsed().as_secs_f64() * 1000.0;
         self.capture_probe.readback_ms_ema = if self.capture_probe.readback_ms_ema == 0.0 {
@@ -1094,6 +1334,51 @@ impl StageRecorder {
                 }
             };
             self.encode_depth = self.encode_depth.saturating_sub(1);
+            if let Some(analysis) = shot.analysis {
+                self.capture_probe.analysis_ms_ema = if self.capture_probe.analysis_ms_ema == 0.0 {
+                    analysis.analysis_ms
+                } else {
+                    self.capture_probe.analysis_ms_ema * 0.95 + analysis.analysis_ms * 0.05
+                };
+                self.capture_probe.analysis_ms_max =
+                    self.capture_probe.analysis_ms_max.max(analysis.analysis_ms);
+                self.anomaly_frames_analyzed = self.anomaly_frames_analyzed.saturating_add(1);
+                if analysis.reset {
+                    self.anomaly_frames_skipped = self.anomaly_frames_skipped.saturating_add(1);
+                }
+                if self.dashcam_config.anomaly_enabled
+                    && let Some(label) = self.anomaly_detector.observe(
+                        analysis.proportion,
+                        analysis.reset,
+                        shot.frame,
+                        AnomalySettings {
+                            min: self.dashcam_config.anomaly_min_proportion,
+                            relative: self.dashcam_config.anomaly_relative_factor,
+                            sustained: self.dashcam_config.anomaly_sustained_frames,
+                            cooldown_frames: self.dashcam_config.anomaly_cooldown_sec as u64
+                                * self.physics_fps as u64,
+                        },
+                    )
+                {
+                    self.on_dashcam_marker_with_tier(
+                        "system",
+                        &label,
+                        shot.frame,
+                        shot.timestamp_ms,
+                        DashcamTier::System,
+                    );
+                    self.base_mut().emit_signal(
+                        "marker_added",
+                        &[
+                            shot.frame.to_variant(),
+                            GString::from("system").to_variant(),
+                            GString::from(&label).to_variant(),
+                        ],
+                    );
+                }
+            } else {
+                self.anomaly_frames_skipped = self.anomaly_frames_skipped.saturating_add(1);
+            }
             if shot.error.is_some() {
                 self.gap_ledger.record(shot.frame, "encode_failed");
                 continue;
@@ -2669,6 +2954,69 @@ mod tests {
             last_system_trigger_frame, 100,
             "last_system_trigger_frame should not update when rate-limited"
         );
+    }
+
+    #[test]
+    fn change_lattice_identical_noise_and_change() {
+        let mut lattice = ChangeLattice::new();
+        let quiet = vec![100u8; 4 * 4 * 4];
+        assert!(lattice.analyze(&quiet, 4, 4, 24).reset);
+        assert_eq!(lattice.analyze(&quiet, 4, 4, 24).proportion, 0.0);
+        let mut changed = quiet.clone();
+        changed[0] = 255;
+        assert_eq!(lattice.analyze(&changed, 4, 4, 24).proportion, 1.0 / 16.0);
+        let mut noise = changed.clone();
+        noise[0] = 230;
+        assert_eq!(lattice.analyze(&noise, 4, 4, 24).proportion, 0.0);
+    }
+
+    #[test]
+    fn change_lattice_dimension_reset_and_stride_cap() {
+        let mut lattice = ChangeLattice::new();
+        let huge = vec![0u8; 200 * 200 * 4];
+        assert!(lattice.analyze(&huge, 200, 200, 24).reset);
+        assert!(lattice.previous.len() <= ChangeLattice::MAX_SAMPLES);
+        assert!(
+            lattice
+                .analyze(&vec![0u8; 100 * 100 * 4], 100, 100, 24)
+                .reset
+        );
+    }
+
+    #[test]
+    fn anomaly_detector_requires_sustained_spike_and_cools_down() {
+        let mut detector = AnomalyDetector::default();
+        let settings = AnomalySettings {
+            min: 0.30,
+            relative: 1.0,
+            sustained: 3,
+            cooldown_frames: 30,
+        };
+        assert!(detector.observe(0.01, false, 1, settings).is_none());
+        for frame in 2..4 {
+            assert!(detector.observe(0.9, false, frame, settings).is_none());
+        }
+        assert!(detector.observe(0.9, false, 4, settings).is_some());
+        for frame in 5..8 {
+            assert!(detector.observe(0.9, false, frame, settings).is_none());
+        }
+        assert_eq!(detector.suppressed_cooldown, 1);
+        assert!(detector.observe(0.01, false, 9, settings).is_none());
+        assert_eq!(detector.streak, 0);
+    }
+
+    #[test]
+    fn anomaly_detector_reset_clears_streak() {
+        let mut detector = AnomalyDetector::default();
+        let settings = AnomalySettings {
+            min: 0.3,
+            relative: 1.0,
+            sustained: 3,
+            cooldown_frames: 0,
+        };
+        assert!(detector.observe(0.9, false, 1, settings).is_none());
+        assert!(detector.observe(0.9, true, 2, settings).is_none());
+        assert_eq!(detector.streak, 0);
     }
 
     #[test]

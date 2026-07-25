@@ -262,6 +262,12 @@ pub(crate) async fn handle_connection(
                 "dense_burst_enabled": s.config.dashcam_dense_burst_enabled,
                 "dense_burst_interval_frames": s.config.dashcam_dense_burst_interval_frames,
                 "dense_burst_duration_sec": s.config.dashcam_dense_burst_duration_sec,
+                "anomaly_enabled": s.config.dashcam_anomaly_enabled,
+                "anomaly_min_proportion": s.config.dashcam_anomaly_min_proportion,
+                "anomaly_relative_factor": s.config.dashcam_anomaly_relative_factor,
+                "anomaly_sustained_frames": s.config.dashcam_anomaly_sustained_frames,
+                "anomaly_cooldown_sec": s.config.dashcam_anomaly_cooldown_sec,
+                "anomaly_noise_floor": s.config.dashcam_anomaly_noise_floor,
             })
         })
     };

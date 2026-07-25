@@ -99,6 +99,18 @@ pub struct SessionConfig {
     pub dashcam_dense_burst_interval_frames: u32,
     #[serde(default = "default_dense_burst_duration_sec")]
     pub dashcam_dense_burst_duration_sec: u32,
+    #[serde(default = "default_anomaly_enabled")]
+    pub dashcam_anomaly_enabled: bool,
+    #[serde(default = "default_anomaly_min")]
+    pub dashcam_anomaly_min_proportion: f64,
+    #[serde(default = "default_anomaly_relative")]
+    pub dashcam_anomaly_relative_factor: f64,
+    #[serde(default = "default_anomaly_sustained")]
+    pub dashcam_anomaly_sustained_frames: u32,
+    #[serde(default = "default_anomaly_cooldown")]
+    pub dashcam_anomaly_cooldown_sec: u32,
+    #[serde(default = "default_anomaly_noise")]
+    pub dashcam_anomaly_noise_floor: u8,
 
     /// True when the project's stage.toml actually contains a `[dashcam]`
     /// section. The post-handshake config push only happens when explicit —
@@ -165,6 +177,24 @@ fn default_dense_burst_interval_frames() -> u32 {
 fn default_dense_burst_duration_sec() -> u32 {
     15
 }
+fn default_anomaly_enabled() -> bool {
+    true
+}
+fn default_anomaly_min() -> f64 {
+    0.30
+}
+fn default_anomaly_relative() -> f64 {
+    4.0
+}
+fn default_anomaly_sustained() -> u32 {
+    4
+}
+fn default_anomaly_cooldown() -> u32 {
+    30
+}
+fn default_anomaly_noise() -> u8 {
+    24
+}
 
 impl Default for SessionConfig {
     fn default() -> Self {
@@ -193,6 +223,12 @@ impl Default for SessionConfig {
             dashcam_dense_burst_enabled: default_dense_burst_enabled(),
             dashcam_dense_burst_interval_frames: default_dense_burst_interval_frames(),
             dashcam_dense_burst_duration_sec: default_dense_burst_duration_sec(),
+            dashcam_anomaly_enabled: default_anomaly_enabled(),
+            dashcam_anomaly_min_proportion: default_anomaly_min(),
+            dashcam_anomaly_relative_factor: default_anomaly_relative(),
+            dashcam_anomaly_sustained_frames: default_anomaly_sustained(),
+            dashcam_anomaly_cooldown_sec: default_anomaly_cooldown(),
+            dashcam_anomaly_noise_floor: default_anomaly_noise(),
             dashcam_explicit: false,
         }
     }
@@ -273,6 +309,24 @@ impl SessionConfig {
         }
         if let Some(v) = update.dashcam_dense_burst_duration_sec {
             self.dashcam_dense_burst_duration_sec = v;
+        }
+        if let Some(v) = update.dashcam_anomaly_enabled {
+            self.dashcam_anomaly_enabled = v;
+        }
+        if let Some(v) = update.dashcam_anomaly_min_proportion {
+            self.dashcam_anomaly_min_proportion = v;
+        }
+        if let Some(v) = update.dashcam_anomaly_relative_factor {
+            self.dashcam_anomaly_relative_factor = v;
+        }
+        if let Some(v) = update.dashcam_anomaly_sustained_frames {
+            self.dashcam_anomaly_sustained_frames = v;
+        }
+        if let Some(v) = update.dashcam_anomaly_cooldown_sec {
+            self.dashcam_anomaly_cooldown_sec = v;
+        }
+        if let Some(v) = update.dashcam_anomaly_noise_floor {
+            self.dashcam_anomaly_noise_floor = v;
         }
     }
 
@@ -355,6 +409,12 @@ pub struct ConfigUpdate {
     pub dashcam_dense_burst_enabled: Option<bool>,
     pub dashcam_dense_burst_interval_frames: Option<u32>,
     pub dashcam_dense_burst_duration_sec: Option<u32>,
+    pub dashcam_anomaly_enabled: Option<bool>,
+    pub dashcam_anomaly_min_proportion: Option<f64>,
+    pub dashcam_anomaly_relative_factor: Option<f64>,
+    pub dashcam_anomaly_sustained_frames: Option<u32>,
+    pub dashcam_anomaly_cooldown_sec: Option<u32>,
+    pub dashcam_anomaly_noise_floor: Option<u8>,
 }
 
 /// Simple glob matching for static patterns.
