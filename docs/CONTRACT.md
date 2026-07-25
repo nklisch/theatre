@@ -4,7 +4,7 @@ Version: 1.0-draft
 Protocol: MCP (Model Context Protocol)
 Transport: stdio (JSON-RPC 2.0)
 
-This document defines the current MCP tool surface for Stage — the contract between Stage and any MCP-compatible AI agent. The tool surface is project-owned and changes in place as the design improves (see the change-in-place principle in `docs/PRINCIPLES.md`); agents calling these tools adapt on each session, so no stability guarantees or versioned schemas are maintained here. Game-specific customization happens at the data layer (what properties are tracked, what nodes are grouped) rather than through per-game tool variants.
+This document describes the current MCP tool surface for Stage as implemented — the contract between Stage and any MCP-compatible AI agent. Code is the source of truth; where this document and the implementation disagree, the implementation wins and this document should be corrected. The tool surface is project-owned and changes in place as the design improves (see the change-in-place principle in `docs/PRINCIPLES.md`); agents calling these tools adapt on each session, so no stability guarantees or versioned schemas are maintained here. Game-specific customization happens at the data layer (what properties are tracked, what nodes are grouped) rather than through per-game tool variants.
 
 ---
 
@@ -20,7 +20,7 @@ This document defines the current MCP tool surface for Stage — the contract be
 | 6 | `spatial_config` | Configure tracking and display | 50-200 |
 | 7 | `spatial_action` | Manipulate game state for debugging | 100-500 |
 | 8 | `scene_tree` | Navigate node hierarchy | 200-1500 |
-| 9 | `recording` | Capture and analyze play sessions | 100-1500 |
+| 9 | `clips` | Always-on dashcam capture, clip analysis, visual artifacts | 100-1500 |
 
 ---
 
@@ -48,9 +48,7 @@ All tools may return errors instead of normal responses:
 | `scene_not_loaded` | Addon connected but no scene is active (between scene transitions) |
 | `node_not_found` | Specified node path doesn't exist |
 | `invalid_cursor` | Pagination cursor is expired or invalid |
-| `recording_not_found` | Referenced recording ID doesn't exist |
-| `recording_active` | Can't start recording — one is already running |
-| `no_recording_active` | Can't stop/mark — no recording running |
+| `recording_not_found` | Referenced clip ID doesn't exist |
 | `budget_exceeded` | Request would exceed hard cap even at minimum detail |
 | `method_not_found` | call_method target doesn't exist on the node |
 | `eval_error` | GDScript expression evaluation failed |
@@ -69,7 +67,7 @@ Every response includes a `budget` block:
 }
 ```
 
-The `token_budget` parameter (available on snapshot, delta, query, inspect, recording tools) sets the target budget for a single response. The server fills up to that amount (capped by `hard_cap`). If omitted, detail-tier defaults apply.
+The `token_budget` parameter (available on snapshot, delta, query, inspect, and clips tools) sets the target budget for a single response. The server fills up to that amount (capped by `hard_cap`). If omitted, detail-tier defaults apply.
 
 ### Pagination
 
@@ -1106,279 +1104,89 @@ Navigate and query the Godot scene tree structure. Not spatial — this is about
 
 ---
 
-## Tool 9: `recording`
+## Tool 9: `clips`
 
-Capture and analyze play sessions. The human drives, the agent observes. The recording system captures a frame-by-frame spatial timeline that the agent can scrub through to diagnose issues.
+Always-on dashcam capture and clip analysis. The addon continuously buffers spatial frames (every physics frame) and viewport screenshots (every 4 physics frames by default) in memory; markers and `save` flush windows of that buffer to per-clip SQLite databases that the agent then scrubs, diffs, queries, and renders visual artifacts from. There is no start/stop: capture is always running while the addon is active.
 
-**When to use:** "Record while I reproduce this bug." / "What happened at frame 3020?" / "When did the enemy first get close to the wall?"
+Marker sources: **human** (dock / F9), **agent** (`add_marker`), **code** (`Stage.marker()` from game scripts), **system** (auto-detected anomalies — velocity spikes and visual anomalies). System and deliberate tiers have independent pre/post capture windows and rate limiting.
 
-### Parameters
+### Actions
 
-```jsonc
-{
-  "action": {
-    "type": "string",
-    "enum": [
-      "start",            // begin recording
-      "stop",             // end recording
-      "status",           // check recording state
-      "list",             // list saved recordings
-      "delete",           // remove a recording
-      "snapshot_at",      // spatial state at a specific frame
-      "query_range",      // search across frame range
-      "trajectory",       // position/property timeseries across frame range
-      "find_event",       // search for specific events
-      "diff_frames",      // compare two frames
-      "markers",          // list markers in a recording
-      "add_marker"        // agent adds a marker
-    ]
-  },
+| Action | Purpose | Required | Optional |
+|---|---|---|---|
+| `add_marker` | Mark the current moment (triggers clip save) | — | `marker_label`, `marker_frame` |
+| `save` | Force-save the dashcam buffer as a clip | — | `marker_label` |
+| `status` | Dashcam state, config, capture probe, anomaly detector, screenshot ring | — | — |
+| `list` | List saved clips with metadata | — | — |
+| `delete` | Remove a clip | `clip_id` | — |
+| `markers` | List markers in a clip | — | `clip_id` |
+| `snapshot_at` | Spatial state at a frame | `at_frame` or `at_time_ms` | `clip_id`, `detail`, `token_budget` |
+| `trajectory` | Position/property timeseries | `node`, `from_frame`, `to_frame` | `clip_id`, `properties`, `sample_interval` |
+| `query_range` | Frames matching a condition | `node`, `from_frame`, `to_frame`, `condition` | `clip_id` |
+| `diff_frames` | Compare two frames | `frame_a`, `frame_b` | `clip_id` |
+| `find_event` | Search clip events | `event_type` | `event_filter`, `clip_id` |
+| `screenshot_at` | Viewport JPEG nearest a frame/time as MCP image content | `at_frame` or `at_time_ms` | `clip_id` |
+| `screenshots` | Screenshot metadata for a clip (no image data) | — | `clip_id` |
+| `visual_artifact` | Generate a temporal visual artifact (below) | `artifact` | `clip_id`, `at_frame`, `at_time_ms`, `reference_frame`, `tile_limit`, `inline_image`, `token_budget`, `node`, `crop_fraction` |
+| `config` | Forward dashcam config JSON to the addon | `config` (object) | — |
 
-  // --- start ---
-  "recording_name": { "type": "string", "optional": true },
-  "capture": {
-    "type": "object",
-    "optional": true,
-    "properties": {
-      "nodes": "array | '*'",
-      "groups": "array",
-      "properties": "array",
-      "capture_interval": "integer",
-      "include_signals": "boolean",
-      "include_input": "boolean",
-      "max_frames": "integer"
-    }
-  },
-
-  // --- snapshot_at ---
-  "recording_id": { "type": "string", "optional": true },
-  "at_frame": { "type": "integer", "optional": true },
-  "at_time_ms": { "type": "integer", "optional": true },
-  "detail": { "type": "string", "optional": true },
-  "token_budget": { "type": "integer", "optional": true },
-
-  // --- query_range ---
-  "from_frame": { "type": "integer", "optional": true },
-  "to_frame": { "type": "integer", "optional": true },
-  "node": { "type": "string", "optional": true },
-  "condition": {
-    "type": "object",
-    "optional": true,
-    "properties": {
-      "type": {
-        "enum": ["proximity", "property_change", "signal_emitted",
-                 "entered_area", "velocity_spike", "state_transition",
-                 "collision", "moved"]
-      },
-      "target": "string",
-      "threshold": "number",
-      "property": "string",
-      "signal": "string"
-    }
-  },
-
-  // --- find_event ---
-  "event_type": {
-    "type": "string",
-    "enum": ["signal", "property_change", "collision", "area_enter", "area_exit",
-             "node_added", "node_removed", "marker", "input"],
-    "optional": true
-  },
-  "event_filter": { "type": "string", "optional": true },
-
-  // --- diff_frames ---
-  "frame_a": { "type": "integer", "optional": true },
-  "frame_b": { "type": "integer", "optional": true },
-
-  // --- add_marker ---
-  "marker_label": { "type": "string", "optional": true },
-  "marker_frame": { "type": "integer", "optional": true }
-}
-```
-
-### Response — `start`
-
-```jsonc
-{
-  "recording_id": "rec_001",
-  "name": "wall_clip_repro",
-  "started_at_frame": 2800,
-  "capturing": { "nodes": "*", "groups": ["enemies"], "interval": 1, "signals": true },
-  "budget": { /* ... */ }
-}
-```
-
-### Response — `stop`
-
-```jsonc
-{
-  "recording_id": "rec_001",
-  "name": "wall_clip_repro",
-  "frames_captured": 340,
-  "duration_ms": 5667,
-  "frame_range": [2800, 3140],
-  "nodes_tracked": 8,
-  "markers": [
-    { "frame": 2800, "source": "human", "label": "Starting patrol test" },
-    { "frame": 3020, "source": "human", "label": "Bug happened here!" },
-    { "frame": 3020, "source": "system", "label": "velocity_spike detected on scout_02" }
-  ],
-  "size_kb": 420,
-  "budget": { /* ... */ }
-}
-```
-
-### Response — `snapshot_at`
-
-Same shape as `spatial_snapshot` response (the recording is a queryable timeline of snapshots).
-
-### Response — `trajectory`
-
-```jsonc
-{
-  "node": "Camera3D",
-  "from_frame": 100,
-  "to_frame": 300,
-  "sample_interval": 10,
-  "samples": [
-    {"frame": 100, "time_ms": 1667, "position": [0, 60, 60]},
-    {"frame": 110, "time_ms": 1833, "position": [0, 54, 54]},
-    {"frame": 120, "time_ms": 2000, "position": [0, 48, 48]}
-  ],
-  "total_frames_in_range": 200,
-  "samples_returned": 21,
-  "budget": { /* ... */ }
-}
-```
-
-### Response — `query_range`
-
-```jsonc
-{
-  "query": "proximity",
-  "node": "enemies/scout_02",
-  "target": "walls/segment_04",
-  "threshold": 0.5,
-  "results": [
-    {
-      "frame": 3012,
-      "time_ms": 5200,
-      "distance": 0.48,
-      "node_pos": [5.1, 0.0, -3.02],
-      "node_velocity": [1.2, 0.0, -0.1],
-      "note": "first_breach"
-    },
-    {
-      "frame": 3015,
-      "time_ms": 5250,
-      "distance": 0.12,
-      "node_pos": [5.3, 0.0, -3.01],
-      "node_velocity": [0.8, 0.0, 0.0],
-      "note": "deepest_penetration"
-    }
-  ],
-  "total_frames_in_range": 340,
-  "frames_matching": 28,
-  "budget": { /* ... */ }
-}
-```
-
-### Response — `diff_frames`
-
-```jsonc
-{
-  "frame_a": 3010,
-  "frame_b": 3020,
-  "dt_ms": 167,
-  "changes": [
-    {
-      "path": "enemies/scout_02",
-      "position": { "a": [4.8, 0.0, -3.1], "b": [5.5, 0.0, -2.9] },
-      "delta_pos": [0.7, 0.0, 0.2],
-      "state": {
-        "alert_level": { "a": "patrol", "b": "suspicious" }
-      }
-    }
-  ],
-  "nodes_unchanged": 6,
-  "markers_between": [
-    { "frame": 3020, "source": "human", "label": "Bug happened here!" }
-  ],
-  "budget": { /* ... */ }
-}
-```
-
-### Response — `markers`
-
-```jsonc
-{
-  "recording_id": "rec_001",
-  "markers": [
-    { "frame": 2800, "time_ms": 0, "source": "human", "label": "Starting patrol test" },
-    { "frame": 2950, "time_ms": 2500, "source": "agent", "label": "scout_02 entered detection range" },
-    { "frame": 3020, "time_ms": 3667, "source": "human", "label": "Bug happened here!" },
-    { "frame": 3020, "time_ms": 3667, "source": "system", "label": "velocity_spike: scout_02 (12.4 -> 0.1)" }
-  ],
-  "budget": { /* ... */ }
-}
-```
-
-Marker sources:
-- **human**: From the editor dock or F9 keyboard shortcut
-- **agent**: Via `recording(action: "add_marker")`
-- **code**: Via `StageRuntime.marker("label")` from game scripts (system tier by default, rate-limited; supports `"deliberate"` and `"silent"` tiers)
-- **system**: Auto-detected anomalies (velocity spikes, collision events, property threshold crossings)
-
-### Response — `list`
-
-```jsonc
-{
-  "recordings": [
-    {
-      "id": "rec_001",
-      "name": "wall_clip_repro",
-      "duration_ms": 5667,
-      "frames": 340,
-      "frame_range": [2800, 3140],
-      "nodes_tracked": 8,
-      "markers_count": 4,
-      "size_kb": 420,
-      "created_at": "2026-03-05T14:30:00Z"
-    }
-  ],
-  "budget": { /* ... */ }
-}
-```
-
-### Response — `find_event`
-
-```jsonc
-{
-  "recording_id": "rec_001",
-  "event_type": "signal",
-  "filter": "health_changed",
-  "events": [
-    { "frame": 2830, "time_ms": 500, "node": "enemies/scout_02", "signal": "health_changed", "args": [80] },
-    { "frame": 2900, "time_ms": 1667, "node": "enemies/scout_02", "signal": "health_changed", "args": [15] }
-  ],
-  "budget": { /* ... */ }
-}
-```
+`clip_id` defaults to the most recent clip. `condition` (query_range) is an object with a `type` key: `moved`, `proximity` (`target`, `threshold`), `velocity_spike` (`threshold`), `property_change` (`property`), `state_transition` (`property`), `signal_emitted` (`signal`), `entered_area`, `collision`.
 
 ### Response — `status`
 
 ```jsonc
 {
-  "recording_active": true,
-  "recording_id": "rec_001",
-  "name": "wall_clip_repro",
-  "frames_captured": 180,
-  "duration_ms": 3000,
-  "nodes_tracked": 8,
-  "markers_count": 1,
-  "buffer_size_kb": 220
+  "dashcam_state": "buffering",          // buffering | post_capture | disabled
+  "buffer_frames": 1240, "buffer_kb": 2480,
+  "config": { /* effective dashcam config, incl. anomaly_* fields */ },
+  "capture_probe": {
+    "readback_ms_ema": 1.69, "readback_ms_max": 4.39,
+    "dispatched": 1322, "dropped_queue_full": 0, "encode_depth_max": 1,
+    "physics_delta_ms_ema": 16.6, "physics_delta_ms_p95_window": 28.5,
+    "analysis_ms_ema": 0.21, "analysis_ms_max": 0.83
+  },
+  "screenshot_buffer_count": 300, "screenshot_buffer_kb": 6200,
+  "screenshots_available": true,
+  "screenshot_gaps": { "count": 0, "dropped": 0, "overflow": 0 },
+  "anomaly": {
+    "active": true, "reason": "",       // reason set when inactive: editor_hint | screenshots_disabled | anomaly_disabled | dashcam_disabled
+    "frames_analyzed": 4120, "frames_skipped": 3,
+    "metric_ema": 0.031, "last_proportion": 0.028,
+    "anomalous_streak": 0,
+    "triggers_total": 1, "suppressed_cooldown": 2,
+    "last_trigger_frame": 182340, "last_trigger_proportion": 0.47
+  },
+  "budget": { /* ... */ }
 }
 ```
+
+### Response — `visual_artifact`
+
+Two content blocks: a compact JSON manifest (text) and, unless `inline_image: false`, the rendered PNG (image). `artifact` kinds:
+
+- `storyboard` — 3–12 informative frames (change-scored selection with stated reasons) as one labeled montage. `tile_limit` (3–12, default 8), anchor via `at_frame`/`at_time_ms` (default: first human/agent marker, else clip midpoint).
+- `motion_history` — single recency-decayed image of where movement happened. `reference_frame` for the backdrop (default: anchor).
+- `difference_map` — change frequency + timing heatmaps relative to `reference_frame` (default: clip start).
+- `node_filmstrip` — fixed-size crop following a node's projected screen position across the clip. Requires `node` (exact path). `crop_fraction` (default 0.25, clamped 0.05–1.0). Requires camera data (clips recorded by addon ≥ camera-capture version); 3D scenes only. Manifest carries per-tile statuses (`on_screen`, `off_screen`, `behind_camera`, `node_absent`, `camera_absent`), projection counts, and `camera_switches`.
+
+```jsonc
+{
+  "clip_id": "clip_1a2b3c4d", "kind": "storyboard", "anchor_frame": 1234,
+  "frames_analyzed": 217, "subsampled": false,
+  "cadence": { "interval_frames": 4, "captured": 217, "dropped": 3,
+               "coverage": { "first_frame": 1200, "last_frame": 2068 } },
+  "gaps": [ { "start_frame": 1400, "end_frame": 1416, "reason": "encode_queue_full", "dropped": 3 } ],
+  "selected_frames": [ { "frame": 1200, "timestamp_ms": 81200, "reasons": ["pre_anchor"] } ],
+  "image": { "width": 1920, "height": 270, "bytes": 310442, "sha256": "…", "cache": "generated" },
+  "budget": { "used": 280, "limit": 1500, "hard_cap": 5000 }
+}
+```
+
+Artifacts are deterministic and cached in the clip database (content-addressed by kind + params + clip fingerprint + generator version); repeat calls return `cache: "hit"` with identical bytes. Degradation conditions return content-level JSON instead of an image: `no_screenshots`, `insufficient_frames`, `decode_failed`, `generation_failed`, plus `no_camera_data`, `unsupported_scene_2d`, `node_not_found` (with `sample_paths`), `unsupported_projection` for `node_filmstrip`.
+
+### Response — `config`
+
+Echoes the applied dashcam config. Tunable keys include screenshot cadence (`screenshot_interval_frames`, `screenshot_quality`, `screenshot_max_dimension`, `screenshot_byte_cap_mb`), dense burst mode (`dense_burst_*`), and the visual anomaly detector (`anomaly_enabled`, `anomaly_min_proportion`, `anomaly_relative_factor`, `anomaly_sustained_frames`, `anomaly_cooldown_sec`, `anomaly_noise_floor`). A project's `stage.toml [dashcam]` section (when present) is pushed after handshake and takes precedence on each new connection; runtime `config` calls apply until then.
 
 ---
 
@@ -1402,14 +1210,15 @@ Total: ~1400 tokens for complete understanding
 Total: 2 calls instead of 3 (snapshot + action + delta)
 ```
 
-### Pattern 3: Recording Analysis
+### Pattern 3: Clip Analysis
 
 ```
-1. recording(action: "markers")                   → find human markers
-2. recording(action: "snapshot_at", at_frame: N)  → state at marked moment
-3. recording(action: "query_range", ...)          → search for the anomaly
-4. recording(action: "diff_frames", ...)          → compare before/after
-5. recording(action: "add_marker", ...)           → annotate findings
+1. clips(action: "markers")                       → find human markers
+2. clips(action: "snapshot_at", at_frame: N)      → state at marked moment
+3. clips(action: "query_range", ...)              → search for the anomaly
+4. clips(action: "diff_frames", ...)              → compare before/after
+5. clips(action: "visual_artifact",
+      artifact: "storyboard")                     → see what happened
 Total: 5 calls for full timeline diagnosis
 ```
 
