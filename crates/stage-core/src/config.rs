@@ -83,6 +83,20 @@ pub struct SessionConfig {
 
     #[serde(default = "default_byte_cap_mb")]
     pub dashcam_byte_cap_mb: u32,
+
+    /// Screenshot cadence in physics frames (the visual-storyboards capture clock).
+    #[serde(default = "default_screenshot_interval_frames")]
+    pub dashcam_screenshot_interval_frames: u32,
+    #[serde(default = "default_screenshot_quality")]
+    pub dashcam_screenshot_quality: f32,
+    #[serde(default = "default_screenshot_max_dimension")]
+    pub dashcam_screenshot_max_dimension: u32,
+    #[serde(default = "default_screenshot_byte_cap_mb")]
+    pub dashcam_screenshot_byte_cap_mb: u32,
+    #[serde(default = "default_dense_burst_enabled")]
+    pub dashcam_dense_burst_enabled: bool,
+    #[serde(default = "default_dense_burst_duration_sec")]
+    pub dashcam_dense_burst_duration_sec: u32,
 }
 
 fn default_poll_interval() -> u32 {
@@ -121,6 +135,24 @@ fn default_system_min_interval() -> u32 {
 fn default_byte_cap_mb() -> u32 {
     1024
 }
+fn default_screenshot_interval_frames() -> u32 {
+    4
+}
+fn default_screenshot_quality() -> f32 {
+    0.65
+}
+fn default_screenshot_max_dimension() -> u32 {
+    480
+}
+fn default_screenshot_byte_cap_mb() -> u32 {
+    32
+}
+fn default_dense_burst_enabled() -> bool {
+    false
+}
+fn default_dense_burst_duration_sec() -> u32 {
+    5
+}
 
 impl Default for SessionConfig {
     fn default() -> Self {
@@ -142,6 +174,12 @@ impl Default for SessionConfig {
             dashcam_min_after_sec: default_min_after(),
             dashcam_system_min_interval_sec: default_system_min_interval(),
             dashcam_byte_cap_mb: default_byte_cap_mb(),
+            dashcam_screenshot_interval_frames: default_screenshot_interval_frames(),
+            dashcam_screenshot_quality: default_screenshot_quality(),
+            dashcam_screenshot_max_dimension: default_screenshot_max_dimension(),
+            dashcam_screenshot_byte_cap_mb: default_screenshot_byte_cap_mb(),
+            dashcam_dense_burst_enabled: default_dense_burst_enabled(),
+            dashcam_dense_burst_duration_sec: default_dense_burst_duration_sec(),
         }
     }
 }
@@ -200,6 +238,24 @@ impl SessionConfig {
         }
         if let Some(v) = update.dashcam_byte_cap_mb {
             self.dashcam_byte_cap_mb = v;
+        }
+        if let Some(v) = update.dashcam_screenshot_interval_frames {
+            self.dashcam_screenshot_interval_frames = v;
+        }
+        if let Some(v) = update.dashcam_screenshot_quality {
+            self.dashcam_screenshot_quality = v;
+        }
+        if let Some(v) = update.dashcam_screenshot_max_dimension {
+            self.dashcam_screenshot_max_dimension = v;
+        }
+        if let Some(v) = update.dashcam_screenshot_byte_cap_mb {
+            self.dashcam_screenshot_byte_cap_mb = v;
+        }
+        if let Some(v) = update.dashcam_dense_burst_enabled {
+            self.dashcam_dense_burst_enabled = v;
+        }
+        if let Some(v) = update.dashcam_dense_burst_duration_sec {
+            self.dashcam_dense_burst_duration_sec = v;
         }
     }
 
@@ -275,6 +331,12 @@ pub struct ConfigUpdate {
     pub dashcam_min_after_sec: Option<u32>,
     pub dashcam_system_min_interval_sec: Option<u32>,
     pub dashcam_byte_cap_mb: Option<u32>,
+    pub dashcam_screenshot_interval_frames: Option<u32>,
+    pub dashcam_screenshot_quality: Option<f32>,
+    pub dashcam_screenshot_max_dimension: Option<u32>,
+    pub dashcam_screenshot_byte_cap_mb: Option<u32>,
+    pub dashcam_dense_burst_enabled: Option<bool>,
+    pub dashcam_dense_burst_duration_sec: Option<u32>,
 }
 
 /// Simple glob matching for static patterns.

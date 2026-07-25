@@ -1495,13 +1495,84 @@ pub struct ScreenshotMeta {
 }
 
 /// Returns true if the screenshots table exists in this clip's DB.
-fn screenshots_table_exists(db: &Connection) -> bool {
+pub fn screenshots_table_exists(db: &Connection) -> bool {
     db.query_row(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='screenshots'",
         [],
         |_| Ok(()),
     )
     .is_ok()
+}
+
+/// Whether the optional artifact cache table exists in this clip.
+pub fn artifacts_table_exists(db: &Connection) -> bool {
+    db.query_row(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='artifacts'",
+        [],
+        |_| Ok(()),
+    )
+    .is_ok()
+}
+
+/// Whether the optional screenshot gap ledger exists in this clip.
+pub fn screenshot_gaps_table_exists(db: &Connection) -> bool {
+    db.query_row(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='screenshot_gaps'",
+        [],
+        |_| Ok(()),
+    )
+    .is_ok()
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ClipGap {
+    pub start_frame: u64,
+    pub end_frame: u64,
+    pub reason: String,
+    pub dropped: u64,
+}
+
+/// Read explicit capture gaps. Old clip schemas intentionally return no gaps.
+pub fn read_screenshot_gaps(db: &Connection) -> Result<Vec<ClipGap>, McpError> {
+    if !screenshot_gaps_table_exists(db) {
+        return Ok(Vec::new());
+    }
+    let mut stmt = db.prepare("SELECT start_frame, end_frame, reason, dropped FROM screenshot_gaps ORDER BY start_frame").map_err(sqlite_err)?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(ClipGap {
+                start_frame: row.get::<_, i64>(0)? as u64,
+                end_frame: row.get::<_, i64>(1)? as u64,
+                reason: row.get::<_, String>(2).unwrap_or_else(|_| "unknown".into()),
+                dropped: row.get::<_, i64>(3).unwrap_or(0) as u64,
+            })
+        })
+        .map_err(sqlite_err)?;
+    rows.collect::<Result<Vec<_>, _>>().map_err(sqlite_err)
+}
+
+/// Infer missing screenshot intervals for legacy clips using capture cadence.
+pub fn infer_screenshot_gaps(
+    db: &Connection,
+    interval_frames: u64,
+) -> Result<Vec<ClipGap>, McpError> {
+    let shots = list_screenshots(db)?;
+    if shots.len() < 2 || interval_frames == 0 {
+        return Ok(Vec::new());
+    }
+    let mut gaps = Vec::new();
+    for pair in shots.windows(2) {
+        let delta = pair[1].frame.saturating_sub(pair[0].frame);
+        if delta > interval_frames {
+            gaps.push(ClipGap {
+                start_frame: pair[0].frame + interval_frames,
+                end_frame: pair[1].frame - interval_frames,
+                reason: "cadence_inferred".into(),
+                dropped: delta / interval_frames - 1,
+            });
+        }
+    }
+    Ok(gaps)
 }
 
 /// Read the screenshot nearest to the given frame number.

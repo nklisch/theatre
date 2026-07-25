@@ -1,0 +1,1 @@
+//! Stage-specific manifest additions.

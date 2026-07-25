@@ -270,6 +270,11 @@ pub fn clips_summary(params: &ClipsParams) -> String {
         }
         ClipAction::ScreenshotAt => "Screenshot at frame".into(),
         ClipAction::Screenshots => "List screenshots".into(),
+        ClipAction::VisualArtifact => format!(
+            "Visual artifact: {}",
+            params.artifact.as_deref().unwrap_or("?")
+        ),
+        ClipAction::Config => "Dashcam config".into(),
     }
 }
 
