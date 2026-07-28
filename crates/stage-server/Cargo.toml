@@ -24,7 +24,7 @@ uuid = { version = "1", features = ["v4"] }
 rusqlite.workspace = true
 rmp-serde.workspace = true
 base64 = "0.22"
-temporal-vision = { path = "../../../krometrail/crates/temporal-vision", version = "0.1" }
+temporal-vision = "0.1"
 jpeg-decoder = "0.3"
 sha2 = "0.10"
 
