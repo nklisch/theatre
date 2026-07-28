@@ -15,8 +15,30 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PROJECT_DIR="$(realpath -m "${1:-$HOME/dev/voxel-dogfood}")"
-MODE="${2:-}"
+
+# Parse args: first non-flag arg is the project dir; --editor/--run select a mode.
+PROJECT_ARG=""
+MODE=""
+for arg in "$@"; do
+	case "$arg" in
+		--editor|--run)
+			MODE="$arg"
+			;;
+		--*)
+			echo "Unknown flag: $arg (use --editor or --run)" >&2
+			exit 1
+			;;
+		*)
+			if [ -z "$PROJECT_ARG" ]; then
+				PROJECT_ARG="$arg"
+			else
+				echo "Unexpected extra argument: $arg" >&2
+				exit 1
+			fi
+			;;
+	esac
+done
+PROJECT_DIR="$(realpath -m "${PROJECT_ARG:-$HOME/dev/voxel-dogfood}")"
 
 # --- Resolve Godot binary -----------------------------------------------------
 
@@ -152,8 +174,4 @@ case "$MODE" in
 		exec "$GODOT" --path "$PROJECT_DIR"
 		;;
 	"") ;;
-	*)
-		echo "Unknown mode: $MODE (use --editor or --run)" >&2
-		exit 1
-		;;
 esac
