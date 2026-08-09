@@ -160,8 +160,9 @@ pub fn project_dir_path() -> PathBuf {
 /// CARGO_TARGET_DIR (env var or cargo config `build.target-dir`, discovered
 /// via `cargo metadata`). Falls back to `<repo>/target/debug/<name>`.
 pub fn workspace_binary(name: &str) -> PathBuf {
+    let filename = format!("{name}{}", std::env::consts::EXE_SUFFIX);
     if let Ok(dir) = std::env::var("CARGO_TARGET_DIR") {
-        return PathBuf::from(dir).join("debug").join(name);
+        return PathBuf::from(dir).join("debug").join(&filename);
     }
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     if let Ok(output) = Command::new("cargo")
@@ -172,9 +173,9 @@ pub fn workspace_binary(name: &str) -> PathBuf {
         && let Ok(json) = serde_json::from_slice::<serde_json::Value>(&output.stdout)
         && let Some(dir) = json.get("target_directory").and_then(|v| v.as_str())
     {
-        return PathBuf::from(dir).join("debug").join(name);
+        return PathBuf::from(dir).join("debug").join(&filename);
     }
-    root.join("target").join("debug").join(name)
+    root.join("target").join("debug").join(filename)
 }
 
 /// Assert two f64 values are approximately equal (within 0.01).

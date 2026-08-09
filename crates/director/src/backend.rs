@@ -91,6 +91,7 @@ impl Backend {
     ) -> Result<OperationResult, OperationError> {
         let port = resolve_daemon_port();
         let mut guard = self.daemon.lock().await;
+        let mut daemon_failures = Vec::new();
 
         // Check whether the current daemon can serve this request.
         if let Some(ref mut handle) = *guard {
@@ -99,6 +100,7 @@ impl Backend {
                     Ok(result) => return Ok(result),
                     Err(e) => {
                         tracing::warn!("daemon send_operation failed ({e}), attempting respawn");
+                        daemon_failures.push(e.to_string());
                         // Kill the stale daemon.
                         *guard = None;
                         // Attempt a single respawn.
@@ -114,6 +116,7 @@ impl Backend {
                                              falling back to one-shot"
                                         );
                                         *guard = None;
+                                        daemon_failures.push(e2.to_string());
                                     }
                                 }
                             }
@@ -121,12 +124,19 @@ impl Backend {
                                 tracing::warn!(
                                     "daemon respawn failed ({e2}), falling back to one-shot"
                                 );
+                                daemon_failures.push(e2.to_string());
                             }
                         }
                         // Fall through to one-shot.
                         drop(guard);
-                        return oneshot::run_oneshot(godot_bin, project_path, operation, params)
-                            .await;
+                        return run_oneshot_fallback(
+                            godot_bin,
+                            project_path,
+                            operation,
+                            params,
+                            daemon_failures,
+                        )
+                        .await;
                     }
                 }
             } else {
@@ -150,16 +160,19 @@ impl Backend {
                              falling back to one-shot"
                         );
                         *guard = None;
+                        daemon_failures.push(e.to_string());
                     }
                 }
             }
             Err(e) => {
                 tracing::info!("daemon spawn failed ({e}), using one-shot");
+                daemon_failures.push(e.to_string());
             }
         }
 
         // One-shot fallback — always available.
-        oneshot::run_oneshot(godot_bin, project_path, operation, params).await
+        drop(guard);
+        run_oneshot_fallback(godot_bin, project_path, operation, params, daemon_failures).await
     }
 
     /// Kill the daemon without shutting down the editor connection.
@@ -192,6 +205,23 @@ impl Backend {
                 tracing::warn!("daemon shutdown error: {e}");
             }
         }
+    }
+}
+
+async fn run_oneshot_fallback(
+    godot_bin: &Path,
+    project_path: &Path,
+    operation: &str,
+    params: &serde_json::Value,
+    daemon_failures: Vec<String>,
+) -> Result<OperationResult, OperationError> {
+    match oneshot::run_oneshot(godot_bin, project_path, operation, params).await {
+        Ok(result) => Ok(result),
+        Err(fallback) if daemon_failures.is_empty() => Err(fallback),
+        Err(fallback) => Err(OperationError::FallbackFailed {
+            daemon: daemon_failures.join("; "),
+            fallback: Box::new(fallback),
+        }),
     }
 }
 

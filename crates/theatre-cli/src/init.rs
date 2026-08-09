@@ -5,6 +5,7 @@ use clap::Args;
 use console::style;
 use dialoguer::{Confirm, Input, MultiSelect};
 
+use crate::godot::{GodotSource, ImportOutcome, import_project, resolve_godot};
 use crate::paths::{TheatrePaths, copy_dir_recursive, gdext_filename, platform_dir};
 use crate::project::{
     generate_mcp_json, remove_autoload, set_autoload, set_plugin_enabled, validate_project,
@@ -26,6 +27,10 @@ pub struct InitArgs {
     /// (both addons, both plugins, generate .mcp.json)
     #[arg(long, short = 'y')]
     yes: bool,
+
+    /// Godot executable used for the initial editor import
+    #[arg(long, value_name = "PATH")]
+    godot_bin: Option<PathBuf>,
 }
 
 pub fn run(args: InitArgs) -> Result<()> {
@@ -101,8 +106,8 @@ pub fn run(args: InitArgs) -> Result<()> {
 
     // Step 6b: Generate and write .mcp.json
     if do_mcp {
-        let stage_bin = theatre.bin_dir.join("stage");
-        let director_bin = theatre.bin_dir.join("director");
+        let stage_bin = theatre.executable("stage");
+        let director_bin = theatre.executable("director");
 
         if !stage_bin.exists() {
             eprintln!(
@@ -120,7 +125,7 @@ pub fn run(args: InitArgs) -> Result<()> {
         }
 
         let port_opt = if port == 9077 { Some(9077) } else { Some(port) };
-        let mcp = generate_mcp_json(&stage_bin, &director_bin, do_stage, do_director, port_opt);
+        let mcp = generate_mcp_json(do_stage, do_director, port_opt);
         let overwrite = args.yes || !mcp_json_exists;
         let written = write_mcp_json(&args.project, &mcp, overwrite)?;
         if written {
@@ -158,10 +163,94 @@ pub fn run(args: InitArgs) -> Result<()> {
     // Step 6d: Generate agent rules
     crate::rules::run_from_init(&args.project, args.yes)?;
 
+    if do_stage || do_director {
+        run_initial_import(&args.project, args.godot_bin.as_deref())?;
+    }
+
     eprintln!();
     eprintln!("Done. Open your project in Godot — plugins are active.");
 
     Ok(())
+}
+
+fn run_initial_import(project: &std::path::Path, explicit: Option<&std::path::Path>) -> Result<()> {
+    let resolution = resolve_godot(explicit)?;
+    for warning in resolution.warnings {
+        eprintln!("  {} {warning}", style("⚠").yellow());
+    }
+
+    let Some(godot) = resolution.path else {
+        eprintln!(
+            "  {} Godot was not found. Run an editor import before using Theatre.",
+            style("⚠").yellow()
+        );
+        print_godot_discovery_guidance(None);
+        return Ok(());
+    };
+
+    eprintln!(
+        "  {} Importing the project with Godot...",
+        style("…").cyan()
+    );
+    match import_project(&godot, project)? {
+        ImportOutcome::Success => {
+            eprintln!("  {} Godot editor import complete", style("✓").green());
+        }
+        ImportOutcome::Failed { status, stderr } => {
+            eprintln!(
+                "  {} Godot import exited with status {status}. Theatre setup remains installed.",
+                style("⚠").yellow()
+            );
+            print_stderr_excerpt(&stderr);
+        }
+        ImportOutcome::TimedOut { stderr } => {
+            eprintln!(
+                "  {} Godot import exceeded 90 seconds and was stopped. Theatre setup remains installed.",
+                style("⚠").yellow()
+            );
+            print_stderr_excerpt(&stderr);
+        }
+    }
+
+    if resolution.source == Some(GodotSource::Explicit) {
+        eprintln!(
+            "  {} --godot-bin applies only to this import. Configure GODOT_BIN for the agent that starts Director.",
+            style("ℹ").cyan()
+        );
+        print_godot_discovery_guidance(Some(&godot));
+    }
+
+    Ok(())
+}
+
+fn print_stderr_excerpt(stderr: &str) {
+    let excerpt = stderr.trim();
+    if !excerpt.is_empty() {
+        eprintln!("    Godot stderr (tail):");
+        let lines: Vec<_> = excerpt.lines().rev().take(40).collect();
+        for line in lines.into_iter().rev() {
+            eprintln!("    {line}");
+        }
+    }
+}
+
+#[cfg(windows)]
+fn print_godot_discovery_guidance(godot: Option<&std::path::Path>) {
+    if let Some(godot) = godot {
+        let escaped = godot.to_string_lossy().replace('\'', "''");
+        eprintln!("    [Environment]::SetEnvironmentVariable('GODOT_BIN', '{escaped}', 'User')");
+    } else {
+        eprintln!("    Set GODOT_BIN in the Windows environment that starts your AI agent.");
+    }
+}
+
+#[cfg(not(windows))]
+fn print_godot_discovery_guidance(godot: Option<&std::path::Path>) {
+    if let Some(godot) = godot {
+        eprintln!("    export GODOT_BIN=\"{}\"", godot.display());
+    } else {
+        eprintln!("    Set GODOT_BIN or add the `godot` command to PATH.");
+    }
 }
 
 /// Run the interactive TUI and return selections.

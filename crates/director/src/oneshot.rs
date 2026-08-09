@@ -39,8 +39,8 @@ pub enum OperationError {
     #[error("Godot process exited with status {status}: {stderr}")]
     ProcessFailed { status: i32, stderr: String },
 
-    #[error("Godot process timed out after {0:?}")]
-    Timeout(Duration),
+    #[error("Godot process timed out after {duration:?}: {stderr}")]
+    Timeout { duration: Duration, stderr: String },
 
     #[error("Failed to parse operation output as JSON: {source}\nstdout: {stdout}")]
     ParseFailed {
@@ -54,6 +54,12 @@ pub enum OperationError {
         error: String,
         operation: String,
         context: serde_json::Value,
+    },
+
+    #[error("daemon backend failed: {daemon}; one-shot fallback also failed: {fallback}")]
+    FallbackFailed {
+        daemon: String,
+        fallback: Box<OperationError>,
     },
 }
 
@@ -75,7 +81,7 @@ async fn run_subprocess(
 ) -> Result<(String, String, std::process::ExitStatus), OperationError> {
     let params_json = params.to_string();
 
-    let mut cmd = tokio::process::Command::new(godot_bin);
+    let mut cmd = crate::process::godot_command(godot_bin).map_err(OperationError::SpawnFailed)?;
     cmd.args([
         "--headless",
         "--path",
@@ -89,17 +95,47 @@ async fn run_subprocess(
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::piped());
 
-    let child = cmd.spawn().map_err(OperationError::SpawnFailed)?;
+    let mut child =
+        crate::process::OwnedChild::spawn(&mut cmd).map_err(OperationError::SpawnFailed)?;
+    let stdout = child.take_stdout().expect("stdout was piped");
+    let stderr = child.take_stderr().expect("stderr was piped");
+    let stdout_task = tokio::spawn(crate::process::read_all(stdout));
+    let stderr_tail = crate::process::spawn_stderr_tail(stderr);
 
-    let output = tokio::time::timeout(TIMEOUT, child.wait_with_output())
-        .await
-        .map_err(|_| OperationError::Timeout(TIMEOUT))?
+    let status = match tokio::time::timeout(TIMEOUT, child.wait()).await {
+        Ok(Ok(status)) => status,
+        Ok(Err(error)) => {
+            let _ = child.terminate_and_wait().await;
+            let _ = stdout_task.await;
+            let _ = stderr_tail.finish().await;
+            return Err(OperationError::SpawnFailed(error));
+        }
+        Err(_) => {
+            let _ = child.terminate_and_wait().await;
+            let _ = stdout_task.await;
+            let stderr = stderr_tail.finish().await;
+            return Err(OperationError::Timeout {
+                duration: TIMEOUT,
+                stderr,
+            });
+        }
+    };
+
+    let stdout = stdout_task.await;
+    let stderr = stderr_tail.finish().await;
+    let stdout = stdout
+        .map_err(|error| {
+            OperationError::SpawnFailed(std::io::Error::other(format!(
+                "stdout reader task failed: {error}"
+            )))
+        })?
         .map_err(OperationError::SpawnFailed)?;
 
-    let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-    let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-
-    Ok((stdout, stderr, output.status))
+    Ok((
+        String::from_utf8_lossy(&stdout).into_owned(),
+        stderr,
+        status,
+    ))
 }
 
 /// Parse the last JSON-like line from stdout into an `OperationResult`.

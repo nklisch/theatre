@@ -5,8 +5,8 @@ use clap::Args;
 use console::style;
 
 use crate::paths::{
-    SourcePaths, copy_dir_recursive, gdext_filename, platform_dir, resolve_bin_dir,
-    resolve_share_dir,
+    SourcePaths, copy_dir_recursive, executable_filename, gdext_filename, platform_dir,
+    resolve_bin_dir, resolve_share_dir,
 };
 
 #[derive(Args)]
@@ -77,11 +77,12 @@ pub fn run(args: InstallArgs) -> Result<()> {
     eprintln!("  Installing to {}/:", bin_dir.display());
 
     for bin_name in &["stage", "director", "theatre"] {
-        let src = source.built_binary(bin_name, true);
-        let dst = bin_dir.join(bin_name);
+        let src = source.built_executable(bin_name, true);
+        let filename = executable_filename(bin_name);
+        let dst = bin_dir.join(&filename);
         std::fs::copy(&src, &dst)
             .with_context(|| format!("Failed to copy {} to {}", src.display(), dst.display()))?;
-        eprintln!("  {} {bin_name}", style("✓").green());
+        eprintln!("  {} {filename}", style("✓").green());
     }
     eprintln!();
 
@@ -143,15 +144,13 @@ pub fn run(args: InstallArgs) -> Result<()> {
     eprintln!();
 
     // Step 9: Check if bin_dir is in PATH
-    let path_env = std::env::var("PATH").unwrap_or_default();
-    let bin_dir_str = bin_dir.to_string_lossy();
-    if !path_env.split(':').any(|p| p == bin_dir_str.as_ref()) {
+    if !path_contains(&bin_dir) {
         eprintln!(
             "  {} {} is not in your PATH. Add it:",
             style("⚠").yellow(),
             bin_dir.display()
         );
-        eprintln!("    export PATH=\"$HOME/.local/bin:$PATH\"");
+        print_path_instruction(&bin_dir);
         eprintln!();
     }
 
@@ -162,4 +161,49 @@ pub fn run(args: InstallArgs) -> Result<()> {
     eprintln!("Install complete. Run `theatre init <project>` to set up a Godot project.");
 
     Ok(())
+}
+
+fn path_contains(bin_dir: &std::path::Path) -> bool {
+    let Some(path) = std::env::var_os("PATH") else {
+        return false;
+    };
+    std::env::split_paths(&path).any(|entry| paths_equivalent(&entry, bin_dir))
+}
+
+fn paths_equivalent(left: &std::path::Path, right: &std::path::Path) -> bool {
+    if let (Ok(left), Ok(right)) = (std::fs::canonicalize(left), std::fs::canonicalize(right)) {
+        return left == right;
+    }
+
+    #[cfg(windows)]
+    {
+        let normalize = |path: &std::path::Path| {
+            path.to_string_lossy()
+                .replace('/', "\\")
+                .trim_end_matches('\\')
+                .to_lowercase()
+        };
+        normalize(left) == normalize(right)
+    }
+
+    #[cfg(not(windows))]
+    {
+        left == right
+    }
+}
+
+#[cfg(windows)]
+fn print_path_instruction(bin_dir: &std::path::Path) {
+    let resolved = std::fs::canonicalize(bin_dir).unwrap_or_else(|_| bin_dir.to_path_buf());
+    let escaped = resolved.to_string_lossy().replace('\'', "''");
+    eprintln!("    $theatreBin = '{escaped}'");
+    eprintln!(
+        "    [Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path', 'User') + [IO.Path]::PathSeparator + $theatreBin, 'User')"
+    );
+}
+
+#[cfg(not(windows))]
+fn print_path_instruction(bin_dir: &std::path::Path) {
+    let resolved = std::fs::canonicalize(bin_dir).unwrap_or_else(|_| bin_dir.to_path_buf());
+    eprintln!("    export PATH=\"{}:$PATH\"", resolved.display());
 }

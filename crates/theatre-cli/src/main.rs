@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 
 mod deploy;
 mod enable;
+mod godot;
 mod init;
 mod install;
 mod mcp;

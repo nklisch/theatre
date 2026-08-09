@@ -9,6 +9,12 @@ use director::resolve::{resolve_godot_bin, validate_project_path};
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    let mut args_os = std::env::args_os();
+    let _executable = args_os.next();
+    if args_os.next().as_deref() == Some(std::ffi::OsStr::new("__process-supervisor")) {
+        std::process::exit(director::process::run_supervisor(args_os)?);
+    }
+
     let args: Vec<String> = std::env::args().collect();
 
     match args.get(1).map(|s| s.as_str()) {

@@ -55,7 +55,22 @@ cargo fmt --check
 # Copy GDExtension to addon dir within this repo (Linux)
 ./scripts/copy-gdext.sh          # debug
 ./scripts/copy-gdext.sh release  # release
+
+# Windows: deploy through the platform-aware CLI (PowerShell)
+cargo run -p theatre-cli -- deploy .\tests\godot-project
 ```
+
+The test project uses tracked links for `addons/stage` and `addons/director`.
+On native Windows, enable Developer Mode (or use an elevated shell) and clone
+with symlink support so Git materializes those links instead of plain text
+placeholder files:
+
+```powershell
+git clone -c core.symlinks=true https://github.com/nklisch/theatre.git
+```
+
+This Windows checkout requirement is additive; Unix checkouts use their normal
+symlink behavior.
 
 ## Theatre CLI
 
@@ -70,11 +85,20 @@ theatre enable ~/godot/my-game   # non-interactive plugin enable/disable
 theatre rules ~/godot/my-game    # generate agent rules file for a project
 ```
 
+PowerShell uses Windows paths without replacing the Unix workflow above:
+
+```powershell
+theatre init .\path\to\my-game --godot-bin 'C:\path\to\Godot_console.exe'
+theatre deploy .\path\to\my-game
+```
+
 - `install` builds from source and populates `~/.local/bin/` (binaries) and
   `~/.local/share/theatre/` (addon templates + GDExtension).
 - `init` reads from the installed share dir (not the repo). Copies addons,
   generates `.mcp.json`, enables plugins, optionally generates agent rules file.
-  Interactive by default, `--yes` for non-interactive.
+  Interactive by default, `--yes` for non-interactive. Generated MCP commands
+  are the portable bare names `stage` and `director`; the agent process must
+  inherit a `PATH` containing the configured Theatre binary directory.
 - `deploy` rebuilds from source, updates the share dir, then copies to
   target project(s). Accepts `--release`.
 - `enable` toggles plugins in `project.godot` without copying files.

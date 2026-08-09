@@ -72,6 +72,16 @@ impl LiveBackend for McpBackend {
     }
 
     async fn director(&self, operation: &str, params: Value) -> anyhow::Result<ToolResult> {
+        // Director-heavy journeys can otherwise exceed Stage's idle timeout on
+        // slower Windows process startup. A read-only request keeps the live
+        // Stage session active between Director subprocesses.
+        let _ = dispatch_tool(
+            &self.server,
+            "scene_tree",
+            serde_json::json!({"action": "roots"}),
+        )
+        .await;
+
         let bin = super::workspace_binary("director");
 
         let mut params = params;

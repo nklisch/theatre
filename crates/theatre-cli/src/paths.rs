@@ -40,6 +40,11 @@ impl TheatrePaths {
             .join(gdext_filename())
     }
 
+    /// Path to an installed native executable.
+    pub fn executable(&self, name: &str) -> PathBuf {
+        self.bin_dir.join(executable_filename(name))
+    }
+
     /// Verify the share dir has been populated (install was run).
     pub fn validate_installed(&self) -> Result<()> {
         let addon_dir = self.addon_source();
@@ -104,21 +109,31 @@ impl SourcePaths {
         )
     }
 
-    /// Path to a built binary in the repo's target dir.
-    pub fn built_binary(&self, name: &str, release: bool) -> PathBuf {
+    /// Path to a built native executable in the repo's target dir.
+    pub fn built_executable(&self, name: &str, release: bool) -> PathBuf {
         let mode = if release { "release" } else { "debug" };
-        workspace_target_dir(&self.repo_root).join(mode).join(name)
+        workspace_target_dir(&self.repo_root)
+            .join(mode)
+            .join(executable_filename(name))
     }
 
     /// Path to the built GDExtension in the repo's target dir.
     pub fn built_gdext(&self, release: bool) -> PathBuf {
-        self.built_binary(gdext_filename(), release)
+        let mode = if release { "release" } else { "debug" };
+        workspace_target_dir(&self.repo_root)
+            .join(mode)
+            .join(gdext_filename())
     }
 
     /// Path to the addon source in the repo.
     pub fn addon_source(&self) -> PathBuf {
         self.repo_root.join("addons")
     }
+}
+
+/// Platform-specific filename for a native executable.
+pub fn executable_filename(name: &str) -> String {
+    format!("{name}{}", std::env::consts::EXE_SUFFIX)
 }
 
 fn is_workspace_root(path: &Path) -> bool {
@@ -143,10 +158,7 @@ fn walk_up_for_workspace(start: &Path) -> Option<PathBuf> {
         if is_workspace_root(&current) {
             return Some(current);
         }
-        match current.parent() {
-            Some(parent) => current = parent.to_path_buf(),
-            None => return None,
-        }
+        current = current.parent()?.to_path_buf();
     }
 }
 
@@ -304,6 +316,22 @@ mod tests {
         assert_eq!(name, "libstage_godot.dylib");
         #[cfg(target_os = "windows")]
         assert_eq!(name, "stage_godot.dll");
+    }
+
+    #[test]
+    fn test_executable_filename() {
+        assert_eq!(
+            executable_filename("stage"),
+            format!("stage{}", std::env::consts::EXE_SUFFIX)
+        );
+    }
+
+    #[test]
+    fn built_gdext_does_not_use_executable_suffix() {
+        let source = SourcePaths {
+            repo_root: PathBuf::from("repo"),
+        };
+        assert!(source.built_gdext(false).ends_with(gdext_filename()));
     }
 
     #[test]
