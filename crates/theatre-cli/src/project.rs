@@ -223,11 +223,7 @@ fn modify_autoload(content: &str, name: &str, script_path: &str, add: bool) -> S
 
 /// Generate .mcp.json content for a project.
 ///
-/// `stage_bin` and `director_bin` are absolute paths to the installed
-/// binaries.
 pub fn generate_mcp_json(
-    stage_bin: &Path,
-    director_bin: &Path,
     include_stage: bool,
     include_director: bool,
     port: Option<u16>,
@@ -237,7 +233,7 @@ pub fn generate_mcp_json(
     if include_stage {
         let mut stage = serde_json::json!({
             "type": "stdio",
-            "command": stage_bin.to_string_lossy(),
+            "command": "stage",
             "args": ["serve"]
         });
         if let Some(p) = port
@@ -253,7 +249,7 @@ pub fn generate_mcp_json(
     if include_director {
         let director = serde_json::json!({
             "type": "stdio",
-            "command": director_bin.to_string_lossy(),
+            "command": "director",
             "args": ["serve"]
         });
         servers.insert("director".to_string(), director);
@@ -284,7 +280,6 @@ pub fn write_mcp_json(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::Path;
     use tempfile::TempDir;
 
     fn make_project(content: &str) -> TempDir {
@@ -402,23 +397,27 @@ mod tests {
 
     #[test]
     fn test_generate_mcp_json_default_port() {
-        let spec_bin = Path::new("/home/user/.local/bin/stage");
-        let dir_bin = Path::new("/home/user/.local/bin/director");
-        let json = generate_mcp_json(spec_bin, dir_bin, true, true, Some(9077));
+        let json = generate_mcp_json(true, true, Some(9077));
         let servers = json["mcpServers"].as_object().unwrap();
         assert!(servers.contains_key("stage"));
         assert!(servers.contains_key("director"));
         // stage uses "serve" arg since bare stage defaults to CLI mode
         assert_eq!(servers["stage"]["args"][0], "serve");
+        assert_eq!(servers["stage"]["command"], "stage");
+        assert_eq!(servers["director"]["command"], "director");
+        assert!(
+            !servers["stage"]["command"]
+                .as_str()
+                .unwrap()
+                .contains(['/', '\\'])
+        );
         // No env for default port
         assert!(servers["stage"].get("env").is_none());
     }
 
     #[test]
     fn test_generate_mcp_json_custom_port() {
-        let spec_bin = Path::new("/home/user/.local/bin/stage");
-        let dir_bin = Path::new("/home/user/.local/bin/director");
-        let json = generate_mcp_json(spec_bin, dir_bin, true, true, Some(9999));
+        let json = generate_mcp_json(true, true, Some(9999));
         let stage = &json["mcpServers"]["stage"];
         assert_eq!(stage["args"][0], "serve");
         assert!(stage.get("env").is_some());
@@ -427,9 +426,7 @@ mod tests {
 
     #[test]
     fn test_generate_mcp_json_stage_only() {
-        let spec_bin = Path::new("/home/user/.local/bin/stage");
-        let dir_bin = Path::new("/home/user/.local/bin/director");
-        let json = generate_mcp_json(spec_bin, dir_bin, true, false, None);
+        let json = generate_mcp_json(true, false, None);
         let servers = json["mcpServers"].as_object().unwrap();
         assert!(servers.contains_key("stage"));
         assert!(!servers.contains_key("director"));

@@ -4,23 +4,24 @@ use std::time::Duration;
 use stage_protocol::codec::async_io;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::TcpStream;
-use tokio::process::{Child, ChildStdout, Command};
 
 use crate::oneshot::{OperationError, OperationResult};
+use crate::process::{OwnedChild, StderrTail};
 
 const DEFAULT_PORT: u16 = 6550;
 const READY_TIMEOUT: Duration = Duration::from_secs(15);
 const OPERATION_TIMEOUT: Duration = Duration::from_secs(30);
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Manages a single headless Godot daemon process.
 pub struct DaemonHandle {
-    child: Child,
+    child: OwnedChild,
     stream: TcpStream,
     project_path: PathBuf,
     port: u16,
-    // Keeps the read end of stdout's pipe open so the daemon can write to it
-    // (e.g. shutdown messages) without getting SIGPIPE.
-    _stdout: BufReader<ChildStdout>,
+    stdout_task: Option<tokio::task::JoinHandle<()>>,
+    stderr: Option<StderrTail>,
 }
 
 /// Errors specific to daemon lifecycle.
@@ -29,11 +30,15 @@ pub enum DaemonError {
     #[error("daemon failed to start: {0}")]
     SpawnFailed(#[source] std::io::Error),
 
-    #[error("daemon did not become ready within {0:?}")]
-    ReadyTimeout(Duration),
+    #[error("daemon did not become ready within {duration:?}: {stderr}")]
+    ReadyTimeout { duration: Duration, stderr: String },
 
-    #[error("daemon TCP connection failed: {0}")]
-    ConnectionFailed(#[source] std::io::Error),
+    #[error("daemon TCP connection failed: {source}: {stderr}")]
+    ConnectionFailed {
+        #[source]
+        source: std::io::Error,
+        stderr: String,
+    },
 
     #[error("daemon TCP I/O error: {0}")]
     IoError(#[source] std::io::Error),
@@ -47,6 +52,15 @@ pub enum DaemonError {
 
     #[error("daemon process exited unexpectedly")]
     ProcessExited,
+
+    #[error("daemon readiness ping failed: {message}: {stderr}")]
+    PingFailed { message: String, stderr: String },
+
+    #[error("daemon operation timed out after {duration:?}: {stderr}")]
+    OperationTimeout { duration: Duration, stderr: String },
+
+    #[error("daemon did not shut down within {duration:?}: {stderr}")]
+    ShutdownTimeout { duration: Duration, stderr: String },
 }
 
 impl From<DaemonError> for OperationError {
@@ -69,7 +83,7 @@ impl DaemonHandle {
         project_path: &Path,
         port: u16,
     ) -> Result<Self, DaemonError> {
-        let mut cmd = Command::new(godot_bin);
+        let mut cmd = crate::process::godot_command(godot_bin).map_err(DaemonError::SpawnFailed)?;
         cmd.args([
             "--headless",
             "--path",
@@ -79,11 +93,13 @@ impl DaemonHandle {
         ])
         .env("DIRECTOR_DAEMON_PORT", port.to_string())
         .stdout(std::process::Stdio::piped())
-        .stderr(std::process::Stdio::null());
+        .stderr(std::process::Stdio::piped());
 
-        let mut child = cmd.spawn().map_err(DaemonError::SpawnFailed)?;
+        let mut child = OwnedChild::spawn(&mut cmd).map_err(DaemonError::SpawnFailed)?;
 
-        let stdout = child.stdout.take().expect("stdout was piped");
+        let stdout = child.take_stdout().expect("stdout was piped");
+        let stderr = child.take_stderr().expect("stderr was piped");
+        let stderr = crate::process::spawn_stderr_tail(stderr);
         let mut reader = BufReader::new(stdout);
 
         // Wait for the ready signal on stdout within READY_TIMEOUT.
@@ -112,34 +128,83 @@ impl DaemonHandle {
         let stdout_reader = match ready_result {
             Ok(Ok(r)) => r,
             Ok(Err(e)) => {
-                let _ = child.kill().await;
-                return Err(DaemonError::SpawnFailed(e));
+                let _ = child.terminate_and_wait().await;
+                let captured = stderr.finish().await;
+                return Err(DaemonError::PingFailed {
+                    message: e.to_string(),
+                    stderr: captured,
+                });
             }
             Err(_) => {
-                let _ = child.kill().await;
-                return Err(DaemonError::ReadyTimeout(READY_TIMEOUT));
+                let _ = child.terminate_and_wait().await;
+                let captured = stderr.finish().await;
+                return Err(DaemonError::ReadyTimeout {
+                    duration: READY_TIMEOUT,
+                    stderr: captured,
+                });
             }
         };
 
         // Connect to the daemon's TCP port.
         let addr = format!("127.0.0.1:{port}");
-        let stream = tokio::time::timeout(Duration::from_secs(5), TcpStream::connect(&addr))
-            .await
-            .map_err(|_| {
-                DaemonError::ConnectionFailed(std::io::Error::new(
-                    std::io::ErrorKind::TimedOut,
-                    "TCP connect timed out",
-                ))
-            })?
-            .map_err(DaemonError::ConnectionFailed)?;
+        let stream = match tokio::time::timeout(CONNECT_TIMEOUT, TcpStream::connect(&addr)).await {
+            Ok(Ok(stream)) => stream,
+            Ok(Err(source)) => {
+                let _ = child.terminate_and_wait().await;
+                let captured = stderr.finish().await;
+                return Err(DaemonError::ConnectionFailed {
+                    source,
+                    stderr: captured,
+                });
+            }
+            Err(_) => {
+                let _ = child.terminate_and_wait().await;
+                let captured = stderr.finish().await;
+                return Err(DaemonError::ConnectionFailed {
+                    source: std::io::Error::new(
+                        std::io::ErrorKind::TimedOut,
+                        "TCP connect timed out",
+                    ),
+                    stderr: captured,
+                });
+            }
+        };
 
-        Ok(DaemonHandle {
+        // Continue draining stdout after the ready line. Merely retaining the
+        // pipe can deadlock a verbose or large project once its buffer fills.
+        let stdout_task = tokio::spawn(async move {
+            let mut reader = stdout_reader;
+            let _ = tokio::io::copy(&mut reader, &mut tokio::io::sink()).await;
+        });
+
+        let mut handle = DaemonHandle {
             child,
             stream,
             project_path: project_path.to_path_buf(),
             port,
-            _stdout: stdout_reader,
-        })
+            stdout_task: Some(stdout_task),
+            stderr: Some(stderr),
+        };
+
+        let ping_error = match handle.send_operation("ping", &serde_json::json!({})).await {
+            Ok(result) if result.success => None,
+            Ok(result) => Some(
+                result
+                    .error
+                    .unwrap_or_else(|| "ping returned an unsuccessful response".into()),
+            ),
+            Err(error) => Some(error.to_string()),
+        };
+        if let Some(message) = ping_error {
+            let captured = handle.stderr_snapshot();
+            handle.terminate().await;
+            return Err(DaemonError::PingFailed {
+                message,
+                stderr: captured,
+            });
+        }
+
+        Ok(handle)
     }
 
     /// Send an operation to the daemon and return the result.
@@ -168,11 +233,9 @@ impl DaemonHandle {
             })
         })
         .await
-        .map_err(|_| {
-            DaemonError::IoError(std::io::Error::new(
-                std::io::ErrorKind::TimedOut,
-                "operation timed out",
-            ))
+        .map_err(|_| DaemonError::OperationTimeout {
+            duration: OPERATION_TIMEOUT,
+            stderr: self.stderr_snapshot(),
         })?
     }
 
@@ -181,8 +244,32 @@ impl DaemonHandle {
         let quit_msg = serde_json::json!({"operation": "quit", "params": {}});
         // Best-effort send — ignore errors if the daemon is already gone.
         let _ = async_io::write_message::<serde_json::Value>(&mut self.stream, &quit_msg).await;
-        self.child.wait().await.map_err(DaemonError::SpawnFailed)?;
-        Ok(())
+        match tokio::time::timeout(SHUTDOWN_TIMEOUT, self.child.wait()).await {
+            Ok(result) => {
+                result.map_err(DaemonError::SpawnFailed)?;
+                if let Some(stderr) = self.stderr.take() {
+                    let _ = stderr.finish().await;
+                }
+                if let Some(stdout_task) = self.stdout_task.take() {
+                    let _ = stdout_task.await;
+                }
+                Ok(())
+            }
+            Err(_) => {
+                let _ = self.child.terminate_and_wait().await;
+                let stderr = match self.stderr.take() {
+                    Some(stderr) => stderr.finish().await,
+                    None => String::new(),
+                };
+                if let Some(stdout_task) = self.stdout_task.take() {
+                    let _ = stdout_task.await;
+                }
+                Err(DaemonError::ShutdownTimeout {
+                    duration: SHUTDOWN_TIMEOUT,
+                    stderr,
+                })
+            }
+        }
     }
 
     /// Check if the daemon process is still running.
@@ -199,12 +286,22 @@ impl DaemonHandle {
     pub fn port(&self) -> u16 {
         self.port
     }
-}
 
-impl Drop for DaemonHandle {
-    fn drop(&mut self) {
-        // Best-effort kill if shutdown() was not called.
-        let _ = self.child.start_kill();
+    fn stderr_snapshot(&self) -> String {
+        self.stderr
+            .as_ref()
+            .map(StderrTail::snapshot)
+            .unwrap_or_default()
+    }
+
+    async fn terminate(&mut self) {
+        let _ = self.child.terminate_and_wait().await;
+        if let Some(stderr) = self.stderr.take() {
+            let _ = stderr.finish().await;
+        }
+        if let Some(stdout_task) = self.stdout_task.take() {
+            let _ = stdout_task.await;
+        }
     }
 }
 

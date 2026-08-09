@@ -34,11 +34,20 @@ cargo run -p theatre-cli -- install
 ```
 
 Installs `theatre`, `stage`, and `director` binaries to `~/.local/bin/` and addon templates to `~/.local/share/theatre/`.
+On Windows these binaries are installed with `.exe` suffixes. If the configured
+binary directory is not on `PATH`, `theatre install` prints a PowerShell command
+for adding it; Unix installations retain the POSIX shell guidance.
 
 ### 2. Set up your Godot project
 
 ```bash
 theatre init ~/your-godot-project
+```
+
+PowerShell:
+
+```powershell
+theatre init .\path\to\your-godot-project
 ```
 
 Interactively copies addons, generates `.mcp.json`, enables plugins, and optionally sets up agent rules. Use `--yes` to skip prompts and accept all defaults.
@@ -109,19 +118,22 @@ Create `.mcp.json` in your project root:
   "mcpServers": {
     "stage": {
       "type": "stdio",
-      "command": "/absolute/path/to/stage",
+      "command": "stage",
       "args": ["serve"]
     },
     "director": {
       "type": "stdio",
-      "command": "/absolute/path/to/director",
+      "command": "director",
       "args": ["serve"]
     }
   }
 }
 ```
 
-Use absolute paths — `~` and relative paths are not expanded by most MCP launchers.
+The bare commands keep tracked configuration portable. Ensure the configured
+Theatre binary directory is on the `PATH` inherited by the agent that launches
+the MCP servers. Windows resolves `stage.exe` and `director.exe`; Unix resolves
+the extensionless executables.
 
 ## Troubleshooting
 

@@ -3,6 +3,15 @@
 See `CLAUDE.md` for the full project instructions (repository layout, build
 commands, architecture rules, code style, and git conventions).
 
+## Repository paths
+
+Use repository-relative paths for files that belong to this Git repository and
+are not ignored by Git. Do not record local machine paths for these files.
+
+If a file should remain local-only, notify the user that it needs a
+`.gitignore` entry. Do not change `.gitignore` until the user confirms the
+change.
+
 <!-- workbench:start -->
 ## Workbench
 

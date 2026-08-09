@@ -57,13 +57,8 @@ pub fn run(args: McpArgs) -> Result<()> {
         gather_options(mcp_json_exists, args.port)?
     };
 
-    let stage_bin = theatre.bin_dir.join("stage");
-    let director_bin = theatre.bin_dir.join("director");
-
     let port_opt = Some(port);
     let mcp = generate_mcp_json(
-        &stage_bin,
-        &director_bin,
         stage_exists || !director_exists, // include stage if installed, or if neither (generate both as fallback)
         director_exists || !stage_exists,
         port_opt,

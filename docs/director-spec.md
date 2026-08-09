@@ -379,7 +379,11 @@ The Rust MCP server is intentionally thin. Its responsibilities:
 4. **Operation dispatch** — forward to whichever backend is active
 5. **Output normalisation** — parse JSON from whichever backend, surface errors as `McpError`
 6. **Godot path resolution** — `$GODOT_PATH` env var > `which godot`
-7. **Daemon lifecycle** — spawn and manage the headless daemon process when needed
+7. **Daemon lifecycle** — validate readiness with a protocol ping, bound stderr
+   and shutdown time, and terminate/reap every owned parent process
+8. **Windows process trees** — launch Godot through the internal supervisor so
+   a kill-on-close Job Object also terminates owned descendants; Unix process
+   spawning remains direct
 
 Each tool handler should be ~10-15 lines. Backend selection and dispatch live in `backend.rs`, not in individual handlers. If a handler gets longer, logic moves to the GDScript side.
 

@@ -1,8 +1,8 @@
 extends Node
 
-var tcp_server: StageTCPServer
-var collector: StageCollector
-var recorder: StageRecorder
+var tcp_server
+var collector
+var recorder
 
 var _overlay: CanvasLayer
 var _pause_label: Label
@@ -25,24 +25,25 @@ func _ready() -> void:
 
 	_resolve_shortcut_keys()
 
-	if not ClassDB.class_exists(&"StageTCPServer"):
-		push_error("[Stage] GDExtension not loaded — StageTCPServer class not found. Check that the stage.gdextension binary exists for your platform.")
-		return
+	for extension_class in [&"StageTCPServer", &"StageCollector", &"StageRecorder"]:
+		if not ClassDB.class_exists(extension_class):
+			push_error("[Stage] GDExtension not loaded — %s class not found. Check that the stage.gdextension binary exists for your platform." % extension_class)
+			return
 
 	var auto_start: bool = ProjectSettings.get_setting(
 		"theatre/stage/connection/auto_start", true)
 	if not auto_start:
 		return
 
-	collector = StageCollector.new()
+	collector = ClassDB.instantiate(&"StageCollector")
 	add_child(collector)
 
-	tcp_server = StageTCPServer.new()
+	tcp_server = ClassDB.instantiate(&"StageTCPServer")
 	add_child(tcp_server)
 	tcp_server.set_collector(collector)
 	tcp_server.activity_received.connect(_on_activity_received)
 
-	recorder = StageRecorder.new()
+	recorder = ClassDB.instantiate(&"StageRecorder")
 	add_child(recorder)
 	recorder.set_collector(collector)
 	recorder.marker_added.connect(_on_marker_added)

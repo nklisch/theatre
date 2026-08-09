@@ -25,7 +25,9 @@ cargo --version
 
 Theatre's Stage GDExtension targets Godot 4.5+ with `compatibility_minimum = "4.5"`. The `api-4-5` feature flag in godot-rust requires Godot 4.5 as the minimum runtime version. Director works on any Godot version that supports GDScript plugins.
 
-Make sure the `godot` binary is on your PATH if you want to run headless verification commands:
+Make sure the Godot binary is on your `PATH`, or pass it to initialization with
+`--godot-bin`, if you want Theatre to run the initial import and headless
+verification commands:
 
 ```bash
 godot --version   # e.g. 4.3.stable.official
@@ -74,11 +76,16 @@ cargo run -p theatre-cli -- install
 
 This builds all crates in release mode and installs to the same locations as the one-liner above.
 
-If `~/.local/bin` is not in your PATH, the installer will print a warning with the export command to add.
+If the configured binary directory is not in your `PATH`, the installer prints
+the appropriate command: PowerShell user-environment guidance on Windows or an
+`export PATH=...` command on Unix.
 
 ### Platform notes
 
 On **Linux**, the build works out of the box. On **macOS**, you may need the Xcode command-line tools (`xcode-select --install`). On **Windows**, use the MSVC toolchain (`rustup default stable-x86_64-pc-windows-msvc`).
+
+The source install writes `stage.exe`, `director.exe`, and `theatre.exe` on
+Windows. Unix executable names remain extensionless.
 
 ## Set up a Godot project
 
@@ -88,9 +95,15 @@ After installing, use `theatre init` to set up a Godot project interactively:
 theatre init ~/path/to/your-godot-project
 ```
 
+PowerShell:
+
+```powershell
+theatre init .\path\to\your-godot-project
+```
+
 This walks you through:
 1. **Addon selection** — choose Stage, Director, or both
-2. **MCP configuration** — generates `.mcp.json` with correct binary paths
+2. **MCP configuration** — generates portable `.mcp.json` commands resolved through `PATH`
 3. **Plugin enabling** — updates `project.godot` to enable plugins and autoloads
 4. **Agent rules** — optionally generates a rules file to prevent hand-editing `.tscn`/`.tres` files
 
@@ -100,13 +113,24 @@ For non-interactive setup (CI, scripting), use `--yes` to accept all defaults:
 theatre init ~/path/to/your-godot-project --yes
 ```
 
+If Godot is not on `PATH`, provide it for the bounded initial import:
+
+```powershell
+theatre init .\path\to\your-godot-project --yes --godot-bin 'C:\path\to\Godot_console.exe'
+```
+
+This argument is used only for initialization. If Director also needs that
+location, set `GODOT_BIN` in the environment that launches your AI agent; do
+not add a machine-specific path to tracked `.mcp.json`.
+
 ### What `theatre init` does
 
 - Copies addon files from `~/.local/share/theatre/addons/` to your project's `addons/` directory
 - Copies the GDExtension binary (`.so`/`.dylib`/`.dll`) for Stage
-- Generates `.mcp.json` with absolute paths to installed MCP server binaries
+- Generates `.mcp.json` with the bare `stage` and `director` commands
 - Enables plugins in `project.godot` and adds the StageRuntime autoload
 - Optionally generates an agent rules file (`.claude/rules/godot.md`, `CLAUDE.md`, or `AGENTS.md`) to prevent hand-editing Godot files
+- Runs one bounded headless editor import when Godot can be resolved; otherwise prints the manual recovery command
 
 ### Verify the deployment
 
@@ -150,7 +174,10 @@ If you skipped `.mcp.json` generation during `theatre init`, or need to update i
 theatre mcp ~/path/to/your-godot-project
 ```
 
-This generates (or overwrites) `.mcp.json` with the correct absolute paths to the installed `stage` and `director` binaries. It detects which addons are installed and includes only those in the config.
+This generates (or overwrites) `.mcp.json` with the portable bare commands
+`stage` and `director`. It detects which addons are installed and includes only
+those in the config. The configured Theatre binary directory must be on the
+`PATH` inherited by the agent process.
 
 Use `--yes` to skip prompts (accepts port 9077 and overwrites any existing file):
 
@@ -210,19 +237,22 @@ Create `.mcp.json` in your project root:
   "mcpServers": {
     "stage": {
       "type": "stdio",
-      "command": "/home/yourname/.local/bin/stage",
+      "command": "stage",
       "args": ["serve"]
     },
     "director": {
       "type": "stdio",
-      "command": "/home/yourname/.local/bin/director",
+      "command": "director",
       "args": ["serve"]
     }
   }
 }
 ```
 
-The `command` field must be an absolute path. Do not use `~` or relative paths — they are not expanded by most MCP launchers. Both binaries require the `serve` subcommand for MCP mode (without it, they run in CLI mode).
+Use the bare commands shown above so checked-in configuration works across
+machines and operating systems. Ensure the binary directory is on the agent
+process's `PATH`. Both binaries require the `serve` subcommand for MCP mode
+(without it, they run in CLI mode).
 
 Use `THEATRE_PORT=9078` in an `env` block if you need a non-default port.
 

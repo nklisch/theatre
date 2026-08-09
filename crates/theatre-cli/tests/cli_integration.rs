@@ -1,6 +1,7 @@
 use std::fs;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 // ============================================================
@@ -19,7 +20,7 @@ fn make_project(dir: &Path) {
 /// Create a fake "installed" share directory with addon stubs.
 fn make_share_dir(dir: &Path) {
     let stage = dir.join("addons").join("stage");
-    fs::create_dir_all(stage.join("bin").join("linux")).unwrap();
+    fs::create_dir_all(stage.join("bin").join(platform_dir())).unwrap();
     fs::write(
         stage.join("plugin.cfg"),
         "[plugin]\nname=\"Stage\"\nscript=\"plugin.gd\"\n",
@@ -27,7 +28,10 @@ fn make_share_dir(dir: &Path) {
     .unwrap();
     fs::write(stage.join("runtime.gd"), "extends Node\n").unwrap();
     fs::write(
-        stage.join("bin").join("linux").join("libstage_godot.so"),
+        stage
+            .join("bin")
+            .join(platform_dir())
+            .join(gdext_filename()),
         b"fake-gdext",
     )
     .unwrap();
@@ -45,10 +49,47 @@ fn theatre_cmd(share_dir: &Path, bin_dir: &Path) -> Command {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_theatre"));
     cmd.env("THEATRE_SHARE_DIR", share_dir);
     cmd.env("THEATRE_BIN_DIR", bin_dir);
-    cmd.env("THEATRE_ROOT", "/dev/null");
+    cmd.env("THEATRE_ROOT", missing_path("source-root"));
     cmd.env("THEATRE_NO_TELEMETRY", "1");
     cmd.env("DO_NOT_TRACK", "1");
+    cmd.env_remove("GODOT_BIN");
+    cmd.env_remove("GODOT_PATH");
+    cmd.env("PATH", bin_dir);
     cmd
+}
+
+fn missing_path(name: &str) -> PathBuf {
+    std::env::temp_dir().join(format!("theatre-missing-{name}-907733"))
+}
+
+#[cfg(target_os = "linux")]
+fn platform_dir() -> &'static str {
+    "linux"
+}
+
+#[cfg(target_os = "macos")]
+fn platform_dir() -> &'static str {
+    "macos"
+}
+
+#[cfg(target_os = "windows")]
+fn platform_dir() -> &'static str {
+    "windows"
+}
+
+#[cfg(target_os = "linux")]
+fn gdext_filename() -> &'static str {
+    "libstage_godot.so"
+}
+
+#[cfg(target_os = "macos")]
+fn gdext_filename() -> &'static str {
+    "libstage_godot.dylib"
+}
+
+#[cfg(target_os = "windows")]
+fn gdext_filename() -> &'static str {
+    "stage_godot.dll"
 }
 
 // ============================================================
@@ -101,7 +142,8 @@ fn enable_on_valid_project() {
 #[test]
 fn enable_on_missing_project() {
     let output = Command::new(env!("CARGO_BIN_EXE_theatre"))
-        .args(["enable", "/tmp/nonexistent-project-12345"])
+        .arg("enable")
+        .arg(missing_path("enable-project"))
         .output()
         .unwrap();
     assert!(!output.status.success());
@@ -114,7 +156,7 @@ fn init_fails_without_install() {
 
     let output = Command::new(env!("CARGO_BIN_EXE_theatre"))
         .args(["init", dir.path().to_str().unwrap(), "--yes"])
-        .env("THEATRE_SHARE_DIR", "/tmp/nonexistent-share-12345")
+        .env("THEATRE_SHARE_DIR", missing_path("initial-share"))
         .output()
         .unwrap();
     assert!(!output.status.success());
@@ -151,7 +193,11 @@ fn init_yes_copies_addons_and_generates_config() {
     assert!(
         project
             .path()
-            .join("addons/stage/bin/linux/libstage_godot.so")
+            .join("addons")
+            .join("stage")
+            .join("bin")
+            .join(platform_dir())
+            .join(gdext_filename())
             .exists()
     );
     assert!(project.path().join("addons/director/plugin.cfg").exists());
@@ -172,6 +218,8 @@ fn init_yes_copies_addons_and_generates_config() {
     );
     assert_eq!(mcp["mcpServers"]["stage"]["args"][0], "serve");
     assert_eq!(mcp["mcpServers"]["director"]["args"][0], "serve");
+    assert_eq!(mcp["mcpServers"]["stage"]["command"], "stage");
+    assert_eq!(mcp["mcpServers"]["director"]["command"], "director");
 
     // project.godot must have plugins enabled and autoload
     let godot = fs::read_to_string(project.path().join("project.godot")).unwrap();
@@ -271,7 +319,9 @@ fn init_nonexistent_path() {
     let bin = tempfile::tempdir().unwrap();
 
     let output = theatre_cmd(share.path(), bin.path())
-        .args(["init", "/tmp/does-not-exist-theatre-test-12345", "--yes"])
+        .arg("init")
+        .arg(missing_path("init-project"))
+        .arg("--yes")
         .output()
         .unwrap();
     assert!(!output.status.success());
@@ -285,9 +335,9 @@ fn init_share_dir_missing() {
 
     let output = Command::new(env!("CARGO_BIN_EXE_theatre"))
         .args(["init", project.path().to_str().unwrap(), "--yes"])
-        .env("THEATRE_SHARE_DIR", "/tmp/nonexistent-share-theatre-12345")
+        .env("THEATRE_SHARE_DIR", missing_path("init-share"))
         .env("THEATRE_BIN_DIR", bin.path())
-        .env("THEATRE_ROOT", "/dev/null")
+        .env("THEATRE_ROOT", missing_path("init-root"))
         .env("THEATRE_NO_TELEMETRY", "1")
         .env("DO_NOT_TRACK", "1")
         .output()
@@ -490,7 +540,8 @@ fn enable_is_idempotent() {
 #[test]
 fn enable_nonexistent_project() {
     let output = Command::new(env!("CARGO_BIN_EXE_theatre"))
-        .args(["enable", "/tmp/nonexistent-theatre-test-12345"])
+        .arg("enable")
+        .arg(missing_path("enable-project-second"))
         .output()
         .unwrap();
     assert!(!output.status.success());
@@ -584,6 +635,7 @@ fn enable_project_godot_with_existing_plugins() {
     assert!(content.contains("director/plugin.cfg"));
 }
 
+#[cfg(unix)]
 #[test]
 fn enable_readonly_project_godot() {
     let dir = tempfile::tempdir().unwrap();
@@ -681,7 +733,9 @@ fn rules_skips_if_already_present() {
 #[test]
 fn rules_nonexistent_project() {
     let output = Command::new(env!("CARGO_BIN_EXE_theatre"))
-        .args(["rules", "/tmp/does-not-exist-theatre-test-12345", "--yes"])
+        .arg("rules")
+        .arg(missing_path("rules-project"))
+        .arg("--yes")
         .output()
         .unwrap();
     assert!(!output.status.success());
@@ -956,7 +1010,7 @@ fn deploy_from_share_dir_copies_addons() {
     make_share_dir(share.path());
     make_project(project.path());
 
-    // THEATRE_ROOT=/dev/null forces share-dir-only mode (no source build)
+    // A missing THEATRE_ROOT forces share-dir-only mode (no source build).
     let output = theatre_cmd(share.path(), bin.path())
         .args(["deploy", project.path().to_str().unwrap()])
         .output()
@@ -971,12 +1025,17 @@ fn deploy_from_share_dir_copies_addons() {
     assert!(
         project
             .path()
-            .join("addons/stage/bin/linux/libstage_godot.so")
+            .join("addons")
+            .join("stage")
+            .join("bin")
+            .join(platform_dir())
+            .join(gdext_filename())
             .exists()
     );
     assert!(project.path().join("addons/director/plugin.cfg").exists());
 }
 
+#[cfg(unix)]
 #[test]
 fn deploy_skips_symlinked_addons() {
     let share = tempfile::tempdir().unwrap();
@@ -1066,9 +1125,9 @@ fn deploy_no_share_dir_no_source() {
 
     let output = Command::new(env!("CARGO_BIN_EXE_theatre"))
         .args(["deploy", project.path().to_str().unwrap()])
-        .env("THEATRE_SHARE_DIR", "/tmp/nonexistent-share-theatre-99999")
+        .env("THEATRE_SHARE_DIR", missing_path("deploy-share"))
         .env("THEATRE_BIN_DIR", bin.path())
-        .env("THEATRE_ROOT", "/tmp/nonexistent-root-theatre-99999")
+        .env("THEATRE_ROOT", missing_path("deploy-root"))
         .env("THEATRE_NO_TELEMETRY", "1")
         .env("DO_NOT_TRACK", "1")
         .output()
@@ -1084,6 +1143,7 @@ fn deploy_no_share_dir_no_source() {
     );
 }
 
+#[cfg(unix)]
 #[test]
 fn deploy_readonly_project_dir() {
     let share = tempfile::tempdir().unwrap();
@@ -1275,24 +1335,24 @@ fn help_and_version_always_work() {
     // No project, no share dir, nothing installed — help and version should always succeed
     let output = Command::new(env!("CARGO_BIN_EXE_theatre"))
         .arg("--help")
-        .env("THEATRE_SHARE_DIR", "/tmp/no-share-dir-99999")
-        .env("THEATRE_BIN_DIR", "/tmp/no-bin-dir-99999")
+        .env("THEATRE_SHARE_DIR", missing_path("help-share"))
+        .env("THEATRE_BIN_DIR", missing_path("help-bin"))
         .output()
         .unwrap();
     assert!(output.status.success(), "--help should always succeed");
 
     let output = Command::new(env!("CARGO_BIN_EXE_theatre"))
         .arg("--version")
-        .env("THEATRE_SHARE_DIR", "/tmp/no-share-dir-99999")
-        .env("THEATRE_BIN_DIR", "/tmp/no-bin-dir-99999")
+        .env("THEATRE_SHARE_DIR", missing_path("version-share"))
+        .env("THEATRE_BIN_DIR", missing_path("version-bin"))
         .output()
         .unwrap();
     assert!(output.status.success(), "--version should always succeed");
 
     let output = Command::new(env!("CARGO_BIN_EXE_theatre"))
         .args(["init", "--help"])
-        .env("THEATRE_SHARE_DIR", "/tmp/no-share-dir-99999")
-        .env("THEATRE_BIN_DIR", "/tmp/no-bin-dir-99999")
+        .env("THEATRE_SHARE_DIR", missing_path("init-help-share"))
+        .env("THEATRE_BIN_DIR", missing_path("init-help-bin"))
         .output()
         .unwrap();
     assert!(output.status.success(), "init --help should always succeed");
@@ -1318,11 +1378,9 @@ fn deploy_continues_for_second_project_if_first_fails() {
     make_project(good_project.path());
 
     let output = theatre_cmd(share.path(), bin.path())
-        .args([
-            "deploy",
-            "/tmp/nonexistent-bad-project-theatre-12345",
-            good_project.path().to_str().unwrap(),
-        ])
+        .arg("deploy")
+        .arg(missing_path("bad-project"))
+        .arg(good_project.path())
         .output()
         .unwrap();
 

@@ -144,8 +144,8 @@ fn build_and_update_share(
 
     // Copy fresh server binaries to bin_dir
     for bin_name in &["stage", "director"] {
-        let src = source.built_binary(bin_name, release);
-        let dst = theatre.bin_dir.join(bin_name);
+        let src = source.built_executable(bin_name, release);
+        let dst = theatre.executable(bin_name);
         if theatre.bin_dir.exists() {
             std::fs::copy(&src, &dst).with_context(|| {
                 format!("Failed to copy {} to {}", src.display(), dst.display())

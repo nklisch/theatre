@@ -29,7 +29,7 @@ impl GodotFixture {
         let godot_bin = std::env::var("GODOT_BIN").unwrap_or_else(|_| "godot".into());
         let project_dir = Self::project_dir();
 
-        let child = Command::new(&godot_bin)
+        let mut child = Command::new(&godot_bin)
             .args([
                 "--headless",
                 "--fixed-fps",
@@ -39,14 +39,19 @@ impl GodotFixture {
                 scene,
             ])
             .env("THEATRE_PORT", port.to_string())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
             .spawn()
             .map_err(|e| anyhow::anyhow!("failed to launch Godot ({godot_bin}): {e}"))?;
 
         // Wait for the GDExtension to start listening
-        let mut stream = Self::wait_for_connection(port, Duration::from_secs(15))
-            .map_err(|e| anyhow::anyhow!("Godot did not open port {port} in time: {e}"))?;
+        let mut stream = match Self::wait_for_connection(port, Duration::from_secs(15)) {
+            Ok(stream) => stream,
+            Err(error) => {
+                terminate_process_tree(&mut child);
+                anyhow::bail!("Godot did not open port {port} in time: {error}");
+            }
+        };
         stream.set_read_timeout(Some(Duration::from_secs(10)))?;
 
         // Read the handshake message
@@ -115,10 +120,15 @@ impl GodotFixture {
     }
 
     fn project_dir() -> std::path::PathBuf {
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
             .join("../godot-project")
             .canonicalize()
-            .expect("tests/godot-project dir must exist")
+            .expect("tests/godot-project dir must exist");
+        #[cfg(windows)]
+        if let Some(path) = path.to_string_lossy().strip_prefix(r"\\?\") {
+            return std::path::PathBuf::from(path);
+        }
+        path
     }
 }
 
@@ -126,21 +136,44 @@ impl GodotFixture {
     /// Close the TCP connection without killing the Godot process.
     /// Returns the port and child process so tests can reconnect to the same process.
     /// Drop the returned `Child` when done to kill Godot.
-    pub fn disconnect_keep_alive(mut self) -> (u16, Child) {
+    pub fn disconnect_keep_alive(mut self) -> (u16, OwnedGodotChild) {
         let port = self.port;
         let child = self.child.take().expect("child already taken");
         // self.stream is dropped here, closing the TCP connection (sends FIN to Godot)
-        (port, child)
+        (port, OwnedGodotChild(child))
     }
 }
 
 impl Drop for GodotFixture {
     fn drop(&mut self) {
         if let Some(mut child) = self.child.take() {
-            let _ = child.kill();
-            let _ = child.wait();
+            terminate_process_tree(&mut child);
         }
     }
+}
+
+/// Keeps a disconnected fixture's Godot process alive for reconnect tests,
+/// then guarantees the same process-tree cleanup as the fixture itself.
+pub struct OwnedGodotChild(Child);
+
+impl Drop for OwnedGodotChild {
+    fn drop(&mut self) {
+        terminate_process_tree(&mut self.0);
+    }
+}
+
+fn terminate_process_tree(child: &mut Child) {
+    #[cfg(windows)]
+    {
+        let _ = Command::new("taskkill")
+            .args(["/PID", &child.id().to_string(), "/T", "/F"])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+    #[cfg(not(windows))]
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 /// Result of a query — either response data or an error.
