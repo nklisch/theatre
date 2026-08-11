@@ -5,6 +5,58 @@ use serde_json::json;
 
 const LIVE_3D: &str = "res://live_scene_3d.tscn";
 
+fn newest_screenshot_frame_after(
+    screenshots: &serde_json::Value,
+    after_frame: Option<u64>,
+    label: &str,
+) -> u64 {
+    screenshots["screenshots"]
+        .as_array()
+        .unwrap_or_else(|| panic!("{label} screenshots must be an array: {screenshots}"))
+        .iter()
+        .filter_map(|screenshot| screenshot["frame"].as_u64())
+        .filter(|frame| after_frame.is_none_or(|boundary| *frame > boundary))
+        .max()
+        .unwrap_or_else(|| {
+            panic!("{label} must contain a screenshot newer than {after_frame:?}: {screenshots}")
+        })
+}
+
+async fn rendered_jpeg_at(b: &impl LiveBackend, clip_id: &str, frame: u64, label: &str) -> String {
+    let screenshot = b
+        .stage(
+            "clips",
+            json!({"action": "screenshot_at", "clip_id": clip_id, "at_frame": frame}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("retrieve {label} screenshot: {error}"))
+        .unwrap_data();
+
+    assert_eq!(
+        screenshot["frame"],
+        json!(frame),
+        "{label} screenshot must be the requested known frame: {screenshot}"
+    );
+    assert_eq!(screenshot["mime_type"], json!("image/jpeg"));
+    assert!(
+        screenshot["width"].as_u64().unwrap_or(0) > 0
+            && screenshot["height"].as_u64().unwrap_or(0) > 0,
+        "{label} screenshot must have nonzero dimensions: {screenshot}"
+    );
+    assert!(
+        screenshot["size_bytes"].as_u64().unwrap_or(0) > 0,
+        "{label} screenshot must contain image bytes: {screenshot}"
+    );
+    let image = screenshot["image_base64"]
+        .as_str()
+        .unwrap_or_else(|| panic!("{label} screenshot must expose image data: {screenshot}"));
+    assert!(
+        image.starts_with("/9j/") && image.len() > 4,
+        "{label} screenshot must contain a nonblank base64 JPEG"
+    );
+    image.to_owned()
+}
+
 /// Journey: Dashcam captures rendered frames, teleport changes viewport, clips differ.
 ///
 /// Tests the full dashcam lifecycle with a real GPU renderer — the primary
@@ -18,13 +70,13 @@ const LIVE_3D: &str = "res://live_scene_3d.tscn";
 ///   3. wait_frames(120) → accumulate ~2s of rendered buffer
 ///   4. clips(status) → screenshot_buffer_count > 0 (GPU is rendering)
 ///   5. clips(save, "before_teleport") → clip_a with frames > 0
-///   6. clips(screenshots, clip_a) → total > 0, screenshots array non-empty
-///   7. spatial_action(teleport, Patrol, [0, 0, 0]) → move enemy to origin
+///   6. clips(screenshots/screenshot_at, clip_a) → newest pre-teleport JPEG is nonblank
+///   7. spatial_action(teleport, Stationary, [0, 0, 0]) → move enemy to origin
 ///   8. wait_frames(60) → let viewport render new state
-///   9. spatial_snapshot(standard) → verify Patrol is at ~(0,0,0) now
+///   9. spatial_snapshot(standard) → verify Stationary remains at ~(0,0,0)
 ///  10. clips(save, "after_teleport") → clip_b
-///  11. clips(screenshots, clip_b) → total > 0
-///  12. Assert: clip_b has more frames than clip_a (buffer kept accumulating)
+///  11. clips(screenshots/screenshot_at, clip_b) → select a JPEG newer than clip_a
+///  12. Assert: known pre/post frame image bytes genuinely differ
 ///  13. clips(list) → both clips present, both have dashcam=false (manual saves)
 ///  14. clips(delete, clip_a) → cleanup
 ///  15. clips(delete, clip_b) → cleanup
@@ -47,7 +99,7 @@ async fn journey_dashcam_captures_rendered_scene(b: &impl LiveBackend) {
         "screenshot_buffer_kb must be present: {status}"
     );
 
-    // Step 2: baseline snapshot — note Patrol position
+    // Step 2: baseline snapshot — note the stationary fixture's position
     let baseline = b
         .stage("spatial_snapshot", json!({"detail": "standard"}))
         .await
@@ -55,8 +107,8 @@ async fn journey_dashcam_captures_rendered_scene(b: &impl LiveBackend) {
         .unwrap_data();
     let entities = baseline["entities"].as_array().expect("entities");
     assert!(!entities.is_empty(), "Scene should have entities");
-    let patrol = find_entity(entities, "Patrol");
-    let patrol_pos_before = extract_position(patrol);
+    let stationary = find_entity(entities, "Stationary");
+    let stationary_pos_before = extract_position(stationary);
 
     // Step 3: accumulate rendered frames
     b.wait_frames(120).await;
@@ -86,7 +138,7 @@ async fn journey_dashcam_captures_rendered_scene(b: &impl LiveBackend) {
     let frames_a = save_a["frames"].as_u64().unwrap_or(0);
     assert!(frames_a > 0, "First clip should contain frames");
 
-    // Step 6: verify screenshots exist in first clip
+    // Step 6: capture the newest known pre-teleport frame and its actual JPEG.
     let screenshots_a = b
         .stage(
             "clips",
@@ -95,44 +147,49 @@ async fn journey_dashcam_captures_rendered_scene(b: &impl LiveBackend) {
         .await
         .expect("screenshots clip_a")
         .unwrap_data();
-    let total_a = screenshots_a["total"].as_u64().expect("total");
-    assert!(
-        total_a > 0,
-        "Windowed Godot should have captured screenshots in clip, total={total_a}"
-    );
+    let pre_teleport_frame = newest_screenshot_frame_after(&screenshots_a, None, "clip_a");
+    let pre_teleport_image = rendered_jpeg_at(b, &clip_a, pre_teleport_frame, "pre-teleport").await;
 
-    // Step 7: teleport Patrol to origin — changes the scene visually
+    // Step 7: teleport the stationary fixture to origin — changes the scene visually
     b.stage(
         "spatial_action",
         json!({
             "action": "teleport",
-            "node": "Enemies/Patrol",
+            "node": "Enemies/Stationary",
             "position": [0.0, 0.0, 0.0]
         }),
     )
     .await
-    .expect("teleport Patrol")
+    .expect("teleport Stationary")
     .unwrap_data();
 
     // Step 8: let viewport render the new state
     b.wait_frames(60).await;
 
-    // Step 9: verify Patrol actually moved
+    // Step 9: verify the teleport persisted after the wait
     let after_snap = b
         .stage("spatial_snapshot", json!({"detail": "standard"}))
         .await
         .expect("post-teleport snapshot")
         .unwrap_data();
     let after_entities = after_snap["entities"].as_array().expect("entities");
-    let patrol_after = find_entity(after_entities, "Patrol");
-    let patrol_pos_after = extract_position(patrol_after);
-    let displacement = ((patrol_pos_after[0] - patrol_pos_before[0]).powi(2)
-        + (patrol_pos_after[2] - patrol_pos_before[2]).powi(2))
-    .sqrt();
+    let stationary_after = find_entity(after_entities, "Stationary");
+    let stationary_pos_after = extract_position(stationary_after);
+    let displacement = stationary_pos_after
+        .iter()
+        .zip(&stationary_pos_before)
+        .map(|(after, before)| (after - before).powi(2))
+        .sum::<f64>()
+        .sqrt();
     assert!(
         displacement > 1.0,
-        "Patrol should have moved from {:?} to near origin, displacement={displacement}",
-        patrol_pos_before
+        "Stationary should have moved from {stationary_pos_before:?}, displacement={displacement}"
+    );
+    assert_pos_approx(
+        &stationary_pos_after,
+        &[0.0, 0.0, 0.0],
+        0.1,
+        "Stationary teleport target",
     );
 
     // Step 10: save second clip (after scene change)
@@ -148,7 +205,8 @@ async fn journey_dashcam_captures_rendered_scene(b: &impl LiveBackend) {
     let frames_b = save_b["frames"].as_u64().unwrap_or(0);
     assert!(frames_b > 0, "Second clip should contain frames");
 
-    // Step 11: verify second clip also has screenshots
+    // Step 11: rolling clips overlap, so explicitly choose a frame captured
+    // after clip A's newest frame instead of assuming clip B is all-new.
     let screenshots_b = b
         .stage(
             "clips",
@@ -157,13 +215,16 @@ async fn journey_dashcam_captures_rendered_scene(b: &impl LiveBackend) {
         .await
         .expect("screenshots clip_b")
         .unwrap_data();
-    let total_b = screenshots_b["total"].as_u64().expect("total");
-    assert!(total_b > 0, "Second clip should have screenshots too");
+    let post_teleport_frame =
+        newest_screenshot_frame_after(&screenshots_b, Some(pre_teleport_frame), "clip_b");
+    let post_teleport_image =
+        rendered_jpeg_at(b, &clip_b, post_teleport_frame, "post-teleport").await;
 
-    // Step 12: second clip accumulated more buffer time
-    assert!(
-        frames_b > frames_a,
-        "Second clip should have more frames (buffer kept growing): a={frames_a}, b={frames_b}"
+    // Step 12: base64 is a one-to-one representation of the JPEG bytes, so
+    // unequal payloads prove the stable screenshot surface returned new visual evidence.
+    assert_ne!(
+        post_teleport_image, pre_teleport_image,
+        "Rendered evidence must change between known frames {pre_teleport_frame} and {post_teleport_frame}"
     );
 
     // Step 13: both clips in list

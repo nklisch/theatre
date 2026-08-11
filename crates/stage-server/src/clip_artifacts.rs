@@ -209,6 +209,31 @@ fn now_ms() -> i64 {
         .unwrap_or(0)
 }
 
+fn filmstrip_crop_dimension(
+    viewport_dimension: u32,
+    fraction: f64,
+) -> Result<NonZeroU32, McpError> {
+    if !fraction.is_finite() {
+        return Err(err("crop fraction must be finite"));
+    }
+    let viewport_dimension = NonZeroU32::new(viewport_dimension)
+        .ok_or_else(|| err("viewport dimension must be non-zero"))?;
+    let pixels = (f64::from(viewport_dimension.get()) * fraction).ceil() as u32;
+    NonZeroU32::new(pixels.clamp(1, viewport_dimension.get()))
+        .ok_or_else(|| err("crop dimension must be non-zero"))
+}
+
+fn centered_crop_origin(center: f64, crop_dimension: NonZeroU32) -> Result<i64, McpError> {
+    let origin = (center - f64::from(crop_dimension.get()) / 2.0).round();
+    const I64_UPPER_EXCLUSIVE: f64 = 9_223_372_036_854_775_808.0;
+    if !origin.is_finite() || origin < i64::MIN as f64 || origin >= I64_UPPER_EXCLUSIVE {
+        return Err(err(
+            "projected crop origin exceeds the supported coordinate space",
+        ));
+    }
+    Ok(origin as i64)
+}
+
 #[allow(clippy::too_many_arguments)]
 pub async fn generate_artifact(
     state: &Arc<Mutex<SessionState>>,
@@ -487,6 +512,11 @@ pub async fn generate_artifact(
                 ));
             }
             let fraction = crop_fraction.unwrap_or(0.25).clamp(0.05, 1.0);
+            // temporal-vision requires every tracked region to have identical
+            // integer dimensions. Derive them once; only the rounded origin
+            // follows each projected subpixel center.
+            let crop_width = filmstrip_crop_dimension(w, fraction)?;
+            let crop_height = filmstrip_crop_dimension(h, fraction)?;
             let mut regions = Vec::new();
             let mut statuses = Vec::new();
             let mut projection_counts = serde_json::Map::new();
@@ -587,11 +617,11 @@ pub async fn generate_artifact(
                         continue;
                     }
                 };
-                let rect = SignedPixelRect::from_outward_f64_bounds(
-                    px - w as f64 * fraction / 2.0,
-                    py - h as f64 * fraction / 2.0,
-                    px + w as f64 * fraction / 2.0,
-                    py + h as f64 * fraction / 2.0,
+                let rect = SignedPixelRect::new(
+                    centered_crop_origin(px, crop_width)?,
+                    centered_crop_origin(py, crop_height)?,
+                    crop_width,
+                    crop_height,
                 )
                 .map_err(|e| err(e.to_string()))?;
                 regions.push(TrackedRegion {

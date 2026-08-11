@@ -35,8 +35,12 @@ pub fn run(args: DeployArgs) -> Result<()> {
     }
 
     // Step 4: Build from source or use installed share dir
-    if let Some(source) = &source {
-        build_and_update_share(source, &theatre, args.release)?;
+    let source_deployment = if let Some(source) = &source {
+        let gdext_artifact = build_and_update_share(source, &theatre, args.release)?;
+        Some(SourceDeployment {
+            stage_addon: source.addon_source().join("stage"),
+            gdext_artifact,
+        })
     } else {
         // No source repo — verify share dir is populated
         theatre.validate_installed().map_err(|e| {
@@ -51,16 +55,22 @@ pub fn run(args: DeployArgs) -> Result<()> {
             style("ℹ").blue()
         );
         eprintln!();
-    }
+        None
+    };
 
     // Step 5: Deploy to each project
     let gdext_src = theatre.gdext_binary();
     for project in &args.projects {
-        deploy_to_project(&theatre, project, &gdext_src)?;
+        deploy_to_project(&theatre, project, &gdext_src, source_deployment.as_ref())?;
     }
 
     eprintln!("Deploy complete.");
     Ok(())
+}
+
+struct SourceDeployment {
+    stage_addon: PathBuf,
+    gdext_artifact: PathBuf,
 }
 
 /// Build from source and update the share dir.
@@ -68,7 +78,7 @@ fn build_and_update_share(
     source: &SourcePaths,
     theatre: &TheatrePaths,
     release: bool,
-) -> Result<()> {
+) -> Result<PathBuf> {
     eprintln!(
         "  Building {} binaries...",
         if release { "release" } else { "debug" }
@@ -155,11 +165,16 @@ fn build_and_update_share(
     }
     eprintln!();
 
-    Ok(())
+    Ok(gdext_src)
 }
 
 /// Deploy from the share dir to a single project.
-fn deploy_to_project(theatre: &TheatrePaths, project: &Path, gdext_src: &Path) -> Result<()> {
+fn deploy_to_project(
+    theatre: &TheatrePaths,
+    project: &Path,
+    gdext_src: &Path,
+    source_deployment: Option<&SourceDeployment>,
+) -> Result<()> {
     eprintln!("  Deploying to {}...", project.display());
 
     // Deploy stage addon
@@ -170,9 +185,32 @@ fn deploy_to_project(theatre: &TheatrePaths, project: &Path, gdext_src: &Path) -
 
     if is_symlink {
         eprintln!(
-            "  {} addons/stage/ is a symlink — skipping copy (dev setup)",
+            "  {} addons/stage/ is a symlink — skipping script copy (dev setup)",
             style("⚠").yellow()
         );
+
+        let verified_source_target = source_deployment.and_then(|deployment| {
+            verified_symlink_target(&stage_project_dst, &deployment.stage_addon)
+        });
+        if let (Some(target), Some(deployment)) = (verified_source_target, source_deployment) {
+            let copied = copy_gdextension(&deployment.gdext_artifact, &target, project)?;
+            if copied {
+                eprintln!(
+                    "  {} Updated GDExtension in verified source addon",
+                    style("✓").green()
+                );
+            } else {
+                eprintln!(
+                    "  {} GDExtension already uses the freshly built artifact — skipping self-copy",
+                    style("ℹ").blue()
+                );
+            }
+        } else {
+            eprintln!(
+                "  {} Skipping GDExtension copy through unrelated addons/stage/ symlink",
+                style("⚠").yellow()
+            );
+        }
     } else {
         copy_dir_recursive(
             &theatre.addon_source().join("stage"),
@@ -186,22 +224,15 @@ fn deploy_to_project(theatre: &TheatrePaths, project: &Path, gdext_src: &Path) -
             )
         })?;
 
-        // Also copy the GDExtension binary
-        let gdext_proj_dir = stage_project_dst.join("bin").join(platform_dir());
-        std::fs::create_dir_all(&gdext_proj_dir).with_context(|| {
-            format!(
-                "Failed to create GDExtension dir in project: {}",
-                gdext_proj_dir.display()
-            )
-        })?;
-        std::fs::copy(gdext_src, gdext_proj_dir.join(gdext_filename())).with_context(|| {
-            format!(
-                "Failed to copy GDExtension to project: {}",
-                project.display()
-            )
-        })?;
-
-        eprintln!("  {} addons/stage/ (with GDExtension)", style("✓").green());
+        let copied = copy_gdextension(gdext_src, &stage_project_dst, project)?;
+        if copied {
+            eprintln!("  {} addons/stage/ (with GDExtension)", style("✓").green());
+        } else {
+            eprintln!(
+                "  {} addons/stage/ (GDExtension already at destination)",
+                style("✓").green()
+            );
+        }
     }
 
     // Deploy director addon
@@ -232,4 +263,47 @@ fn deploy_to_project(theatre: &TheatrePaths, project: &Path, gdext_src: &Path) -
 
     eprintln!();
     Ok(())
+}
+
+/// Resolve both sides before trusting a project symlink, then return the
+/// canonical source path so subsequent writes cannot be redirected by swapping
+/// the project link after verification.
+fn verified_symlink_target(link: &Path, expected_target: &Path) -> Option<PathBuf> {
+    let actual_target = std::fs::canonicalize(link).ok()?;
+    let expected_target = std::fs::canonicalize(expected_target).ok()?;
+    (actual_target == expected_target).then_some(expected_target)
+}
+
+fn copy_gdextension(gdext_src: &Path, stage_dst: &Path, project: &Path) -> Result<bool> {
+    let gdext_dir = stage_dst.join("bin").join(platform_dir());
+    std::fs::create_dir_all(&gdext_dir).with_context(|| {
+        format!(
+            "Failed to create GDExtension dir in project: {}",
+            gdext_dir.display()
+        )
+    })?;
+
+    let gdext_dst = gdext_dir.join(gdext_filename());
+    if paths_refer_to_same_file(gdext_src, &gdext_dst) {
+        return Ok(false);
+    }
+
+    std::fs::copy(gdext_src, &gdext_dst).with_context(|| {
+        format!(
+            "Failed to copy GDExtension to project: {}",
+            project.display()
+        )
+    })?;
+    Ok(true)
+}
+
+fn paths_refer_to_same_file(left: &Path, right: &Path) -> bool {
+    if left == right {
+        return true;
+    }
+
+    match (std::fs::canonicalize(left), std::fs::canonicalize(right)) {
+        (Ok(left), Ok(right)) => left == right,
+        _ => false,
+    }
 }

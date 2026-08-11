@@ -105,6 +105,79 @@ fn make_clip(dir: &std::path::Path, id: &str, with_camera: bool) {
     }
 }
 
+fn make_moving_subpixel_clip(dir: &std::path::Path, id: &str) {
+    const WIDTH: u32 = 480;
+    const HEIGHT: u32 = 270;
+    const CENTERS: [(f64, f64); 4] = [
+        (240.0, 135.0),
+        (240.25, 135.25),
+        (240.5, 135.5),
+        (240.75, 135.75),
+    ];
+
+    let db = rusqlite::Connection::open(dir.join(format!("{id}.sqlite"))).unwrap();
+    db.execute_batch(SCHEMA).unwrap();
+    db.execute(
+        "INSERT INTO recording VALUES (?1, ?1, 1, 4, 1000, 1060, 3, 60, '{}', 1000)",
+        [id],
+    )
+    .unwrap();
+    for (index, (px, py)) in CENTERS.into_iter().enumerate() {
+        let frame = index as u64 + 1;
+        // With a 270-unit orthographic keep-height camera, one world unit is
+        // exactly one pixel at 480x270. This independently places the node at
+        // centers whose fractional X and Y components change every frame.
+        let entity = FrameEntityData {
+            path: "Enemies/Patrol".into(),
+            class: "CharacterBody3D".into(),
+            position: vec![px - 240.0, 135.0 - py, 0.0],
+            rotation_deg: vec![0.0; 3],
+            velocity: vec![1.0, -1.0, 0.0],
+            groups: vec![],
+            visible: true,
+            state: serde_json::Map::new(),
+        };
+        db.execute(
+            "INSERT INTO frames VALUES (?1, ?2, ?3)",
+            rusqlite::params![
+                frame,
+                1000 + index as u64 * 20,
+                rmp_serde::to_vec(&vec![entity]).unwrap()
+            ],
+        )
+        .unwrap();
+        let camera = CameraFrameData {
+            position: vec![0.0, 0.0, 5.0],
+            quaternion: vec![0.0, 0.0, 0.0, 1.0],
+            projection: 1,
+            fov_deg: 70.0,
+            ortho_size: HEIGHT as f64,
+            keep_aspect: 1,
+            camera_path: "/root/Camera3D".into(),
+        };
+        db.execute(
+            "INSERT INTO camera_frames VALUES (?1, ?2, 'Camera3D', ?3)",
+            rusqlite::params![
+                frame,
+                1000 + index as u64 * 20,
+                rmp_serde::to_vec(&camera).unwrap()
+            ],
+        )
+        .unwrap();
+        db.execute(
+            "INSERT INTO screenshots VALUES (?1, ?2, ?3, ?4, ?5)",
+            rusqlite::params![
+                frame,
+                1000 + index as u64 * 20,
+                jpeg_with_dot(WIDTH, HEIGHT, px, py),
+                WIDTH,
+                HEIGHT
+            ],
+        )
+        .unwrap();
+    }
+}
+
 fn state(dir: &std::path::Path) -> Arc<Mutex<SessionState>> {
     Arc::new(Mutex::new(SessionState {
         clip_storage_path: Some(dir.to_string_lossy().into_owned()),
@@ -176,6 +249,29 @@ async fn node_filmstrip_fixture_projects_deterministically_and_caches() {
         clip_artifacts::cache_key("node_filmstrip", &json!({"node":"A"}), "fp"),
         clip_artifacts::cache_key("node_filmstrip", &json!({"node":"B"}), "fp")
     );
+}
+
+#[tokio::test]
+async fn node_filmstrip_fixture_keeps_crop_dimensions_fixed_across_subpixel_motion() {
+    let tmp = tempfile::TempDir::new().unwrap();
+    make_moving_subpixel_clip(tmp.path(), "clip_subpixel");
+    let output = artifact(&state(tmp.path()), "clip_subpixel", "Enemies/Patrol")
+        .await
+        .unwrap();
+
+    assert_eq!(output.manifest["kind"], json!("node_filmstrip"));
+    assert_eq!(output.manifest["frames_analyzed"], json!(4));
+    let tiles = output.manifest["tiles"].as_array().unwrap();
+    for (tile, (expected_x, expected_y)) in tiles.iter().zip([
+        (240.0, 135.0),
+        (240.25, 135.25),
+        (240.5, 135.5),
+        (240.75, 135.75),
+    ]) {
+        assert!((tile["px"].as_f64().unwrap() - expected_x).abs() < 1e-6);
+        assert!((tile["py"].as_f64().unwrap() - expected_y).abs() < 1e-6);
+    }
+    assert!(!output.png.is_empty());
 }
 
 #[tokio::test]

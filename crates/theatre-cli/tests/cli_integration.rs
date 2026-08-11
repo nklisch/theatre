@@ -44,6 +44,32 @@ fn make_share_dir(dir: &Path) {
     .unwrap();
 }
 
+#[cfg(unix)]
+fn make_source_repo(dir: &Path, command_dir: &Path) {
+    fs::write(dir.join("Cargo.toml"), "[workspace]\nmembers = []\n").unwrap();
+
+    let stage = dir.join("addons/stage");
+    fs::create_dir_all(&stage).unwrap();
+    fs::write(stage.join("plugin.cfg"), "source-stage").unwrap();
+    fs::write(stage.join("runtime.gd"), "extends Node\n").unwrap();
+
+    let director = dir.join("addons/director");
+    fs::create_dir_all(&director).unwrap();
+    fs::write(director.join("plugin.cfg"), "source-director").unwrap();
+
+    let target = dir.join("target/debug");
+    fs::create_dir_all(&target).unwrap();
+    fs::write(target.join(gdext_filename()), b"fresh-built-gdext").unwrap();
+    fs::write(target.join("stage"), b"stage-bin").unwrap();
+    fs::write(target.join("director"), b"director-bin").unwrap();
+
+    let cargo = command_dir.join("cargo");
+    fs::write(&cargo, "#!/bin/sh\nexit 0\n").unwrap();
+    let mut permissions = fs::metadata(&cargo).unwrap().permissions();
+    permissions.set_mode(0o755);
+    fs::set_permissions(cargo, permissions).unwrap();
+}
+
 /// Build a Command with isolated env vars for testing.
 fn theatre_cmd(share_dir: &Path, bin_dir: &Path) -> Command {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_theatre"));
@@ -1037,20 +1063,31 @@ fn deploy_from_share_dir_copies_addons() {
 
 #[cfg(unix)]
 #[test]
-fn deploy_skips_symlinked_addons() {
+fn deploy_updates_gdextension_through_source_repository_symlink() {
     let share = tempfile::tempdir().unwrap();
     let bin = tempfile::tempdir().unwrap();
+    let source = tempfile::tempdir().unwrap();
     let project = tempfile::tempdir().unwrap();
-    let link_target = tempfile::tempdir().unwrap();
 
     make_share_dir(share.path());
+    make_source_repo(source.path(), bin.path());
     make_project(project.path());
 
-    // Create addons/stage as a symlink
     fs::create_dir_all(project.path().join("addons")).unwrap();
-    std::os::unix::fs::symlink(link_target.path(), project.path().join("addons/stage")).unwrap();
+    std::os::unix::fs::symlink(
+        source.path().join("addons/stage"),
+        project.path().join("addons/stage"),
+    )
+    .unwrap();
+    std::os::unix::fs::symlink(
+        source.path().join("addons/director"),
+        project.path().join("addons/director"),
+    )
+    .unwrap();
 
     let output = theatre_cmd(share.path(), bin.path())
+        .env("THEATRE_ROOT", source.path())
+        .env_remove("CARGO_TARGET_DIR")
         .args(["deploy", project.path().to_str().unwrap()])
         .output()
         .unwrap();
@@ -1060,17 +1097,110 @@ fn deploy_skips_symlinked_addons() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    // Symlink should still be intact
-    let meta = fs::symlink_metadata(project.path().join("addons/stage")).unwrap();
-    assert!(
-        meta.file_type().is_symlink(),
-        "addons/stage should remain a symlink"
+    for addon in ["stage", "director"] {
+        let meta = fs::symlink_metadata(project.path().join("addons").join(addon)).unwrap();
+        assert!(
+            meta.file_type().is_symlink(),
+            "addons/{addon} should remain a symlink"
+        );
+    }
+
+    let deployed_gdext = source
+        .path()
+        .join("addons/stage/bin")
+        .join(platform_dir())
+        .join(gdext_filename());
+    assert_eq!(
+        fs::read(deployed_gdext).unwrap(),
+        b"fresh-built-gdext",
+        "The freshly built artifact should be deployed to the source addon"
     );
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("symlink") || stderr.contains("skipping"),
-        "Should warn about symlink, got: {stderr}"
+        stderr.contains("verified source addon"),
+        "Should identify the verified source deployment, got: {stderr}"
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn deploy_skips_unrelated_stage_symlinks_and_installed_share_self_copy() {
+    let share = tempfile::tempdir().unwrap();
+    let bin = tempfile::tempdir().unwrap();
+    let unrelated_project = tempfile::tempdir().unwrap();
+    let share_link_project = tempfile::tempdir().unwrap();
+    let unrelated_target = tempfile::tempdir().unwrap();
+
+    make_share_dir(share.path());
+    make_project(unrelated_project.path());
+    make_project(share_link_project.path());
+
+    for project in [&unrelated_project, &share_link_project] {
+        fs::create_dir_all(project.path().join("addons")).unwrap();
+    }
+    std::os::unix::fs::symlink(
+        unrelated_target.path(),
+        unrelated_project.path().join("addons/stage"),
+    )
+    .unwrap();
+    std::os::unix::fs::symlink(
+        share.path().join("addons/stage"),
+        share_link_project.path().join("addons/stage"),
+    )
+    .unwrap();
+
+    let unrelated_gdext = unrelated_target
+        .path()
+        .join("bin")
+        .join(platform_dir())
+        .join(gdext_filename());
+    fs::create_dir_all(unrelated_gdext.parent().unwrap()).unwrap();
+    fs::write(&unrelated_gdext, b"unrelated-gdext").unwrap();
+
+    let output = theatre_cmd(share.path(), bin.path())
+        .args([
+            "deploy",
+            unrelated_project.path().to_str().unwrap(),
+            share_link_project.path().to_str().unwrap(),
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    assert_eq!(
+        fs::read(unrelated_gdext).unwrap(),
+        b"unrelated-gdext",
+        "An unrelated symlink target must not be modified"
+    );
+    assert_eq!(
+        fs::read(
+            share
+                .path()
+                .join("addons/stage/bin")
+                .join(platform_dir())
+                .join(gdext_filename())
+        )
+        .unwrap(),
+        b"fake-gdext",
+        "A symlink to the installed share must not trigger a self-copy"
+    );
+    assert!(
+        !unrelated_target.path().join("plugin.cfg").exists(),
+        "Stage scripts should not be copied through an unrelated symlink"
+    );
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(
+        stderr
+            .matches("Skipping GDExtension copy through unrelated addons/stage/ symlink")
+            .count(),
+        2,
+        "Both unrelated symlink deployments should be skipped, got: {stderr}"
     );
 }
 

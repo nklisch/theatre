@@ -59,16 +59,36 @@ pub async fn dispatch_tool_raw(
             server.spatial_config(Parameters(p)).await
         }
         "clips" => {
-            // clips returns CallToolResult; extract text from first content block
+            // Preserve image content so dual CLI/MCP journeys can assert the
+            // same public screenshot response instead of losing MCP evidence.
             let p = from_value(params)?;
             let result = server.clips(Parameters(p)).await?;
-            let text = result
-                .content
-                .first()
-                .and_then(|c| c.as_text())
-                .map(|t| t.text.clone())
-                .unwrap_or_default();
-            Ok(text)
+            let mut text = None;
+            let mut image = None;
+            for content in result.content {
+                if let Some(value) = content.as_text() {
+                    text = Some(value.text.clone());
+                } else if let Some(value) = content.as_image() {
+                    image = Some((value.data.clone(), value.mime_type.clone()));
+                }
+            }
+
+            match (text, image) {
+                (Some(text), Some((data, mime_type))) => {
+                    let mut value: serde_json::Value = serde_json::from_str(&text).unwrap();
+                    let object = value.as_object_mut().unwrap();
+                    object.insert("image_base64".to_owned(), serde_json::json!(data));
+                    object.insert("mime_type".to_owned(), serde_json::json!(mime_type));
+                    Ok(value.to_string())
+                }
+                (Some(text), None) => Ok(text),
+                (None, Some((data, mime_type))) => Ok(serde_json::json!({
+                    "image_base64": data,
+                    "mime_type": mime_type,
+                })
+                .to_string()),
+                (None, None) => Ok("{}".to_owned()),
+            }
         }
         _ => Err(rmcp::model::ErrorData::invalid_params(
             format!("Unknown tool: {name}"),
