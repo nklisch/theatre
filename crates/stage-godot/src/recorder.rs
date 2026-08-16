@@ -626,6 +626,7 @@ impl StageRecorder {
     /// Enable or disable dashcam mode at runtime.
     #[func]
     pub fn set_dashcam_enabled(&mut self, enabled: bool) {
+        self.dashcam_config.enabled = enabled;
         if enabled {
             if matches!(self.dashcam_state, DashcamState::Disabled) {
                 self.dashcam_state = DashcamState::Buffering;
@@ -786,7 +787,7 @@ impl StageRecorder {
         };
 
         if let Some(b) = v.get("enabled").and_then(|x| x.as_bool()) {
-            self.dashcam_config.enabled = b;
+            self.set_dashcam_enabled(b);
         }
         if let Some(n) = v.get("capture_interval").and_then(|x| x.as_u64()) {
             self.dashcam_config.capture_interval = n as u32;

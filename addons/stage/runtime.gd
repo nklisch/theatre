@@ -44,6 +44,9 @@ func _ready() -> void:
 	tcp_server.activity_received.connect(_on_activity_received)
 
 	recorder = ClassDB.instantiate(&"StageRecorder")
+	var dashcam_enabled: bool = ProjectSettings.get_setting(
+		"theatre/stage/dashcam/enabled", true)
+	recorder.set_dashcam_enabled(dashcam_enabled)
 	add_child(recorder)
 	recorder.set_collector(collector)
 	recorder.marker_added.connect(_on_marker_added)

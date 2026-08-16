@@ -79,6 +79,52 @@ func test_runtime_process_mode_is_always() -> String:
 	return err
 
 
+func test_runtime_dashcam_enabled_by_default() -> String:
+	var rt = load("res://addons/stage/runtime.gd").new()
+	_root.add_child(rt)
+	await _root.get_tree().process_frame
+
+	var recorder = rt.get("recorder")
+	var err := Assert.not_null(recorder, "recorder created")
+	if not err:
+		err = Assert.eq(recorder.is_dashcam_active(), true,
+			"dashcam remains enabled by default")
+	if not err:
+		var config: Dictionary = JSON.parse_string(recorder.get_dashcam_config_json())
+		err = Assert.eq(config.get("enabled"), true,
+			"reported dashcam config matches the default runtime state")
+
+	rt.queue_free()
+	return err
+
+
+func test_runtime_dashcam_can_be_disabled_without_disabling_stage() -> String:
+	const SETTING := "theatre/stage/dashcam/enabled"
+	var previous: Variant = ProjectSettings.get_setting(SETTING, true)
+	ProjectSettings.set_setting(SETTING, false)
+
+	var rt = load("res://addons/stage/runtime.gd").new()
+	_root.add_child(rt)
+	await _root.get_tree().process_frame
+
+	var recorder = rt.get("recorder")
+	var server = rt.get("tcp_server")
+	var err := Assert.not_null(recorder, "recorder remains available")
+	if not err:
+		err = Assert.not_null(server, "Stage server remains available")
+	if not err:
+		err = Assert.eq(recorder.is_dashcam_active(), false,
+			"project setting disables continuous dashcam capture")
+	if not err:
+		var config: Dictionary = JSON.parse_string(recorder.get_dashcam_config_json())
+		err = Assert.eq(config.get("enabled"), false,
+			"reported dashcam config matches runtime state")
+
+	rt.queue_free()
+	ProjectSettings.set_setting(SETTING, previous)
+	return err
+
+
 func test_runtime_polls_during_pause() -> String:
 	## When the tree is paused, tcp_server.poll() must still be called because
 	## runtime sets PROCESS_MODE_ALWAYS. We test this with a direct server on an
