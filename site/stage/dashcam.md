@@ -108,6 +108,10 @@ The default dashcam buffer holds 60 seconds of pre-trigger history. To extend it
 - `pre_window_deliberate_sec`: seconds of history before a human/agent marker (default: 60)
 - `byte_cap_mb`: memory limit for the ring buffer (default: 1024 MB)
 
+High-load projects that only need live Stage observation can disable continuous
+recording with `theatre/stage/dashcam/enabled` in Project Settings. Snapshots,
+queries, and actions remain available.
+
 ### Post-playtest analysis
 
 After a playtest session:

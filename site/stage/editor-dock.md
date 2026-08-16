@@ -63,16 +63,17 @@ The feed holds up to 20 entries and can be collapsed with the **▼** button.
 These work while the game is running, whether focus is on the game window
 or the editor. They are handled by the StageRuntime autoload, not the dock.
 
-### Configuring shortcuts
+### Project settings
 
-Shortcuts are configured in **Project → Project Settings**:
+Runtime behavior and shortcuts are configured in **Project → Project Settings**:
 
 | Setting | Default | Description |
 |---|---|---|
+| `theatre/stage/dashcam/enabled` | `true` | Continuously buffer dashcam frames. Disable for high-load projects that only need live Stage observation. |
 | `theatre/stage/shortcuts/marker_key` | `F9` | Key to save dashcam clip |
 | `theatre/stage/shortcuts/pause_key` | `F11` | Key to pause/unpause game |
 
-Values are key names: `F1` through `F12`.
+Shortcut values are key names: `F1` through `F12`.
 
 ## Tips
 
