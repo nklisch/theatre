@@ -27,10 +27,10 @@ const LIVE_3D: &str = "res://live_scene_3d.tscn";
 ///  12. spatial_delta() → Patrol in moved (organic), Stationary in state_changed (damage)
 ///  13. Assert: Patrol delta_pos is non-zero
 ///  14. Assert: Stationary state change includes health
-///  15. spatial_snapshot(standard) → new baseline, Patrol at new position
-///  16. spatial_action(call_method, Stationary, take_damage, [10]) → health 35→25
-///  17. spatial_action(set_property, Enemies/Patrol, speed, 0.0) → freeze patrol
-///  18. wait_frames(60) → patrol should stop moving
+///  15. spatial_action(set_property, Enemies/Patrol, speed, 0.0) → freeze patrol
+///  16. spatial_snapshot(standard) → new baseline after the freeze takes effect
+///  17. spatial_action(call_method, Stationary, take_damage, [10]) → health 35→25
+///  18. wait_frames(60) → patrol should remain stopped
 ///  19. spatial_delta() → Stationary in state_changed (health 35→25),
 ///      Patrol should NOT be in moved (speed=0, frozen)
 ///  20. spatial_inspect(Enemies/Stationary) → health=25
@@ -221,30 +221,7 @@ async fn journey_watch_delta_gameplay(b: &impl LiveBackend) {
         "Stationary should be in delta.state_changed (damage). Delta: {delta}"
     );
 
-    // Step 15: new baseline
-    let snap2 = b
-        .stage("spatial_snapshot", json!({"detail": "standard"}))
-        .await
-        .expect("second baseline")
-        .unwrap_data();
-    let e2 = snap2["entities"].as_array().expect("entities");
-    let _patrol_pos = extract_position(find_entity(e2, "Patrol"));
-
-    // Step 16: more damage
-    b.stage(
-        "spatial_action",
-        json!({
-            "action": "call_method",
-            "node": "Enemies/Stationary",
-            "method": "take_damage",
-            "args": [10]
-        }),
-    )
-    .await
-    .expect("call take_damage 10")
-    .unwrap_data();
-
-    // Step 17: freeze patrol by setting speed=0
+    // Step 15: freeze patrol by setting speed=0
     b.stage(
         "spatial_action",
         json!({
@@ -256,6 +233,31 @@ async fn journey_watch_delta_gameplay(b: &impl LiveBackend) {
     )
     .await
     .expect("set_property speed=0")
+    .unwrap_data();
+
+    // Step 16: establish the second delta baseline after the freeze. Otherwise,
+    // legitimate movement between the old baseline and the action is misreported
+    // as post-freeze drift.
+    let snap2 = b
+        .stage("spatial_snapshot", json!({"detail": "standard"}))
+        .await
+        .expect("second baseline")
+        .unwrap_data();
+    let e2 = snap2["entities"].as_array().expect("entities");
+    let _patrol_pos = extract_position(find_entity(e2, "Patrol"));
+
+    // Step 17: more damage after the baseline so the delta must observe it
+    b.stage(
+        "spatial_action",
+        json!({
+            "action": "call_method",
+            "node": "Enemies/Stationary",
+            "method": "take_damage",
+            "args": [10]
+        }),
+    )
+    .await
+    .expect("call take_damage 10")
     .unwrap_data();
 
     // Step 18: wait — patrol should NOT move now

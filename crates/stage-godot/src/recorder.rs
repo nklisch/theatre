@@ -3,7 +3,9 @@ use std::sync::mpsc::{self, Receiver, SyncSender, TryRecvError, TrySendError};
 use std::thread::{self, JoinHandle};
 use std::time::Instant;
 
-use godot::classes::{Engine, Node, Node2D, Node3D, image::Format, node::ProcessMode};
+use godot::classes::{
+    DisplayServer, Engine, Node, Node2D, Node3D, image::Format, node::ProcessMode,
+};
 use godot::obj::Gd;
 use godot::prelude::*;
 use rusqlite::Connection;
@@ -1267,6 +1269,12 @@ impl StageRecorder {
     /// Read and resize on the Godot thread; only plain RGBA bytes cross threads.
     fn dispatch_screenshot_capture(&mut self) {
         if Engine::singleton().is_editor_hint() {
+            return;
+        }
+        // Godot's headless display server has no viewport texture to read. Calling
+        // `Viewport::get_texture` there emits a rendering error every capture tick.
+        // Spatial dashcam capture remains available; only rendered screenshots degrade.
+        if DisplayServer::singleton().get_name().to_string() == "headless" {
             return;
         }
         let started = Instant::now();

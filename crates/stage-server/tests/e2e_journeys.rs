@@ -818,10 +818,10 @@ async fn journey_2d_scene() {
 /// Journey: Screenshot API works end-to-end — status fields present, clip
 /// listing and retrieval succeed, and empty/missing-screenshot cases are handled.
 ///
-/// Note: In headless mode (--headless), Godot does not render to the viewport,
-/// so `do_screenshot_capture()` returns None (empty image). This test verifies
-/// the API contract in both headless (no screenshots) and rendering (with
-/// screenshots) environments.
+/// Note: In headless mode (--headless), the display-server capability guard
+/// skips viewport readback entirely, so screenshot counts remain zero. This
+/// test verifies the API contract in both headless (no screenshots) and
+/// rendering (with screenshots) environments.
 ///
 /// Steps:
 ///   1. clips(status) → screenshot_buffer_count and screenshot_buffer_kb present
@@ -862,6 +862,11 @@ async fn journey_screenshot_api_contract() {
     assert!(
         status2["screenshot_buffer_kb"].as_u64().is_some(),
         "screenshot_buffer_kb must still be present: {status2}"
+    );
+    let godot_stderr = h.godot.stderr_output();
+    assert!(
+        !godot_stderr.contains("texture_2d_get"),
+        "headless screenshot fallback must not request a null viewport texture:\n{godot_stderr}"
     );
 
     // Step 4: save clip
