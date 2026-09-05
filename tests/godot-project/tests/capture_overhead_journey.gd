@@ -39,8 +39,14 @@ func _measure(runtime: Node) -> void:
 	var profile := OS.get_environment("CAPTURE_PROFILE")
 	var patch := {"enabled": profile != "disabled", "anomaly_enabled": false}
 	if profile != "disabled":
-		patch["preset"] = profile
+		patch["preset"] = "lightweight" if profile in ["lightweight_no_images", "spatial_only"] else profile
+	if profile == "lightweight_no_images":
+		# Isolate image capture without changing Lightweight's spatial sampling.
+		patch["screenshot_enabled"] = false
 	var applied: Dictionary = JSON.parse_string(runtime.recorder.apply_dashcam_config(JSON.stringify(patch)))
+	if applied.get("result") == "ok" and profile == "spatial_only":
+		# Select after Lightweight to prove that Spatial only preserves its cadence.
+		applied = JSON.parse_string(runtime.recorder.apply_dashcam_config(JSON.stringify({"preset": "spatial_only"})))
 	if applied.get("result") != "ok":
 		push_error("Benchmark configuration failed: %s" % applied)
 		quit(1)
@@ -56,6 +62,12 @@ func _measure(runtime: Node) -> void:
 	var capture: Dictionary = JSON.parse_string(runtime.recorder.get_dashcam_status_json())
 	print("CAPTURE_BENCHMARK:" + JSON.stringify({
 		"profile":profile, "scene":"64 moving Polygon2D nodes, 1280x720, compatibility renderer",
+		"godot_version":Engine.get_version_info().get("string", "unknown"),
+		"rendering_method":RenderingServer.get_current_rendering_method(),
+		"physics_ticks_per_second":Engine.physics_ticks_per_second,
+		"warmup_seconds":1.0,
+		"physics_monitor":"Performance.TIME_PHYSICS_PROCESS; sampled during the measurement window",
+		"pacing_window":"Recorder's latest 600 tick intervals; includes warmup",
 		"measurement_seconds":elapsed, "physics_ticks":Engine.get_physics_frames() - first_frame,
 		"physics_ms_median":physics_ms[physics_ms.size() / 2],
 		"physics_ms_p95":physics_ms[int(physics_ms.size() * 0.95)],

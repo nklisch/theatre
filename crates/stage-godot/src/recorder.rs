@@ -1,10 +1,10 @@
 use std::collections::VecDeque;
-use std::sync::mpsc::{self, Receiver, SyncSender, TryRecvError, TrySendError};
+use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 use std::thread::{self, JoinHandle};
 use std::time::Instant;
 
 use godot::classes::{
-    DisplayServer, Engine, Node, Node2D, Node3D, image::Format, node::ProcessMode,
+    DisplayServer, Engine, Node, Node2D, Node3D, RenderingServer, node::ProcessMode,
 };
 use godot::obj::Gd;
 use godot::prelude::*;
@@ -37,6 +37,7 @@ struct CapturedScreenshot {
 }
 
 struct RawShot {
+    generation: u64,
     frame: u64,
     timestamp_ms: u64,
     rgba: Vec<u8>,
@@ -55,6 +56,7 @@ struct FrameAnalysis {
 }
 
 struct EncodedShot {
+    generation: u64,
     frame: u64,
     timestamp_ms: u64,
     jpeg_data: Option<Vec<u8>>,
@@ -62,6 +64,51 @@ struct EncodedShot {
     height: u32,
     error: Option<String>,
     analysis: Option<FrameAnalysis>,
+}
+
+struct ScreenshotEncoder {
+    generation: Option<u64>,
+    lattice: ChangeLattice,
+}
+
+impl ScreenshotEncoder {
+    fn new() -> Self {
+        Self {
+            generation: None,
+            lattice: ChangeLattice::new(),
+        }
+    }
+
+    fn encode(&mut self, raw: RawShot) -> EncodedShot {
+        if self.generation != Some(raw.generation) {
+            self.lattice = ChangeLattice::new();
+            self.generation = Some(raw.generation);
+        }
+        let analysis = raw.analyze.then(|| {
+            self.lattice
+                .analyze(&raw.rgba, raw.width, raw.height, raw.noise_floor)
+        });
+        let mut output = Vec::new();
+        let error = jpeg_encoder::Encoder::new(&mut output, raw.quality.clamp(1, 100))
+            .encode(
+                &raw.rgba,
+                raw.width,
+                raw.height,
+                jpeg_encoder::ColorType::Rgba,
+            )
+            .err()
+            .map(|error| error.to_string());
+        EncodedShot {
+            generation: raw.generation,
+            frame: raw.frame,
+            timestamp_ms: raw.timestamp_ms,
+            jpeg_data: error.is_none().then_some(output),
+            width: raw.width as u32,
+            height: raw.height as u32,
+            error,
+            analysis,
+        }
+    }
 }
 
 /// Reusable strided changed-pixel lattice. The worker owns this value, so no
@@ -169,6 +216,15 @@ struct AnomalySettings {
 }
 
 impl AnomalyDetector {
+    fn reset_continuity(&mut self) {
+        self.ema = 0.0;
+        self.have_ema = false;
+        self.last_proportion = 0.0;
+        self.streak = 0;
+        self.last_trigger_frame = None;
+        self.last_trigger_proportion = None;
+    }
+
     fn observe(
         &mut self,
         proportion: f64,
@@ -178,7 +234,7 @@ impl AnomalyDetector {
     ) -> Option<String> {
         self.last_proportion = proportion;
         if reset {
-            self.streak = 0;
+            self.reset_continuity();
             return None;
         }
         if !self.have_ema {
@@ -226,7 +282,7 @@ struct CaptureGap {
     dropped: u32,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 struct GapLedger {
     gaps: VecDeque<CaptureGap>,
     overflow: u64,
@@ -236,8 +292,12 @@ impl GapLedger {
     fn record(&mut self, frame: u64, reason: &str) {
         if let Some(last) = self.gaps.back_mut()
             && last.reason == reason
+            && frame >= last.start_frame.saturating_sub(1)
             && frame <= last.end_frame.saturating_add(1)
         {
+            // Delayed completions can report an earlier missing request after
+            // a more recent admission gap; never claim the intervening frames.
+            last.start_frame = last.start_frame.min(frame);
             last.end_frame = last.end_frame.max(frame);
             last.dropped = last.dropped.saturating_add(1);
             return;
@@ -280,6 +340,13 @@ struct CaptureProbe {
     physics_deltas: VecDeque<f64>,
     analysis_ms_ema: f64,
     analysis_ms_max: f64,
+    submission_ms_max: f64,
+    completion_copy_ms_max: f64,
+    completion_latency_ms_max: f64,
+    last_request_frame: u64,
+    last_completion_frame: u64,
+    spatial_capture_ms_ema: f64,
+    spatial_capture_ms_max: f64,
 }
 
 impl Default for CaptureProbe {
@@ -294,11 +361,27 @@ impl Default for CaptureProbe {
             physics_deltas: VecDeque::with_capacity(600),
             analysis_ms_ema: 0.0,
             analysis_ms_max: 0.0,
+            submission_ms_max: 0.0,
+            completion_copy_ms_max: 0.0,
+            completion_latency_ms_max: 0.0,
+            last_request_frame: 0,
+            last_completion_frame: 0,
+            spatial_capture_ms_ema: 0.0,
+            spatial_capture_ms_max: 0.0,
         }
     }
 }
 
 impl CaptureProbe {
+    fn observe_readback(&mut self, active_ms: f64) {
+        self.readback_ms_ema = if self.readback_ms_ema == 0.0 {
+            active_ms
+        } else {
+            self.readback_ms_ema * 0.95 + active_ms * 0.05
+        };
+        self.readback_ms_max = self.readback_ms_max.max(active_ms);
+    }
+
     fn observe_delta(&mut self, delta_ms: f64) {
         self.physics_delta_ms_ema = if self.physics_delta_ms_ema == 0.0 {
             delta_ms
@@ -331,6 +414,13 @@ impl CaptureProbe {
             "physics_delta_ms_p95_window": self.p95(),
             "analysis_ms_ema": self.analysis_ms_ema,
             "analysis_ms_max": self.analysis_ms_max,
+            "submission_ms_max": self.submission_ms_max,
+            "completion_copy_ms_max": self.completion_copy_ms_max,
+            "completion_latency_ms_max": self.completion_latency_ms_max,
+            "last_request_frame": self.last_request_frame,
+            "last_completion_frame": self.last_completion_frame,
+            "spatial_capture_ms_ema": self.spatial_capture_ms_ema,
+            "spatial_capture_ms_max": self.spatial_capture_ms_max,
         })
     }
 }
@@ -366,7 +456,7 @@ struct DashcamTrigger {
 /// Max number of pending silent markers. Oldest are evicted when exceeded.
 const MAX_PENDING_SILENT_MARKERS: usize = 1000;
 
-use stage_protocol::dashcam::{DashcamConfig, DashcamConfigPatch};
+use stage_protocol::dashcam::{DashcamConfig, DashcamConfigPatch, ScreenshotReadback};
 
 /// Dashcam clip state machine.
 enum DashcamState {
@@ -422,10 +512,16 @@ pub struct StageRecorder {
     screenshot_ring: VecDeque<CapturedScreenshot>,
     screenshot_ring_bytes: usize,
     last_screenshot_frame: u64,
-    screenshot_tx: Option<SyncSender<RawShot>>,
+    screenshot_tx: Option<Sender<RawShot>>,
     screenshot_rx: Option<Receiver<EncodedShot>>,
     screenshot_worker: Option<JoinHandle<()>>,
-    encode_depth: usize,
+    readback: Option<crate::capture_readback::Readback>,
+    pending_shot: Option<RawShot>,
+    capture_error: Option<String>,
+    readback_verified: bool,
+    capture_generation: u64,
+    /// Request provenance for encoding and undrained results, including old generations.
+    encoding_requests: VecDeque<(u64, u64)>,
     gap_ledger: GapLedger,
     capture_probe: CaptureProbe,
     burst_until_frame: Option<u64>,
@@ -463,6 +559,9 @@ impl INode for StageRecorder {
     }
 
     fn exit_tree(&mut self) {
+        self.invalidate_capture_generation();
+        self.readback.take();
+        self.pending_shot.take();
         self.stop_screenshot_worker();
     }
 
@@ -486,7 +585,12 @@ impl INode for StageRecorder {
             screenshot_tx: None,
             screenshot_rx: None,
             screenshot_worker: None,
-            encode_depth: 0,
+            readback: None,
+            pending_shot: None,
+            capture_error: None,
+            readback_verified: false,
+            capture_generation: 0,
+            encoding_requests: VecDeque::new(),
             gap_ledger: GapLedger::default(),
             capture_probe: CaptureProbe::default(),
             burst_until_frame: None,
@@ -508,6 +612,7 @@ impl INode for StageRecorder {
             self.capture_probe
                 .observe_delta(now.duration_since(last).as_secs_f64() * 1000.0);
         }
+        self.poll_screenshot_readback();
         self.drain_encoded_shots();
         // --- Dashcam force-close check (no capture needed) ---
         self.dashcam_check_force_close();
@@ -543,7 +648,18 @@ impl INode for StageRecorder {
             return;
         }
 
-        let Some(captured) = self.do_capture() else {
+        let started = Instant::now();
+        let captured = self.do_capture();
+        let elapsed = started.elapsed().as_secs_f64() * 1000.0;
+        self.capture_probe.spatial_capture_ms_ema =
+            if self.capture_probe.spatial_capture_ms_ema == 0.0 {
+                elapsed
+            } else {
+                self.capture_probe.spatial_capture_ms_ema * 0.95 + elapsed * 0.05
+            };
+        self.capture_probe.spatial_capture_ms_max =
+            self.capture_probe.spatial_capture_ms_max.max(elapsed);
+        let Some(captured) = captured else {
             return;
         };
 
@@ -576,11 +692,13 @@ impl StageRecorder {
     #[func]
     pub fn set_dashcam_enabled(&mut self, enabled: bool) {
         if !enabled && matches!(self.dashcam_state, DashcamState::PostCapture { .. }) {
-            self.stop_screenshot_worker();
             self.flush_dashcam_clip_from(
                 "Stopped recording before the post-window completed",
                 "human",
             );
+        }
+        if enabled != self.dashcam_config.enabled {
+            self.invalidate_capture_generation();
         }
         self.dashcam_config.enabled = enabled;
         if enabled {
@@ -588,7 +706,6 @@ impl StageRecorder {
                 self.dashcam_state = DashcamState::Buffering;
             }
         } else {
-            self.stop_screenshot_worker();
             self.dashcam_state = DashcamState::Disabled;
             self.ring_buffer.clear();
             self.ring_buffer_bytes = 0;
@@ -651,6 +768,12 @@ impl StageRecorder {
             "screenshots_disabled"
         } else if !self.dashcam_config.anomaly_enabled {
             "anomaly_disabled"
+        } else if self.screenshot_unavailable_reason().is_some() {
+            "readback_unavailable"
+        } else if self.dashcam_config.screenshot_readback == ScreenshotReadback::Auto
+            && !self.readback_verified
+        {
+            "readback_initializing"
         } else {
             ""
         };
@@ -714,6 +837,7 @@ impl StageRecorder {
             "buffer_frames":self.get_dashcam_buffer_frames(), "buffer_kb":self.get_dashcam_buffer_kb(),
             "screenshot_buffer_count":self.get_screenshot_buffer_count(), "screenshot_buffer_kb":self.get_screenshot_buffer_kb(),
             "screenshots_available":self.screenshots_available(), "capture_probe":parse(self.get_capture_probe_json()),
+            "screenshot_capture": self.screenshot_capture_status(),
             "screenshot_gaps":parse(self.get_screenshot_gaps_json()), "anomaly":parse(self.get_anomaly_status_json()),
             "config":self.dashcam_config, "preset":self.dashcam_config.matching_preset(),
             "settings_applied_at_frame":self.config_changed_at_frame,
@@ -833,9 +957,7 @@ impl StageRecorder {
         } else {
             None
         };
-        if next.screenshot_encode_queue != self.dashcam_config.screenshot_encode_queue {
-            self.stop_screenshot_worker();
-        }
+        self.invalidate_capture_generation();
         // Keep the remaining post-window duration when sampling cadence changes.
         if let (
             Some(pending),
@@ -1198,45 +1320,17 @@ impl StageRecorder {
         if self.screenshot_tx.is_some() {
             return;
         }
-        let (tx, rx) =
-            mpsc::sync_channel::<RawShot>(self.dashcam_config.screenshot_encode_queue.max(1));
+        // Recorder admission bounds this channel together with GPU work and
+        // undrained results. A physical channel capacity would require restarting
+        // the worker when the user changes the total outstanding limit.
+        let (tx, rx) = mpsc::channel::<RawShot>();
         let (encoded_tx, encoded_rx) = mpsc::channel();
         let handle = thread::spawn(move || {
-            let mut lattice = ChangeLattice::new();
+            let mut encoder = ScreenshotEncoder::new();
             while let Ok(raw) = rx.recv() {
-                let analysis = raw
-                    .analyze
-                    .then(|| lattice.analyze(&raw.rgba, raw.width, raw.height, raw.noise_floor));
-                let mut output = Vec::new();
-                let quality = raw.quality.clamp(1, 100);
-                let encoder = jpeg_encoder::Encoder::new(&mut output, quality);
-                let result = encoder.encode(
-                    &raw.rgba,
-                    raw.width,
-                    raw.height,
-                    jpeg_encoder::ColorType::Rgba,
-                );
-                let shot = match result {
-                    Ok(()) => EncodedShot {
-                        frame: raw.frame,
-                        timestamp_ms: raw.timestamp_ms,
-                        jpeg_data: Some(output),
-                        width: raw.width as u32,
-                        height: raw.height as u32,
-                        error: None,
-                        analysis,
-                    },
-                    Err(error) => EncodedShot {
-                        frame: raw.frame,
-                        timestamp_ms: raw.timestamp_ms,
-                        jpeg_data: None,
-                        width: raw.width as u32,
-                        height: raw.height as u32,
-                        error: Some(error.to_string()),
-                        analysis,
-                    },
-                };
-                let _ = encoded_tx.send(shot);
+                if encoded_tx.send(encoder.encode(raw)).is_err() {
+                    break;
+                }
             }
         });
         self.screenshot_tx = Some(tx);
@@ -1244,76 +1338,210 @@ impl StageRecorder {
         self.screenshot_worker = Some(handle);
     }
 
-    /// Read and resize on the Godot thread; only plain RGBA bytes cross threads.
-    fn dispatch_screenshot_capture(&mut self) {
+    fn invalidate_capture_generation(&mut self) {
+        if let Some(raw) = &self.pending_shot
+            && raw.generation == self.capture_generation
+        {
+            self.gap_ledger
+                .record(raw.frame, "capture_generation_changed");
+        }
+        for &(generation, frame) in &self.encoding_requests {
+            if generation == self.capture_generation {
+                self.gap_ledger.record(frame, "capture_generation_changed");
+            }
+        }
+        self.capture_generation = self.capture_generation.wrapping_add(1);
+        self.anomaly_detector.reset_continuity();
+        self.burst_until_frame = None;
+        self.capture_error = None;
+        // Pending native ownership is intentionally untouched. Even rejected
+        // images count against admission until their physical completion drains.
+    }
+
+    fn screenshot_unavailable_reason(&self) -> Option<String> {
         if Engine::singleton().is_editor_hint() {
+            Some("editor_hint".into())
+        } else if DisplayServer::singleton().get_name() == "headless" {
+            Some("headless".into())
+        } else if self.dashcam_config.screenshot_readback == ScreenshotReadback::Auto
+            && RenderingServer::singleton().get_current_rendering_method() != "gl_compatibility"
+        {
+            Some("Native asynchronous capture requires Compatibility/OpenGL; synchronous recovery is explicit".into())
+        } else {
+            self.capture_error.clone()
+        }
+    }
+
+    fn screenshot_capture_status(&self) -> serde_json::Value {
+        let (available, backend, reason) =
+            if !self.dashcam_config.enabled || !self.dashcam_config.screenshot_enabled {
+                (
+                    false,
+                    "disabled",
+                    Some("Screenshot capture disabled by configuration".to_string()),
+                )
+            } else if let Some(reason) = self.screenshot_unavailable_reason() {
+                (false, "unavailable", Some(reason))
+            } else if self.dashcam_config.screenshot_readback == ScreenshotReadback::Synchronous {
+                (true, "synchronous", None)
+            } else if self.readback_verified {
+                (true, "opengl_async", None)
+            } else {
+                (
+                    false,
+                    "initializing",
+                    Some("Awaiting first native readback completion".into()),
+                )
+            };
+        serde_json::json!({"available":available, "backend":backend, "reason":reason, "pending":self.pending_shot.is_some()})
+    }
+
+    fn poll_screenshot_readback(&mut self) {
+        let result = self
+            .readback
+            .as_mut()
+            .and_then(|readback| readback.poll(self.physics_tick_count));
+        if let Some(result) = result {
+            let Some(mut raw) = self.pending_shot.take() else {
+                return;
+            };
+            match result {
+                Ok(pixels) => {
+                    self.capture_probe.submission_ms_max = self
+                        .capture_probe
+                        .submission_ms_max
+                        .max(self.readback.as_ref().map_or(0.0, |r| r.submission_ms));
+                    self.capture_probe.completion_copy_ms_max = self
+                        .capture_probe
+                        .completion_copy_ms_max
+                        .max(pixels.completion_copy_ms);
+                    self.capture_probe.completion_latency_ms_max = self
+                        .capture_probe
+                        .completion_latency_ms_max
+                        .max(pixels.latency_ms);
+                    self.capture_probe.last_request_frame = raw.frame;
+                    self.capture_probe.last_completion_frame = current_physics_frame();
+                    self.readback_verified = true;
+                    let active_ms = self.readback.as_ref().map_or(0.0, |r| r.submission_ms)
+                        + pixels.completion_copy_ms;
+                    self.capture_probe.observe_readback(active_ms);
+                    if raw.generation != self.capture_generation || !self.is_dashcam_active() {
+                        return;
+                    }
+                    raw.rgba = pixels.rgba;
+                    raw.width = pixels.width;
+                    raw.height = pixels.height;
+                    self.send_raw_shot(raw);
+                }
+                Err(error) => {
+                    // Invalidation already accounts for stale requests, even if
+                    // their physically outstanding transfer later fails.
+                    if raw.generation == self.capture_generation {
+                        self.gap_ledger.record(raw.frame, "readback_unavailable");
+                        if self.dashcam_config.screenshot_readback == ScreenshotReadback::Auto {
+                            self.capture_error = Some(error);
+                        }
+                    }
+                    self.readback_verified = false;
+                    self.readback.take();
+                }
+            }
+        }
+    }
+
+    /// Admission precedes viewport access, drawable work and pixel transfer.
+    fn dispatch_screenshot_capture(&mut self) {
+        if self.screenshot_unavailable_reason().is_some() {
+            self.gap_ledger
+                .record(current_physics_frame(), "readback_unavailable");
             return;
         }
-        // Godot's headless display server has no viewport texture to read. Calling
-        // `Viewport::get_texture` there emits a rendering error every capture tick.
-        // Spatial dashcam capture remains available; only rendered screenshots degrade.
-        if DisplayServer::singleton().get_name() == "headless" {
+        if self.pending_shot.is_some()
+            || self.encoding_requests.len() >= self.dashcam_config.screenshot_encode_queue
+        {
+            self.capture_probe.dropped_queue_full += 1;
+            self.gap_ledger
+                .record(current_physics_frame(), "capture_capacity_full");
             return;
         }
-        let started = Instant::now();
         let Some(viewport) = self.base().get_viewport() else {
+            self.capture_error = Some("Viewport unavailable".into());
             return;
         };
         let Some(texture) = viewport.get_texture() else {
+            self.capture_error = Some("Viewport texture unavailable".into());
             return;
         };
-        let Some(mut image) = texture.get_image() else {
-            return;
-        };
-        let orig_width = image.get_width() as u32;
-        let orig_height = image.get_height() as u32;
-        if orig_width == 0 || orig_height == 0 {
+        if texture.get_width() <= 0 || texture.get_height() <= 0 {
+            self.capture_error = Some("Viewport texture is empty".into());
             return;
         }
-        let max_dim = self.dashcam_config.screenshot_max_dimension.clamp(1, 8192);
-        if orig_width.max(orig_height) > max_dim {
-            let (w, h) = if orig_width >= orig_height {
-                (max_dim, (orig_height * max_dim / orig_width).max(1))
-            } else {
-                ((orig_width * max_dim / orig_height).max(1), max_dim)
-            };
-            image.resize(w as i32, h as i32);
-        }
-        image.convert(Format::RGBA8);
-        let raw = RawShot {
+        let size = crate::capture_readback::reduced_size(
+            texture.get_width() as u32,
+            texture.get_height() as u32,
+            self.dashcam_config.screenshot_max_dimension,
+        );
+        let mut raw = RawShot {
+            generation: self.capture_generation,
             frame: current_physics_frame(),
             timestamp_ms: current_time_ms(),
-            rgba: image.get_data().to_vec(),
-            width: image.get_width() as u16,
-            height: image.get_height() as u16,
+            rgba: Vec::new(),
+            width: size.0 as u16,
+            height: size.1 as u16,
             quality: (self.dashcam_config.screenshot_quality * 100.0).round() as u8,
             analyze: self.dashcam_config.anomaly_enabled && self.dashcam_config.screenshot_enabled,
             noise_floor: self.dashcam_config.anomaly_noise_floor,
         };
-        let elapsed = started.elapsed().as_secs_f64() * 1000.0;
-        self.capture_probe.readback_ms_ema = if self.capture_probe.readback_ms_ema == 0.0 {
-            elapsed
+        let readback = self.readback.get_or_insert_with(Default::default);
+        if self.dashcam_config.screenshot_readback == ScreenshotReadback::Synchronous {
+            match readback.synchronous(texture.get_rid(), size) {
+                Ok(pixels) => {
+                    self.capture_probe.observe_readback(pixels.latency_ms);
+                    self.capture_probe.submission_ms_max =
+                        self.capture_probe.submission_ms_max.max(pixels.latency_ms);
+                    self.capture_probe.last_request_frame = raw.frame;
+                    self.capture_probe.last_completion_frame = current_physics_frame();
+                    raw.rgba = pixels.rgba;
+                    self.send_raw_shot(raw);
+                }
+                Err(error) => {
+                    self.gap_ledger.record(raw.frame, "readback_unavailable");
+                    self.capture_error = Some(error);
+                }
+            }
         } else {
-            self.capture_probe.readback_ms_ema * 0.95 + elapsed * 0.05
-        };
-        self.capture_probe.readback_ms_max = self.capture_probe.readback_ms_max.max(elapsed);
+            match readback.submit(texture.get_rid(), size, self.physics_tick_count) {
+                Ok(()) => {
+                    self.pending_shot = Some(raw);
+                }
+                Err(error) => {
+                    self.gap_ledger.record(raw.frame, "readback_unavailable");
+                    self.capture_error = Some(error);
+                }
+            }
+        }
+    }
+
+    fn send_raw_shot(&mut self, raw: RawShot) {
         self.ensure_screenshot_worker();
         let Some(tx) = self.screenshot_tx.as_ref() else {
             return;
         };
-        match tx.try_send(raw) {
+        let request = (raw.generation, raw.frame);
+        match tx.send(raw) {
             Ok(()) => {
-                self.encode_depth = self.encode_depth.saturating_add(1);
+                self.encoding_requests.push_back(request);
                 self.capture_probe.dispatched = self.capture_probe.dispatched.saturating_add(1);
-                self.capture_probe.encode_depth_max =
-                    self.capture_probe.encode_depth_max.max(self.encode_depth);
+                self.capture_probe.encode_depth_max = self
+                    .capture_probe
+                    .encode_depth_max
+                    .max(self.encoding_requests.len());
             }
-            Err(TrySendError::Full(raw)) => {
-                self.capture_probe.dropped_queue_full =
-                    self.capture_probe.dropped_queue_full.saturating_add(1);
-                self.gap_ledger.record(raw.frame, "encode_queue_full");
+            Err(_) => {
+                self.gap_ledger
+                    .record(request.1, "encode_worker_unavailable");
+                self.capture_error = Some("Screenshot encoder unavailable".into());
             }
-            Err(TrySendError::Disconnected(_)) => self.stop_screenshot_worker(),
         }
     }
 
@@ -1324,10 +1552,18 @@ impl StageRecorder {
                 Some(Err(TryRecvError::Empty)) | None => break,
                 Some(Err(TryRecvError::Disconnected)) => {
                     self.screenshot_rx = None;
+                    for &(_, frame) in &self.encoding_requests {
+                        self.gap_ledger.record(frame, "encode_worker_unavailable");
+                    }
+                    self.encoding_requests.clear();
+                    self.capture_error = Some("Screenshot encoder disconnected".into());
                     break;
                 }
             };
-            self.encode_depth = self.encode_depth.saturating_sub(1);
+            self.encoding_requests.pop_front();
+            if shot.generation != self.capture_generation || !self.is_dashcam_active() {
+                continue;
+            }
             if let Some(analysis) = shot.analysis {
                 self.capture_probe.analysis_ms_ema = if self.capture_probe.analysis_ms_ema == 0.0 {
                     analysis.analysis_ms
@@ -1391,6 +1627,8 @@ impl StageRecorder {
         }
     }
 
+    // Only engine teardown joins: unloading the extension while its encoder is
+    // executing would unload live code. Ordinary Stop/configuration never joins.
     fn stop_screenshot_worker(&mut self) {
         self.screenshot_tx.take();
         if let Some(handle) = self.screenshot_worker.take() {
@@ -1398,7 +1636,7 @@ impl StageRecorder {
         }
         self.drain_encoded_shots();
         self.screenshot_rx.take();
-        self.encode_depth = 0;
+        self.encoding_requests.clear();
     }
 
     /// Ingest a screenshot into the ring buffer and post-capture state.
@@ -1868,6 +2106,21 @@ impl StageRecorder {
                 .len()
         );
 
+        // A save is a snapshot of evidence already ingested, not a reason to
+        // wait for GPU/encoder work. These gaps belong to this saved window only.
+        let mut save_gaps = self.gap_ledger.clone();
+        // Old generations already have a capture_generation_changed gap.
+        if let Some(raw) = &self.pending_shot
+            && raw.generation == self.capture_generation
+        {
+            save_gaps.record(raw.frame, "unavailable_at_save");
+        }
+        for &(generation, frame) in &self.encoding_requests {
+            if generation == self.capture_generation {
+                save_gaps.record(frame, "unavailable_at_save");
+            }
+        }
+
         let mut reserved = false;
         let saved = (|| -> Result<(), Box<dyn std::error::Error>> {
             std::fs::create_dir_all(&dir_path)?;
@@ -1926,7 +2179,7 @@ impl StageRecorder {
             }
             {
                 let mut stmt = tx.prepare_cached("INSERT INTO screenshot_gaps (start_frame, end_frame, reason, dropped) VALUES (?1, ?2, ?3, ?4)")?;
-                for gap in self.gap_ledger.overlapping(first_frame, last_frame) {
+                for gap in save_gaps.overlapping(first_frame, last_frame) {
                     stmt.execute(rusqlite::params![
                         gap.start_frame,
                         gap.end_frame,
@@ -2160,6 +2413,72 @@ fn current_time_ms() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn delayed_gap_reports_do_not_claim_unsampled_intervening_frames() {
+        let mut ledger = GapLedger::default();
+        ledger.record(20, "unavailable_at_save");
+        ledger.record(10, "unavailable_at_save");
+        ledger.record(9, "unavailable_at_save");
+        assert_eq!(ledger.gaps.len(), 2);
+        assert_eq!(
+            (ledger.gaps[1].start_frame, ledger.gaps[1].end_frame),
+            (9, 10)
+        );
+        assert_eq!(ledger.overlapping(11, 19).count(), 0);
+    }
+
+    #[test]
+    fn encoder_keeps_request_provenance_but_resets_comparison_between_generations() {
+        let raw = |generation, frame, value| RawShot {
+            generation,
+            frame,
+            timestamp_ms: frame * 17,
+            rgba: vec![value; 16 * 16 * 4],
+            width: 16,
+            height: 16,
+            quality: 65,
+            analyze: true,
+            noise_floor: 24,
+        };
+        let mut encoder = ScreenshotEncoder::new();
+        let first = encoder.encode(raw(1, 10, 0));
+        assert!(first.analysis.unwrap().reset);
+        let changed = encoder.encode(raw(1, 11, 255));
+        assert!(changed.analysis.unwrap().proportion > 0.99);
+        // Identical dimensions must not reuse the discarded generation's pixels.
+        let restarted = encoder.encode(raw(2, 90, 0));
+        assert!(restarted.analysis.unwrap().reset);
+        assert_eq!(restarted.analysis.unwrap().proportion, 0.0);
+        assert_eq!(
+            (
+                restarted.generation,
+                restarted.frame,
+                restarted.timestamp_ms
+            ),
+            (2, 90, 1530)
+        );
+        assert!(restarted.error.is_none() && restarted.jpeg_data.is_some());
+        assert!(!encoder.encode(raw(2, 91, 0)).analysis.unwrap().reset);
+    }
+
+    #[test]
+    fn anomaly_generation_reset_discards_baseline_streak_and_cooldown() {
+        let settings = AnomalySettings {
+            min: 0.2,
+            relative: 2.0,
+            sustained: 2,
+            cooldown_frames: 100,
+        };
+        let mut detector = AnomalyDetector::default();
+        assert!(detector.observe(0.01, false, 1, settings).is_none());
+        assert!(detector.observe(0.9, false, 2, settings).is_none());
+        detector.reset_continuity();
+        assert!(detector.observe(0.9, false, 3, settings).is_none());
+        assert_eq!(detector.triggers_total, 0);
+        assert_eq!(detector.streak, 0);
+        assert_eq!(detector.ema, 0.9);
+    }
 
     #[test]
     fn markers_are_preserved_between_sampled_spatial_frames() {

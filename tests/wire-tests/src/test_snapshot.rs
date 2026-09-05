@@ -102,6 +102,60 @@ fn snapshot_includes_state_exports_at_full_detail() {
 
 #[test]
 #[ignore = "requires Godot binary and built GDExtension"]
+fn exported_state_preserves_inherited_dynamic_and_validated_properties() {
+    let mut f = GodotFixture::start("tests/exported_state_journey.gd").unwrap();
+    for changed in [false, true] {
+        if changed {
+            f.query(
+                "execute_action",
+                serde_json::json!({
+                    "action": "call_method", "path": "Subject",
+                    "method": "change_exports", "args": []
+                }),
+            )
+            .unwrap()
+            .unwrap_data();
+        }
+        let expected = if changed {
+            serde_json::json!({"health":17, "inventory":["gem"], "direction":[-1.0,8.0],
+                "visible":false, "dynamic_after":456, "hidden_export":7})
+        } else {
+            serde_json::json!({"health":42, "inventory":["key","coin"], "direction":[2.0,3.0],
+                "visible":true, "dynamic_before":123})
+        };
+        for detail in ["summary", "standard", "full"] {
+            let data = f
+                .query(
+                    "get_snapshot_data",
+                    serde_json::json!({
+                        "perspective":{"type":"camera"}, "detail":detail,
+                        "radius":200.0, "include_offscreen":true
+                    }),
+                )
+                .unwrap()
+                .unwrap_data();
+            let subject = find_entity(&data, "Subject");
+            assert_eq!(subject["path"], "Subject");
+            assert_eq!(subject["state"], expected, "{detail}, changed={changed}");
+            if detail == "full" {
+                assert_eq!(subject["all_exported_vars"], expected);
+            }
+        }
+        let inspected = f
+            .query(
+                "get_node_inspect",
+                serde_json::json!({
+                    "path":"Subject", "include":["state"]
+                }),
+            )
+            .unwrap()
+            .unwrap_data();
+        assert_eq!(inspected["state"]["exported"], expected);
+    }
+}
+
+#[test]
+#[ignore = "requires Godot binary and built GDExtension"]
 fn snapshot_2d_has_2_component_positions() {
     let mut f = GodotFixture::start("test_scene_2d.tscn").unwrap();
 

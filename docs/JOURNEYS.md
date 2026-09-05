@@ -97,11 +97,15 @@ Mark and Save now decide when to retain a clip.
 
 1. Check the native capture controls or `clips` status. Confirm recording is
    enabled and inspect actual buffered coverage, not only the configured window.
-2. Choose sampling settings if needed, then explicitly Start recording. Presets
-   do not enable it. Mark retains the configured post-window—the time collected
+   Current image capability is separate from images already retained.
+2. Choose sampling settings if needed, then explicitly Start recording if it is
+   stopped. Presets do not enable it. Spatial only disables new images while
+   preserving spatial cadence, movement settings and retained images.
+   Mark retains the configured post-window—the time collected
    after the marker. Save now closes the available window immediately. Stopping
    a pending capture saves the available portion rather than waiting for the
-   rest of its post-window.
+   rest of its post-window. Saving does not wait for unfinished image work;
+   those images appear as gaps in the saved window.
 3. Wait for the saved acknowledgement and copy the clip reference from the
    controls. Match its run and note the scene at save when several clips exist; do not assume an
    old clip belongs to the current game merely because it is listed.
@@ -127,10 +131,11 @@ reconnect to resolve it. Live capture controls still need the game.
 
 Lightweight and Detailed are relative sampling choices, not frame-time promises.
 Inspect pacing, readback cost and gaps in `clips` status on the actual project.
-Lower image frequency or dimensions, disable screenshots, or stop recording if
-capture disrupts the behavior being investigated. A full encoding queue is only
-one possible cause of capture overhead; zero queue drops do not prove smooth
-playback.
+Lower image frequency or dimensions, choose Spatial only, or stop recording if
+capture disrupts the behavior being investigated. Spatial collection also has a
+cost. A full encoding queue is only one possible cause of capture overhead;
+zero queue drops do not prove smooth playback. Delayed image completion retains
+the capture-request frame and timestamp, not an atomic image-and-physics state.
 
 ## Author with Director
 
@@ -250,7 +255,15 @@ Read the target with Director, verify node/resource types and required assigned 
 
 ### Visual evidence is unavailable
 
-Headless or editor-hint runs may still provide spatial frames while producing no rendered screenshots. Check `clips` status and screenshot metadata, then continue with spatial analysis or run a graphical session when the question genuinely depends on pixels.
+Headless or editor-hint runs may still provide spatial frames while producing no
+rendered screenshots. A graphical session alone also does not prove that a usable
+capture backend exists. Check `screenshot_capture` in `clips` status for current
+capability and its reason, separately from retained screenshot coverage.
+Automatic readback uses the available native asynchronous OpenGL path or leaves
+visual capture unavailable while spatial recording continues. If pixels are
+necessary and that path is unavailable, synchronous readback is an explicit
+recovery choice that can stall gameplay; it is not an automatic fallback.
+Continue with spatial analysis when that is sufficient.
 
 ## Contract and source references
 

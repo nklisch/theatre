@@ -70,7 +70,7 @@ process. `stage-core` is an engine-independent library used by the server.
 
 The extension owns three engine-facing roles:
 
-- `StageCollector` reads the scene tree and engine properties during the physics callback.
+- `StageCollector` reads the scene tree and engine properties during the physics callback. Its addon helper filters live exported-property metadata inside Godot before values cross into Rust; this avoids per-property binding overhead without caching state or losing dynamic properties. Binary-only use retains the Rust collection path.
 - `StageTCPServer` listens on `127.0.0.1` (default port `9077`), performs the handshake, and dispatches requests on the Godot thread.
 - `StageRecorder` maintains dashcam buffers and owns capture and clip persistence, including spatial frames and optional screenshots.
 
@@ -147,10 +147,28 @@ provenance. After a successful save, Godot publishes its resolved storage path
 in the project's `.stage/clip_storage_path` hint; a fresh server can then inspect
 saved evidence after the game exits without reimplementing `user://` resolution.
 
-Pixel readback stays on the Godot thread; encoding and capture-local change
-measurement can use an owned-data worker. The recorder reports capture gaps
-and health rather than treating dropped or unavailable images as unchanged
-frames. Headless Godot can supply spatial data without a rendered viewport.
+Spatial-only capture disables new images without changing spatial sampling or
+removing retained screenshots. Automatic visual capture requires a usable native
+asynchronous OpenGL path; otherwise spatial recording continues with image
+unavailability reported. Synchronous readback is explicit recovery, never an
+implicit fallback.
+
+The asynchronous path downsamples the existing viewport through Godot's public
+GPU blit API, without rendering the scene again. Godot objects stay on the main
+thread. Native graphics submission, zero-timeout fence polling and resource
+retirement run in context-correct render callbacks; only completed owned pixels
+reach the JPEG and capture-local change-measurement worker. This avoids intentional
+GPU completion waits, not every possible driver or memory-transfer cost.
+
+The recorder admits work before blitting or readback. One pending native transfer
+and all encoding or undrained results count against bounded outstanding work.
+Late samples are skipped rather than caught up in bursts. Stop and configuration
+changes invalidate stale image results and reset anomaly continuity without
+waiting for the encoder; outstanding native resources remain owned until safe
+retirement. Saves retain completed evidence and report unfinished images as gaps,
+without waiting for them. Headless Godot can supply spatial data without a
+rendered viewport.
+
 Opt-in movement evidence uses the same spatial samples: the protocol defines an
 optional trailing movement record, and the engine samples selected InputMap
 strengths and bounded CharacterBody3D contact facts on the main thread. Older
@@ -233,7 +251,7 @@ copy. Release ownership and authorized commands are in [`AGENTS.md`](../AGENTS.m
 
 ## Thread and process rules
 
-- Godot scene-tree and engine APIs are main-thread-only. Stage's `Gd<T>` values do not cross thread boundaries.
+- Godot objects and scene-tree access remain on the main thread. Stage's `Gd<T>` values do not cross thread boundaries. Native capture graphics work uses Godot's render-thread scheduling boundary with native handles and owned data, not scene objects.
 - Stage's runtime poll runs from the Godot physics lifecycle. Its socket handling is bounded and hands engine work to the same main-thread callback.
 - Screenshot encoding may use a worker, but only plain pixel data crosses that boundary; Godot objects remain on the engine thread.
 - Stage's MCP server uses Tokio for asynchronous MCP and TCP coordination. It registers pending responses, releases session locks before awaiting the addon, and applies a per-query timeout.

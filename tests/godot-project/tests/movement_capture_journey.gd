@@ -35,6 +35,9 @@ func _initialize() -> void:
 	recorder = ClassDB.instantiate("StageRecorder")
 	root.add_child(recorder)
 	recorder.set_collector(collector)
+	# This fixture constructs the recorder without StageRuntime startup glue.
+	# Stop it before deferred setup can follow a default-cadence physics tick.
+	check(patch({"enabled": false}).get("result") == "ok", "hold capture until configured")
 	call_deferred("exercise")
 
 func add_box(body: Node3D, size: Vector3) -> void:
@@ -57,7 +60,7 @@ func frames(count: int) -> void:
 	await process_frame
 
 func exercise() -> void:
-	check(patch({"screenshot_enabled": false, "anomaly_enabled": false, "capture_interval": 2}).get("result") == "ok", "disable images")
+	check(patch({"enabled": true, "screenshot_enabled": false, "anomaly_enabled": false, "capture_interval": 2}).get("result") == "ok", "start with the tested cadence")
 	await frames(8)
 	ranges.disabled = Engine.get_physics_frames() - 2
 	var original: String = recorder.get_dashcam_config_json()

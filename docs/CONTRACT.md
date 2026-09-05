@@ -157,6 +157,36 @@ with defaults on one-shot connections. Invalid recorder TOML is reported without
 discarding valid connection settings or preventing other local tools from
 starting.
 
+The `spatial_only` preset disables new screenshots while preserving spatial
+cadence, movement selection, recording enabled/disabled intent and already
+retained images. Recording is enabled by default; explicit project startup
+settings can disable it and are preserved by preset selection.
+
+Automatic screenshot readback selects an available native asynchronous OpenGL
+path or reports visual capture unavailable while spatial recording continues.
+It never silently substitutes synchronous readback. Explicit synchronous
+recovery can wait for the GPU and stall gameplay. Neither mode changes the
+project's renderer.
+
+### Visual capture and coverage
+
+Live `screenshot_capture` status describes current capability: whether new images
+are available, the selected backend, any unavailability reason and whether a
+readback is pending. It is separate from `screenshots_available`, which describes
+images already retained in the buffer. Historical images do not establish that
+new capture is working; a pending transfer does not establish a retained image.
+
+Admission precedes expensive visual work. Pending readback, encoding and
+completed-but-not-ingested results all consume capacity; skipped samples are
+reported as gaps, not unchanged frames. Screenshot frame/time metadata records
+the capture request and survives delayed completion. It is not the completion
+time or a guarantee that image pixels and sampled physics state are atomic.
+
+Stop and configuration changes invalidate stale image results and reset image
+comparison and anomaly continuity. They do not wait for encoding to finish.
+A save records images already ingested and reports unfinished images in its
+window as gaps; it does not wait for readback or encoding to fill them.
+
 ### Persistence ownership
 
 The Stage addon owns capture buffers and clip persistence. It writes spatial frame data and optional screenshot data to SQLite in its configured user storage. The Stage server resolves the storage path and reads clips for analysis; it does not own the live capture buffer. This distinction matters when a game exits, when screenshots are unavailable,

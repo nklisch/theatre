@@ -39,6 +39,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rusqlite = { version = "0.33", features = ["bundled"] }
 rmp-serde = "1"
+libloading = "0.8"
 stage-protocol = { path = "crates/stage-protocol" }
 stage-core = { path = "crates/stage-core" }
 theatre-feedback = { path = "crates/theatre-feedback" }

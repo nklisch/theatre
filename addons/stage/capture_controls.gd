@@ -8,6 +8,11 @@ signal save_requested
 signal preset_requested(preset: String)
 signal feedback_requested
 
+const PRESETS := {
+	"Custom": "", "Lightweight": "lightweight", "Detailed": "detailed",
+	"Spatial only": "spatial_only",
+}
+
 var _toggle: Button
 var _marker: Button
 var _save: Button
@@ -40,12 +45,14 @@ func _init() -> void:
 	heading.add_child(title)
 	_preset = OptionButton.new()
 	_preset.name = "CapturePreset"
-	for label in ["Custom", "Lightweight", "Detailed"]:
+	for label in PRESETS:
 		_preset.add_item(label)
-	_preset.tooltip_text = "Sampling and image size only. Choosing a preset does not start recording."
+		_preset.set_item_metadata(_preset.item_count - 1, PRESETS[label])
+	_preset.tooltip_text = "Choosing a preset does not start recording. Spatial only turns off new images without changing spatial sampling or discarding retained images."
 	_preset.item_selected.connect(func(index: int) -> void:
-		if index > 0:
-			preset_requested.emit("lightweight" if index == 1 else "detailed")
+		var preset: String = _preset.get_item_metadata(index)
+		if not preset.is_empty():
+			preset_requested.emit(preset)
 	)
 	heading.add_child(_preset)
 	var actions := HBoxContainer.new()
@@ -141,10 +148,11 @@ func refresh(status: Dictionary) -> void:
 		_marker.tooltip_text = "Start dashcam before marking. The marker shortcut will explain this too."
 	else:
 		_marker.tooltip_text = "Retain the configured before/after window around this moment."
-	match status.get("preset"):
-		"lightweight": _preset.select(1)
-		"detailed": _preset.select(2)
-		_: _preset.select(0)
+	_preset.select(0)
+	for index in _preset.item_count:
+		if _preset.get_item_metadata(index) == status.get("preset"):
+			_preset.select(index)
+			break
 	var coverage: Dictionary = status.get("coverage", {})
 	var buffered := float(coverage.get("buffered_seconds") if coverage.get("buffered_seconds") != null else 0.0)
 	var message := "Dashcam stopped · Start to retain gameplay"
@@ -155,17 +163,41 @@ func refresh(status: Dictionary) -> void:
 	elif status.get("state") == "post_capture":
 		message = "Marked · collecting %.1f s after the marker" % float(coverage.get("post_window_remaining_seconds", 0.0))
 	elif active:
-		message = "Buffering · %.1f s retained · images %s" % [buffered,
-			"available" if status.get("screenshots_available", false) else "unavailable"]
+		message = "Buffering · %.1f s retained" % buffered
+	if available:
+		message += " · " + _image_status(status)
+	var tooltip := message
+	var screenshot_capture: Dictionary = status.get("screenshot_capture", {})
+	if screenshot_capture.get("reason") != null:
+		tooltip += "\n" + str(screenshot_capture.reason)
 	if Time.get_ticks_msec() < _acknowledgement_until:
 		message = _acknowledgement
+		tooltip = message
 	_status.text = message
-	_status.tooltip_text = message
+	_status.tooltip_text = tooltip
 	var clip: Variant = status.get("last_saved_clip")
 	if clip is Dictionary:
 		_last_clip = clip
 		_last_saved.text = "Last saved: %s" % str(clip.get("clip_id", ""))
 		_copy.disabled = false
+
+
+func _image_status(status: Dictionary) -> String:
+	var config: Dictionary = status.get("config", {})
+	var capture: Dictionary = status.get("screenshot_capture", {})
+	var message := "Images unavailable"
+	if not config.get("screenshot_enabled", true):
+		message = "Images off"
+	elif not status.get("dashcam_enabled", false):
+		message = "Images stopped"
+	elif capture.get("available", false):
+		message = "Images pending" if capture.get("pending", false) else "Images on"
+	elif capture.get("backend") == "initializing":
+		message = "Images initializing"
+	var retained := int(status.get("screenshot_buffer_count", 0))
+	if retained > 0:
+		message += " · %d images retained" % retained
+	return message
 
 
 func _copy_reference() -> void:

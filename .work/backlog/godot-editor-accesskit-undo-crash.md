@@ -49,3 +49,13 @@ passed, including the authoring-editor tests. The earlier duplicate-child panic
 remains reproduced evidence of an intermittent issue; no accessibility fix or
 workaround was applied during the eleven-item repair delivery. A passing run
 does not establish that this deferred native crash has been repaired.
+
+The responsive-capture full rerun reproduced the crash in
+`every_scene_mutator_uses_native_undo_in_single_and_batch_routes`, during undo
+for batched `node_set_meta`. Godot 4.7.1 Compatibility on the RTX 4070 reported
+`TreeUpdate includes duplicate child #491670676179720` at the same AccessKit
+0.35.0 `tree.rs:224:21` location; Director reported
+`shortcut: editor plugin TCP I/O error: early eof`. Three other authoring tests
+passed. This remains excluded engine-crash evidence, not a capture regression
+or a repaired accessibility issue. A separate movement-fixture startup race
+also failed that invocation and is being corrected within verification.

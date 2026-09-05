@@ -5,10 +5,24 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 #[serde(rename_all = "snake_case")]
 pub enum CapturePreset {
+    /// Disable new screenshots without changing spatial sampling or recording intent.
+    SpatialOnly,
     /// Lower sampling frequency and smaller images for movement investigations.
     Lightweight,
     /// More frequent samples and larger images, with higher capture cost.
     Detailed,
+}
+
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
+#[serde(rename_all = "snake_case")]
+pub enum ScreenshotReadback {
+    /// Use native nonblocking readback when available; otherwise retain spatial capture only.
+    #[default]
+    Auto,
+    /// Explicit recovery: GPU-downsample first where available, then synchronously read pixels.
+    /// This can stall gameplay while waiting for the GPU.
+    Synchronous,
 }
 
 // One field catalog keeps effective values, patch keys and defaults together.
@@ -64,6 +78,7 @@ settings! {
     system_min_interval_sec: u32 = 2;
     byte_cap_mb: u32 = 1024;
     screenshot_enabled: bool = true;
+    screenshot_readback: ScreenshotReadback = ScreenshotReadback::Auto;
     /// Screenshot sampling interval in physics frames. Must be positive.
     screenshot_interval_frames: u32 = 4;
     /// JPEG quality from zero to one.
@@ -71,6 +86,7 @@ settings! {
     /// Maximum output image dimension, from 1 to 8192 pixels.
     screenshot_max_dimension: u32 = 480;
     screenshot_byte_cap_mb: u32 = 32;
+    /// Total outstanding images: GPU pending, encoding and undrained completions.
     screenshot_encode_queue: usize = 8;
     dense_burst_enabled: bool = false;
     dense_burst_interval_frames: u32 = 2;
@@ -145,17 +161,26 @@ impl DashcamConfig {
 
     /// Identify the preset-controlled fields without treating unrelated options as defaults.
     pub fn matching_preset(&self) -> Option<CapturePreset> {
-        [CapturePreset::Lightweight, CapturePreset::Detailed]
-            .into_iter()
-            .find(|preset| {
-                let mut candidate = self.clone();
-                candidate.apply_preset(*preset);
-                candidate == *self
-            })
+        [
+            CapturePreset::SpatialOnly,
+            CapturePreset::Lightweight,
+            CapturePreset::Detailed,
+        ]
+        .into_iter()
+        .find(|preset| {
+            let mut candidate = self.clone();
+            candidate.apply_preset(*preset);
+            candidate == *self
+        })
     }
 
     fn apply_preset(&mut self, preset: CapturePreset) {
+        if preset == CapturePreset::SpatialOnly {
+            self.screenshot_enabled = false;
+            return;
+        }
         let (interval, screenshots, dimension, state_mb, image_mb) = match preset {
+            CapturePreset::SpatialOnly => return,
             CapturePreset::Lightweight => (6, 12, 640, 128, 16),
             CapturePreset::Detailed => (2, 6, 960, 256, 32),
         };
@@ -173,6 +198,36 @@ impl DashcamConfig {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn spatial_only_preserves_all_non_image_intent_and_readback_is_explicit() {
+        let original = DashcamConfig {
+            enabled: false,
+            capture_interval: 7,
+            movement_nodes: vec!["Player".into()],
+            input_actions: vec!["move".into()],
+            ..Default::default()
+        };
+        let patch: DashcamConfigPatch =
+            serde_json::from_value(json!({"preset":"spatial_only"})).unwrap();
+        let mut expected = original.clone();
+        expected.screenshot_enabled = false;
+        let actual = patch.apply_to(&original).unwrap();
+        assert_eq!(actual, expected);
+        assert_eq!(actual.matching_preset(), Some(CapturePreset::SpatialOnly));
+        assert_eq!(actual.screenshot_readback, ScreenshotReadback::Auto);
+        let recovery: DashcamConfigPatch =
+            serde_json::from_value(json!({"screenshot_readback":"synchronous"})).unwrap();
+        assert_eq!(
+            recovery.apply_to(&actual).unwrap().screenshot_readback,
+            ScreenshotReadback::Synchronous
+        );
+        assert!(
+            serde_json::from_value::<DashcamConfigPatch>(json!({"screenshot_readback":"async"}))
+                .is_err()
+        );
+        assert!(DashcamConfig::default().enabled);
+    }
 
     #[test]
     fn partial_configuration_is_validated_without_changing_the_original() {

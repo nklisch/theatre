@@ -108,7 +108,28 @@ fn human_capture_controls_preserve_intent_and_fit_small_viewports() {
 #[test]
 #[ignore = "requires graphical Godot and built GDExtension; measures representative capture cost"]
 fn measure_recording_presets_on_a_moving_scene() {
-    for profile in ["disabled", "lightweight", "detailed"] {
+    let profiles = [
+        "disabled",
+        "lightweight",
+        "lightweight_no_images",
+        "spatial_only",
+        "detailed",
+    ];
+    // Reuse the fixture's profile selector for bounded attribution runs.
+    let selected = std::env::var("CAPTURE_PROFILE").ok();
+    if let Some(selected) = &selected {
+        assert!(
+            profiles.contains(&selected.as_str()),
+            "unknown CAPTURE_PROFILE: {selected}"
+        );
+    }
+    for profile in profiles {
+        if selected
+            .as_deref()
+            .is_some_and(|selected| selected != profile)
+        {
+            continue;
+        }
         let output = run_journey(
             "capture_overhead_journey.gd",
             false,
@@ -118,13 +139,46 @@ fn measure_recording_presets_on_a_moving_scene() {
             .lines()
             .find_map(|line| line.strip_prefix("CAPTURE_BENCHMARK:"))
             .expect("benchmark report");
-        let report: serde_json::Value = serde_json::from_str(report).unwrap();
+        let mut report: serde_json::Value = serde_json::from_str(report).unwrap();
+        report["rust_test_profile"] = serde_json::json!(if cfg!(debug_assertions) {
+            "debug"
+        } else {
+            "release"
+        });
         assert!(report["physics_ticks"].as_u64().unwrap() >= 60, "{report}");
         assert!(report["physics_ms_p95"].as_f64().unwrap().is_finite());
         if profile == "disabled" {
             assert_eq!(report["status"]["buffer_frames"].as_f64(), Some(0.0));
         } else {
             assert!(report["status"]["buffer_frames"].as_f64().unwrap() > 0.0);
+        }
+        if matches!(
+            profile,
+            "lightweight" | "lightweight_no_images" | "spatial_only"
+        ) {
+            assert_eq!(report["status"]["config"]["capture_interval"], 6.0);
+        }
+        if matches!(profile, "lightweight_no_images" | "spatial_only") {
+            assert_eq!(report["status"]["config"]["enabled"], true);
+            assert_eq!(report["status"]["config"]["screenshot_enabled"], false);
+            assert_eq!(report["status"]["screenshot_buffer_count"], 0.0);
+            for field in ["dispatched", "readback_ms_ema", "readback_ms_max"] {
+                assert_eq!(report["status"]["capture_probe"][field], 0.0, "{report}");
+            }
+            assert_eq!(
+                report["status"]["screenshot_capture"]["backend"],
+                "disabled"
+            );
+            assert_eq!(report["status"]["screenshot_capture"]["available"], false);
+            assert_eq!(report["status"]["preset"], "spatial_only");
+        } else if profile != "disabled" {
+            // This graphical qualification requires actual visual capture.
+            // An unsupported automatic backend is a verification limitation,
+            // not a successful visual-performance measurement.
+            assert_eq!(
+                report["status"]["screenshot_capture"]["available"], true,
+                "{report}"
+            );
             assert!(
                 report["status"]["screenshot_buffer_count"]
                     .as_f64()

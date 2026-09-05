@@ -66,7 +66,10 @@ recent capture costs, gaps and the last successful save:
 
 The live states are `disabled`, `buffering`, and `post_capture`. Configured window
 lengths are limits and intentions, not proof that a full window has accumulated.
-Check `coverage` for the actual retained span.
+Check `coverage` for the actual retained span. `screenshot_capture` reports whether
+new images can be captured, the backend, any unavailability reason and whether a
+readback is pending. `screenshots_available` instead describes images already in
+the buffer: retained images can remain available after new image capture stops.
 
 Configuration accepts a partial patch with a flat vocabulary. Unknown fields,
 wrong types and invalid values are rejected before any settings change.
@@ -75,8 +78,10 @@ wrong types and invalid values are rejected before any settings change.
 {"action":"config","config":{"preset":"lightweight"}}
 ```
 
-Choosing a preset leaves recording enabled or disabled as it was. Start it
-explicitly when wanted:
+Choosing a preset leaves recording enabled or disabled as it was. **Spatial
+only** (`spatial_only`) disables new images without changing spatial cadence,
+movement settings or already retained images. Start recording explicitly if it
+is stopped and you want to collect history:
 
 ```json
 {"action":"config","config":{"enabled":true}}
@@ -112,23 +117,48 @@ per second and images about 5 times per second, at a maximum image dimension of
 10 times per second, at up to 960 pixels. Both turn off dense bursts. Their
 memory limits bound retained data; they do not guarantee the requested duration.
 
-These names are relative, not a promise of negligible overhead. In a graphical
-64-moving-object test using a debug extension, Lightweight maintained roughly
-60 physics ticks per second but still showed pacing spikes. Detailed fell below
-real-time 60 Hz. The repeatable `capture_controls_engine` measurement journey
-prints the workload, effective settings and capture probes; use measurements
-from your own project rather than treating those results as a universal budget.
+These names are relative, not a promise of negligible overhead. Cost depends on
+the scene, spatial sampling, viewport size, renderer, graphics driver and build.
+Inspect pacing and readback cost as well as gaps on your actual project. No queue
+drops does not mean capture is smooth, and spatial collection has a cost even
+without images.
 
 If recording changes the behavior under investigation, reduce image frequency
-or dimensions, disable screenshots, or stop recording. For spatial-only capture:
+or dimensions, choose Spatial only, or stop recording. To turn off new images
+while keeping your spatial settings:
 
 ```json
-{"action":"config","config":{"screenshot_enabled":false}}
+{"action":"config","config":{"preset":"spatial_only"}}
 ```
 
-Inspect pacing and readback cost as well as queue drops. No queue drops does not
-mean capture is smooth. A smaller output image still requires reading the source
-viewport, and more frequent spatial sampling also has a cost.
+This does not start recording or discard retained images. Setting
+`"screenshot_enabled":false` directly has the same image-disabling effect.
+
+### Choose a readback path
+
+The default `screenshot_readback` is `auto`. It uses native asynchronous OpenGL
+readback when available; otherwise new images are unavailable while spatial
+recording continues. Check `screenshot_capture` rather than assuming a graphical
+session or renderer name guarantees support. Automatic mode never falls back to
+synchronous readback or changes the project's renderer.
+
+The asynchronous path downsamples the existing viewport on the GPU before
+transferring pixels, without rendering the scene a second time. It checks
+capacity before expensive work and polls for completed pixels on later frames
+without waiting for the GPU. Busy capture skips images instead of catching up in
+bursts. Driver submission and completed-pixel copying can still cost time; this
+is not a hard frame-time guarantee.
+
+If images are necessary and automatic capture is unavailable, opt in to
+synchronous recovery explicitly:
+
+```json
+{"action":"config","config":{"screenshot_enabled":true,"screenshot_readback":"synchronous"}}
+```
+
+Synchronous recovery downsamples on the GPU where available, but still waits for
+pixels and can stall gameplay. Return to `"screenshot_readback":"auto"` or choose
+Spatial only when that cost interferes with the investigation.
 
 ## Capture movement intent and contacts
 
@@ -223,8 +253,15 @@ happened between them.
 {"action":"visual_artifact","clip_id":"clip_example","artifact":"storyboard"}
 ```
 
-Visual results identify sampled frames and coverage gaps. Markers outside the
-saved image timestamps remain available through `markers`; the artifact reports
+Visual results identify sampled frames and coverage gaps. Image frames and
+timestamps refer to the capture request even when pixels arrive later; they do
+not promise atomic correspondence with sampled physics state. Saving does not
+wait for unfinished readback or encoding: missing images in the saved window
+are reported as gaps. Stop and configuration changes discard stale pending
+results, so they cannot seed later image-change anomaly detection.
+
+Markers outside the saved image timestamps remain available through `markers`;
+the artifact reports
 them as outside visual coverage rather than implying that an image exists at
 that moment. Headless runs can retain spatial evidence without rendered images.
 These tools analyze recordings; they do not replay or simulate the game.

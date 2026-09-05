@@ -57,6 +57,17 @@
       "relationships": []
     },
     {
+      "path": ".research/attestations/godot-4-7-1-capture-interop.md",
+      "namespace": "research",
+      "kind": "attestation",
+      "id": "godot-4-7-1-capture-interop",
+      "title": "Godot 4.7.1 capture and rendering interop",
+      "summary": null,
+      "updated": "2026-09-05",
+      "status": null,
+      "relationships": []
+    },
+    {
       "path": ".research/attestations/godot-interaction-debugger.md",
       "namespace": "research",
       "kind": "attestation",
@@ -196,6 +207,17 @@
       "title": "godot-local-api-probe",
       "summary": null,
       "updated": "2026-09-04",
+      "status": null,
+      "relationships": []
+    },
+    {
+      "path": ".research/attestations/khronos-pixel-readback-context.md",
+      "namespace": "research",
+      "kind": "attestation",
+      "id": "khronos-pixel-readback-context",
+      "title": "OpenGL readback and context semantics",
+      "summary": null,
+      "updated": "2026-09-05",
       "status": null,
       "relationships": []
     },
@@ -348,6 +370,17 @@
       "relationships": []
     },
     {
+      "path": ".research/briefs/responsive-dashcam-capture.md",
+      "namespace": "research",
+      "kind": "research-brief",
+      "id": "responsive-dashcam-capture",
+      "title": "Responsive dashcam capture",
+      "summary": "Compatibility GPU downsampling is public; delayed native readback is feasible but its integration and performance remain unverified.",
+      "updated": "2026-09-05",
+      "status": null,
+      "relationships": []
+    },
+    {
       "path": ".research/briefs/theatre-client-feedback.md",
       "namespace": "research",
       "kind": "research-brief",
@@ -375,6 +408,17 @@
       "relationships": []
     },
     {
+      "path": ".work/backlog/automatic-capture-on-renderingdevice-renderers.md",
+      "namespace": "work",
+      "kind": "backlog-item",
+      "id": "automatic-capture-on-renderingdevice-renderers",
+      "title": "Retain the automatic-capture limitation on RenderingDevice renderers",
+      "summary": null,
+      "updated": "2026-09-05",
+      "status": null,
+      "relationships": []
+    },
+    {
       "path": ".work/backlog/dock-visual-timelines.md",
       "namespace": "work",
       "kind": "backlog-item",
@@ -382,6 +426,17 @@
       "title": "Human-facing filmstrips in the editor dock",
       "summary": null,
       "updated": "2026-07-25",
+      "status": null,
+      "relationships": []
+    },
+    {
+      "path": ".work/backlog/gdext-render-callables-with-lazy-tables.md",
+      "namespace": "work",
+      "kind": "backlog-item",
+      "id": "gdext-render-callables-with-lazy-tables",
+      "title": "Revisit high-level render callables with lazy binding tables",
+      "summary": null,
+      "updated": "2026-09-05",
       "status": null,
       "relationships": []
     },
@@ -525,6 +580,17 @@
       "title": "Compare scripted authoring with batches",
       "summary": null,
       "updated": "2026-09-04",
+      "status": "active",
+      "relationships": []
+    },
+    {
+      "path": ".work/active/responsive-dashcam-capture.md",
+      "namespace": "work",
+      "kind": "feature",
+      "id": "responsive-dashcam-capture",
+      "title": "Keep dashcam capture responsive",
+      "summary": null,
+      "updated": "2026-09-05",
       "status": "active",
       "relationships": []
     },

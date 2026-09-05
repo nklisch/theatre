@@ -42,8 +42,12 @@ impl GodotFixture {
         if fixed_fps {
             command.args(["--fixed-fps", "60"]);
         }
+        command.args(["--path", &project_dir.to_string_lossy()]);
+        if scene.ends_with(".gd") {
+            command.arg("--script");
+        }
         let mut child = command
-            .args(["--path", &project_dir.to_string_lossy(), scene])
+            .arg(scene)
             .env("THEATRE_PORT", port.to_string())
             .stdout(Stdio::null())
             .stderr(Stdio::null())

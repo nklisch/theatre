@@ -1,6 +1,10 @@
 # Generated from .research/attestations. Do not edit by hand.
 schema: 1
 sources:
+  - source_handle: godot-4-7-1-capture-interop
+    title: "Godot 4.7.1 Compatibility capture and rendering interop source"
+    source_url: "https://github.com/godotengine/godot/tree/a13da4feb8d8aefc283c3763d33a2f170a18d541"
+    fetched: "2026-09-05"
   - source_handle: godot-interaction-debugger
     title: "Godot Engine latest documentation — EditorDebuggerPlugin"
     source_url: "https://docs.godotengine.org/en/latest/classes/class_editordebuggerplugin.html"
@@ -52,6 +56,10 @@ sources:
   - source_handle: godot-local-api-probe
     title: "Installed Godot version and temporary native editor probes"
     fetched: "2026-09-04"
+  - source_handle: khronos-pixel-readback-context
+    title: "Khronos OpenGL pixel readback, synchronization and GLX context reference pages"
+    source_url: "https://github.com/KhronosGroup/OpenGL-Refpages/tree/121f1891c688e0c75ad46ed83d9cb73712fbbbfc"
+    fetched: "2026-09-05"
   - source_handle: krometrail-repo
     title: "krometrail repository (local checkout)"
     source_url: "https://github.com/nklisch/krometrail/tree/3414f57b83787aaa21fb3b6cc112ca03f4df60e8"

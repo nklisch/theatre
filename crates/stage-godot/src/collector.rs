@@ -33,6 +33,8 @@ pub struct StageCollector {
     pub deferred_action: std::cell::RefCell<Option<crate::action_handler::DeferredAction>>,
     last_entity_count: std::cell::Cell<u32>,
     last_group_count: std::cell::Cell<u32>,
+    /// Main-thread script resource only; no node metadata or values are retained.
+    exported_state_reader: Option<Gd<godot::classes::Script>>,
 }
 
 #[godot_api]
@@ -43,6 +45,17 @@ impl INode for StageCollector {
             deferred_action: std::cell::RefCell::new(None),
             last_entity_count: std::cell::Cell::new(0),
             last_group_count: std::cell::Cell::new(0),
+            exported_state_reader: None,
+        }
+    }
+
+    fn ready(&mut self) {
+        let mut loader = godot::classes::ResourceLoader::singleton();
+        let path = "res://addons/stage/spatial_collection.gd";
+        if loader.exists(path) {
+            self.exported_state_reader = loader
+                .load(path)
+                .and_then(|resource| resource.try_cast().ok());
         }
     }
 }
@@ -444,32 +457,47 @@ impl StageCollector {
     /// Get exported variable state (@export vars).
     fn get_exported_state(&self, node: &Gd<Node>) -> serde_json::Map<String, serde_json::Value> {
         let mut state = serde_json::Map::new();
+        if let Some(reader) = &self.exported_state_reader {
+            // Filtering the full property list through gdext costs many boundary
+            // calls per non-exported property. The addon filters the same live
+            // list in-engine; only selected values cross for our JSON conversion.
+            let values = reader
+                .clone()
+                .call("exported_state", &[node.to_variant()])
+                .to::<VarDictionary>();
+            for (name, value) in values.iter_shared() {
+                if let Some(json_value) = variant_to_json(&value) {
+                    state.insert(name.to::<StringName>().to_string(), json_value);
+                }
+            }
+            return state;
+        }
+        // Standalone extension users without the addon retain live collection.
+        // Keep the object's live list: script-only enumeration would miss dynamic
+        // properties and changes made by _validate_property. Most entries are
+        // engine properties, so reject usage before converting their names.
         let properties: Array<VarDictionary> = node.get_property_list();
-
-        for i in 0..properties.len() {
-            let Some(prop) = properties.get(i) else {
-                continue;
-            };
-            let usage = prop
-                .get("usage")
-                .and_then(|v| v.try_to::<i64>().ok())
-                .unwrap_or(0);
-            let name = prop
-                .get("name")
-                .and_then(|v| v.try_to::<GString>().ok())
-                .map(|s| s.to_string())
-                .unwrap_or_default();
-
-            if name.is_empty() {
+        let usage_key = StringName::from("usage").to_variant();
+        let name_key = StringName::from("name").to_variant();
+        for prop in properties.iter_shared() {
+            // Missing usage already means zero; one lookup suffices rather
+            // than Dictionary::get's separate membership and value queries.
+            let usage = prop.get_or_nil(&usage_key).try_to::<i64>().unwrap_or(0);
+            // PROPERTY_USAGE_SCRIPT_VARIABLE AND PROPERTY_USAGE_EDITOR.
+            if usage & (4096 | 4) != (4096 | 4) {
                 continue;
             }
-
-            // PROPERTY_USAGE_SCRIPT_VARIABLE (4096) AND PROPERTY_USAGE_EDITOR (4) — exported vars
-            if usage & (4096 | 4) == (4096 | 4) {
-                let value = node.get(&name);
-                if let Some(json_value) = variant_to_json(&value) {
-                    state.insert(name, json_value);
-                }
+            let Some(name) = prop
+                .get_or_nil(&name_key)
+                .try_to::<StringName>()
+                .ok()
+                .filter(|name| !name.is_empty())
+            else {
+                continue;
+            };
+            let value = node.get(&name);
+            if let Some(json_value) = variant_to_json(&value) {
+                state.insert(name.to_string(), json_value);
             }
         }
 

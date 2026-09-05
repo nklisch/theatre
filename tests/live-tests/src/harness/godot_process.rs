@@ -62,7 +62,12 @@ impl LiveGodotProcess {
         } else {
             Command::new(&godot_bin)
         };
+        // These graphical journeys require images with the default Auto capture
+        // setting. Auto supports native asynchronous OpenGL, not Forward+'s
+        // synchronous readback; select that test precondition without changing
+        // the fixture project or silently opting into synchronous recovery.
         let child = command
+            .args(["--rendering-method", "gl_compatibility"])
             .args(["--fixed-fps", "60", "--path"])
             .arg(&project_dir)
             .arg(scene)
