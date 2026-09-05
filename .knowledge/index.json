@@ -747,6 +747,17 @@
       "updated": null,
       "status": null,
       "relationships": []
+    },
+    {
+      "path": ".work/completed/theatre-marketplace-registration.md",
+      "namespace": "work",
+      "kind": "story",
+      "id": "theatre-marketplace-registration",
+      "title": "Advertise Theatre in the shared skills marketplace",
+      "summary": null,
+      "updated": null,
+      "status": null,
+      "relationships": []
     }
   ]
 }
