@@ -95,7 +95,7 @@ fn decode(s: &ClipScreenshot) -> Result<(PixelDimensions, Vec<u8>), McpError> {
     let info = d.info().ok_or_else(|| err("JPEG has no dimensions"))?;
     let dims = PixelDimensions::new(info.width as u32, info.height as u32).map_err(err)?;
     let mut rgba = Vec::with_capacity(rgb.len() / 3 * 4);
-    for p in rgb.chunks_exact(3) {
+    for p in rgb.as_chunks::<3>().0 {
         rgba.extend_from_slice(&[p[0], p[1], p[2], 255]);
     }
     Ok((dims, rgba))

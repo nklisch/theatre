@@ -76,11 +76,9 @@ done
 # --- 4. Changelog (site/changelog.md) ---
 CHANGELOG="site/changelog.md"
 if [[ -f "$CHANGELOG" ]]; then
-    # Insert new version header after the "## [Unreleased]" section marker
-    # Adds a blank separator and new version header right before the first "---" after [Unreleased]
-    sed -i "/^## \[Unreleased\]/,/^---$/ {
-        /^---$/ i\\\\n## [${NEXT}] — ${TODAY}
-    }" "$CHANGELOG"
+    # Move the current notes under the new release immediately. Searching for
+    # a later horizontal rule can put the header below older releases instead.
+    sed -i "/^## \\[Unreleased\\]$/a\\\\n## [${NEXT}] — ${TODAY}" "$CHANGELOG"
 
     # Update footer links: add new version link and update [Unreleased] compare base
     sed -i "s|\[Unreleased\]: \(.*\)/compare/v${CURRENT}\.\.\.HEAD|[Unreleased]: \1/compare/v${NEXT}...HEAD|" "$CHANGELOG"

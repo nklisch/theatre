@@ -127,7 +127,11 @@ fn runtime(headless: bool) {
             let pixels = decoder.decode().unwrap();
             assert_eq!(decoder.info().unwrap().width, 1280);
             assert!(
-                pixels.chunks_exact(3).all(|pixel| pixel[2] > pixel[0]),
+                pixels
+                    .as_chunks::<3>()
+                    .0
+                    .iter()
+                    .all(|pixel| pixel[2] > pixel[0]),
                 "expected the blue surface, not the composer"
             );
         }

@@ -85,13 +85,23 @@ async fn fresh_wrong_project_receives_only_identity_ping() {
         )
         .await
         .unwrap_err();
-    assert!(matches!(error, EditorError::Identity(_)));
-    assert!(
-        error
-            .to_string()
-            .contains(&actual.path().display().to_string())
+    let EditorError::Identity(message) = error else {
+        panic!("expected project identity mismatch, got {error}");
+    };
+    // Identity diagnostics report canonical paths, whose spelling can differ
+    // from TempDir's original path on Windows (and through filesystem aliases).
+    assert_eq!(
+        message,
+        format!(
+            "requested {}, but editor process 42 on port {} serves {}",
+            requested.path().canonicalize().unwrap().display(),
+            peer.port,
+            actual.path().canonicalize().unwrap().display(),
+        )
     );
     assert_eq!(*peer.operations.lock().await, ["ping"]);
+    assert!(backend.editor.lock().await.is_none());
+    assert!(backend.daemon.lock().await.is_none());
 }
 
 #[tokio::test]

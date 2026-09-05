@@ -39,6 +39,9 @@ jobs:
       - name: Check bundled client skills
         run: python3 scripts/sync-client-skills.py --check
 
+      - name: Check release script
+        run: python3 scripts/test-release.py
+
       - name: Clippy
         run: cargo clippy --workspace --all-targets
 
