@@ -13,15 +13,41 @@ Theatre uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
-### Stage
-- `spatial_query` type `relationship` returns `in_fov` field for Camera3D `from` nodes
-- `spatial_config`: `auto_record` and `max_clip_duration_s` for continuous background recording
-- `spatial_snapshot`: `include_properties` supports dot-notation for nested properties
+### Compatibility
 
-### Director
-- `animation_add_track`: keyframes support `easing` parameter (`linear`, `ease_in`, `ease_out`, `ease_in_out`)
-- `gridmap_fill`: batch-fill 3D regions in GridMap
-- Daemon backend: improved startup detection (no longer requires a 3-second sleep in CI)
+- Stage targets Godot 4.7. Update the installed tools and project addons together, then restart affected Godot and MCP processes.
+- Automatic screenshot capture uses a supported asynchronous Compatibility/OpenGL path. Other renderers report images unavailable while spatial recording continues. Explicit synchronous recovery remains available but can stall gameplay.
+
+### Recording and saved evidence
+
+- Dashcam capture downsamples the existing viewport on the GPU and reads completed images asynchronously. It skips excess work before capture and reports unfinished images as gaps.
+- The Spatial only preset disables new screenshots without discarding retained images. Presets preserve recording state and explicit project startup settings.
+- Spatial collection reduces exported-property filtering overhead without caching live property state.
+- Native controls distinguish Start/Stop, Mark, and Save now. They show the configured marker shortcut, acknowledge human actions, and provide saved clip references.
+- Capture and feedback controls support corner or hidden placement. Hidden controls retain shortcut access.
+- Shared dashcam settings provide validated partial updates, effective values, and actual buffered coverage. Lightweight and Detailed presets expose sampling trade-offs without starting recording.
+- Saved clips retain run identity and scene-at-save context. Save failures remain distinct from recording state, and markers survive between spatial samples.
+- Fresh CLI or MCP processes can inspect saved clips after the game closes, using the storage location published by a successful save.
+- Optional movement evidence records selected InputMap strengths and CharacterBody3D contact facts. Saved snapshots and trajectories report sampling and truncation limits.
+
+### Tool reliability
+
+- Scene discovery returns absolute Godot paths that subsequent node inspection can reuse.
+- Stage and Director output schemas use standard JSON Schema nullability. Structured results match their JSON text for strict MCP clients.
+- Stale-addon identity errors direct users to deploy and restart the addon rather than change tool arguments.
+- Director editor and daemon listeners bind explicitly to IPv4 loopback. Local callers still require trust.
+
+### Installation and client integration
+
+- Install, init, and deploy replace native payloads through staged files rather than truncating loaded binaries. Failed copies preserve existing destinations.
+- Claude and Codex packages include self-contained Stage and Director operating skills and references, with shared marketplace entries.
+- Optional feedback hooks honor explicit nested-project selection. Hook environment settings remain separate from the Stage server's environment, and installation does not grant hook trust.
+
+### Known limits
+
+- Recording still adds overhead. Bounded Linux/Godot 4.7.1 Voxlar samples improved Lightweight render-pacing p95 from 63.744 to 42.537 ms. These are short idle-scene measurements, not a universal performance guarantee.
+- Windows and macOS qualification for these changes is not complete.
+- The intermittent native AccessKit editor undo crash remains unresolved.
 
 
 ## [0.3.2] — 2026-03-16
