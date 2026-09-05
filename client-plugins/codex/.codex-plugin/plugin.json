@@ -3,5 +3,12 @@
   "version": "0.3.4",
   "description": "Stage and Director operating skills with pending Godot feedback notices; explicit image retrieval stays in Theatre.",
   "author": {"name": "nklisch"},
-  "skills": "./skills/"
+  "skills": "./skills/",
+  "hooks": "./hooks/hooks.json",
+  "interface": {
+    "displayName": "Theatre Feedback",
+    "shortDescription": "Operate Godot with Stage and Director",
+    "category": "Developer Tools",
+    "developerName": "nklisch"
+  }
 }
