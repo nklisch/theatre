@@ -375,6 +375,28 @@
       "relationships": []
     },
     {
+      "path": ".work/backlog/capture-movement-intent-and-contact-context.md",
+      "namespace": "work",
+      "kind": "backlog-item",
+      "id": "capture-movement-intent-and-contact-context",
+      "title": "Capture enough context to distinguish standing still from being stuck",
+      "summary": null,
+      "updated": "2026-09-05",
+      "status": null,
+      "relationships": []
+    },
+    {
+      "path": ".work/backlog/clarify-human-capture-state-and-agent-handoff.md",
+      "namespace": "work",
+      "kind": "backlog-item",
+      "id": "clarify-human-capture-state-and-agent-handoff",
+      "title": "Make capture state and agent handoff obvious",
+      "summary": null,
+      "updated": "2026-09-05",
+      "status": null,
+      "relationships": []
+    },
+    {
       "path": ".work/backlog/cli-install-deploy-journey-coverage.md",
       "namespace": "work",
       "kind": "backlog-item",
@@ -382,6 +404,17 @@
       "title": "Check the remaining install/deploy journey evidence",
       "summary": null,
       "updated": "2026-09-04",
+      "status": null,
+      "relationships": []
+    },
+    {
+      "path": ".work/backlog/diagnose-client-addon-handshake-mismatch.md",
+      "namespace": "work",
+      "kind": "backlog-item",
+      "id": "diagnose-client-addon-handshake-mismatch",
+      "title": "Explain stale-addon handshake failures and their repair",
+      "summary": null,
+      "updated": "2026-09-05",
       "status": null,
       "relationships": []
     },
@@ -408,11 +441,44 @@
       "relationships": []
     },
     {
+      "path": ".work/backlog/feedback-launcher-overlaps-consumer-hud.md",
+      "namespace": "work",
+      "kind": "backlog-item",
+      "id": "feedback-launcher-overlaps-consumer-hud",
+      "title": "Check feedback launcher placement against consumer HUDs",
+      "summary": null,
+      "updated": "2026-09-05",
+      "status": null,
+      "relationships": []
+    },
+    {
       "path": ".work/backlog/godot-editor-accesskit-undo-crash.md",
       "namespace": "work",
       "kind": "backlog-item",
       "id": "godot-editor-accesskit-undo-crash",
       "title": "Investigate intermittent native editor accessibility crash",
+      "summary": null,
+      "updated": "2026-09-05",
+      "status": null,
+      "relationships": []
+    },
+    {
+      "path": ".work/backlog/inspect-saved-clips-without-a-running-game.md",
+      "namespace": "work",
+      "kind": "backlog-item",
+      "id": "inspect-saved-clips-without-a-running-game",
+      "title": "Inspect saved clips after the game closes",
+      "summary": null,
+      "updated": "2026-09-05",
+      "status": null,
+      "relationships": []
+    },
+    {
+      "path": ".work/backlog/investigate-stage-output-schema-client-rejection.md",
+      "namespace": "work",
+      "kind": "backlog-item",
+      "id": "investigate-stage-output-schema-client-rejection",
+      "title": "Investigate Stage output-schema rejection in Pi",
       "summary": null,
       "updated": "2026-09-05",
       "status": null,
@@ -426,6 +492,39 @@
       "title": "Visual queries over the live recorder ring",
       "summary": null,
       "updated": "2026-07-25",
+      "status": null,
+      "relationships": []
+    },
+    {
+      "path": ".work/backlog/make-dashcam-configuration-discoverable-and-truthful.md",
+      "namespace": "work",
+      "kind": "backlog-item",
+      "id": "make-dashcam-configuration-discoverable-and-truthful",
+      "title": "Make dashcam settings discoverable and their application truthful",
+      "summary": null,
+      "updated": "2026-09-05",
+      "status": null,
+      "relationships": []
+    },
+    {
+      "path": ".work/backlog/offer-low-overhead-recording-guidance.md",
+      "namespace": "work",
+      "kind": "backlog-item",
+      "id": "offer-low-overhead-recording-guidance",
+      "title": "Help users record movement bugs without distorting their feel",
+      "summary": null,
+      "updated": "2026-09-05",
+      "status": null,
+      "relationships": []
+    },
+    {
+      "path": ".work/backlog/return-reusable-node-paths-from-discovery.md",
+      "namespace": "work",
+      "kind": "backlog-item",
+      "id": "return-reusable-node-paths-from-discovery",
+      "title": "Return directly reusable node paths when discovering the scene",
+      "summary": null,
+      "updated": "2026-09-05",
       "status": null,
       "relationships": []
     },

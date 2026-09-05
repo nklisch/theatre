@@ -22,3 +22,10 @@ An initial suspicion about Tab input was disproved: Stage Tab press/release
 correctly changed the game's `_tool_selection_mode`. Native X11 window capture
 had returned stale pixels. Do not treat key injection or feedback keyboard
 interference as demonstrated defects from this session.
+
+The overlap also appears in human feedback
+`feedback_1662017_75720100_1d03c1394d076e0d` from the combined starter at
+`05d1fa44`: the launcher/tooltip covers part of the same upper-left status area.
+The underlying consumer text is “Mesh visible • View • Collision Current.”
+Its potentially confusing wording belongs to Voxlar; Theatre should coexist
+with that HUD rather than being blamed for the consumer's terminology.
