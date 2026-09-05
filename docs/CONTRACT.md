@@ -227,7 +227,11 @@ can be attached to later results without changing a tool's typed result, image
 content, success meaning, or error meaning. Notice failures remain best-effort.
 The optional Claude and Codex hooks inject only this textual notice at a
 supported post-tool boundary. They neither consume evidence nor deliver images,
-and they do not wake or steer an idle agent.
+and they do not wake or steer an idle agent. An explicit `THEATRE_PROJECT_DIR`
+in the client environment selects the hook's project and does not fall through
+to an ancestor when invalid; when unset, the hook finds the nearest
+`project.godot` above the tool event's working directory. Environment configured
+only on the Stage MCP server does not propagate back to the client hook.
 
 ## Wire and transport rules
 

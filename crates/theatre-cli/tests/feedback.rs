@@ -25,16 +25,36 @@ fn hook(project: &Path) -> Value {
 }
 
 fn hook_with_response(project: &Path, response: &str) -> Value {
-    let mut child = Command::new(env!("CARGO_BIN_EXE_theatre"))
+    hook_process(project, response, None)
+}
+
+fn hook_process(cwd: &Path, response: &str, selected_project: Option<&Path>) -> Value {
+    let mut command = Command::new(env!("CARGO_BIN_EXE_theatre"));
+    command
         .arg("feedback-hook")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .spawn()
-        .unwrap();
-    write!(child.stdin.take().unwrap(), "{}", json!({"hook_event_name":"PostToolUse", "cwd":project, "tool_name":"Read", "tool_response":response})).unwrap();
+        .env_remove("THEATRE_PROJECT_DIR");
+    if let Some(project) = selected_project {
+        command.env("THEATRE_PROJECT_DIR", project);
+    }
+    let mut child = command.spawn().unwrap();
+    write!(child.stdin.take().unwrap(), "{}", json!({"hook_event_name":"PostToolUse", "cwd":cwd, "tool_name":"Read", "tool_response":response})).unwrap();
     let output = child.wait_with_output().unwrap();
     assert!(output.status.success());
     serde_json::from_slice(&output.stdout).unwrap()
+}
+
+fn write_pending_feedback(project: &Path, feedback_id: &str) {
+    let dir = project.join(".theatre/feedback").join(feedback_id);
+    fs::create_dir_all(&dir).unwrap();
+    fs::write(dir.join("item.json"), json!({
+        "feedback_id":feedback_id, "source":"editor", "timestamp_ms":1,
+        "project_path":project, "process_id":12, "run_id":null, "scene":"res://main.tscn",
+        "surface":"unavailable", "selection":[{"path":"/root/Player","class":"Node2D"}],
+        "pointer":{"status":"unavailable"}, "capture":{"status":"unavailable","reason":"closed viewport"},
+        "readback_render_frame":1,"readback_physics_frame":2,"note":"Please inspect the selected player"
+    }).to_string()).unwrap();
 }
 
 #[test]
@@ -45,14 +65,7 @@ fn cli_and_shared_native_hook_helper_preserve_project_evidence() {
         fs::write(path.join("project.godot"), "config_version=5\n").unwrap();
     }
     let dir = project.path().join(".theatre/feedback/feedback_native");
-    fs::create_dir_all(&dir).unwrap();
-    fs::write(dir.join("item.json"), json!({
-        "feedback_id":"feedback_native", "source":"editor", "timestamp_ms":1,
-        "project_path":project.path(), "process_id":12, "run_id":null, "scene":"res://main.tscn",
-        "surface":"unavailable", "selection":[{"path":"/root/Player","class":"Node2D"}],
-        "pointer":{"status":"unavailable"},"capture":{"status":"unavailable","reason":"closed viewport"},
-        "readback_render_frame":1,"readback_physics_frame":2,"note":"Please inspect the selected player"
-    }).to_string()).unwrap();
+    write_pending_feedback(project.path(), "feedback_native");
     let notice = hook(project.path());
     assert!(
         notice["hookSpecificOutput"]["additionalContext"]
@@ -95,4 +108,29 @@ fn cli_and_shared_native_hook_helper_preserve_project_evidence() {
         json!({"action":"delete","feedback_id":"feedback_native"}),
     );
     assert!(!dir.exists());
+}
+
+#[test]
+fn hook_uses_explicit_nested_project_then_falls_back_to_cwd_ancestors() {
+    let repository = tempfile::tempdir().unwrap();
+    let nested = repository.path().join("examples/sandbox");
+    fs::create_dir_all(&nested).unwrap();
+    fs::write(nested.join("project.godot"), "config_version=5\n").unwrap();
+    write_pending_feedback(&nested, "feedback_nested");
+
+    let selected = hook_process(repository.path(), "ok", Some(&nested));
+    assert!(
+        selected["hookSpecificOutput"]["additionalContext"]
+            .as_str()
+            .unwrap()
+            .contains("1 pending")
+    );
+
+    let child = nested.join("scenes");
+    fs::create_dir_all(&child).unwrap();
+    assert_eq!(hook_process(&child, "ok", None), selected);
+
+    let wrong = repository.path().join("missing-project");
+    assert_eq!(hook_process(&child, "ok", Some(&wrong)), json!({}));
+    assert_eq!(hook_process(&child, "ok", Some(Path::new(""))), json!({}));
 }

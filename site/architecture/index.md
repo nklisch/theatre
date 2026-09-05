@@ -21,7 +21,8 @@ analysis, and agent response shaping in Rust processes outside it.
 - **Human feedback:** `addons/theatre_shared` publishes project-local evidence.
   `theatre-feedback` gives both servers and the CLI one typed reader.
 - **Distribution:** `theatre-cli` installs, initializes, enables, deploys, and
-  configures the matched binaries and addon payloads.
+  configures the matched binaries, addon payloads, and optional self-contained
+  client packages with Stage and Director operating skills.
 
 See [Crate Structure](/architecture/crates) for source ownership and the
 [generated API reference](/api/) for current tool schemas.

@@ -156,7 +156,7 @@ fn build_and_update_share(
         &theatre.share_dir.join("client-plugins"),
         &|_| false,
     )
-    .context("Failed to sync optional client hook packages")?;
+    .context("Failed to sync optional client packages")?;
     eprintln!("  {} Synced addon scripts to share dir", style("✓").green());
 
     // Copy fresh server binaries to bin_dir

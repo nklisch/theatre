@@ -196,6 +196,44 @@ theatre mcp ~/path/to/your-godot-project --port 9078
 
 After regenerating, restart your AI agent to pick up the updated server configuration.
 
+### Use a nested sandbox or switch projects
+
+Run `theatre init /absolute/path/to/project` once for each Godot project that
+needs Theatre's addons. If you start the agent from a repository root whose MCP
+configuration already points at a nested sandbox, keep that root configuration;
+do not also load the nested generated `.mcp.json` or duplicate generated rules.
+
+Stage selects a project from `THEATRE_PROJECT_DIR` when its server starts. Set
+that environment value in the Stage MCP entry, then restart the MCP connection
+or start a new agent session. Changing the file does not retarget an existing
+Stage process. That MCP `env` applies only to the Stage subprocess. To make the
+optional feedback hook select the same nested project from a repository-root
+session, launch the client with the absolute project environment too:
+
+```bash
+THEATRE_PROJECT_DIR=/absolute/path/to/project claude --plugin-dir "$HOME/.local/share/theatre/client-plugins/claude"
+THEATRE_PROJECT_DIR=/absolute/path/to/project codex
+```
+
+An explicit hook selection is authoritative; if it is wrong, the hook stays
+quiet rather than surfacing an ancestor project's queue. When it is unset, the
+hook keeps the existing nearest-ancestor project lookup. For a one-off Stage CLI
+call, override selection directly:
+
+```bash
+THEATRE_PROJECT_DIR=/absolute/path/to/project stage runtime_status '{}'
+```
+
+Director selects independently: pass the absolute Godot project directory as
+`project_path` on every call. Consecutive Director calls can target different
+projects without restarting the server.
+
+The default Stage and Director ports are shared local resources. Stop the old
+running game before starting another project on the same ports, then verify
+Stage's reported project, scene, and run with `runtime_status`. Follow the target
+repository's ownership rules when setup files are generated; update the owning
+generator rather than making a durable direct edit to its output.
+
 ## Manual setup (alternative)
 
 If you prefer not to use the CLI, you can set things up manually.
@@ -260,42 +298,53 @@ process's `PATH`. Both binaries require the `serve` subcommand for MCP mode
 
 Use `THEATRE_PORT=9078` in an `env` block if you need a non-default port.
 
-## Install agent skills (optional)
+## Install client plugins and agent skills (optional)
 
-Theatre ships agent skills that teach AI agents how to use Stage and Director effectively — tool selection, parameter patterns, debugging workflows, and common pitfalls.
+The Theatre distribution includes self-contained Claude and Codex plugin roots
+under `~/.local/share/theatre/client-plugins/`. Both retain the plugin ID
+`theatre-feedback`, bundle the `theatre-stage` and `theatre-director` operating
+skills, and provide the optional pending-feedback hook. They do not register
+Stage or Director MCP servers; keep using the project's existing `.mcp.json`.
 
-### Via skilltap (recommended)
-
-[skilltap](https://skilltap.dev) is a package manager for agent skills. Install it first, then add the Theatre tap and install skills:
+Claude Code can load the installed plugin root for a session without modifying a
+marketplace:
 
 ```bash
-# Install all Theatre skills to the current project
-skilltap install nklisch/theatre
-
-# Or install globally (available to all projects)
-skilltap install nklisch/theatre --global
+claude --plugin-dir "$HOME/.local/share/theatre/client-plugins/claude"
 ```
 
-You can also add Theatre as a tap for browsing and discovery:
+For Codex, the containing directory is a local marketplace:
 
 ```bash
-skilltap tap add theatre nklisch/theatre
-skilltap tap install   # interactive skill picker
+codex plugin marketplace add "$HOME/.local/share/theatre/client-plugins"
+codex plugin add theatre-feedback@theatre-local
 ```
 
-Available skills:
-- **theatre-stage** — 9 spatial observation tools for debugging a running Godot game: snapshots, deltas, queries, watches, clips, and live property mutation
-- **theatre-director** — Director authoring, engine discovery, run-control, and feedback workflows
-- **godot-gdscript-patterns** — Godot 4 GDScript patterns: signals, state machines, object pooling, component systems, and performance tips
+Plugin installation and hook trust remain explicit client actions. Restart or
+reload the client when it requires that to discover newly installed skills. The
+plugins add operating guidance and a feedback notice only; they do not replace
+`theatre init`, change the active Godot project, or deliver feedback images.
 
-### Manual installation
-
-Copy the skill directories from the Theatre repo directly:
+If a client does not load native plugins, install the same operating skills in
+the project instead. Project skills are also useful when guidance should travel
+with a repository:
 
 ```bash
-# From within the theatre repo
+# From within the Theatre source checkout
 cp -r .agents/skills/theatre-stage <your-project>/.agents/skills/
 cp -r .agents/skills/theatre-director <your-project>/.agents/skills/
+```
+
+A client may discover both plugin and project copies. They describe the same
+Theatre tools; do not duplicate MCP registration or agent rules because both are
+present. The canonical source is `.agents/skills/` in the Theatre repository,
+and distributed plugin copies are synchronized from it.
+
+For broader Godot coding guidance, `godot-gdscript-patterns` remains available
+through the Theatre skilltap collection:
+
+```bash
+skilltap install nklisch/theatre
 ```
 
 ## Agent rules (recommended)

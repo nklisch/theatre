@@ -154,7 +154,7 @@ pub fn run(args: InstallArgs) -> Result<()> {
         &share_dir.join("client-plugins"),
         &|_| false,
     )
-    .context("Failed to install optional client hook packages")?;
+    .context("Failed to install optional client packages")?;
 
     // Step 9: Check if bin_dir is in PATH
     if !path_contains(&bin_dir) {

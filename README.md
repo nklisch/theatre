@@ -114,8 +114,9 @@ is non-destructive. Handling suppresses notices for all readers, while deletion
 remains explicit.
 
 Stage, Director, and `theatre feedback` read the same queue. Optional Claude and
-Codex plugin packages can add a text notice at a later tool boundary after the
-user installs and trusts them. They do not wake idle agents or deliver images
+Codex plugin packages bundle the Stage and Director operating skills and can add
+a text notice at a later tool boundary after the user installs and trusts them.
+They do not register MCP servers, wake idle agents, or deliver images
 automatically.
 
 ## Manual Setup

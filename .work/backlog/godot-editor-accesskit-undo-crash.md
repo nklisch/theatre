@@ -27,8 +27,9 @@ A Director-free native comparison was prepared in
 and checksum-verified in isolation, without changing the installed engine. The
 Director-free native control passed on both 4.7.1 (255.39 s) and 4.7.2 (255.58 s),
 with accessibility active and released control focus. This does not establish
-an exclusively upstream cause. The final Director/4.7.2 comparison was interrupted
-when Nathan stopped the investigation; no patch-fix conclusion is established.
+an exclusively upstream cause. The final Director/4.7.2 comparison's late-arriving
+log recorded three passes (1084.60 s). This does not establish a patch fix or
+reopen the investigation Nathan explicitly deferred.
 Diagnostics reported roughly 1 FPS despite focused windows and normal configured
 low-processor sleep, so long runs were not repeated readiness timeouts.
 

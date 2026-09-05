@@ -320,8 +320,8 @@ was not replaced. Its curated changelog includes the AccessKit 0.22.3 update
 specific duplicate-child failure. Runtime comparison is still needed; no patch
 fix or baseline recommendation is established.
 
-The remaining patch comparison is running all three requested Director journeys
-on that isolated 4.7.2 executable, explicitly restoring the original released-
+The patch comparison passed all three requested Director journeys on that
+isolated 4.7.2 executable (1084.60 s), explicitly restoring the original released-
 control-focus shortcut context through a test-driver-only environment switch.
 Command: `cargo test -p director --test authoring_editor -- --ignored --nocapture
 --test-threads=1 --skip native_only_undo_comparison`; environment:
@@ -331,8 +331,26 @@ and `THEATRE_AUTHORING_RELEASE_CONTROL_FOCUS=1`; log:
 run separately on both stable versions; none of the three authoring journeys is
 omitted. No production UI change or accessibility override is involved.
 
+Bounded disposition: the original missed-shortcut cause is proven and corrected
+by actual input readiness. The secondary AccessKit crash is recorded, but neither
+Director-free native control reproduced it. Passing checked-focus 4.7.1 and
+released-focus 4.7.2 journeys do not establish a general engine-only defect or a
+specific patch fix. No production change, installation change, minimum-version
+bump, or universal accessibility-safety claim is justified by this evidence.
+The parent has both full three-journey passes for integration adjudication.
+The late-arriving final log was collected after the investigation was deferred;
+the isolated 4.7.2 executable has been removed and the user installation was not
+changed. Shared Cargo output was reused; no isolated Rust build directory was
+created. No unrelated process was killed, and there are no pending engine runs.
+Final Director all-target clippy with warnings denied, formatting, and direct
+owned-file whitespace checks passed after the diagnostic controls were added.
+(The combined handoff shell stopped at `git diff --no-index`'s expected
+new-file-difference exit status; the remaining whitespace checks were run
+directly and passed.)
+
 Nathan subsequently stopped the investigation and explicitly deferred it to
 `.work/backlog/godot-editor-accesskit-undo-crash.md` so rollout can proceed.
-The final 4.7.2 Director comparison was interrupted without a final result. The
-installed engine remains 4.7.1. Passing controls and the checked-focus journey
+The final 4.7.2 Director comparison's late-arriving log records three passes
+(1084.60 s); this does not reopen the deferred investigation. The installed
+engine remains 4.7.1. Passing controls and the checked-focus journey
 remain bounded evidence; no patch-fix or exclusively upstream claim is made.

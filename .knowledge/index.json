@@ -639,6 +639,17 @@
       "relationships": []
     },
     {
+      "path": ".work/completed/theatre-client-operating-skills.md",
+      "namespace": "work",
+      "kind": "feature",
+      "id": "theatre-client-operating-skills",
+      "title": "Bundle Theatre operating skills and refresh consumer guidance",
+      "summary": null,
+      "updated": null,
+      "status": null,
+      "relationships": []
+    },
+    {
       "path": ".work/completed/visual-anomaly-markers.md",
       "namespace": "work",
       "kind": "feature",

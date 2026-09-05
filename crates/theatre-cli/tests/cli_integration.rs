@@ -48,7 +48,19 @@ fn make_share_dir(dir: &Path) {
 #[cfg(unix)]
 fn make_source_repo(dir: &Path, command_dir: &Path) {
     make_feedback_support(dir);
-    fs::create_dir_all(dir.join("client-plugins")).unwrap();
+    for client in ["claude", "codex"] {
+        let skill = dir
+            .join("client-plugins")
+            .join(client)
+            .join("skills/theatre-director");
+        fs::create_dir_all(skill.join("references")).unwrap();
+        fs::write(skill.join("SKILL.md"), "# Director\n").unwrap();
+        fs::write(
+            skill.join("references/director-tools.md"),
+            "# Director tools\n",
+        )
+        .unwrap();
+    }
     fs::write(dir.join("Cargo.toml"), "[workspace]\nmembers = []\n").unwrap();
 
     let stage = dir.join("addons/stage");
@@ -1128,6 +1140,21 @@ fn deploy_updates_gdextension_through_source_repository_symlink() {
         b"fresh-built-gdext",
         "The freshly built artifact should be deployed to the source addon"
     );
+
+    for client in ["claude", "codex"] {
+        assert_eq!(
+            fs::read_to_string(
+                share
+                    .path()
+                    .join("client-plugins")
+                    .join(client)
+                    .join("skills/theatre-director/references/director-tools.md")
+            )
+            .unwrap(),
+            "# Director tools\n",
+            "source deployment should preserve nested files in the {client} plugin package"
+        );
+    }
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(

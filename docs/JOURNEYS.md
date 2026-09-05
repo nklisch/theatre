@@ -49,6 +49,7 @@ this. Compare engine run identifiers across restarts, not client session identif
 
 - **Stage** connects to the running project's Stage listener on `127.0.0.1:9077` by default. The game must be running before a useful Stage query can complete.
 - **Director** requires a `project_path` in every operation. It can use the editor plugin, a headless daemon, or a one-shot Godot process; the agent does not need to select the backend. The standalone Godot executable is resolved from `GODOT_BIN`, then `GODOT_PATH`, then `godot` on `PATH`.
+- **Nested projects and switching:** initialize each Godot project once. A root MCP configuration can select a nested project for Stage with `THEATRE_PROJECT_DIR`; do not also load the nested generated MCP configuration. Restart the Stage MCP process or begin a new agent session after changing its startup environment. One-off Stage CLI calls can override `THEATRE_PROJECT_DIR` directly. The Stage MCP entry's environment applies only to that subprocess; launch the client with the same absolute variable when its optional feedback hook should select the nested queue. An explicit hook selection does not fall through to another project. Director switches per call through its absolute `project_path`. Stop an old game before another project uses the same local ports.
 - Both MCP servers use stdout for MCP protocol traffic and stderr for logs. Do not use log output as a data channel.
 
 After the Stage server connects, the addon sends the initial handshake. If the

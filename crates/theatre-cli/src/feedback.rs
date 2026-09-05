@@ -41,7 +41,10 @@ pub fn hook() -> Result<()> {
     // Deserialize only routing fields; large tool results are skipped rather than
     // retained or truncated into invalid JSON that would lose the pending notice.
     let event = serde_json::from_reader(std::io::stdin().lock()).ok();
-    let output = hook_output(event);
+    // An explicit selection is authoritative. Falling back after a bad selection
+    // could surface feedback from a different project than the one the user chose.
+    let selected_project = std::env::var_os("THEATRE_PROJECT_DIR").map(PathBuf::from);
+    let output = hook_output(event, selected_project.as_deref());
     writeln!(std::io::stdout(), "{output}")?;
     Ok(())
 }
@@ -52,19 +55,30 @@ struct HookEvent {
     cwd: PathBuf,
 }
 
-fn hook_output(event: Option<HookEvent>) -> serde_json::Value {
+fn hook_output(
+    event: Option<HookEvent>,
+    selected_project: Option<&std::path::Path>,
+) -> serde_json::Value {
     let Some(event) = event else {
         return serde_json::json!({});
     };
     if event.hook_event_name != "PostToolUse" {
         return serde_json::json!({});
     }
-    let Some(project) = event
-        .cwd
-        .ancestors()
-        .find(|p| p.join("project.godot").is_file())
-    else {
-        return serde_json::json!({});
+    let project = if let Some(project) = selected_project {
+        if project.as_os_str().is_empty() || !project.join("project.godot").is_file() {
+            return serde_json::json!({});
+        }
+        project
+    } else {
+        let Some(project) = event
+            .cwd
+            .ancestors()
+            .find(|p| p.join("project.godot").is_file())
+        else {
+            return serde_json::json!({});
+        };
+        project
     };
     let Some(notice) = theatre_feedback::pending_notice(project) else {
         return serde_json::json!({});
@@ -78,7 +92,7 @@ mod tests {
     fn unrelated_or_malformed_events_are_quiet() {
         for input in ["", "{}", "{\"hook_event_name\":\"Stop\",\"cwd\":\".\"}"] {
             assert_eq!(
-                super::hook_output(serde_json::from_str(input).ok()),
+                super::hook_output(serde_json::from_str(input).ok(), None),
                 serde_json::json!({})
             );
         }

@@ -62,11 +62,23 @@ Normal Stage and Director results can include a compact pending-feedback notice.
 The notice does not change the original result or error meaning.
 
 The installed distribution also contains separate optional Claude and Codex
-plugin packages. After explicit installation, activation, and project trust,
-their synchronous post-tool hook can inject the same text notice at a later tool
-boundary. The hook does not handle feedback, embed the JPEG as text, wake an idle
-agent, or steer a running turn asynchronously. Explicit feedback retrieval remains
-the image path.
+plugin packages. Each self-contained package bundles the Theatre Stage and
+Director operating skills alongside the feedback hook while retaining the plugin
+ID `theatre-feedback`. After explicit installation, activation, and project
+trust, the synchronous post-tool hook can inject the same text notice at a later
+tool boundary. The package does not add or globally enable MCP servers. The hook
+does not handle feedback, embed the JPEG as text, wake an idle agent, or steer a
+running turn asynchronously. Explicit feedback retrieval remains the image path.
+
+For a nested sandbox, `THEATRE_PROJECT_DIR` in the Stage MCP entry selects only
+the Stage server. Launch Claude or Codex with the same absolute environment value
+when the client hook should read that sandbox's queue from a repository-root
+session. An explicit hook selection does not fall through to another project;
+when unset, the hook finds the nearest ancestor containing `project.godot`.
+
+Clients that do not load native plugins can use project-installed copies of the
+same skills. If both copies are discovered, their guidance overlaps by design;
+do not add a second MCP registration or duplicate project rules.
 
 ## Storage and privacy
 

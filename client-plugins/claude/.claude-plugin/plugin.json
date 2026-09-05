@@ -1,4 +1,6 @@
 {
   "name": "theatre-feedback",
-  "description": "Pending Godot human feedback at the next tool boundary; explicit image retrieval stays in Theatre."
+  "version": "0.3.4",
+  "description": "Stage and Director operating skills with pending Godot feedback notices; explicit image retrieval stays in Theatre.",
+  "author": {"name": "nklisch"}
 }

@@ -36,6 +36,9 @@ jobs:
       - name: Check formatting
         run: cargo fmt --check --all
 
+      - name: Check bundled client skills
+        run: python3 scripts/sync-client-skills.py --check
+
       - name: Clippy
         run: cargo clippy --workspace --all-targets
 

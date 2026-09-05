@@ -65,7 +65,15 @@ for cfg in addons/stage/plugin.cfg addons/director/plugin.cfg; do
     fi
 done
 
-# --- 3. Changelog (site/changelog.md) ---
+# --- 3. Native client plugin manifests ---
+for manifest in \
+    client-plugins/claude/.claude-plugin/plugin.json \
+    client-plugins/codex/.codex-plugin/plugin.json; do
+    sed -i "s/\"version\": \"${CURRENT}\"/\"version\": \"${NEXT}\"/" "$manifest"
+    echo "  updated $manifest"
+done
+
+# --- 4. Changelog (site/changelog.md) ---
 CHANGELOG="site/changelog.md"
 if [[ -f "$CHANGELOG" ]]; then
     # Insert new version header after the "## [Unreleased]" section marker
@@ -83,7 +91,7 @@ if [[ -f "$CHANGELOG" ]]; then
     echo "  updated $CHANGELOG"
 fi
 
-# --- 4. Documentation version strings ---
+# --- 5. Documentation version strings ---
 # installation.md: version in CLI output example
 INSTALL_MD="site/guide/installation.md"
 if [[ -f "$INSTALL_MD" ]]; then
@@ -101,13 +109,15 @@ if [[ -f "$WIRE_MD" ]]; then
     echo "  updated $WIRE_MD"
 fi
 
-# --- 5. Regenerate Cargo.lock ---
+# --- 6. Regenerate Cargo.lock ---
 cargo check --workspace > /dev/null 2>&1 || true
 echo "  updated Cargo.lock"
 
 # --- Commit, tag, push ---
 git add "$CARGO_TOML" Cargo.lock \
     addons/stage/plugin.cfg addons/director/plugin.cfg \
+    client-plugins/claude/.claude-plugin/plugin.json \
+    client-plugins/codex/.codex-plugin/plugin.json \
     "$CHANGELOG" "$INSTALL_MD" "$WIRE_MD" 2>/dev/null || true
 git commit -m "release: ${TAG}"
 git tag "$TAG"

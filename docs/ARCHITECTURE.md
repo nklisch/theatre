@@ -46,7 +46,7 @@ runtime dependency of either MCP server.
 | Director backend routing | `crates/director` | Editor connection, daemon lifecycle, one-shot fallback, path and process resolution |
 | Project installation and deployment | `crates/theatre-cli` | Installed share directory, addon copies, GDExtension placement, MCP config, plugin enablement |
 | Human feedback evidence | `crates/theatre-feedback` and `addons/theatre_shared` | Shared typed readers, project-local publication, handling, and explicit deletion |
-| Optional client notices | `client-plugins/claude` and `client-plugins/codex` | Thin client-native hooks around the Theatre CLI helper |
+| Optional client integration | `client-plugins/claude` and `client-plugins/codex` | Self-contained Stage/Director operating skills and thin client-native feedback hooks |
 | Generated tool reference | `crates/theatre-docs-gen` and `site/api/` | Input and output schemas emitted from the routers |
 
 The repository layout and crate dependency graph are defined by the workspace manifest in [`Cargo.toml`](../Cargo.toml). Stage deliberately keeps `stage-godot` dependent on `stage-protocol`, not `stage-core`; Director has no Stage runtime dependency.
@@ -185,7 +185,7 @@ explicit user actions.
 
 The `theatre` executable separates installation from project deployment:
 
-- `install` builds and populates the user-level binaries, addon templates, GDExtension, and optional client packages.
+- `install` builds and populates the user-level binaries, addon templates, GDExtension, and optional client packages. Each native client package physically contains synchronized copies of the canonical Stage and Director operating skills so Git, source, and release installs remain self-contained.
 - `init` copies selected addons and their shared support payload, generates `.mcp.json`, enables plugins, registers `StageRuntime` when selected, and can generate project agent rules.
 - `deploy` rebuilds from the repository when run from a source checkout, updates the installed share directory, and copies the addon, shared support, and binary payload into one or more projects.
 - `enable` changes plugin enablement without copying files.
