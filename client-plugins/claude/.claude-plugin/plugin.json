@@ -1,6 +1,6 @@
 {
   "name": "theatre-feedback",
-  "version": "0.3.4",
+  "version": "0.4.0",
   "description": "Stage and Director operating skills with pending Godot feedback notices; explicit image retrieval stays in Theatre.",
   "author": {"name": "nklisch"}
 }
