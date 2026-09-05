@@ -661,17 +661,6 @@
       "relationships": []
     },
     {
-      "path": ".work/active/local-theatre-voxlar-setup.md",
-      "namespace": "work",
-      "kind": "story",
-      "id": "local-theatre-voxlar-setup",
-      "title": "Install verified Theatre and equip Voxlar",
-      "summary": null,
-      "updated": "2026-09-05",
-      "status": "active",
-      "relationships": []
-    },
-    {
       "path": ".work/completed/configure-runtime-dashcam-autostart.md",
       "namespace": "work",
       "kind": "story",
@@ -699,6 +688,17 @@
       "kind": "story",
       "id": "fix-stage-headless-texture-readback",
       "title": "Fix Stage headless texture readback",
+      "summary": null,
+      "updated": null,
+      "status": null,
+      "relationships": []
+    },
+    {
+      "path": ".work/completed/local-theatre-voxlar-setup.md",
+      "namespace": "work",
+      "kind": "story",
+      "id": "local-theatre-voxlar-setup",
+      "title": "Install Theatre and equip the consuming project",
       "summary": null,
       "updated": null,
       "status": null,
