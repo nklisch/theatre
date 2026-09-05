@@ -584,17 +584,6 @@
       "relationships": []
     },
     {
-      "path": ".work/active/responsive-dashcam-capture.md",
-      "namespace": "work",
-      "kind": "feature",
-      "id": "responsive-dashcam-capture",
-      "title": "Keep dashcam capture responsive",
-      "summary": null,
-      "updated": "2026-09-05",
-      "status": "active",
-      "relationships": []
-    },
-    {
       "path": ".work/active/stage-cli-session-semantics.md",
       "namespace": "work",
       "kind": "feature",
@@ -738,6 +727,17 @@
       "relationships": []
     },
     {
+      "path": ".work/completed/responsive-dashcam-capture.md",
+      "namespace": "work",
+      "kind": "feature",
+      "id": "responsive-dashcam-capture",
+      "title": "Keep capture responsive during play",
+      "summary": null,
+      "updated": null,
+      "status": null,
+      "relationships": []
+    },
+    {
       "path": ".work/completed/stabilize-local-theatre-verification.md",
       "namespace": "work",
       "kind": "feature",
@@ -787,6 +787,17 @@
       "kind": "feature",
       "id": "visual-storyboards",
       "title": "Agent-facing visual storyboards for clips",
+      "summary": null,
+      "updated": null,
+      "status": null,
+      "relationships": []
+    },
+    {
+      "path": ".work/releases/0.4.0.md",
+      "namespace": "work",
+      "kind": "release",
+      "id": "releases/0.4.0",
+      "title": "Theatre 0.4.0 — draft",
       "summary": null,
       "updated": null,
       "status": null,
