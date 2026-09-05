@@ -29,6 +29,10 @@ impl Drop for Game {
 }
 
 async fn start(headless: bool) -> (Game, Arc<Mutex<SessionState>>) {
+    start_with_connection(headless, true).await
+}
+
+async fn start_with_connection(headless: bool, connect: bool) -> (Game, Arc<Mutex<SessionState>>) {
     let dir = tempfile::tempdir().unwrap();
     let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
@@ -102,6 +106,8 @@ func _initialize():
         .arg(dir.path())
         .args(["--script", "res://main.gd"])
         .env("THEATRE_PORT", port.to_string())
+        .env("XDG_DATA_HOME", dir.path().join("user-data"))
+        .env("APPDATA", dir.path().join("user-data"))
         .stdout(Stdio::from(
             std::fs::File::create(dir.path().join("godot.log")).unwrap(),
         ))
@@ -116,6 +122,22 @@ func _initialize():
         project_dir: game._dir.path().into(),
         ..Default::default()
     }));
+    if !connect {
+        // Wait for the fixture's listener without consuming its single client slot.
+        tokio::time::timeout(Duration::from_secs(15), async {
+            loop {
+                if TcpListener::bind(("127.0.0.1", port))
+                    .is_err_and(|error| error.kind() == std::io::ErrorKind::AddrInUse)
+                {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
+        })
+        .await
+        .expect("fixture listener became ready");
+        return (game, state);
+    }
     tokio::time::timeout(Duration::from_secs(15), async {
         loop {
             if tcp::connect_once(&state, port).await.is_ok() {
@@ -247,4 +269,178 @@ async fn headless_pixels_unavailable_but_spatial_observation_works() {
     .await
     .unwrap();
     assert!(spatial["entities"].is_array());
+}
+
+#[tokio::test]
+#[ignore = "requires graphical Godot and built Stage extension"]
+async fn saved_clip_survives_shutdown_without_an_agent_storage_path_query() {
+    let (mut game, state) = start(false).await;
+    tcp::query_addon(
+        &state,
+        "dashcam_config",
+        json!({
+            "enabled":true, "capture_interval":1, "screenshot_interval_frames":2,
+            "screenshot_max_dimension":320, "anomaly_enabled":false
+        }),
+    )
+    .await
+    .unwrap();
+    tokio::time::timeout(Duration::from_secs(15), async {
+        loop {
+            let status = tcp::query_addon(&state, "dashcam_status", json!({}))
+                .await
+                .unwrap();
+            if status["screenshot_buffer_count"].as_u64().unwrap_or(0) >= 4 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(state.lock().await.clip_storage_path.is_none());
+    let saved = tcp::query_addon(
+        &state,
+        "dashcam_flush",
+        json!({"marker_label":"offline handoff"}),
+    )
+    .await
+    .unwrap();
+    let clip_id = saved["clip_id"].as_str().unwrap();
+    assert!(state.lock().await.clip_storage_path.is_none());
+    assert!(game._dir.path().join(".stage/clip_storage_path").is_file());
+    game.child.kill().unwrap();
+    game.child.wait().unwrap();
+
+    let run = |params: serde_json::Value| {
+        let output = Command::new(env!("CARGO_BIN_EXE_stage"))
+            .args(["clips", &params.to_string()])
+            .env("THEATRE_PROJECT_DIR", game._dir.path())
+            .env("THEATRE_PORT", "0")
+            .output()
+            .unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert!(output.status.success(), "offline call failed: {value}");
+        value
+    };
+    let list = run(json!({"action":"list"}));
+    let clip = list["clips"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|clip| clip["clip_id"] == clip_id)
+        .unwrap();
+    let frame = clip["frame_range"][0].as_u64().unwrap();
+    let markers = run(json!({"action":"markers", "clip_id":clip_id}));
+    assert!(markers.to_string().contains("offline handoff"));
+    run(json!({"action":"snapshot_at", "clip_id":clip_id, "at_frame":frame}));
+    let image = run(
+        json!({"action":"visual_artifact", "clip_id":clip_id, "artifact":"storyboard", "tile_limit":3}),
+    );
+    assert!(
+        image["image_base64"]
+            .as_str()
+            .is_some_and(|image| !image.is_empty()),
+        "{image}"
+    );
+    run(json!({"action":"delete", "clip_id":clip_id}));
+
+    for action in ["status", "save", "add_marker", "config"] {
+        let output = Command::new(env!("CARGO_BIN_EXE_stage"))
+            .args(["clips", &json!({"action":action, "config":{}}).to_string()])
+            .env("THEATRE_PROJECT_DIR", game._dir.path())
+            .env("THEATRE_PORT", "0")
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        let error: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(error["error"], "connection_failed");
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires Godot and built GDExtension"]
+async fn agent_stop_reports_failed_pending_save_without_claiming_rollback() {
+    let (_game, state) = start(true).await;
+    tcp::query_addon(
+        &state,
+        "dashcam_config",
+        json!({"enabled":true,"screenshot_enabled":false,"anomaly_enabled":false}),
+    )
+    .await
+    .unwrap();
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    tcp::query_addon(
+        &state,
+        "recording_marker",
+        json!({"source":"agent","label":"stop failure"}),
+    )
+    .await
+    .unwrap();
+    let storage = tcp::query_addon(&state, "recording_resolve_path", json!({}))
+        .await
+        .unwrap();
+    let path = PathBuf::from(
+        storage["path"]
+            .as_str()
+            .unwrap()
+            .trim_end_matches(['/', '\\']),
+    );
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(&path, "deliberate storage obstruction").unwrap();
+    let server = StageServer::new(state.clone());
+    let result = server
+        .clips(Parameters(
+            serde_json::from_value(json!({"action":"config","config":{"enabled":false}})).unwrap(),
+        ))
+        .await
+        .unwrap();
+    let result: serde_json::Value =
+        serde_json::from_str(&result.content[0].as_text().unwrap().text).unwrap();
+    assert_eq!(result["result"], "ok");
+    assert_eq!(result["config"]["enabled"], false);
+    assert_eq!(result["stop_save"]["result"], "error", "{result}");
+    assert!(
+        result["stop_save"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("not saved")
+    );
+    let status = tcp::query_addon(&state, "dashcam_status", json!({}))
+        .await
+        .unwrap();
+    assert_eq!(status["state"], "disabled");
+    assert!(status["last_saved_clip"].is_null());
+}
+
+#[tokio::test]
+#[ignore = "requires Godot and built GDExtension"]
+async fn invalid_project_recorder_settings_are_reported_without_blocking_cli_status() {
+    for (patch, evidence) in [
+        ("[dashcam]\ncapture_interval=0\n", "capture_interval"),
+        (
+            "[dashcam]\nenabled=true\nmovement_nodes=['MissingBody']\n",
+            "Movement target",
+        ),
+    ] {
+        let (game, _state) = start_with_connection(true, false).await;
+        std::fs::write(game._dir.path().join("stage.toml"), patch).unwrap();
+        let output = Command::new(env!("CARGO_BIN_EXE_stage"))
+            .args(["clips", "{\"action\":\"status\"}"])
+            .env("THEATRE_PROJECT_DIR", game._dir.path())
+            .env("THEATRE_PORT", game.port.to_string())
+            .env("RUST_LOG", "warn")
+            .output()
+            .unwrap();
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(output.status.success(), "{stderr}");
+        assert!(
+            stderr.contains("Project dashcam settings were not applied")
+                && stderr.contains(evidence),
+            "{stderr}"
+        );
+        let status: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(status["config"]["enabled"], false);
+        assert_ne!(status["config"]["capture_interval"], 0);
+    }
 }

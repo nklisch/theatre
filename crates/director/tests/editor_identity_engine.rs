@@ -75,6 +75,14 @@ async fn real_editor_ping_and_status_identify_actual_project_and_process() {
             std::fs::read_to_string(&stderr_path).unwrap()
         )
     });
+    // A wildcard listener would also answer this alternate loopback address.
+    assert!(
+        std::net::TcpStream::connect_timeout(
+            &std::net::SocketAddr::from(([127, 0, 0, 2], port)),
+            Duration::from_secs(1),
+        )
+        .is_err()
+    );
     let ping = handle.send_operation("ping", &json!({})).await.unwrap();
     let status = handle
         .send_operation("editor_status", &json!({}))
@@ -96,6 +104,41 @@ async fn real_editor_ping_and_status_identify_actual_project_and_process() {
         EditorHandle::connect_verified(port, wrong.path()).await,
         Err(EditorError::Identity(_))
     ));
+    // Exercise the real MCP envelope as well as native editor identity.
+    use rmcp::ServiceExt;
+    let (server_io, client_io) = tokio::io::duplex(64 * 1024);
+    let serving = tokio::spawn(director::server::DirectorServer::new().serve(server_io));
+    let client = ().serve(client_io).await.unwrap();
+    let server = serving.await.unwrap().unwrap();
+    let tools = client.list_all_tools().await.unwrap();
+    assert!(
+        tools
+            .iter()
+            .find(|tool| tool.name == "editor_run")
+            .unwrap()
+            .output_schema
+            .is_some()
+    );
+    let result = client
+        .call_tool(rmcp::model::CallToolRequestParams {
+            name: "editor_run".into(),
+            arguments: json!({"project_path":project.path(), "action":"status"})
+                .as_object()
+                .cloned(),
+            meta: None,
+            task: None,
+        })
+        .await
+        .unwrap();
+    assert_ne!(result.is_error, Some(true), "{result:?}");
+    let structured = result.structured_content.unwrap();
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&result.content[0].as_text().unwrap().text)
+            .unwrap(),
+        structured
+    );
+    client.cancel().await.unwrap();
+    server.cancel().await.unwrap();
     let editor_process_id = editor.0.id();
     drop(editor);
     let headless = director::oneshot::run_oneshot(
@@ -111,4 +154,25 @@ async fn real_editor_ping_and_status_identify_actual_project_and_process() {
     assert_eq!(headless.data["project_path"], ping.data["project_path"]);
     assert!(headless.data["process_id"].as_u64().unwrap() > 0);
     assert_ne!(headless.data["process_id"], editor_process_id);
+
+    let mut daemon = director::daemon::DaemonHandle::spawn(
+        &director::resolve::resolve_godot_bin().unwrap(),
+        project.path(),
+        port,
+    )
+    .await
+    .unwrap();
+    assert!(
+        std::net::TcpStream::connect_timeout(
+            &std::net::SocketAddr::from(([127, 0, 0, 2], port)),
+            Duration::from_secs(1),
+        )
+        .is_err()
+    );
+    let response = daemon
+        .send_operation("editor_status", &json!({}))
+        .await
+        .unwrap();
+    assert!(response.success);
+    daemon.shutdown().await.unwrap();
 }

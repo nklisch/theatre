@@ -999,7 +999,7 @@ async fn test_dashcam_config_forwards_anomaly_keys_and_status_exposes_block() {
             assert_eq!(params["anomaly_relative_factor"], json!(1.0));
             assert_eq!(params["anomaly_sustained_frames"], json!(1));
             assert_eq!(params["anomaly_cooldown_sec"], json!(0));
-            Ok(json!({"ok":true}))
+            Ok(json!({"result":"ok", "config":params}))
         }
         "dashcam_status" => Ok(json!({
             "dashcam_enabled": true,
@@ -1033,6 +1033,7 @@ async fn test_dashcam_config_forwards_anomaly_keys_and_status_exposes_block() {
         .await
         .unwrap();
     assert_eq!(config["result"], json!("ok"));
+    assert_eq!(config["config"]["anomaly_min_proportion"], 0.0);
 
     let status = harness
         .call_tool("clips", json!({"action":"status"}))
@@ -1413,6 +1414,7 @@ fn create_test_clip(dir: &std::path::Path, clip_id: &str, created_ms: i64) {
 
     for f in [100u64, 150, 200] {
         let entities = vec![FrameEntityData {
+            movement: None,
             path: "player".into(),
             class: "CharacterBody3D".into(),
             position: vec![f as f64 * 0.1, 0.0, 0.0],

@@ -2,6 +2,7 @@
 
 pub mod codec;
 pub mod connection_state;
+pub mod dashcam;
 pub mod handshake;
 #[cfg(feature = "mcp")]
 pub mod mcp_helpers;

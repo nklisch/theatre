@@ -22,9 +22,24 @@ pub async fn dispatch_tool_raw(
     name: &str,
     params: serde_json::Value,
 ) -> Result<String, rmcp::model::ErrorData> {
+    let result = dispatch_tool_result(server, name, params).await?;
+    Ok(result
+        .content
+        .first()
+        .and_then(|c| c.as_text())
+        .expect("JSON text response")
+        .text
+        .clone())
+}
+
+/// Dispatch a tool call and retain structured data and image content.
+pub async fn dispatch_tool_result(
+    server: &stage_server::server::StageServer,
+    name: &str,
+    params: serde_json::Value,
+) -> Result<rmcp::model::CallToolResult, rmcp::model::ErrorData> {
     use rmcp::handler::server::wrapper::Parameters;
     use rmcp::model::ErrorData as McpError;
-
     fn from_value<T: for<'de> serde::Deserialize<'de>>(
         v: serde_json::Value,
     ) -> Result<T, McpError> {
@@ -73,44 +88,12 @@ pub async fn dispatch_tool_raw(
             server.spatial_config(Parameters(p)).await
         }
         "clips" => {
-            // clips returns CallToolResult; extract text from first content block
             let p = from_value(params)?;
-            let result = server.clips(Parameters(p)).await?;
-            let text = result
-                .content
-                .first()
-                .and_then(|c| c.as_text())
-                .map(|t| t.text.clone())
-                .unwrap_or_default();
-            Ok(text)
+            server.clips(Parameters(p)).await
         }
         _ => Err(McpError::invalid_params(
             format!("Unknown tool: {name}"),
             None,
         )),
     }
-}
-
-/// Dispatch a tool call and return the full CallToolResult.
-pub async fn dispatch_tool_result(
-    server: &stage_server::server::StageServer,
-    name: &str,
-    params: serde_json::Value,
-) -> Result<rmcp::model::CallToolResult, rmcp::model::ErrorData> {
-    use rmcp::handler::server::wrapper::Parameters;
-    use rmcp::model::{CallToolResult, Content, ErrorData as McpError};
-
-    fn from_value<T: for<'de> serde::Deserialize<'de>>(
-        v: serde_json::Value,
-    ) -> Result<T, McpError> {
-        serde_json::from_value(v).map_err(|e| McpError::invalid_params(e.to_string(), None))
-    }
-
-    if name == "clips" {
-        let p = from_value(params)?;
-        return server.clips(Parameters(p)).await;
-    }
-
-    let s = dispatch_tool_raw(server, name, params).await?;
-    Ok(CallToolResult::success(vec![Content::text(s)]))
 }

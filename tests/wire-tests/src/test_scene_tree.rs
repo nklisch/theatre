@@ -6,6 +6,16 @@ use crate::harness::GodotFixture;
 fn scene_tree_roots_returns_at_least_one_node() {
     let mut f = GodotFixture::start("test_scene_3d.tscn").unwrap();
 
+    f.query(
+        "execute_action",
+        serde_json::json!({
+            "action":"spawn_node", "scene_path":"res://spawn_test.tscn",
+            "parent":"/root", "name":"DiscoverySibling"
+        }),
+    )
+    .unwrap()
+    .unwrap_data();
+
     let data = f
         .query("get_scene_tree", serde_json::json!({ "action": "roots" }))
         .unwrap()
@@ -14,7 +24,36 @@ fn scene_tree_roots_returns_at_least_one_node() {
     let nodes = data["roots"]
         .as_array()
         .expect("expected 'roots' array in response");
-    assert!(!nodes.is_empty(), "expected at least one root node");
+    assert!(
+        nodes
+            .iter()
+            .any(|node| node["path"] == "/root/DiscoverySibling")
+    );
+    for node in nodes {
+        let path = node["path"].as_str().expect("reusable root path");
+        assert!(path.starts_with("/root/"));
+        let children = f
+            .query(
+                "get_scene_tree",
+                serde_json::json!({
+                    "action":"children", "node":path
+                }),
+            )
+            .unwrap()
+            .unwrap_data();
+        for child in children["children"].as_array().unwrap() {
+            let path = child["path"].as_str().expect("reusable child path");
+            assert!(path.starts_with("/root/"));
+            f.query(
+                "get_node_inspect",
+                serde_json::json!({
+                    "path":path, "include":["transform"]
+                }),
+            )
+            .unwrap()
+            .unwrap_data();
+        }
+    }
 }
 
 #[test]
@@ -66,7 +105,7 @@ fn scene_tree_find_by_class() {
         .unwrap()
         .unwrap_data();
 
-    // Result should include at least one match
+    // Find uses the same reusable absolute path contract as root/child listings.
     let results = data["results"]
         .as_array()
         .expect("expected 'results' array in response");
@@ -74,6 +113,16 @@ fn scene_tree_find_by_class() {
         !results.is_empty(),
         "expected at least one CharacterBody3D node in results"
     );
+    for node in results {
+        let path = node["path"].as_str().unwrap();
+        assert!(path.starts_with("/root/"));
+        f.query(
+            "get_scene_tree",
+            serde_json::json!({"action":"children", "node":path}),
+        )
+        .unwrap()
+        .unwrap_data();
+    }
 }
 
 #[test]

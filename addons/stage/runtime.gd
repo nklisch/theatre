@@ -1,5 +1,6 @@
 extends Node
 
+const CaptureControls := preload("res://addons/stage/capture_controls.gd")
 const RuntimeLoggerScript := preload("res://addons/stage/runtime_logger.gd")
 const Feedback := preload("res://addons/theatre_shared/feedback.gd")
 const FeedbackComposer := preload("res://addons/theatre_shared/feedback_composer.gd")
@@ -14,8 +15,7 @@ var _overlay: CanvasLayer
 var _pause_label: Label
 var _toast_container: VBoxContainer
 var _toasts: Array[Control] = []
-var _dashcam_label: Label
-var _marker_btn: Button
+var _capture_controls: PanelContainer
 
 const MAX_TOASTS := 3
 const TOAST_DURATION := 3.0
@@ -67,6 +67,8 @@ func _ready() -> void:
 	recorder.marker_added.connect(_on_marker_added)
 	recorder.dashcam_clip_saved.connect(_on_dashcam_clip_saved)
 	recorder.dashcam_clip_started.connect(_on_dashcam_clip_started)
+	recorder.dashcam_clip_failed.connect(_on_dashcam_clip_failed)
+	_update_capture_controls()
 
 	tcp_server.set_recorder(recorder)
 
@@ -167,45 +169,28 @@ func _setup_overlay() -> void:
 	_toast_container.offset_right = -20
 	_overlay.add_child(_toast_container)
 
-	_dashcam_label = Label.new()
-	_dashcam_label.add_theme_font_size_override("font_size", 12)
-	_dashcam_label.modulate = Color(0.6, 0.9, 1.0, 0.85)
-	_dashcam_label.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	_dashcam_label.offset_left = 32
-	_dashcam_label.offset_top = 8
-	_dashcam_label.visible = false
-	_overlay.add_child(_dashcam_label)
-
-	# In-game marker button (works when dock buttons can't — dock runs in editor process).
-	_marker_btn = Button.new()
-	_marker_btn.text = "⚑"
-	_marker_btn.tooltip_text = "Drop marker / save dashcam clip"
-	_marker_btn.custom_minimum_size = Vector2(32, 32)
-	_marker_btn.set_anchors_preset(Control.PRESET_TOP_LEFT)
-	_marker_btn.offset_left = 10
-	_marker_btn.offset_top = 32
-	_marker_btn.modulate = Color(1.0, 1.0, 1.0, 0.7)
-	_marker_btn.pressed.connect(_drop_marker)
-	_overlay.add_child(_marker_btn)
-
-	var share := Button.new()
-	share.text = "Share feedback"
-	share.tooltip_text = "Capture the game and add a note for the agent (Ctrl+Shift+F8)"
-	share.position = Vector2(50, 32)
-	share.pressed.connect(share_feedback)
-	_overlay.add_child(share)
+	_capture_controls = CaptureControls.new()
+	_overlay.add_child(_capture_controls)
+	_capture_controls.configure(OS.get_keycode_string(_marker_keycode),
+		str(ProjectSettings.get_setting("theatre/stage/display/capture_controls", "bottom_right")))
+	_capture_controls.toggle_requested.connect(_toggle_capture)
+	_capture_controls.marker_requested.connect(_drop_marker)
+	_capture_controls.save_requested.connect(_save_capture_now)
+	_capture_controls.preset_requested.connect(_apply_capture_preset)
+	_capture_controls.feedback_requested.connect(share_feedback)
+	_capture_controls.refresh({})
 
 
-var _dashcam_label_tick: int = 0
+var _capture_status_tick: int = 0
 
 func _physics_process(_delta: float) -> void:
 	if tcp_server:
 		tcp_server.poll()
-	# Update dashcam status label every ~60 frames (≈1 s at 60 fps).
-	_dashcam_label_tick += 1
-	if _dashcam_label_tick >= 60:
-		_dashcam_label_tick = 0
-		_update_dashcam_label()
+	# Update capture status every ~60 frames (≈1 s at 60 fps).
+	_capture_status_tick += 1
+	if _capture_status_tick >= 60:
+		_capture_status_tick = 0
+		_update_capture_controls()
 
 
 func _shortcut_input(event: InputEvent) -> void:
@@ -245,13 +230,60 @@ func _toggle_pause() -> void:
 		_pause_label.visible = tree.paused
 
 
+func _acknowledge_capture(message: String) -> void:
+	if _capture_controls:
+		_capture_controls.acknowledge(message)
+	if not _capture_controls or not _capture_controls.visible:
+		_show_toast(message, true)
+
+
 func _drop_marker() -> void:
 	if not recorder:
+		_acknowledge_capture("Recorder unavailable · Check Stage auto-start and addon loading")
+	elif not recorder.is_dashcam_active():
+		_acknowledge_capture("Dashcam stopped · Start recording before marking")
+	else:
+		recorder.add_marker("human", "Human marker")
+
+
+func _toggle_capture() -> void:
+	if not recorder:
 		return
-	if recorder.is_dashcam_active():
-		var clip_id: String = recorder.flush_dashcam_clip("human")
-		if not clip_id.is_empty():
-			_show_toast("Dashcam clip saved")
+	var was_pending: bool = recorder.get_dashcam_state() == "post_capture"
+	var enable: bool = not recorder.is_dashcam_active()
+	recorder.set_dashcam_enabled(enable)
+	var status: Dictionary = JSON.parse_string(recorder.get_dashcam_status_json())
+	if status.get("last_save_error") != null:
+		_acknowledge_capture(str(status.last_save_error))
+	elif enable:
+		_acknowledge_capture("Dashcam started · buffering gameplay")
+	elif was_pending and status.get("last_saved_clip") is Dictionary:
+		_acknowledge_capture("Stopped · available capture saved as %s" % status.last_saved_clip.clip_id)
+	else:
+		_acknowledge_capture("Dashcam stopped · no new clip saved")
+	_update_capture_controls()
+
+
+func _save_capture_now() -> void:
+	if not recorder or not recorder.is_dashcam_active():
+		_acknowledge_capture("Start dashcam before saving a clip")
+		return
+	if recorder.get_dashcam_buffer_frames() == 0:
+		_acknowledge_capture("No sampled gameplay yet · wait for the buffer")
+		return
+	recorder.flush_dashcam_clip("Human Save now")
+	_update_capture_controls()
+
+
+func _apply_capture_preset(preset: String) -> void:
+	if not recorder:
+		return
+	var result: Dictionary = JSON.parse_string(recorder.apply_dashcam_config(JSON.stringify({"preset":preset})))
+	if result.has("error"):
+		_acknowledge_capture(str(result.error))
+	else:
+		_acknowledge_capture("%s capture settings applied · recording state unchanged" % preset.capitalize())
+	_update_capture_controls()
 
 
 ## Place a code marker at the current frame.
@@ -265,38 +297,37 @@ func marker(label: String, tier: String = "system") -> void:
 	recorder.add_code_marker(label, tier)
 
 
-func _update_dashcam_label() -> void:
-	if not recorder or not _dashcam_label:
+func _update_capture_controls() -> void:
+	if not _capture_controls:
 		return
-	var state: String = recorder.get_dashcam_state()
-	if state == "disabled":
-		_dashcam_label.visible = false
-		return
-	var kb: int = recorder.get_dashcam_buffer_kb()
-	var mb_str: String = "%.1f MB" % (kb / 1024.0)
-	if state == "buffering":
-		_dashcam_label.text = "● Dashcam: buffering (%s)" % mb_str
-	elif state == "post_capture":
-		_dashcam_label.text = "◉ Dashcam: saving clip…"
-	_dashcam_label.visible = true
+	var status: Dictionary = {}
+	if recorder:
+		status = JSON.parse_string(recorder.get_dashcam_status_json())
+	_capture_controls.refresh(status)
 
 
-func _on_marker_added(_frame: int, source: String, label: String) -> void:
-	var text := "Marker: %s" % label if not label.is_empty() else "Marker added"
-	if source != "human":
-		text = "[%s] %s" % [source, text]
-	_show_toast(text)
+func _on_marker_added(frame: int, source: String, label: String) -> void:
+	if source == "human":
+		_acknowledge_capture("Marked frame %d · collecting the post-window" % frame)
+	else:
+		_show_toast("[%s] Marker: %s" % [source, label])
+	call_deferred("_update_capture_controls")
 
 
-func _on_dashcam_clip_saved(_clip_id: String, tier: String, frames: int) -> void:
-	_show_toast("[dashcam] Clip saved (%s, %d frames)" % [tier, frames])
-	_update_dashcam_label()
+func _on_dashcam_clip_saved(clip_id: String, _tier: String, _frames: int) -> void:
+	_acknowledge_capture("Clip saved: %s" % clip_id)
+	# Never re-enter recorder getters while its native save call is still bound.
+	call_deferred("_update_capture_controls")
+
+
+func _on_dashcam_clip_failed(message: String) -> void:
+	_acknowledge_capture(message)
+	call_deferred("_update_capture_controls")
 
 
 func _on_dashcam_clip_started(_trigger_frame: int, tier: String) -> void:
-	_update_dashcam_label()
-	if ProjectSettings.get_setting("theatre/stage/display/show_agent_notifications", true):
-		_show_toast("[dashcam] Capturing clip (%s)…" % tier)
+	call_deferred("_update_capture_controls")
+	_show_toast("[dashcam] Collecting post-window (%s)…" % tier)
 
 
 func _on_activity_received(entry_type: String, summary: String, tool: String, active_watches: int) -> void:
@@ -307,8 +338,8 @@ func _on_activity_received(entry_type: String, summary: String, tool: String, ac
 			[entry_type, summary, tool, active_watches])
 
 
-func _show_toast(text: String) -> void:
-	if not ProjectSettings.get_setting("theatre/stage/display/show_agent_notifications", true):
+func _show_toast(text: String, human_confirmation: bool = false) -> void:
+	if not human_confirmation and not ProjectSettings.get_setting("theatre/stage/display/show_agent_notifications", true):
 		return
 	if not _toast_container:
 		return

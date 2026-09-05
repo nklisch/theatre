@@ -2,6 +2,28 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result, bail};
 
+/// Replace a native payload without truncating a file mapped by a running process.
+///
+/// The sibling copy keeps an existing installation intact if copying fails.
+/// Unix processes retain their old mapped file after replacement. Platforms that
+/// deny replacing an in-use file return an actionable error instead.
+pub fn copy_native_payload(source: &Path, destination: &Path) -> Result<()> {
+    let parent = destination
+        .parent()
+        .context("Native payload needs a parent directory")?;
+    let staged = tempfile::NamedTempFile::new_in(parent)
+        .with_context(|| format!("Failed to stage native payload in {}", parent.display()))?;
+    std::fs::copy(source, staged.path())
+        .with_context(|| format!("Failed to copy native payload from {}", source.display()))?;
+    staged.persist(destination).map_err(|error| error.error).with_context(|| {
+        format!(
+            "Failed to replace native payload {}. If it is in use, stop the affected Theatre or Godot process and retry.",
+            destination.display()
+        )
+    })?;
+    Ok(())
+}
+
 /// Installed Theatre layout under ~/.local.
 pub struct TheatrePaths {
     /// Where binaries live: ~/.local/bin (or override)
@@ -501,5 +523,53 @@ mod tests {
         assert_eq!(count, 1);
         assert!(dst.path().join("keep.txt").exists());
         assert!(!dst.path().join("bin").exists());
+    }
+
+    #[test]
+    fn native_payload_replacement_preserves_destination_on_copy_failure() {
+        let dir = TempDir::new().unwrap();
+        let source = dir.path().join("source");
+        let destination = dir.path().join("installed");
+        std::fs::write(&source, b"new payload").unwrap();
+        std::fs::write(&destination, b"old payload").unwrap();
+        copy_native_payload(&source, &destination).unwrap();
+        assert_eq!(std::fs::read(&destination).unwrap(), b"new payload");
+        assert!(copy_native_payload(&dir.path().join("missing"), &destination).is_err());
+        assert_eq!(std::fs::read(&destination).unwrap(), b"new payload");
+        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 2);
+    }
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn native_payload_can_replace_a_running_executable() {
+        use std::process::{Command, Stdio};
+        let dir = TempDir::new().unwrap();
+        let installed = dir.path().join("shell");
+        copy_native_payload(Path::new("/bin/sh"), &installed).unwrap();
+        // Keep the installed executable mapped without a timer or an external
+        // service. The child blocks waiting for a line on its owned stdin pipe.
+        let mut child = Command::new(&installed)
+            .args(["-c", "read line"])
+            .stdin(Stdio::piped())
+            .spawn()
+            .unwrap();
+        let truncation = std::fs::copy("/bin/sh", &installed);
+        let replacement = copy_native_payload(Path::new("/bin/sh"), &installed);
+        let still_running = child.try_wait().unwrap().is_none();
+        let _ = child.kill();
+        let _ = child.wait();
+        assert_eq!(truncation.unwrap_err().raw_os_error(), Some(26));
+        replacement.unwrap();
+        assert!(
+            still_running,
+            "replacement must not stop the existing process"
+        );
+        assert!(
+            Command::new(&installed)
+                .args(["-c", "exit 0"])
+                .status()
+                .unwrap()
+                .success()
+        );
     }
 }

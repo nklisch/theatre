@@ -408,22 +408,13 @@ pub async fn generate_artifact(
             (df > 0 && dt > 0).then_some(dt / df)
         })
         .unwrap_or(1);
-    let tv_markers = markers
-        .iter()
-        .enumerate()
-        .map(|(i, (_, ts, src, label))| {
-            vision(Marker::new(
-                format!("marker-{i}"),
-                Timestamp::from_nanos(ts.saturating_mul(1_000_000)),
-                src.clone(),
-                if label.is_empty() {
-                    "(unlabeled)".into()
-                } else {
-                    label.clone()
-                },
-            ))
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    // Markers have independent engine timestamps. A save action can occur
+    // after the last rendered image; do not fabricate pixels at that time.
+    let (tv_markers, markers_outside_visual_range) = markers_for_visual_range(
+        &markers,
+        frames[0].timestamp(),
+        frames[frames.len() - 1].timestamp(),
+    )?;
     let seq = vision(FrameSequence::new(
         frames,
         tv_markers,
@@ -719,6 +710,11 @@ pub async fn generate_artifact(
     let analyzed_last = seq.frames().last().map(|f| *f.id());
     root.insert("subsampled".into(), json!(shots.len() > 1500));
     root.insert("cadence".into(),json!({"interval_frames":interval,"captured":seq.frames().len(),"dropped":gaps.iter().map(|g|g.dropped).sum::<u64>(),"coverage":{"first_frame":analyzed_first,"last_frame":analyzed_last}}));
+    root.insert("marker_coverage".into(), json!({
+        "included":markers.len() - markers_outside_visual_range,
+        "outside_visual_range":markers_outside_visual_range,
+        "note":"Markers outside saved image timestamps remain available through clips(markers); no image is implied at those times."
+    }));
     root.insert("gaps".into(), serde_json::to_value(&gaps).map_err(err)?);
     if !extra.is_null() {
         if let Some(counts) = extra.get("projection_counts") {
@@ -842,6 +838,52 @@ mod tests {
             cache_key("storyboard", &a, "clip-a"),
             cache_key("storyboard", &a, "clip-b")
         );
+    }
+}
+
+fn markers_for_visual_range(
+    markers: &[(u64, u64, String, String)],
+    first: Timestamp,
+    last: Timestamp,
+) -> Result<(Vec<Marker<String>>, usize), McpError> {
+    let mut visible = Vec::new();
+    let mut outside = 0;
+    for (index, (_, timestamp_ms, source, label)) in markers.iter().enumerate() {
+        let timestamp = timestamp_ms.saturating_mul(1_000_000);
+        if timestamp < first.as_nanos() || timestamp > last.as_nanos() {
+            outside += 1;
+            continue;
+        }
+        visible.push(vision(Marker::new(
+            format!("marker-{index}"),
+            Timestamp::from_nanos(timestamp),
+            source.clone(),
+            if label.is_empty() {
+                "(unlabeled)".into()
+            } else {
+                label.clone()
+            },
+        ))?);
+    }
+    Ok((visible, outside))
+}
+
+#[cfg(test)]
+mod marker_coverage_tests {
+    use super::*;
+
+    #[test]
+    fn independently_timed_markers_do_not_claim_pixels_outside_image_coverage() {
+        let markers = [9, 10, 15, 20, 21].map(|time| (time, time, "human".into(), "marked".into()));
+        let (visible, outside) = markers_for_visual_range(
+            &markers,
+            Timestamp::from_nanos(10_000_000),
+            Timestamp::from_nanos(20_000_000),
+        )
+        .unwrap();
+        assert_eq!(visible.len(), 3);
+        assert_eq!(outside, 2);
+        assert_eq!(markers.len(), 5, "retained marker evidence is unchanged");
     }
 }
 

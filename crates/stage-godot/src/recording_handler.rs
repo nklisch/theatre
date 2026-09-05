@@ -118,6 +118,7 @@ fn handle_list(
                 "markers_count": dict.get("markers_count").map(|v: godot::builtin::Variant| v.to::<u32>()).unwrap_or(0),
                 "size_kb": dict.get("size_kb").map(|v: godot::builtin::Variant| v.to::<u32>()).unwrap_or(0),
                 "created_at": created_at,
+                "created_at_unix_ms": created_at_unix_ms,
                 "dashcam": dict.get("dashcam").map(|v: godot::builtin::Variant| v.to::<bool>()).unwrap_or(false),
                 "tier": dict.get("dashcam_tier").map(|v| v.to_string()).unwrap_or_default(),
             });
@@ -235,39 +236,8 @@ fn handle_get_markers(
 }
 
 fn handle_dashcam_status(recorder: &mut Gd<StageRecorder>) -> Result<Value, (String, String)> {
-    let rec = recorder.bind();
-    let state_str = rec.get_dashcam_state().to_string();
-    let buffer_frames = rec.get_dashcam_buffer_frames();
-    let buffer_kb = rec.get_dashcam_buffer_kb();
-    let screenshot_count = rec.get_screenshot_buffer_count();
-    let screenshot_kb = rec.get_screenshot_buffer_kb();
-    let dashcam_enabled =
-        rec.is_dashcam_active() || state_str == "buffering" || state_str == "post_capture";
-    let config_json_str = rec.get_dashcam_config_json().to_string();
-    let capture_probe_json = rec.get_capture_probe_json().to_string();
-    let screenshot_gaps_json = rec.get_screenshot_gaps_json().to_string();
-    let anomaly_json = rec.get_anomaly_status_json().to_string();
-    let screenshots_available = rec.screenshots_available();
-    drop(rec);
-
-    let config: Value = serde_json::from_str(&config_json_str).unwrap_or(json!({}));
-    let capture_probe: Value = serde_json::from_str(&capture_probe_json).unwrap_or(json!({}));
-    let screenshot_gaps: Value = serde_json::from_str(&screenshot_gaps_json).unwrap_or(json!({}));
-    let anomaly: Value = serde_json::from_str(&anomaly_json).unwrap_or(json!({}));
-
-    Ok(json!({
-        "dashcam_enabled": dashcam_enabled,
-        "state": state_str,
-        "buffer_frames": buffer_frames,
-        "buffer_kb": buffer_kb,
-        "screenshot_buffer_count": screenshot_count,
-        "screenshot_buffer_kb": screenshot_kb,
-        "screenshots_available": screenshots_available,
-        "capture_probe": capture_probe,
-        "screenshot_gaps": screenshot_gaps,
-        "anomaly": anomaly,
-        "config": config,
-    }))
+    serde_json::from_str(&recorder.bind().get_dashcam_status_json().to_string())
+        .map_err(|error| ("internal_error".into(), error.to_string()))
 }
 
 fn handle_dashcam_flush(
@@ -284,7 +254,7 @@ fn handle_dashcam_flush(
 
     let clip_id = recorder
         .bind_mut()
-        .flush_dashcam_clip(label.into())
+        .flush_dashcam_clip_from(label, "agent")
         .to_string();
 
     if clip_id.is_empty() {
@@ -306,16 +276,11 @@ fn handle_dashcam_config(
     recorder: &mut Gd<StageRecorder>,
     params: &Value,
 ) -> Result<Value, (String, String)> {
-    let config_json = params.to_string();
-    let ok = recorder
+    let patch =
+        serde_json::from_value::<stage_protocol::dashcam::DashcamConfigPatch>(params.clone())
+            .map_err(|error| ("invalid_params".into(), error.to_string()))?;
+    recorder
         .bind_mut()
-        .apply_dashcam_config(config_json.as_str().into());
-    if ok {
-        Ok(json!({ "result": "ok" }))
-    } else {
-        Err((
-            "invalid_params".into(),
-            "Failed to apply dashcam config".into(),
-        ))
-    }
+        .configure_dashcam(&patch)
+        .map_err(|error| ("invalid_params".into(), error))
 }

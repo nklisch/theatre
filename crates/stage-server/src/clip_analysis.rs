@@ -157,6 +157,7 @@ pub fn list_clips_from_disk(storage_path: &str) -> Result<serde_json::Value, Mcp
             "markers_count": markers_count,
             "size_kb": size_kb,
             "created_at": created_at,
+            "created_at_unix_ms": created_at_unix_ms,
             "dashcam": dashcam,
             "tier": tier,
         });
@@ -168,14 +169,22 @@ pub fn list_clips_from_disk(storage_path: &str) -> Result<serde_json::Value, Mcp
         clips.push(entry);
     }
 
-    // Sort by created_at descending (newest first)
-    clips.sort_by(|a, b| {
-        let a_time = a["created_at"].as_str().unwrap_or("");
-        let b_time = b["created_at"].as_str().unwrap_or("");
-        b_time.cmp(a_time)
-    });
+    sort_clip_entries(&mut clips);
 
     Ok(json!({ "clips": clips }))
+}
+
+/// Share metadata ordering between live and retained discovery. Artifact cache
+/// writes can change a file's modification time without creating new evidence.
+pub(crate) fn sort_clip_entries(clips: &mut [serde_json::Value]) {
+    clips.sort_by(|a, b| {
+        b["created_at_unix_ms"]
+            .as_i64()
+            .unwrap_or(0)
+            .cmp(&a["created_at_unix_ms"].as_i64().unwrap_or(0))
+            .then_with(|| b["created_at"].as_str().cmp(&a["created_at"].as_str()))
+            .then_with(|| b["clip_id"].as_str().cmp(&a["clip_id"].as_str()))
+    });
 }
 
 /// List markers for a clip directly from SQLite (no addon required).
@@ -498,30 +507,17 @@ impl ClipSession {
     }
 }
 
-/// Find the most recently modified .sqlite file in the storage directory.
+/// Find the most recently created clip using persisted metadata, not cache-write time.
 /// Public alias for use in handler code that resolves "most recent" clip.
 pub fn most_recent_clip_id(storage_path: &str) -> Option<String> {
     most_recent_clip(storage_path)
 }
 
 fn most_recent_clip(storage_path: &str) -> Option<String> {
-    let entries = std::fs::read_dir(storage_path).ok()?;
-    let mut newest: Option<(std::time::SystemTime, String)> = None;
-
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if path.extension().and_then(|e| e.to_str()) != Some("sqlite") {
-            continue;
-        }
-        let modified = entry.metadata().ok()?.modified().ok()?;
-        let stem = path.file_stem()?.to_str()?.to_string();
-
-        if newest.is_none() || modified > newest.as_ref().unwrap().0 {
-            newest = Some((modified, stem));
-        }
-    }
-
-    newest.map(|(_, id)| id)
+    let listing = list_clips_from_disk(storage_path).ok()?;
+    listing["clips"].as_array()?.first()?["clip_id"]
+        .as_str()
+        .map(str::to_owned)
 }
 
 // ---------------------------------------------------------------------------
@@ -576,6 +572,9 @@ pub fn snapshot_at(
                 if vel_mag > 0.01 {
                     entry["velocity"] = json!(e.velocity);
                 }
+                if let Some(movement) = &e.movement {
+                    entry["movement"] = json!(movement);
+                }
                 if !e.state.is_empty() {
                     entry["state"] = json!(e.state);
                 }
@@ -603,6 +602,9 @@ pub fn snapshot_at(
         "total_entities": total,
     });
 
+    if detail != "summary" && entities.iter().any(|entity| entity.movement.is_some()) {
+        response["movement_sampling"] = json!(stage_protocol::recording::MOVEMENT_SAMPLING_LIMITS);
+    }
     if showing < total {
         response["pagination"] = json!({
             "truncated": true,
@@ -1229,6 +1231,11 @@ pub fn trajectory(
                 "velocity" => {
                     sample["velocity"] = json!(entity.velocity);
                 }
+                "movement" => {
+                    if let Some(movement) = &entity.movement {
+                        sample["movement"] = json!(movement);
+                    }
+                }
                 "speed" => {
                     let speed: f64 = entity.velocity.iter().map(|v| v * v).sum::<f64>().sqrt();
                     sample["speed"] = json!(speed);
@@ -1255,6 +1262,8 @@ pub fn trajectory(
         "from_frame": from_frame,
         "to_frame": to_frame,
         "sample_interval": interval,
+        "movement_sampling": props.iter().any(|property| property == "movement")
+            .then_some(stage_protocol::recording::MOVEMENT_SAMPLING_LIMITS),
         "samples": samples,
         "total_frames_in_range": total_frames,
         "samples_returned": samples_returned,
@@ -1832,6 +1841,7 @@ CREATE INDEX IF NOT EXISTS idx_markers_frame ON markers(frame);
 
     fn test_entity(path: &str, pos: [f64; 3]) -> FrameEntityData {
         FrameEntityData {
+            movement: None,
             path: path.into(),
             class: "CharacterBody3D".into(),
             position: pos.to_vec(),
@@ -2669,6 +2679,28 @@ CREATE INDEX IF NOT EXISTS idx_markers_frame ON markers(frame);
         assert!(clip["frame_range"].is_array());
         assert!(clip["duration_ms"].as_i64().unwrap() > 0);
         assert!(clip["created_at"].as_str().unwrap().contains("T"));
+    }
+
+    #[test]
+    fn recent_clip_uses_creation_milliseconds_not_artifact_modification_time() {
+        let dir = tempfile::tempdir().unwrap();
+        create_clip_on_disk(dir.path(), "clip_old", 1001);
+        create_clip_on_disk(dir.path(), "clip_new", 1002);
+        let old = std::fs::OpenOptions::new()
+            .write(true)
+            .open(dir.path().join("clip_old.sqlite"))
+            .unwrap();
+        old.set_times(
+            std::fs::FileTimes::new()
+                .set_modified(std::time::SystemTime::now() + std::time::Duration::from_secs(3600)),
+        )
+        .unwrap();
+        assert_eq!(
+            most_recent_clip(dir.path().to_str().unwrap()).as_deref(),
+            Some("clip_new")
+        );
+        let listed = list_clips_from_disk(dir.path().to_str().unwrap()).unwrap();
+        assert_eq!(listed["clips"][0]["created_at_unix_ms"], 1002);
     }
 
     #[test]

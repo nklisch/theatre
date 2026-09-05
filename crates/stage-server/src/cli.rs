@@ -137,6 +137,7 @@ pub async fn run(tool: &str, json_arg: Option<&str>) -> Result<()> {
     // 6. Create session state
     let state = Arc::new(Mutex::new(tcp::SessionState {
         config: base_config,
+        project_dashcam_config: config::load_toml_dashcam(&project_dir),
         project_dir: project_dir.clone(),
         ..Default::default()
     }));
@@ -161,10 +162,20 @@ pub async fn run(tool: &str, json_arg: Option<&str>) -> Result<()> {
         std::process::exit(code);
     }
 
-    // 7. Connect to addon
-    if let Err(e) = tcp::connect_once(&state, resolved_port).await {
+    // Saved-clip reads use the local path hint without contacting a game. When
+    // no hint exists, a live addon may still resolve its authoritative user path.
+    let retained_clip = tool == "clips"
+        && serde_json::from_value::<stage_server::mcp::clips::ClipsParams>(params.clone())
+            .is_ok_and(|params| !params.action.requires_live_runtime());
+    let needs_connection = !retained_clip
+        || stage_server::clip_analysis::resolve_clip_storage_path(&state)
+            .await
+            .is_err();
+
+    // 7. Connect only when needed; saved data survives a connection failure.
+    if needs_connection && let Err(e) = tcp::connect_once(&state, resolved_port).await {
         state.lock().await.connection_error = Some(e.to_string());
-        if tool != "runtime_status" {
+        if tool != "runtime_status" && !retained_clip {
             let mut error = serde_json::json!({
                 "error": "connection_failed",
                 "message": e.to_string(),

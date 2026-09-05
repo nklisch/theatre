@@ -61,7 +61,8 @@ pub struct SnapshotStandardResponse {
     pub timestamp_ms: u64,
     pub perspective: PerspectiveBlock,
     pub entities: Vec<OutputEntity>,
-    pub pagination: PaginationBlock,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pagination: Option<PaginationBlock>,
     /// Summary of static geometry nodes (detail=standard).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub static_summary: Option<serde_json::Value>,
@@ -69,6 +70,26 @@ pub struct SnapshotStandardResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub static_nodes: Option<Vec<serde_json::Value>>,
     pub budget: BudgetBlock,
+}
+
+/// Response when expanding one summary cluster.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct SnapshotExpandResponse {
+    pub frame: u64,
+    pub timestamp_ms: u64,
+    pub expand: String,
+    pub entities: Vec<OutputEntity>,
+    pub budget: BudgetBlock,
+}
+
+/// All successful snapshot modes, including explicit cluster expansion.
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(untagged)]
+#[schemars(extend("type" = "object"))]
+pub enum SnapshotResponse {
+    Summary(SnapshotSummaryResponse),
+    Standard(SnapshotStandardResponse),
+    Expand(SnapshotExpandResponse),
 }
 
 // ---------------------------------------------------------------------------
@@ -141,6 +162,17 @@ pub struct WatchClearResponse {
     pub result: String,
     pub removed: usize,
     pub budget: BudgetBlock,
+}
+
+/// Each watch action has its own successful response shape.
+#[derive(Debug, Serialize, JsonSchema)]
+#[serde(untagged)]
+#[schemars(extend("type" = "object"))]
+pub enum WatchResponse {
+    Add(WatchAddResponse),
+    Remove(WatchRemoveResponse),
+    List(WatchListResponse),
+    Clear(WatchClearResponse),
 }
 
 // ---------------------------------------------------------------------------

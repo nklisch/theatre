@@ -63,6 +63,7 @@ fn make_clip(dir: &std::path::Path, id: &str, with_camera: bool) {
         .enumerate()
     {
         let entity = FrameEntityData {
+            movement: None,
             path: "Enemies/Patrol".into(),
             class: "CharacterBody3D".into(),
             position: vec![*x, 0.0, 0.0],
@@ -128,6 +129,7 @@ fn make_moving_subpixel_clip(dir: &std::path::Path, id: &str) {
         // exactly one pixel at 480x270. This independently places the node at
         // centers whose fractional X and Y components change every frame.
         let entity = FrameEntityData {
+            movement: None,
             path: "Enemies/Patrol".into(),
             class: "CharacterBody3D".into(),
             position: vec![px - 240.0, 135.0 - py, 0.0],

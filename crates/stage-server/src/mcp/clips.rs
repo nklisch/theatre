@@ -50,8 +50,18 @@ pub enum ClipAction {
     Screenshots,
     /// Generate a deterministic visual artifact from clip screenshots.
     VisualArtifact,
-    /// Forward opaque dashcam configuration to the addon.
+    /// Apply validated partial recorder settings.
     Config,
+}
+
+impl ClipAction {
+    /// Saved evidence is independent of the engine-owned rolling buffer.
+    pub fn requires_live_runtime(&self) -> bool {
+        matches!(
+            self,
+            Self::AddMarker | Self::Save | Self::Status | Self::Config
+        )
+    }
 }
 
 #[derive(Debug, Deserialize, JsonSchema)]
@@ -68,7 +78,7 @@ pub struct ClipsParams {
     /// Marker label (add_marker, save).
     pub marker_label: Option<String>,
 
-    /// Frame to attach marker to (add_marker). Defaults to current.
+    /// Historical marker placement is unsupported; omit this field to mark the current frame.
     pub marker_frame: Option<u64>,
 
     /// Soft token budget.
@@ -100,9 +110,9 @@ pub struct ClipsParams {
     pub condition: Option<serde_json::Value>,
 
     /// Properties to sample in trajectory. Default: ["position"].
-    /// Options: "position", "rotation_deg", "velocity", "speed", or any state property name.
+    /// Options: "position", "rotation_deg", "velocity", "speed", "movement", or any state property name.
     #[schemars(
-        description = "Properties to sample in trajectory. Default: [\"position\"]. Options: position, rotation_deg, velocity, speed, or any state property name."
+        description = "Properties to sample in trajectory. Default: [\"position\"]. Options: position, rotation_deg, velocity, speed, movement, or any state property name."
     )]
     pub properties: Option<Vec<String>>,
 
@@ -133,8 +143,8 @@ pub struct ClipsParams {
     /// Include the generated PNG as an image content block (default true).
     #[serde(default = "default_inline_image")]
     pub inline_image: bool,
-    /// Opaque dashcam_config JSON forwarded to the addon.
-    pub config: Option<serde_json::Value>,
+    /// Partial recorder settings. Unknown fields are rejected. Presets do not start recording.
+    pub config: Option<stage_protocol::dashcam::DashcamConfigPatch>,
 }
 
 fn default_inline_image() -> bool {
@@ -206,16 +216,18 @@ pub async fn handle_clips(
         }
         ClipAction::VisualArtifact => handle_visual_artifact(&params, state).await,
         ClipAction::Config => {
-            let config = params.config.clone().ok_or_else(|| {
+            let patch = params.config.as_ref().ok_or_else(|| {
                 McpError::invalid_params("config action requires config object", None)
             })?;
-            let applied = query_addon(state, "dashcam_config", config).await?;
-            let status = query_addon(state, "dashcam_status", json!({}))
-                .await
-                .unwrap_or(json!({}));
-            Ok(text_result(
-                json!({"result":"ok","applied":applied,"status":status}).to_string(),
-            ))
+            let response = query_and_finalize(
+                state,
+                "dashcam_config",
+                json!(patch),
+                budget_limit,
+                hard_cap,
+            )
+            .await?;
+            Ok(text_result(response))
         }
     }
 }
@@ -245,15 +257,20 @@ async fn handle_list(
     budget_limit: u32,
     hard_cap: u32,
 ) -> Result<String, McpError> {
-    // Try live addon first (includes currently-recording info), fall back to disk
-    match query_and_finalize(state, "recording_list", json!({}), budget_limit, hard_cap).await {
-        Ok(s) => Ok(s),
+    let mut data = match query_addon(state, "recording_list", json!({})).await {
+        Ok(data) => data,
         Err(_) => {
             let storage_path = clip_analysis::resolve_clip_storage_path(state).await?;
-            let mut data = clip_analysis::list_clips_from_disk(&storage_path)?;
-            finalize_response(&mut data, budget_limit, hard_cap)
+            clip_analysis::list_clips_from_disk(&storage_path)?
         }
+    };
+    if let Some(clips) = data
+        .get_mut("clips")
+        .and_then(serde_json::Value::as_array_mut)
+    {
+        clip_analysis::sort_clip_entries(clips);
     }
+    finalize_response(&mut data, budget_limit, hard_cap)
 }
 
 async fn handle_add_marker(
@@ -262,13 +279,16 @@ async fn handle_add_marker(
     budget_limit: u32,
     hard_cap: u32,
 ) -> Result<String, McpError> {
-    let mut query = json!({
+    if params.marker_frame.is_some() {
+        return Err(McpError::invalid_params(
+            "marker_frame is unsupported: add_marker marks the current engine frame",
+            None,
+        ));
+    }
+    let query = json!({
         "source": "agent",
         "label": params.marker_label.as_deref().unwrap_or(""),
     });
-    if let Some(frame) = params.marker_frame {
-        query["frame"] = json!(frame);
-    }
     query_and_finalize(state, "recording_marker", query, budget_limit, hard_cap).await
 }
 

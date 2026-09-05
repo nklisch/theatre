@@ -5,9 +5,7 @@ use schemars::JsonSchema;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
-use crate::mcp::responses::{
-    ConfigResponse, DeltaResponse, SnapshotSummaryResponse, WatchAddResponse,
-};
+use crate::mcp::responses::{ConfigResponse, DeltaResponse, SnapshotResponse, WatchResponse};
 use crate::tcp::SessionState;
 
 fn attach_output_schema<T: JsonSchema + 'static>(
@@ -19,13 +17,17 @@ fn attach_output_schema<T: JsonSchema + 'static>(
     }
 }
 
-/// Post-process all tool schemas in the router, replacing bare `true` schema
-/// values with `{}` for MCP client compatibility.
+/// Normalize input and output schemas for strict JSON Schema MCP clients.
 fn sanitize_schemas(router: &mut ToolRouter<StageServer>) {
     for route in router.map.values_mut() {
+        let mut input = serde_json::Value::Object(route.attr.input_schema.as_ref().clone());
+        stage_protocol::mcp_helpers::normalize_mcp_schema(&mut input);
+        if let serde_json::Value::Object(map) = input {
+            route.attr.input_schema = std::sync::Arc::new(map);
+        }
         if let Some(ref schema) = route.attr.output_schema {
             let mut value = serde_json::Value::Object(schema.as_ref().clone());
-            stage_protocol::mcp_helpers::replace_bool_schemas(&mut value);
+            stage_protocol::mcp_helpers::normalize_mcp_schema(&mut value);
             if let serde_json::Value::Object(map) = value {
                 route.attr.output_schema = Some(Arc::new(map));
             }
@@ -45,9 +47,9 @@ impl StageServer {
     pub fn router_with_schemas() -> ToolRouter<Self> {
         let mut router = Self::tool_router();
         attach_output_schema::<theatre_feedback::Response>(&mut router, "feedback");
-        attach_output_schema::<SnapshotSummaryResponse>(&mut router, "spatial_snapshot");
+        attach_output_schema::<SnapshotResponse>(&mut router, "spatial_snapshot");
         attach_output_schema::<DeltaResponse>(&mut router, "spatial_delta");
-        attach_output_schema::<WatchAddResponse>(&mut router, "spatial_watch");
+        attach_output_schema::<WatchResponse>(&mut router, "spatial_watch");
         attach_output_schema::<ConfigResponse>(&mut router, "spatial_config");
         attach_output_schema::<crate::mcp::runtime_status::RuntimeStatusResponse>(
             &mut router,

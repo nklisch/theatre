@@ -132,7 +132,7 @@ Stage serves the state of a running Godot project through MCP tools. The exact f
 
 - `spatial_snapshot` requests summary, standard, or full engine data from a camera, node, or point perspective. Radius and visibility/filter inputs narrow the returned set; the server computes relative position and response budgeting.
 - `spatial_inspect` focuses on one node and can select categories such as transform, physics, state, children, signals, script, spatial context, and resources.
-- `scene_tree` reports hierarchy independently of spatial calculations.
+- `scene_tree` reports hierarchy independently of spatial calculations. Discovery returns absolute Godot node paths, including the root and root-level siblings, that can be reused in node operations.
 - `spatial_query` uses `results` for nearest/radius/area collections and `result` for raycast, path-distance, and relationship answers. Nearest/radius/area depend on a current spatial index; engine raycast and navigation work are delegated to Godot.
 - `spatial_delta` reports applicable moved, state-changed, entered, exited, signal, and watch-trigger information. Empty categories may be omitted; omission means no entries were returned, not that the category is unsupported.
 - `spatial_watch` stores node/group subscriptions in session state. Triggers are delivered through later delta results; adding a watch does not itself constitute a trigger.
@@ -141,17 +141,46 @@ Stage serves the state of a running Godot project through MCP tools. The exact f
 - `runtime_diagnostics` reads bounded errors, warnings, script errors and shader errors captured by the running game's native logger. Results identify the actual run and distinguish retained, evicted and response-omitted entries. Reads do not consume diagnostics. Capture starts at logger registration; engine initialization, disabled log streams and unavailable release backtraces are not recovered. A disconnected call does not return stale current-run evidence.
 - `viewport` returns a bounded, aspect-preserving JPEG of the latest completed root-viewport render, with actual run identity and readback counters. It is independent of recording. Headless, missing-viewport and empty-pixel outcomes explicitly report unavailability; spatial observation remains available. A physics counter at readback is not the simulation frame represented by the pixels.
 - `clips` manages the dashcam buffer and analyzes saved clips. Capture runs
-  continuously while enabled; projects can disable dashcam startup. It covers markers, saves, status, list/delete, frame snapshots, trajectories, range conditions, frame diffs, events, screenshots, visual artifacts, and opaque dashcam configuration. Visual results may contain a text manifest and an image content block; unavailable screenshots and generation degradation are content-level outcomes, not proof that spatial capture failed.
+  continuously while enabled; projects can disable dashcam startup. It covers markers, saves, status, list/delete, frame snapshots, trajectories, range conditions, frame diffs, events, screenshots, visual artifacts, and validated partial dashcam configuration. Visual results may contain a text manifest and an image content block; unavailable screenshots and generation degradation are content-level outcomes, not proof that spatial capture failed.
 
 Stage's response budget is approximate, is derived from serialized JSON size, and is capped by the session hard cap. Detail tiers and filtering are response-shaping semantics, not guarantees that every engine property is available. Engine state that is not exposed by the collector remains unavailable.
 
 ### Configuration precedence
 
-For Stage's effective server configuration, session `spatial_config` overrides project defaults loaded from `stage.toml`; Godot project settings provide addon-side defaults where defined. Dashcam configuration is a separate runtime surface: `clips` config can apply it for the current connection, and an explicit project `[dashcam]` section is pushed after handshake. Do not assume every built-in default is pushed on every one-shot connection.
+For Stage's effective server configuration, session `spatial_config` overrides project defaults loaded from `stage.toml`; Godot project settings provide addon-side defaults where defined. Dashcam configuration is a separate recorder-owned runtime surface: `clips`
+config applies a validated partial patch and returns effective settings. Unknown
+fields and invalid values are rejected before mutation. The same flat vocabulary
+is used by TOML, native controls and the agent API. Presets change their defined
+sampling/image settings, not whether recording is enabled. Explicit project
+`[dashcam]` fields are pushed after handshake; omitted fields are not replaced
+with defaults on one-shot connections. Invalid recorder TOML is reported without
+discarding valid connection settings or preventing other local tools from
+starting.
 
 ### Persistence ownership
 
-The Stage addon owns capture buffers and clip persistence. It writes spatial frame data and optional screenshot data to SQLite in its configured user storage. The Stage server resolves the storage path and reads clips for analysis; it does not own the live capture buffer. This distinction matters when a game exits, when screenshots are unavailable, and when a server session is replaced.
+The Stage addon owns capture buffers and clip persistence. It writes spatial frame data and optional screenshot data to SQLite in its configured user storage. The Stage server resolves the storage path and reads clips for analysis; it does not own the live capture buffer. This distinction matters when a game exits, when screenshots are unavailable,
+and when a server session is replaced. A successful save publishes Godot's
+resolved storage path for later local inspection. Saved operations do not require
+a live connection when that location is known; live configuration, status and
+markers still do.
+
+Markers identify engine time, independently of spatial and image sampling.
+Visual artifacts report markers outside their image coverage rather than failing
+or implying that pixels were captured at those times. New clips retain run
+identity and configuration provenance. Their `scene_at_save` is not a claim that
+every sample came from one scene; buffered history may span scene changes.
+Stopping a pending window reports its save outcome separately from the applied
+configuration; a stopped recorder is not proof that persistence succeeded.
+For retained evidence, older clips may lack these fields, and
+missing metadata must not be presented as known current-run evidence.
+
+Movement context is opt-in and bounded to selected character bodies and named
+InputMap actions. Input strengths are global values at the recorder callback;
+contact facts come from the latest `move_and_slide`, not a synchronized
+controller execution trace. Missing context is not zero input, and contact
+truncation is explicit. Saved snapshot and trajectory analysis preserve this
+sampling boundary.
 
 ## Director semantics
 

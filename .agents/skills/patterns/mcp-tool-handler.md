@@ -1,21 +1,22 @@
 # Pattern: Stage MCP Tool Handler
 
-Most Stage tools that return ordinary JSON text use a `#[tool_router]` method on
-`StageServer`, typed extraction through `Parameters<T>`, a focused handler, and a
-`Result<String, McpError>` return. Engine-backed handlers serialize a typed query,
+Stage MCP tools use a `#[tool_router]` method on `StageServer`, typed extraction
+through `Parameters<T>`, and a focused shared handler. A shared JSON handler can
+return `Result<String, McpError>` for CLI use; its MCP wrapper returns
+`CallToolResult` with matching text and structured content. Engine-backed handlers serialize a typed query,
 call `query_addon`, and deserialize the response before applying server-side
 reasoning or response shaping.
 
 ## Rationale
 
 The rmcp `#[tool_router]` macro generates dispatch and `Parameters<T>` provides the
-typed input boundary. A string result is the simplest shape for text-only JSON,
-but it is not an SDK requirement or a universal Theatre convention. Tools that
-need multiple MCP content blocks return `CallToolResult` instead.
+typed input boundary. Declaring an output schema also requires structured
+content: a JSON string alone is not that envelope. The MCP wrapper performs the
+conversion explicitly, without changing the shared CLI handler's return type.
 
 ## Examples
 
-### Ordinary text handler
+### Structured MCP wrapper
 
 **File**: `crates/stage-server/src/mcp/mod.rs`
 
@@ -24,11 +25,11 @@ need multiple MCP content blocks return `CallToolResult` instead.
 pub async fn spatial_delta(
     &self,
     Parameters(params): Parameters<SpatialDeltaParams>,
-) -> Result<String, McpError> {
+) -> Result<rmcp::model::CallToolResult, McpError> {
     let result = delta::handle_spatial_delta(params, &self.state).await;
     self.log_activity("query", &crate::activity::delta_summary(), "spatial_delta")
         .await;
-    result
+    result.and_then(stage_protocol::mcp_helpers::structured_json)
 }
 ```
 
@@ -62,13 +63,13 @@ engine.
 
 ## When to Use
 
-Use the ordinary text-handler shape for Stage tools that return one JSON text
-payload. For live engine data, use the typed protocol helpers and `query_addon`.
+Use the shared JSON handler plus structured MCP wrapper for ordinary JSON
+operations. For live engine data, use the typed protocol helpers and `query_addon`.
 Apply budget finalization and activity logging when those are part of that tool's
 contract and lifecycle.
 
-Return `CallToolResult` when the tool needs mixed MCP content or shared content
-handling rather than flattening images into a text-only response.
+Preserve image blocks in mixed-content `CallToolResult` responses. Do not flatten
+them into handler text or treat text-only JSON as structured content.
 
 ## When Not to Use
 
@@ -79,7 +80,7 @@ handling rather than flattening images into a text-only response.
 
 ## Common Violations
 
-- Claiming every rmcp handler must return `Result<String, McpError>`.
+- Returning only a string from an MCP wrapper that declares an output schema.
 - Routing project-local feedback through the addon.
 - Flattening viewport or feedback image content into ordinary handler text.
 - Injecting a budget block into a response whose contract does not define one.

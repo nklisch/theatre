@@ -13,13 +13,12 @@ use tokio::{io::AsyncWriteExt, sync::Mutex};
 
 async fn status(state: &Arc<Mutex<SessionState>>) -> Value {
     let server = StageServer::new(state.clone());
-    serde_json::from_str(
-        &server
-            .runtime_status(Parameters(RuntimeStatusParams {}))
-            .await
-            .unwrap(),
-    )
-    .unwrap()
+    server
+        .runtime_status(Parameters(RuntimeStatusParams {}))
+        .await
+        .unwrap()
+        .structured_content
+        .unwrap()
 }
 
 async fn disconnected(state: &Arc<Mutex<SessionState>>) {
@@ -46,7 +45,11 @@ async fn real_engine_identity_survives_reconnect_changes_on_restart_and_rejects_
         project_dir: wrong.path().into(),
         ..Default::default()
     }));
-    wrong_state.lock().await.config.dashcam_explicit = true;
+    wrong_state.lock().await.project_dashcam_config =
+        Some(stage_protocol::dashcam::DashcamConfigPatch {
+            enabled: Some(false),
+            ..Default::default()
+        });
     let error = tcp::connect_once(&wrong_state, game.port())
         .await
         .unwrap_err();

@@ -10,34 +10,7 @@ use std::path::Path;
 pub struct StageToml {
     pub connection: Option<ConnectionConfig>,
     pub tracking: Option<TrackingConfig>,
-    pub dashcam: Option<DashcamTomlConfig>,
-}
-
-#[derive(Debug, Default, Deserialize)]
-pub struct DashcamTomlConfig {
-    pub enabled: Option<bool>,
-    pub capture_interval: Option<u32>,
-    pub pre_window_system_sec: Option<u32>,
-    pub pre_window_deliberate_sec: Option<u32>,
-    pub post_window_system_sec: Option<u32>,
-    pub post_window_deliberate_sec: Option<u32>,
-    pub max_window_sec: Option<u32>,
-    pub min_after_sec: Option<u32>,
-    pub system_min_interval_sec: Option<u32>,
-    pub byte_cap_mb: Option<u32>,
-    pub screenshot_interval_frames: Option<u32>,
-    pub screenshot_quality: Option<f32>,
-    pub screenshot_max_dimension: Option<u32>,
-    pub screenshot_byte_cap_mb: Option<u32>,
-    pub dense_burst_enabled: Option<bool>,
-    pub dense_burst_interval_frames: Option<u32>,
-    pub dense_burst_duration_sec: Option<u32>,
-    pub anomaly_enabled: Option<bool>,
-    pub anomaly_min_proportion: Option<f64>,
-    pub anomaly_relative_factor: Option<f64>,
-    pub anomaly_sustained_frames: Option<u32>,
-    pub anomaly_cooldown_sec: Option<u32>,
-    pub anomaly_noise_floor: Option<u8>,
+    pub dashcam: Option<toml::Value>,
 }
 
 #[derive(Debug, Default, Deserialize)]
@@ -112,79 +85,28 @@ fn toml_to_session_config(toml: &StageToml) -> SessionConfig {
             config.token_hard_cap = v;
         }
     }
-    if let Some(ref dc) = toml.dashcam {
-        config.dashcam_explicit = true;
-        if let Some(v) = dc.enabled {
-            config.dashcam_enabled = v;
-        }
-        if let Some(v) = dc.capture_interval {
-            config.dashcam_capture_interval = v;
-        }
-        if let Some(v) = dc.pre_window_system_sec {
-            config.dashcam_pre_window_system_sec = v;
-        }
-        if let Some(v) = dc.pre_window_deliberate_sec {
-            config.dashcam_pre_window_deliberate_sec = v;
-        }
-        if let Some(v) = dc.post_window_system_sec {
-            config.dashcam_post_window_system_sec = v;
-        }
-        if let Some(v) = dc.post_window_deliberate_sec {
-            config.dashcam_post_window_deliberate_sec = v;
-        }
-        if let Some(v) = dc.max_window_sec {
-            config.dashcam_max_window_sec = v;
-        }
-        if let Some(v) = dc.min_after_sec {
-            config.dashcam_min_after_sec = v;
-        }
-        if let Some(v) = dc.system_min_interval_sec {
-            config.dashcam_system_min_interval_sec = v;
-        }
-        if let Some(v) = dc.byte_cap_mb {
-            config.dashcam_byte_cap_mb = v;
-        }
-        if let Some(v) = dc.screenshot_interval_frames {
-            config.dashcam_screenshot_interval_frames = v;
-        }
-        if let Some(v) = dc.screenshot_quality {
-            config.dashcam_screenshot_quality = v;
-        }
-        if let Some(v) = dc.screenshot_max_dimension {
-            config.dashcam_screenshot_max_dimension = v;
-        }
-        if let Some(v) = dc.screenshot_byte_cap_mb {
-            config.dashcam_screenshot_byte_cap_mb = v;
-        }
-        if let Some(v) = dc.dense_burst_enabled {
-            config.dashcam_dense_burst_enabled = v;
-        }
-        if let Some(v) = dc.dense_burst_interval_frames {
-            config.dashcam_dense_burst_interval_frames = v;
-        }
-        if let Some(v) = dc.dense_burst_duration_sec {
-            config.dashcam_dense_burst_duration_sec = v;
-        }
-        if let Some(v) = dc.anomaly_enabled {
-            config.dashcam_anomaly_enabled = v;
-        }
-        if let Some(v) = dc.anomaly_min_proportion {
-            config.dashcam_anomaly_min_proportion = v;
-        }
-        if let Some(v) = dc.anomaly_relative_factor {
-            config.dashcam_anomaly_relative_factor = v;
-        }
-        if let Some(v) = dc.anomaly_sustained_frames {
-            config.dashcam_anomaly_sustained_frames = v;
-        }
-        if let Some(v) = dc.anomaly_cooldown_sec {
-            config.dashcam_anomaly_cooldown_sec = v;
-        }
-        if let Some(v) = dc.anomaly_noise_floor {
-            config.dashcam_anomaly_noise_floor = v;
+    config
+}
+
+/// Read only the explicit recorder patch. Invalid recorder settings do not erase
+/// valid connection/tracking settings or prevent the local tools from starting.
+pub fn load_toml_dashcam(
+    project_dir: &Path,
+) -> Option<stage_protocol::dashcam::DashcamConfigPatch> {
+    let path = project_dir.join("stage.toml");
+    let text = std::fs::read_to_string(&path).ok()?;
+    let parsed: StageToml = toml::from_str(&text).ok()?;
+    let value = parsed.dashcam?;
+    match value.try_into::<stage_protocol::dashcam::DashcamConfigPatch>() {
+        Ok(patch) => Some(patch),
+        Err(error) => {
+            tracing::warn!(
+                "Invalid [dashcam] in {}: {error}. Recorder settings were not applied.",
+                path.display()
+            );
+            None
         }
     }
-    config
 }
 
 #[cfg(test)]
@@ -281,31 +203,36 @@ capture_interval = 2
         )
         .unwrap();
 
-        let config = load_toml_config(dir.path());
-        assert!(config.dashcam_enabled);
-        assert_eq!(config.dashcam_pre_window_system_sec, 45);
-        assert_eq!(config.dashcam_pre_window_deliberate_sec, 90);
-        assert_eq!(config.dashcam_post_window_system_sec, 15);
-        assert_eq!(config.dashcam_post_window_deliberate_sec, 45);
-        assert_eq!(config.dashcam_max_window_sec, 180);
-        assert_eq!(config.dashcam_min_after_sec, 3);
-        assert_eq!(config.dashcam_system_min_interval_sec, 5);
-        assert_eq!(config.dashcam_byte_cap_mb, 512);
-        assert_eq!(config.dashcam_capture_interval, 2);
+        let patch = load_toml_dashcam(dir.path()).unwrap();
+        let config = patch
+            .apply_to(&stage_protocol::dashcam::DashcamConfig::default())
+            .unwrap();
+        assert!(config.enabled);
+        assert_eq!(config.pre_window_system_sec, 45);
+        assert_eq!(config.pre_window_deliberate_sec, 90);
+        assert_eq!(config.post_window_system_sec, 15);
+        assert_eq!(config.post_window_deliberate_sec, 45);
+        assert_eq!(config.max_window_sec, 180);
+        assert_eq!(config.min_after_sec, 3);
+        assert_eq!(config.system_min_interval_sec, 5);
+        assert_eq!(config.byte_cap_mb, 512);
+        assert_eq!(config.capture_interval, 2);
+        assert!(
+            patch.screenshot_enabled.is_none(),
+            "omitted settings must not be pushed as defaults"
+        );
     }
 
     #[test]
     fn dashcam_config_defaults_when_dashcam_section_absent() {
         let dir = TempDir::new().unwrap();
-        let config = load_toml_config(dir.path());
-        assert!(config.dashcam_enabled);
-        assert_eq!(config.dashcam_pre_window_system_sec, 30);
-        assert_eq!(config.dashcam_pre_window_deliberate_sec, 60);
-        assert_eq!(config.dashcam_post_window_system_sec, 10);
-        assert_eq!(config.dashcam_post_window_deliberate_sec, 30);
-        assert_eq!(config.dashcam_max_window_sec, 120);
-        assert_eq!(config.dashcam_min_after_sec, 5);
-        assert_eq!(config.dashcam_system_min_interval_sec, 2);
-        assert_eq!(config.dashcam_byte_cap_mb, 1024);
+        assert!(load_toml_dashcam(dir.path()).is_none());
+        std::fs::write(
+            dir.path().join("stage.toml"),
+            "[connection]\nport=9078\n[dashcam]\nunknown=true\n",
+        )
+        .unwrap();
+        assert!(load_toml_dashcam(dir.path()).is_none());
+        assert_eq!(load_toml_port(dir.path()), Some(9078));
     }
 }

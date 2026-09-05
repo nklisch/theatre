@@ -2,7 +2,7 @@
 
 Most ordinary Director MCP handlers that dispatch a Godot operation use the
 `director_tool!` macro. It combines parameter serialization, normal backend
-routing, typed response validation, and JSON text serialization.
+routing, typed response validation, and matching JSON text/structured MCP content.
 
 ## Rationale
 
@@ -21,7 +21,7 @@ universal Director-handler abstraction.
 pub async fn scene_create(
     &self,
     Parameters(params): Parameters<SceneCreateParams>,
-) -> Result<String, McpError> {
+) -> Result<CallToolResult, McpError> {
     director_tool!(self, params, "scene_create", SceneCreateResponse)
 }
 ```
@@ -36,7 +36,7 @@ macro_rules! director_tool {
         let op_params = serialize_params(&$params)?;
         let data = run_operation(&$self.backend, &$params.project_path, $op, &op_params).await?;
         let typed: $resp = deserialize_response(data)?;
-        serialize_response(&typed)
+        structured_response(&typed)
     }};
 }
 ```
@@ -69,7 +69,7 @@ pub struct NodeAddParams {
 
 ## When to Use
 
-Use `director_tool!` for an ordinary text-returning Director operation that uses
+Use `director_tool!` for an ordinary structured-response Director operation that uses
 the normal editor → daemon → one-shot backend order and maps directly to one
 typed response.
 

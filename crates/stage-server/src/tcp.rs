@@ -59,6 +59,8 @@ pub struct SessionState {
     pub watch_engine: WatchEngine,
     /// Active session configuration (merged from TOML defaults + spatial_config overrides).
     pub config: SessionConfig,
+    /// Explicit project recorder intent, not a second effective-settings owner.
+    pub project_dashcam_config: Option<stage_protocol::dashcam::DashcamConfigPatch>,
     /// Cached filesystem path to clip storage (resolved from addon or disk cache).
     pub clip_storage_path: Option<String>,
     /// Scene dimensions from handshake.
@@ -80,6 +82,7 @@ impl Default for SessionState {
             delta_engine: DeltaEngine::new(),
             watch_engine: WatchEngine::new(),
             config: SessionConfig::default(),
+            project_dashcam_config: None,
             clip_storage_path: None,
             scene_dimensions: SceneDimensions::Three,
             project_dir: PathBuf::new(),
@@ -204,7 +207,13 @@ async fn run_connection(stream: TcpStream, state: Arc<Mutex<SessionState>>) -> R
         .map_err(|_| {
             anyhow::anyhow!("Handshake timeout after 10s — Godot may have another active client")
         })?
-        .map_err(|e| anyhow::anyhow!("Failed to read handshake: {}", e))?;
+        .map_err(|e| match e {
+            stage_protocol::codec::CodecError::Deserialize(_) => anyhow::anyhow!(
+                "Cannot decode the Stage addon's handshake response: {e}. The addon may be stale, incompatible, or malformed; this is not a missing tool argument. Deploy matching Theatre payloads with `theatre deploy <project>` and restart the game. Server version: {}.",
+                env!("CARGO_PKG_VERSION")
+            ),
+            _ => anyhow::anyhow!("Failed to read handshake: {e}"),
+        })?;
 
     let handshake = match msg {
         Message::Handshake(h) => h,
@@ -229,7 +238,7 @@ async fn run_connection(stream: TcpStream, state: Arc<Mutex<SessionState>>) -> R
             .await
             .map_err(|e| anyhow::anyhow!("Failed to send handshake error: {}", e))?;
         anyhow::bail!(
-            "Protocol version mismatch: expected {}, got {}",
+            "Protocol version mismatch: expected {}, got {}. Deploy matching Theatre payloads with `theatre deploy <project>` and restart the game.",
             PROTOCOL_VERSION,
             handshake.protocol_version
         );
@@ -267,10 +276,30 @@ async fn run_connection(stream: TcpStream, state: Arc<Mutex<SessionState>>) -> R
 
     tracing::info!("Handshake complete — session {}", session_id);
 
-    // Step 4: Update shared state
+    let mut writer = TcpClientHandle { writer, next_id: 0 };
+    let patch = state.lock().await.project_dashcam_config.clone();
+    let mut project_config_request = None;
+    if let Some(patch) = patch {
+        let id = writer.next_request_id();
+        match async_io::write_message(
+            &mut writer.writer,
+            &Message::Query {
+                request_id: id.clone(),
+                method: "dashcam_config".into(),
+                params: serde_json::json!(patch),
+            },
+        )
+        .await
+        {
+            Ok(()) => project_config_request = Some(id),
+            Err(error) => tracing::warn!("Project dashcam settings could not be sent: {error}"),
+        }
+    }
+
+    // Publish readiness only after explicit project intent has been sent.
     {
         let mut s = state.lock().await;
-        s.tcp_writer = Some(TcpClientHandle { writer, next_id: 0 });
+        s.tcp_writer = Some(writer);
         s.connected = true;
         s.connection_error = None;
         s.session_id = Some(session_id);
@@ -285,60 +314,14 @@ async fn run_connection(stream: TcpStream, state: Arc<Mutex<SessionState>>) -> R
         });
     }
 
-    // Step 5: Push project dashcam settings after the handshake ACK — but
-    // only when the project's stage.toml has an explicit [dashcam] section.
-    // Pushing built-in defaults on every one-shot connection would clobber
-    // runtime config applied via clips(config).
-    let dashcam_config = {
-        let s = state.lock().await;
-        s.config.dashcam_explicit.then(|| {
-            serde_json::json!({
-                "enabled": s.config.dashcam_enabled,
-                "capture_interval": s.config.dashcam_capture_interval,
-                "pre_window_system_sec": s.config.dashcam_pre_window_system_sec,
-                "pre_window_deliberate_sec": s.config.dashcam_pre_window_deliberate_sec,
-                "post_window_system_sec": s.config.dashcam_post_window_system_sec,
-                "post_window_deliberate_sec": s.config.dashcam_post_window_deliberate_sec,
-                "max_window_sec": s.config.dashcam_max_window_sec,
-                "min_after_sec": s.config.dashcam_min_after_sec,
-                "system_min_interval_sec": s.config.dashcam_system_min_interval_sec,
-                "byte_cap_mb": s.config.dashcam_byte_cap_mb,
-                "screenshot_interval_frames": s.config.dashcam_screenshot_interval_frames,
-                "screenshot_quality": s.config.dashcam_screenshot_quality,
-                "screenshot_max_dimension": s.config.dashcam_screenshot_max_dimension,
-                "screenshot_byte_cap_mb": s.config.dashcam_screenshot_byte_cap_mb,
-                "dense_burst_enabled": s.config.dashcam_dense_burst_enabled,
-                "dense_burst_interval_frames": s.config.dashcam_dense_burst_interval_frames,
-                "dense_burst_duration_sec": s.config.dashcam_dense_burst_duration_sec,
-                "anomaly_enabled": s.config.dashcam_anomaly_enabled,
-                "anomaly_min_proportion": s.config.dashcam_anomaly_min_proportion,
-                "anomaly_relative_factor": s.config.dashcam_anomaly_relative_factor,
-                "anomaly_sustained_frames": s.config.dashcam_anomaly_sustained_frames,
-                "anomaly_cooldown_sec": s.config.dashcam_anomaly_cooldown_sec,
-                "anomaly_noise_floor": s.config.dashcam_anomaly_noise_floor,
-            })
-        })
-    };
-    if let Some(dashcam_config) = dashcam_config {
-        let mut s = state.lock().await;
-        if let Some(writer) = s.tcp_writer.as_mut() {
-            let id = writer.next_request_id();
-            let _ = async_io::write_message(
-                &mut writer.writer,
-                &Message::Query {
-                    request_id: id,
-                    method: "dashcam_config".into(),
-                    params: dashcam_config,
-                },
-            )
-            .await;
-        }
-    }
-
     // Step 6: Read loop — dispatch incoming messages
     loop {
         match async_io::read_message::<Message>(&mut reader).await {
             Ok(Message::Response { request_id, data }) => {
+                if project_config_request.as_ref() == Some(&request_id) {
+                    project_config_request = None;
+                    tracing::debug!("Project dashcam settings applied");
+                }
                 let mut s = state.lock().await;
                 if let Some(sender) = s.pending_queries.remove(&request_id) {
                     let _ = sender.send(QueryResult::Ok(data));
@@ -349,6 +332,10 @@ async fn run_connection(stream: TcpStream, state: Arc<Mutex<SessionState>>) -> R
                 code,
                 message,
             }) => {
+                if project_config_request.as_ref() == Some(&request_id) {
+                    project_config_request = None;
+                    tracing::warn!("Project dashcam settings were not applied: {code}: {message}");
+                }
                 let mut s = state.lock().await;
                 if let Some(sender) = s.pending_queries.remove(&request_id) {
                     let _ = sender.send(QueryResult::Err { code, message });
@@ -478,7 +465,7 @@ pub async fn get_config(state: &Arc<Mutex<SessionState>>) -> SessionConfig {
 /// Map Stage error codes to McpError.
 fn make_stage_error(code: &str, message: &str) -> McpError {
     match code {
-        "node_not_found" => McpError::invalid_params(message.to_string(), None),
+        "node_not_found" | "invalid_params" => McpError::invalid_params(message.to_string(), None),
         "scene_not_loaded" => McpError::internal_error(message.to_string(), None),
         _ => McpError::internal_error(format!("{code}: {message}"), None),
     }
@@ -546,6 +533,39 @@ mod tests {
             err_msg.contains("timeout") || err_msg.contains("10s"),
             "error must mention timeout: {err_msg}"
         );
+    }
+
+    #[tokio::test]
+    async fn missing_addon_identity_explains_payload_repair_not_tool_arguments() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let peer = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await.unwrap();
+            async_io::write_message(
+                &mut stream,
+                &serde_json::json!({
+                    "type":"handshake", "stage_version":"old", "protocol_version":3,
+                    "godot_version":"test", "scene_dimensions":3,
+                    "physics_ticks_per_sec":60, "project_name":"test"
+                }),
+            )
+            .await
+            .unwrap();
+        });
+        let state = Arc::new(Mutex::new(SessionState::default()));
+        let stream = tokio::net::TcpStream::connect(("127.0.0.1", port))
+            .await
+            .unwrap();
+        let message = handle_connection(stream, state.clone())
+            .await
+            .unwrap_err()
+            .to_string();
+        peer.await.unwrap();
+        assert!(message.contains("missing field `identity`"), "{message}");
+        assert!(message.contains("addon's handshake response"));
+        assert!(message.contains("not a missing tool argument"));
+        assert!(message.contains("theatre deploy") && message.contains("restart the game"));
+        assert!(!state.lock().await.connected);
     }
 
     /// Verify SessionState default has no active connection.

@@ -39,26 +39,138 @@ pub fn serialize_response<T: Serialize>(response: &T) -> Result<String, McpError
         .map_err(|e| McpError::internal_error(format!("Response serialization error: {e}"), None))
 }
 
-/// Replace bare `true` values in a JSON Schema tree with `{}`.
+/// Normalize generated schemas for strict JSON Schema MCP clients.
 ///
-/// schemars v1 emits `true` for `serde_json::Value` fields (the JSON Schema
-/// "accept anything" shorthand). Some MCP clients (notably Claude Code) reject
-/// bare booleans during schema validation. `{}` is the equivalent object form.
-pub fn replace_bool_schemas(value: &mut serde_json::Value) {
-    match value {
-        serde_json::Value::Bool(true) => {
-            *value = serde_json::Value::Object(serde_json::Map::new());
+/// rmcp's OpenAPI-oriented generation can emit `nullable` beside a `$ref`
+/// without `type`; strict clients reject that extension. Express nullability
+/// as a standard union, while keeping schema resource identifiers in place.
+pub fn normalize_mcp_schema(value: &mut serde_json::Value) {
+    fn normalize(schema: &mut schemars::Schema) {
+        if schema.as_bool() == Some(true) {
+            *schema = schemars::json_schema!({});
+            return;
         }
-        serde_json::Value::Object(map) => {
-            for v in map.values_mut() {
-                replace_bool_schemas(v);
+        // Traverse schema positions only, never defaults, consts or examples.
+        schemars::transform::transform_subschemas(&mut normalize, schema);
+        let Some(object) = schema.as_object_mut() else {
+            return;
+        };
+        let nullable = object.remove("nullable");
+        if nullable != Some(serde_json::Value::Bool(true)) {
+            return;
+        }
+        let mut outer = serde_json::Map::new();
+        for key in [
+            "$schema",
+            "$id",
+            "$anchor",
+            "$dynamicAnchor",
+            "$defs",
+            "definitions",
+        ] {
+            if let Some(value) = object.remove(key) {
+                outer.insert(key.into(), value);
             }
         }
-        serde_json::Value::Array(arr) => {
-            for v in arr.iter_mut() {
-                replace_bool_schemas(v);
-            }
-        }
-        _ => {}
+        let original = std::mem::take(object);
+        outer.insert(
+            "anyOf".into(),
+            serde_json::json!([original, {"type":"null"}]),
+        );
+        *object = outer;
+    }
+    if let Ok(schema) = value.try_into() {
+        normalize(schema);
+    }
+}
+
+/// Return typed operation data as both MCP structured content and readable JSON.
+pub fn structured_response<T: Serialize>(
+    response: &T,
+) -> Result<rmcp::model::CallToolResult, McpError> {
+    serde_json::to_value(response)
+        .map(rmcp::model::CallToolResult::structured)
+        .map_err(|e| McpError::internal_error(format!("Response serialization error: {e}"), None))
+}
+
+/// Adapt a JSON-producing shared CLI handler at the explicit MCP boundary.
+pub fn structured_json(text: String) -> Result<rmcp::model::CallToolResult, McpError> {
+    serde_json::from_str(&text)
+        .map(rmcp::model::CallToolResult::structured)
+        .map_err(|e| McpError::internal_error(format!("Invalid handler JSON response: {e}"), None))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn normalization_changes_schemas_not_boolean_data() {
+        let mut schema = json!({
+            "type": "object",
+            "properties": {
+                "anything": true,
+                "enabled": {"type":"boolean", "default":true, "const":true, "enum":[true,false]},
+                "list": {"type":"array", "items":true},
+                "never": false
+            },
+            "examples": [{"nullable":true, "properties":{"literal":true}}],
+            "anyOf": [true, {"properties":{"nested":true}}],
+            "additionalProperties": false
+        });
+        let literals = schema["properties"]["enabled"].clone();
+        let examples = schema["examples"].clone();
+        normalize_mcp_schema(&mut schema);
+        assert_eq!(schema["properties"]["enabled"], literals);
+        assert_eq!(schema["examples"], examples);
+        assert_eq!(schema["properties"]["anything"], json!({}));
+        assert_eq!(schema["properties"]["list"]["items"], json!({}));
+        assert_eq!(schema["anyOf"][0], json!({}));
+        assert_eq!(schema["anyOf"][1]["properties"]["nested"], json!({}));
+        assert_eq!(schema["additionalProperties"], false);
+        assert_eq!(schema["properties"]["never"], false);
+    }
+
+    #[test]
+    fn nullable_references_become_standard_unions_without_moving_definitions() {
+        let mut schema = json!({
+            "$defs":{"Identity":{"type":"object"}},
+            "type":"object",
+            "properties":{
+                "identity":{"$ref":"#/$defs/Identity", "nullable":true},
+                "anything":{"nullable":true},
+                "label":{"type":"string", "nullable":false}
+            },
+            "examples":[{"nullable":true}]
+        });
+        normalize_mcp_schema(&mut schema);
+        assert_eq!(
+            schema["properties"]["identity"]["anyOf"],
+            json!([
+                {"$ref":"#/$defs/Identity"}, {"type":"null"}
+            ])
+        );
+        assert_eq!(schema["$defs"]["Identity"]["type"], "object");
+        assert_eq!(
+            schema["properties"]["anything"],
+            json!({"anyOf":[{}, {"type":"null"}]})
+        );
+        assert_eq!(schema["properties"]["label"], json!({"type":"string"}));
+        assert_eq!(schema["examples"], json!([{"nullable":true}]));
+    }
+
+    #[test]
+    fn structured_response_keeps_matching_text_and_data() {
+        let data = json!({"connected":false, "ready":false});
+        let result = structured_response(&data).unwrap();
+        assert_eq!(result.structured_content, Some(data.clone()));
+        assert_eq!(
+            serde_json::from_str::<serde_json::Value>(&result.content[0].as_text().unwrap().text)
+                .unwrap(),
+            data
+        );
+        assert_eq!(result.is_error, Some(false));
+        assert!(structured_json("not JSON".to_owned()).is_err());
     }
 }

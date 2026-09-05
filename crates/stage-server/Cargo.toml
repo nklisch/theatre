@@ -30,6 +30,7 @@ jpeg-decoder = "0.3"
 sha2 = "0.10"
 
 [dev-dependencies]
+rmcp = { version = "0.16", features = ["client"] }
 tempfile = "3"
 jpeg-encoder = "0.6"
 

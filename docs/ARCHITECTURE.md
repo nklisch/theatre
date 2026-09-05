@@ -124,7 +124,7 @@ Director's important boundary is serialization: `.tscn`, `.tres`, and other Godo
 scene without saving open work. Director reports native play state. Stage remains
 the authority for runtime readiness and run identity.
 
-Director operations return a normalized `success`/`data` or `success: false`/`error` shape internally. The MCP layer deserializes the data into typed output schemas. A `batch` is sequential and can stop at the first failure; it is not a transaction and does not provide rollback.
+Director operations return a normalized `success`/`data` or `success: false`/`error` shape internally. The MCP layer deserializes the data into typed responses and returns matching JSON text and structured content. Generated schemas use standard JSON Schema nullability so strict clients can validate referenced optional types. A `batch` is sequential and can stop at the first failure; it is not a transaction and does not provide rollback.
 
 See [`crates/director/src/backend.rs`](../crates/director/src/backend.rs), [`addons/director/editor_ops.gd`](../addons/director/editor_ops.gd), and [`addons/director/operations.gd`](../addons/director/operations.gd).
 
@@ -135,11 +135,27 @@ The recorder keeps bounded spatial and screenshot buffers and saves capture
 windows as per-clip SQLite files. Spatial entity frames use MessagePack;
 screenshots use JPEG. Capture can remain active without an agent connection,
 and projects can disable dashcam startup independently of on-demand observation.
+The protocol owns the shared recorder-setting vocabulary and validated partial
+patch; the recorder owns effective values. Spatial session configuration does
+not duplicate recorder defaults. Native controls expose start/stop, deliberate
+markers, immediate saves and sampling presets without enabling capture implicitly.
+
+Markers have their own engine timestamps and need not coincide with a sampled
+spatial frame. A save succeeds only after its database writes commit. Newly
+saved metadata includes run identity, effective settings and configuration-change
+provenance. After a successful save, Godot publishes its resolved storage path
+in the project's `.stage/clip_storage_path` hint; a fresh server can then inspect
+saved evidence after the game exits without reimplementing `user://` resolution.
 
 Pixel readback stays on the Godot thread; encoding and capture-local change
 measurement can use an owned-data worker. The recorder reports capture gaps
 and health rather than treating dropped or unavailable images as unchanged
 frames. Headless Godot can supply spatial data without a rendered viewport.
+Opt-in movement evidence uses the same spatial samples: the protocol defines an
+optional trailing movement record, and the engine samples selected InputMap
+strengths and bounded CharacterBody3D contact facts on the main thread. Older
+MessagePack frames remain readable without that record; no second recorder or
+controller hook is involved.
 
 The runtime autoload registers a native Logger for current-process diagnostics.
 Its bounded queue survives client reconnects, not game restarts. Worker-thread
@@ -233,11 +249,10 @@ Stage TCP frames are a four-byte big-endian payload length followed by UTF-8 JSO
 ## Security and operating boundary
 
 Theatre is intended for local development, not untrusted network clients.
-Stage binds its listener to loopback. Director's Rust clients connect through
-loopback, but its GDScript editor and daemon listeners call `TCPServer.listen`
-without an explicit bind address; they do not establish a loopback-only server
-boundary. Neither protocol authenticates callers. Do not assume localhost client
-configuration prevents other network access.
+Stage and Director bind their development listeners explicitly to IPv4
+loopback (`127.0.0.1`); Director applies the same boundary to editor and daemon
+listeners. Neither protocol authenticates local callers. Loopback limits network
+reachability, not what other processes on the machine may request.
 
 These are powerful development interfaces: Stage can invoke node methods and
 Director can write project resources. Keep them off untrusted networks and do

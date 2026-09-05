@@ -37,3 +37,15 @@ Related work: `.work/active/director-consistent-authoring.md` and
 `.work/active/agent-godot-development-loop.md`. Preserve the distinction between
 normal native undo coverage and diagnostic reproductions; do not disable
 accessibility or repeat until green and call that a fix.
+
+## Latest baseline reproduction
+
+The September repair baseline ran `cargo test --workspace -- --ignored --test-threads=1` after successful deployment. On Godot 4.7.1, the all-mutators authoring journey again crashed during native undo/redo around `node_set_meta`, with `accesskit_consumer-0.35.0/src/tree.rs:224:21: TreeUpdate includes duplicate child #491778050362126`. Director observed `input_readiness: editor plugin TCP I/O error: Connection reset by peer (os error 104)`. Three other authoring tests passed, including the native-only comparison. The binary replacement repair had passed deployment before this run. This confirms the baseline verification limitation, not its cause. The investigation remains explicitly excluded from the eleven-item repair boundary. Do not disable accessibility or repeat until green as a purported fix.
+
+A filtered continuation excluding the first failing all-mutators test reproduced the same native crash in `authoring_preserves_human_history_and_selected_scene_persistence`: `TreeUpdate includes duplicate child #479932530557273`, followed by Director `inspect` connection reset. This shows the baseline limitation is not confined to one test name. Remaining coverage excludes the deferred native undo journeys rather than retrying them to obtain a pass. The full required suite remains failed.
+
+A later complete ignored-suite invocation on the same Godot 4.7.1 environment
+passed, including the authoring-editor tests. The earlier duplicate-child panic
+remains reproduced evidence of an intermittent issue; no accessibility fix or
+workaround was applied during the eleven-item repair delivery. A passing run
+does not establish that this deferred native crash has been repaired.

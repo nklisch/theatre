@@ -52,72 +52,6 @@ pub struct SessionConfig {
     /// Hard cap on token budget for any single response.
     #[serde(default = "default_token_hard_cap")]
     pub token_hard_cap: u32,
-
-    // --- Dashcam config (M11) ---
-    #[serde(default = "default_dashcam_enabled")]
-    pub dashcam_enabled: bool,
-
-    #[serde(default = "default_dashcam_capture_interval")]
-    pub dashcam_capture_interval: u32,
-
-    #[serde(default = "default_pre_window_system")]
-    pub dashcam_pre_window_system_sec: u32,
-
-    #[serde(default = "default_pre_window_deliberate")]
-    pub dashcam_pre_window_deliberate_sec: u32,
-
-    #[serde(default = "default_post_window_system")]
-    pub dashcam_post_window_system_sec: u32,
-
-    #[serde(default = "default_post_window_deliberate")]
-    pub dashcam_post_window_deliberate_sec: u32,
-
-    #[serde(default = "default_max_window")]
-    pub dashcam_max_window_sec: u32,
-
-    #[serde(default = "default_min_after")]
-    pub dashcam_min_after_sec: u32,
-
-    #[serde(default = "default_system_min_interval")]
-    pub dashcam_system_min_interval_sec: u32,
-
-    #[serde(default = "default_byte_cap_mb")]
-    pub dashcam_byte_cap_mb: u32,
-
-    /// Screenshot cadence in physics frames (the visual-storyboards capture clock).
-    #[serde(default = "default_screenshot_interval_frames")]
-    pub dashcam_screenshot_interval_frames: u32,
-    #[serde(default = "default_screenshot_quality")]
-    pub dashcam_screenshot_quality: f32,
-    #[serde(default = "default_screenshot_max_dimension")]
-    pub dashcam_screenshot_max_dimension: u32,
-    #[serde(default = "default_screenshot_byte_cap_mb")]
-    pub dashcam_screenshot_byte_cap_mb: u32,
-    #[serde(default = "default_dense_burst_enabled")]
-    pub dashcam_dense_burst_enabled: bool,
-    #[serde(default = "default_dense_burst_interval_frames")]
-    pub dashcam_dense_burst_interval_frames: u32,
-    #[serde(default = "default_dense_burst_duration_sec")]
-    pub dashcam_dense_burst_duration_sec: u32,
-    #[serde(default = "default_anomaly_enabled")]
-    pub dashcam_anomaly_enabled: bool,
-    #[serde(default = "default_anomaly_min")]
-    pub dashcam_anomaly_min_proportion: f64,
-    #[serde(default = "default_anomaly_relative")]
-    pub dashcam_anomaly_relative_factor: f64,
-    #[serde(default = "default_anomaly_sustained")]
-    pub dashcam_anomaly_sustained_frames: u32,
-    #[serde(default = "default_anomaly_cooldown")]
-    pub dashcam_anomaly_cooldown_sec: u32,
-    #[serde(default = "default_anomaly_noise")]
-    pub dashcam_anomaly_noise_floor: u8,
-
-    /// True when the project's stage.toml actually contains a `[dashcam]`
-    /// section. The post-handshake config push only happens when explicit —
-    /// otherwise every one-shot CLI connection would clobber runtime config
-    /// applied via `clips(config)` with built-in defaults.
-    #[serde(skip)]
-    pub dashcam_explicit: bool,
 }
 
 fn default_poll_interval() -> u32 {
@@ -126,76 +60,6 @@ fn default_poll_interval() -> u32 {
 fn default_token_hard_cap() -> u32 {
     5000
 }
-fn default_dashcam_enabled() -> bool {
-    true
-}
-fn default_dashcam_capture_interval() -> u32 {
-    1
-}
-fn default_pre_window_system() -> u32 {
-    30
-}
-fn default_pre_window_deliberate() -> u32 {
-    60
-}
-fn default_post_window_system() -> u32 {
-    10
-}
-fn default_post_window_deliberate() -> u32 {
-    30
-}
-fn default_max_window() -> u32 {
-    120
-}
-fn default_min_after() -> u32 {
-    5
-}
-fn default_system_min_interval() -> u32 {
-    2
-}
-fn default_byte_cap_mb() -> u32 {
-    1024
-}
-fn default_screenshot_interval_frames() -> u32 {
-    4
-}
-fn default_screenshot_quality() -> f32 {
-    0.65
-}
-fn default_screenshot_max_dimension() -> u32 {
-    480
-}
-fn default_screenshot_byte_cap_mb() -> u32 {
-    32
-}
-fn default_dense_burst_enabled() -> bool {
-    false
-}
-fn default_dense_burst_interval_frames() -> u32 {
-    2
-}
-fn default_dense_burst_duration_sec() -> u32 {
-    15
-}
-fn default_anomaly_enabled() -> bool {
-    true
-}
-fn default_anomaly_min() -> f64 {
-    0.30
-}
-fn default_anomaly_relative() -> f64 {
-    4.0
-}
-fn default_anomaly_sustained() -> u32 {
-    4
-}
-fn default_anomaly_cooldown() -> u32 {
-    30
-}
-fn default_anomaly_noise() -> u8 {
-    24
-}
-
 impl Default for SessionConfig {
     fn default() -> Self {
         Self {
@@ -206,30 +70,6 @@ impl Default for SessionConfig {
             expose_internals: false,
             poll_interval: default_poll_interval(),
             token_hard_cap: default_token_hard_cap(),
-            dashcam_enabled: default_dashcam_enabled(),
-            dashcam_capture_interval: default_dashcam_capture_interval(),
-            dashcam_pre_window_system_sec: default_pre_window_system(),
-            dashcam_pre_window_deliberate_sec: default_pre_window_deliberate(),
-            dashcam_post_window_system_sec: default_post_window_system(),
-            dashcam_post_window_deliberate_sec: default_post_window_deliberate(),
-            dashcam_max_window_sec: default_max_window(),
-            dashcam_min_after_sec: default_min_after(),
-            dashcam_system_min_interval_sec: default_system_min_interval(),
-            dashcam_byte_cap_mb: default_byte_cap_mb(),
-            dashcam_screenshot_interval_frames: default_screenshot_interval_frames(),
-            dashcam_screenshot_quality: default_screenshot_quality(),
-            dashcam_screenshot_max_dimension: default_screenshot_max_dimension(),
-            dashcam_screenshot_byte_cap_mb: default_screenshot_byte_cap_mb(),
-            dashcam_dense_burst_enabled: default_dense_burst_enabled(),
-            dashcam_dense_burst_interval_frames: default_dense_burst_interval_frames(),
-            dashcam_dense_burst_duration_sec: default_dense_burst_duration_sec(),
-            dashcam_anomaly_enabled: default_anomaly_enabled(),
-            dashcam_anomaly_min_proportion: default_anomaly_min(),
-            dashcam_anomaly_relative_factor: default_anomaly_relative(),
-            dashcam_anomaly_sustained_frames: default_anomaly_sustained(),
-            dashcam_anomaly_cooldown_sec: default_anomaly_cooldown(),
-            dashcam_anomaly_noise_floor: default_anomaly_noise(),
-            dashcam_explicit: false,
         }
     }
 }
@@ -258,75 +98,6 @@ impl SessionConfig {
         }
         if let Some(v) = update.token_hard_cap {
             self.token_hard_cap = v;
-        }
-        if let Some(v) = update.dashcam_enabled {
-            self.dashcam_enabled = v;
-        }
-        if let Some(v) = update.dashcam_capture_interval {
-            self.dashcam_capture_interval = v;
-        }
-        if let Some(v) = update.dashcam_pre_window_system_sec {
-            self.dashcam_pre_window_system_sec = v;
-        }
-        if let Some(v) = update.dashcam_pre_window_deliberate_sec {
-            self.dashcam_pre_window_deliberate_sec = v;
-        }
-        if let Some(v) = update.dashcam_post_window_system_sec {
-            self.dashcam_post_window_system_sec = v;
-        }
-        if let Some(v) = update.dashcam_post_window_deliberate_sec {
-            self.dashcam_post_window_deliberate_sec = v;
-        }
-        if let Some(v) = update.dashcam_max_window_sec {
-            self.dashcam_max_window_sec = v;
-        }
-        if let Some(v) = update.dashcam_min_after_sec {
-            self.dashcam_min_after_sec = v;
-        }
-        if let Some(v) = update.dashcam_system_min_interval_sec {
-            self.dashcam_system_min_interval_sec = v;
-        }
-        if let Some(v) = update.dashcam_byte_cap_mb {
-            self.dashcam_byte_cap_mb = v;
-        }
-        if let Some(v) = update.dashcam_screenshot_interval_frames {
-            self.dashcam_screenshot_interval_frames = v;
-        }
-        if let Some(v) = update.dashcam_screenshot_quality {
-            self.dashcam_screenshot_quality = v;
-        }
-        if let Some(v) = update.dashcam_screenshot_max_dimension {
-            self.dashcam_screenshot_max_dimension = v;
-        }
-        if let Some(v) = update.dashcam_screenshot_byte_cap_mb {
-            self.dashcam_screenshot_byte_cap_mb = v;
-        }
-        if let Some(v) = update.dashcam_dense_burst_enabled {
-            self.dashcam_dense_burst_enabled = v;
-        }
-        if let Some(v) = update.dashcam_dense_burst_interval_frames {
-            self.dashcam_dense_burst_interval_frames = v;
-        }
-        if let Some(v) = update.dashcam_dense_burst_duration_sec {
-            self.dashcam_dense_burst_duration_sec = v;
-        }
-        if let Some(v) = update.dashcam_anomaly_enabled {
-            self.dashcam_anomaly_enabled = v;
-        }
-        if let Some(v) = update.dashcam_anomaly_min_proportion {
-            self.dashcam_anomaly_min_proportion = v;
-        }
-        if let Some(v) = update.dashcam_anomaly_relative_factor {
-            self.dashcam_anomaly_relative_factor = v;
-        }
-        if let Some(v) = update.dashcam_anomaly_sustained_frames {
-            self.dashcam_anomaly_sustained_frames = v;
-        }
-        if let Some(v) = update.dashcam_anomaly_cooldown_sec {
-            self.dashcam_anomaly_cooldown_sec = v;
-        }
-        if let Some(v) = update.dashcam_anomaly_noise_floor {
-            self.dashcam_anomaly_noise_floor = v;
         }
     }
 
@@ -390,31 +161,6 @@ pub struct ConfigUpdate {
     pub expose_internals: Option<bool>,
     pub poll_interval: Option<u32>,
     pub token_hard_cap: Option<u32>,
-
-    // Dashcam config overrides (M11)
-    pub dashcam_enabled: Option<bool>,
-    pub dashcam_capture_interval: Option<u32>,
-    pub dashcam_pre_window_system_sec: Option<u32>,
-    pub dashcam_pre_window_deliberate_sec: Option<u32>,
-    pub dashcam_post_window_system_sec: Option<u32>,
-    pub dashcam_post_window_deliberate_sec: Option<u32>,
-    pub dashcam_max_window_sec: Option<u32>,
-    pub dashcam_min_after_sec: Option<u32>,
-    pub dashcam_system_min_interval_sec: Option<u32>,
-    pub dashcam_byte_cap_mb: Option<u32>,
-    pub dashcam_screenshot_interval_frames: Option<u32>,
-    pub dashcam_screenshot_quality: Option<f32>,
-    pub dashcam_screenshot_max_dimension: Option<u32>,
-    pub dashcam_screenshot_byte_cap_mb: Option<u32>,
-    pub dashcam_dense_burst_enabled: Option<bool>,
-    pub dashcam_dense_burst_interval_frames: Option<u32>,
-    pub dashcam_dense_burst_duration_sec: Option<u32>,
-    pub dashcam_anomaly_enabled: Option<bool>,
-    pub dashcam_anomaly_min_proportion: Option<f64>,
-    pub dashcam_anomaly_relative_factor: Option<f64>,
-    pub dashcam_anomaly_sustained_frames: Option<u32>,
-    pub dashcam_anomaly_cooldown_sec: Option<u32>,
-    pub dashcam_anomaly_noise_floor: Option<u8>,
 }
 
 /// Simple glob matching for static patterns.

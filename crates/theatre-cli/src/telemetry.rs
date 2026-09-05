@@ -20,8 +20,12 @@ const GA_ENDPOINT: &str = "https://www.google-analytics.com/mp/collect";
 
 /// Returns `true` if telemetry is disabled by environment variables.
 fn is_opted_out() -> bool {
+    opted_out_from(|name| std::env::var(name).ok())
+}
+
+fn opted_out_from(lookup: impl Fn(&str) -> Option<String>) -> bool {
     for var in ["DO_NOT_TRACK", "THEATRE_NO_TELEMETRY", "CI"] {
-        if let Ok(val) = std::env::var(var) {
+        if let Some(val) = lookup(var) {
             let v = val.trim().to_lowercase();
             if v == "1" || v == "true" || v == "yes" {
                 return true;
@@ -90,47 +94,28 @@ fn send_install_event() -> Result<(), Box<dyn std::error::Error>> {
 mod tests {
     use super::*;
 
-    // SAFETY: These tests manipulate env vars which is unsafe in Rust 2024.
-    // Each test runs in its own process via `cargo test`, and these env vars
-    // are not read by other threads during the test.
-
     #[test]
-    fn opted_out_with_do_not_track() {
-        unsafe { std::env::set_var("DO_NOT_TRACK", "1") };
-        assert!(is_opted_out());
-        unsafe { std::env::remove_var("DO_NOT_TRACK") };
-    }
-
-    #[test]
-    fn opted_out_with_theatre_env() {
-        unsafe { std::env::set_var("THEATRE_NO_TELEMETRY", "true") };
-        assert!(is_opted_out());
-        unsafe { std::env::remove_var("THEATRE_NO_TELEMETRY") };
-    }
-
-    #[test]
-    fn opted_out_with_ci() {
-        unsafe { std::env::set_var("CI", "true") };
-        assert!(is_opted_out());
-        unsafe { std::env::remove_var("CI") };
-    }
-
-    #[test]
-    fn not_opted_out_by_default() {
-        let saved: Vec<_> = ["DO_NOT_TRACK", "THEATRE_NO_TELEMETRY", "CI"]
-            .iter()
-            .map(|k| (*k, std::env::var(k).ok()))
-            .collect();
-        for (k, _) in &saved {
-            unsafe { std::env::remove_var(k) };
-        }
-
-        assert!(!is_opted_out());
-
-        for (k, v) in saved {
-            if let Some(val) = v {
-                unsafe { std::env::set_var(k, val) };
+    fn recognized_opt_out_values_are_checked_for_each_environment_key() {
+        for key in ["DO_NOT_TRACK", "THEATRE_NO_TELEMETRY", "CI"] {
+            for (value, expected) in [
+                ("1", true),
+                (" true ", true),
+                ("YES", true),
+                ("0", false),
+                ("false", false),
+                ("", false),
+            ] {
+                assert_eq!(
+                    opted_out_from(|name| (name == key).then(|| value.to_owned())),
+                    expected,
+                    "{key}={value}"
+                );
             }
         }
+    }
+
+    #[test]
+    fn not_opted_out_without_environment_configuration() {
+        assert!(!opted_out_from(|_| None));
     }
 }

@@ -38,13 +38,17 @@ fn attach_output_schema<T: JsonSchema + 'static>(
     }
 }
 
-/// Post-process all tool schemas in the router, replacing bare `true` schema
-/// values with `{}` for MCP client compatibility.
+/// Normalize input and output schemas for strict JSON Schema MCP clients.
 fn sanitize_schemas(router: &mut ToolRouter<DirectorServer>) {
     for route in router.map.values_mut() {
+        let mut input = serde_json::Value::Object(route.attr.input_schema.as_ref().clone());
+        stage_protocol::mcp_helpers::normalize_mcp_schema(&mut input);
+        if let serde_json::Value::Object(map) = input {
+            route.attr.input_schema = std::sync::Arc::new(map);
+        }
         if let Some(ref schema) = route.attr.output_schema {
             let mut value = serde_json::Value::Object(schema.as_ref().clone());
-            stage_protocol::mcp_helpers::replace_bool_schemas(&mut value);
+            stage_protocol::mcp_helpers::normalize_mcp_schema(&mut value);
             if let serde_json::Value::Object(map) = value {
                 route.attr.output_schema = Some(Arc::new(map));
             }

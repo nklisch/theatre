@@ -1876,14 +1876,7 @@ impl StageCollector {
         };
 
         if matches {
-            let mut info = self.node_info(node, include);
-            if let serde_json::Value::Object(ref mut map) = info {
-                map.insert(
-                    "path".to_string(),
-                    serde_json::Value::String(self.get_relative_path(node)),
-                );
-            }
-            results.push(info);
+            results.push(self.node_info(node, include));
         }
 
         let count = node.get_child_count();
@@ -1899,6 +1892,12 @@ impl StageCollector {
         let mut info = serde_json::Map::new();
         let name = node.get_name().to_string();
         info.insert("name".to_string(), serde_json::json!(name));
+        // Discovery includes scene roots and autoload siblings. Absolute paths
+        // remain reusable without assuming the current scene is their parent.
+        info.insert(
+            "path".to_string(),
+            serde_json::json!(node.get_path().to_string()),
+        );
 
         for inc in include {
             match inc {

@@ -518,11 +518,11 @@ impl StageServer {
     pub async fn runtime_diagnostics(
         &self,
         Parameters(params): Parameters<runtime_diagnostics::RuntimeDiagnosticsParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         let result = runtime_diagnostics::handle_runtime_diagnostics(params, &self.state).await;
         self.log_activity("query", "Runtime diagnostics", "runtime_diagnostics")
             .await;
-        result
+        result.and_then(stage_protocol::mcp_helpers::structured_json)
     }
 
     #[tool(
@@ -531,11 +531,11 @@ impl StageServer {
     pub async fn runtime_status(
         &self,
         Parameters(params): Parameters<runtime_status::RuntimeStatusParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         let result = runtime_status::handle_runtime_status(params, &self.state).await;
         self.log_activity("query", "Runtime status", "runtime_status")
             .await;
-        result
+        result.and_then(stage_protocol::mcp_helpers::structured_json)
     }
 
     /// Get a spatial snapshot of the current scene from a perspective.
@@ -548,12 +548,12 @@ impl StageServer {
     pub async fn spatial_snapshot(
         &self,
         Parameters(params): Parameters<SpatialSnapshotParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         let activity_summary = crate::activity::snapshot_summary(&params);
         let result = handle_snapshot(params, &self.state).await;
         self.log_activity("query", &activity_summary, "spatial_snapshot")
             .await;
-        result
+        result.and_then(stage_protocol::mcp_helpers::structured_json)
     }
 
     /// Deep inspection of a single node — transform, physics, state, children,
@@ -565,12 +565,12 @@ impl StageServer {
     pub async fn spatial_inspect(
         &self,
         Parameters(params): Parameters<SpatialInspectParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         let activity_summary = crate::activity::inspect_summary(&params.node);
         let result = handle_inspect(params, &self.state).await;
         self.log_activity("query", &activity_summary, "spatial_inspect")
             .await;
-        result
+        result.and_then(stage_protocol::mcp_helpers::structured_json)
     }
 
     /// Navigate and query the Godot scene tree structure. Not spatial — this is
@@ -581,12 +581,12 @@ impl StageServer {
     pub async fn scene_tree(
         &self,
         Parameters(params): Parameters<SceneTreeToolParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         let activity_summary = crate::activity::scene_tree_summary(&params);
         let result = handle_scene_tree(params, &self.state).await;
         self.log_activity("query", &activity_summary, "scene_tree")
             .await;
-        result
+        result.and_then(stage_protocol::mcp_helpers::structured_json)
     }
 
     /// Manipulate game state for debugging. Actions: pause (pause/unpause scene),
@@ -601,12 +601,12 @@ impl StageServer {
     pub async fn spatial_action(
         &self,
         Parameters(params): Parameters<SpatialActionParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         let activity_summary = crate::activity::action_summary(&params);
         let result = handle_action(params, &self.state).await;
         self.log_activity("action", &activity_summary, "spatial_action")
             .await;
-        result
+        result.and_then(stage_protocol::mcp_helpers::structured_json)
     }
 
     /// Targeted spatial questions: nearest nodes, radius search, raycast line-of-sight,
@@ -617,11 +617,11 @@ impl StageServer {
     pub async fn spatial_query(
         &self,
         Parameters(params): Parameters<SpatialQueryParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         let summary = format!("Query: {:?}", params.query_type);
         let result = handle_spatial_query(params, &self.state).await;
         self.log_activity("query", &summary, "spatial_query").await;
-        result
+        result.and_then(stage_protocol::mcp_helpers::structured_json)
     }
 
     /// See what changed since the last query. Returns moved entities, state
@@ -632,11 +632,11 @@ impl StageServer {
     pub async fn spatial_delta(
         &self,
         Parameters(params): Parameters<SpatialDeltaParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         let result = delta::handle_spatial_delta(params, &self.state).await;
         self.log_activity("query", &crate::activity::delta_summary(), "spatial_delta")
             .await;
-        result
+        result.and_then(stage_protocol::mcp_helpers::structured_json)
     }
 
     /// Subscribe to changes on nodes or groups with optional conditions.
@@ -647,7 +647,7 @@ impl StageServer {
     pub async fn spatial_watch(
         &self,
         Parameters(params): Parameters<SpatialWatchParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         let summary = crate::activity::watch_summary(&params);
         let result = watch::handle_spatial_watch(params, &self.state).await;
         let active_watches = self.state.lock().await.watch_engine.list().len() as u64;
@@ -658,7 +658,7 @@ impl StageServer {
             Some(serde_json::json!({ "active_watches": active_watches })),
         )
         .await;
-        result
+        result.and_then(stage_protocol::mcp_helpers::structured_json)
     }
 
     /// Configure tracking behavior — static patterns, state properties,
@@ -670,12 +670,12 @@ impl StageServer {
     pub async fn spatial_config(
         &self,
         Parameters(params): Parameters<SpatialConfigParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         let summary = crate::activity::config_summary(&params);
         let result = handle_spatial_config(params, &self.state).await;
         self.log_activity("config", &summary, "spatial_config")
             .await;
-        result
+        result.and_then(stage_protocol::mcp_helpers::structured_json)
     }
 
     /// Capture and analyze gameplay clips. Clips are saved automatically when you

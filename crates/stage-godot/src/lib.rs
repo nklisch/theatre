@@ -2,6 +2,7 @@ use godot::prelude::*;
 
 mod action_handler;
 mod collector;
+mod movement_capture;
 mod query_handler;
 mod recorder;
 mod recording_handler;

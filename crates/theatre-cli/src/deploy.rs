@@ -128,7 +128,7 @@ fn build_and_update_share(
         )
     })?;
     let gdext_dst = gdext_platform_dir.join(gdext_filename());
-    std::fs::copy(&gdext_src, &gdext_dst).with_context(|| {
+    crate::paths::copy_native_payload(&gdext_src, &gdext_dst).with_context(|| {
         format!(
             "Failed to copy GDExtension from {} to {}",
             gdext_src.display(),
@@ -164,7 +164,7 @@ fn build_and_update_share(
         let src = source.built_executable(bin_name, release);
         let dst = theatre.executable(bin_name);
         if theatre.bin_dir.exists() {
-            std::fs::copy(&src, &dst).with_context(|| {
+            crate::paths::copy_native_payload(&src, &dst).with_context(|| {
                 format!("Failed to copy {} to {}", src.display(), dst.display())
             })?;
             eprintln!("  {} Updated {bin_name} in bin dir", style("✓").green());
@@ -225,7 +225,7 @@ fn deploy_to_project(
         copy_dir_recursive(
             &theatre.addon_source().join("stage"),
             &stage_project_dst,
-            &|_| false,
+            &|p| p.file_name().map(|name| name == "bin").unwrap_or(false),
         )
         .with_context(|| {
             format!(
@@ -298,7 +298,7 @@ fn copy_gdextension(gdext_src: &Path, stage_dst: &Path, project: &Path) -> Resul
         return Ok(false);
     }
 
-    std::fs::copy(gdext_src, &gdext_dst).with_context(|| {
+    crate::paths::copy_native_payload(gdext_src, &gdext_dst).with_context(|| {
         format!(
             "Failed to copy GDExtension to project: {}",
             project.display()

@@ -50,7 +50,7 @@ use shader::VisualShaderCreateParams;
 use signal::{SignalConnectParams, SignalDisconnectParams, SignalListParams};
 use tilemap::{TileMapClearParams, TileMapGetCellsParams, TileMapSetCellsParams};
 
-use stage_protocol::mcp_helpers::{deserialize_response, serialize_params, serialize_response};
+use stage_protocol::mcp_helpers::{deserialize_response, serialize_params, structured_response};
 
 use crate::responses::{
     AnimationAddTrackResponse, AnimationCreateResponse, AnimationReadResponse,
@@ -76,7 +76,7 @@ macro_rules! director_tool {
         let op_params = serialize_params(&$params)?;
         let data = run_operation(&$self.backend, &$params.project_path, $op, &op_params).await?;
         let typed: $resp = deserialize_response(data)?;
-        serialize_response(&typed)
+        structured_response(&typed)
     }};
 }
 
@@ -123,7 +123,7 @@ impl DirectorServer {
     pub async fn scene_save(
         &self,
         Parameters(params): Parameters<SceneSaveParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "scene_save", SceneSaveResponse)
     }
 
@@ -136,7 +136,7 @@ impl DirectorServer {
     pub async fn scene_create(
         &self,
         Parameters(params): Parameters<SceneCreateParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "scene_create", SceneCreateResponse)
     }
 
@@ -149,7 +149,7 @@ impl DirectorServer {
     pub async fn scene_read(
         &self,
         Parameters(params): Parameters<SceneReadParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "scene_read", SceneReadResponse)
     }
 
@@ -162,7 +162,7 @@ impl DirectorServer {
     pub async fn node_add(
         &self,
         Parameters(params): Parameters<NodeAddParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "node_add", NodeAddResponse)
     }
 
@@ -175,7 +175,7 @@ impl DirectorServer {
     pub async fn node_set_properties(
         &self,
         Parameters(params): Parameters<NodeSetPropertiesParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(
             self,
             params,
@@ -192,7 +192,7 @@ impl DirectorServer {
     pub async fn node_remove(
         &self,
         Parameters(params): Parameters<NodeRemoveParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "node_remove", NodeRemoveResponse)
     }
 
@@ -204,7 +204,7 @@ impl DirectorServer {
     pub async fn scene_list(
         &self,
         Parameters(params): Parameters<SceneListParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "scene_list", SceneListResponse)
     }
 
@@ -217,7 +217,7 @@ impl DirectorServer {
     pub async fn scene_add_instance(
         &self,
         Parameters(params): Parameters<SceneAddInstanceParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "scene_add_instance", SceneAddInstanceResponse)
     }
 
@@ -230,7 +230,7 @@ impl DirectorServer {
     pub async fn node_reparent(
         &self,
         Parameters(params): Parameters<NodeReparentParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "node_reparent", NodeReparentResponse)
     }
 
@@ -244,7 +244,7 @@ impl DirectorServer {
     pub async fn engine_api(
         &self,
         Parameters(params): Parameters<EngineApiParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "engine_api", EngineApiResponse)
     }
 
@@ -257,7 +257,7 @@ impl DirectorServer {
     pub async fn resource_read(
         &self,
         Parameters(params): Parameters<ResourceReadParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "resource_read", ResourceReadResponse)
     }
 
@@ -270,7 +270,7 @@ impl DirectorServer {
     pub async fn material_create(
         &self,
         Parameters(params): Parameters<MaterialCreateParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "material_create", ResourceCreateResponse)
     }
 
@@ -284,7 +284,7 @@ impl DirectorServer {
     pub async fn shape_create(
         &self,
         Parameters(params): Parameters<ShapeCreateParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "shape_create", ShapeCreateResponse)
     }
 
@@ -297,7 +297,7 @@ impl DirectorServer {
     pub async fn style_box_create(
         &self,
         Parameters(params): Parameters<StyleBoxCreateParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "style_box_create", ResourceCreateResponse)
     }
 
@@ -309,7 +309,7 @@ impl DirectorServer {
     pub async fn resource_duplicate(
         &self,
         Parameters(params): Parameters<ResourceDuplicateParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(
             self,
             params,
@@ -327,7 +327,7 @@ impl DirectorServer {
     pub async fn tilemap_set_cells(
         &self,
         Parameters(params): Parameters<TileMapSetCellsParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "tilemap_set_cells", TileMapSetCellsResponse)
     }
 
@@ -340,7 +340,7 @@ impl DirectorServer {
     pub async fn tilemap_get_cells(
         &self,
         Parameters(params): Parameters<TileMapGetCellsParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "tilemap_get_cells", TileMapGetCellsResponse)
     }
 
@@ -352,7 +352,7 @@ impl DirectorServer {
     pub async fn tilemap_clear(
         &self,
         Parameters(params): Parameters<TileMapClearParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "tilemap_clear", TileMapClearResponse)
     }
 
@@ -365,7 +365,7 @@ impl DirectorServer {
     pub async fn gridmap_set_cells(
         &self,
         Parameters(params): Parameters<GridMapSetCellsParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "gridmap_set_cells", GridMapSetCellsResponse)
     }
 
@@ -377,7 +377,7 @@ impl DirectorServer {
     pub async fn gridmap_get_cells(
         &self,
         Parameters(params): Parameters<GridMapGetCellsParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "gridmap_get_cells", GridMapGetCellsResponse)
     }
 
@@ -389,7 +389,7 @@ impl DirectorServer {
     pub async fn gridmap_clear(
         &self,
         Parameters(params): Parameters<GridMapClearParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "gridmap_clear", GridMapClearResponse)
     }
 
@@ -402,7 +402,7 @@ impl DirectorServer {
     pub async fn animation_create(
         &self,
         Parameters(params): Parameters<AnimationCreateParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "animation_create", AnimationCreateResponse)
     }
 
@@ -416,7 +416,7 @@ impl DirectorServer {
     pub async fn animation_add_track(
         &self,
         Parameters(params): Parameters<AnimationAddTrackParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(
             self,
             params,
@@ -434,7 +434,7 @@ impl DirectorServer {
     pub async fn animation_read(
         &self,
         Parameters(params): Parameters<AnimationReadParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "animation_read", AnimationReadResponse)
     }
 
@@ -447,7 +447,7 @@ impl DirectorServer {
     pub async fn animation_remove_track(
         &self,
         Parameters(params): Parameters<AnimationRemoveTrackParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(
             self,
             params,
@@ -466,7 +466,7 @@ impl DirectorServer {
     pub async fn physics_set_layers(
         &self,
         Parameters(params): Parameters<PhysicsSetLayersParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "physics_set_layers", PhysicsSetLayersResponse)
     }
 
@@ -480,7 +480,7 @@ impl DirectorServer {
     pub async fn physics_set_layer_names(
         &self,
         Parameters(params): Parameters<PhysicsSetLayerNamesParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(
             self,
             params,
@@ -502,7 +502,7 @@ impl DirectorServer {
     pub async fn visual_shader_create(
         &self,
         Parameters(params): Parameters<VisualShaderCreateParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(
             self,
             params,
@@ -523,7 +523,7 @@ impl DirectorServer {
     pub async fn batch(
         &self,
         Parameters(params): Parameters<BatchParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "batch", BatchResponse)
     }
 
@@ -536,7 +536,7 @@ impl DirectorServer {
     pub async fn scene_diff(
         &self,
         Parameters(params): Parameters<SceneDiffParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "scene_diff", SceneDiffResponse)
     }
 
@@ -550,7 +550,7 @@ impl DirectorServer {
     pub async fn autoload_add(
         &self,
         Parameters(params): Parameters<AutoloadAddParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "autoload_add", AutoloadAddResponse)
     }
 
@@ -562,7 +562,7 @@ impl DirectorServer {
     pub async fn autoload_remove(
         &self,
         Parameters(params): Parameters<AutoloadRemoveParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "autoload_remove", AutoloadRemoveResponse)
     }
 
@@ -580,7 +580,7 @@ impl DirectorServer {
     pub async fn project_settings_set(
         &self,
         Parameters(params): Parameters<ProjectSettingsSetParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(
             self,
             params,
@@ -601,7 +601,7 @@ impl DirectorServer {
     pub async fn project_reload(
         &self,
         Parameters(params): Parameters<ProjectReloadParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         use crate::diagnostics::parse_godot_stderr;
         use crate::oneshot::run_validation;
 
@@ -642,7 +642,7 @@ impl DirectorServer {
             .cloned()
             .unwrap_or(serde_json::Value::Object(Default::default()));
 
-        serialize_response(&ProjectReloadResponse {
+        structured_response(&ProjectReloadResponse {
             result: "ok".to_string(),
             scripts_checked,
             autoloads,
@@ -658,9 +658,9 @@ impl DirectorServer {
     pub async fn editor_run(
         &self,
         Parameters(params): Parameters<EditorRunParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         let response: EditorRunResponse = editor_run::run_editor(&self.backend, &params).await?;
-        serialize_response(&response)
+        structured_response(&response)
     }
 
     #[tool(
@@ -676,7 +676,7 @@ impl DirectorServer {
     pub async fn editor_status(
         &self,
         Parameters(params): Parameters<EditorStatusParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         let op_params = serialize_params(&params)?;
         let data = run_operation(
             &self.backend,
@@ -703,7 +703,7 @@ impl DirectorServer {
             .cloned()
             .collect();
 
-        serialize_response(&EditorStatusResponse {
+        structured_response(&EditorStatusResponse {
             project_path: raw.project_path,
             process_id: raw.process_id,
             editor_connected: raw.editor_connected,
@@ -726,7 +726,7 @@ impl DirectorServer {
     pub async fn uid_get(
         &self,
         Parameters(params): Parameters<UidGetParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "uid_get", UidGetResponse)
     }
 
@@ -739,7 +739,7 @@ impl DirectorServer {
     pub async fn uid_update_project(
         &self,
         Parameters(params): Parameters<UidUpdateProjectParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "uid_update_project", UidUpdateProjectResponse)
     }
 
@@ -753,7 +753,7 @@ impl DirectorServer {
     pub async fn export_mesh_library(
         &self,
         Parameters(params): Parameters<ExportMeshLibraryParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(
             self,
             params,
@@ -771,7 +771,7 @@ impl DirectorServer {
     pub async fn signal_connect(
         &self,
         Parameters(params): Parameters<SignalConnectParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "signal_connect", SignalConnectionResponse)
     }
 
@@ -783,7 +783,7 @@ impl DirectorServer {
     pub async fn signal_disconnect(
         &self,
         Parameters(params): Parameters<SignalDisconnectParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "signal_disconnect", SignalConnectionResponse)
     }
 
@@ -796,7 +796,7 @@ impl DirectorServer {
     pub async fn signal_list(
         &self,
         Parameters(params): Parameters<SignalListParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "signal_list", SignalListResponse)
     }
 
@@ -810,7 +810,7 @@ impl DirectorServer {
     pub async fn node_set_groups(
         &self,
         Parameters(params): Parameters<NodeSetGroupsParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "node_set_groups", NodeSetGroupsResponse)
     }
 
@@ -824,7 +824,7 @@ impl DirectorServer {
     pub async fn node_set_script(
         &self,
         Parameters(params): Parameters<NodeSetScriptParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "node_set_script", NodeSetScriptResponse)
     }
 
@@ -838,7 +838,7 @@ impl DirectorServer {
     pub async fn node_set_meta(
         &self,
         Parameters(params): Parameters<NodeSetMetaParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "node_set_meta", NodeSetMetaResponse)
     }
 
@@ -851,7 +851,7 @@ impl DirectorServer {
     pub async fn node_find(
         &self,
         Parameters(params): Parameters<NodeFindParams>,
-    ) -> Result<String, McpError> {
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
         director_tool!(self, params, "node_find", NodeFindResponse)
     }
 }

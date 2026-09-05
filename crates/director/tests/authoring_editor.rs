@@ -252,7 +252,7 @@ impl Fixture {
         self.server
             .batch(Parameters(params))
             .await
-            .map(|s| serde_json::from_str(&s).unwrap())
+            .map(|result| result.structured_content.unwrap())
     }
     async fn editor_run(&self, action: EditorRunAction, scene_path: Option<&str>) -> Value {
         let result = self
@@ -264,7 +264,7 @@ impl Fixture {
             }))
             .await
             .unwrap_or_else(|e| panic!("{}: {}", e.message, self.log()));
-        serde_json::from_str(&result).unwrap()
+        result.structured_content.unwrap()
     }
 }
 
@@ -574,8 +574,13 @@ async fn authoring_preserves_human_history_and_selected_scene_persistence() {
     let save_params =
         serde_json::from_value(json!({"project_path":f.project.path(),"scene_path":"a.tscn"}))
             .unwrap();
-    let saved: Value =
-        serde_json::from_str(&f.server.scene_save(Parameters(save_params)).await.unwrap()).unwrap();
+    let saved: Value = f
+        .server
+        .scene_save(Parameters(save_params))
+        .await
+        .unwrap()
+        .structured_content
+        .unwrap();
     assert_eq!(saved["persistence"]["saved_paths"], json!(["a.tscn"]));
     assert_eq!(saved["editor_dirty_marker_may_remain"], true);
     assert_eq!(f.inspect("Human/Unowned").await["owner_id"], 0);

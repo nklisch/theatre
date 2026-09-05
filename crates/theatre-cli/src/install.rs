@@ -80,7 +80,7 @@ pub fn run(args: InstallArgs) -> Result<()> {
         let src = source.built_executable(bin_name, true);
         let filename = executable_filename(bin_name);
         let dst = bin_dir.join(&filename);
-        std::fs::copy(&src, &dst)
+        crate::paths::copy_native_payload(&src, &dst)
             .with_context(|| format!("Failed to copy {} to {}", src.display(), dst.display()))?;
         eprintln!("  {} {filename}", style("✓").green());
     }
@@ -113,7 +113,7 @@ pub fn run(args: InstallArgs) -> Result<()> {
         )
     })?;
     let gdext_dst = gdext_platform_dir.join(gdext_filename());
-    std::fs::copy(&gdext_src, &gdext_dst).with_context(|| {
+    crate::paths::copy_native_payload(&gdext_src, &gdext_dst).with_context(|| {
         format!(
             "Failed to copy GDExtension from {} to {}",
             gdext_src.display(),

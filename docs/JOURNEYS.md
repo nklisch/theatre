@@ -91,11 +91,20 @@ Actions are debugging controls, not persistence. They can invoke arbitrary node 
 
 ## Record and analyze
 
-Stage's dashcam buffers spatial frames while active and can also buffer rendered screenshots when a graphical runtime permits capture. It is not a start/stop recording API:
+Stage's dashcam keeps a rolling history while enabled and can also retain
+rendered screenshots. Start/Stop controls whether that history is collected;
+Mark and Save now decide when to retain a clip.
 
-1. Check `clips` status to confirm dashcam state and capture health.
-2. Mark a moment with an agent marker, a human marker, or a game-code marker, or force-save the current buffer.
-3. Select the resulting clip explicitly when more than one exists; otherwise analysis defaults to the most recent clip.
+1. Check the native capture controls or `clips` status. Confirm recording is
+   enabled and inspect actual buffered coverage, not only the configured window.
+2. Choose sampling settings if needed, then explicitly Start recording. Presets
+   do not enable it. Mark retains the configured post-window—the time collected
+   after the marker. Save now closes the available window immediately. Stopping
+   a pending capture saves the available portion rather than waiting for the
+   rest of its post-window.
+3. Wait for the saved acknowledgement and copy the clip reference from the
+   controls. Match its run and note the scene at save when several clips exist; do not assume an
+   old clip belongs to the current game merely because it is listed.
 4. Use markers to locate the investigation window.
 5. Use `snapshot_at` for state at a frame, `trajectory` for a node's time series, `query_range` for conditions, `diff_frames` for before/after comparison, and `find_event` for recorded events.
 6. Use `screenshot_at` or a deterministic `visual_artifact` when visual evidence is useful and screenshots were captured.
@@ -104,6 +113,24 @@ Stage's dashcam buffers spatial frames while active and can also buffer rendered
 The addon owns capture buffers and writes clip SQLite files under its configured user storage. The server reads those files for analysis. Spatial clip data can exist in headless runs; rendered screenshots require a usable graphical display and capture path.
 
 Markers have different origins and trigger tiers. Code markers can be deliberate, system, or silent; silent markers annotate without triggering a clip. System anomaly capture is rate-limited. The relevant capture configuration and status are part of the `clips` contract rather than this workflow overview.
+
+The native controls show the configured marker shortcut. Their corner or hidden
+placement is set by `theatre/stage/display/capture_controls`; hiding them does
+not disable shortcuts. Human marker confirmations remain available when agent
+notifications are disabled. Share note + still opens the separate feedback
+composer; it does not mark or save a dashcam clip.
+
+After a successful save, Godot leaves a project-local hint to its resolved clip
+storage. A fresh CLI or MCP process can use that hint for saved analysis after
+the game closes. If storage has moved, restore or update the hint to its known location, or
+reconnect to resolve it. Live capture controls still need the game.
+
+Lightweight and Detailed are relative sampling choices, not frame-time promises.
+Inspect pacing, readback cost and gaps in `clips` status on the actual project.
+Lower image frequency or dimensions, disable screenshots, or stop recording if
+capture disrupts the behavior being investigated. A full encoding queue is only
+one possible cause of capture overhead; zero queue drops do not prove smooth
+playback.
 
 ## Author with Director
 

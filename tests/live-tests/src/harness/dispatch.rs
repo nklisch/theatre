@@ -28,35 +28,75 @@ pub async fn dispatch_tool_raw(
     match name {
         "spatial_snapshot" => {
             let p = from_value(params)?;
-            server.spatial_snapshot(Parameters(p)).await
+            server.spatial_snapshot(Parameters(p)).await.map(|result| {
+                result
+                    .structured_content
+                    .expect("structured tool response")
+                    .to_string()
+            })
         }
         "spatial_inspect" => {
             let p = from_value(params)?;
-            server.spatial_inspect(Parameters(p)).await
+            server.spatial_inspect(Parameters(p)).await.map(|result| {
+                result
+                    .structured_content
+                    .expect("structured tool response")
+                    .to_string()
+            })
         }
         "scene_tree" => {
             let p = from_value(params)?;
-            server.scene_tree(Parameters(p)).await
+            server.scene_tree(Parameters(p)).await.map(|result| {
+                result
+                    .structured_content
+                    .expect("structured tool response")
+                    .to_string()
+            })
         }
         "spatial_action" => {
             let p = from_value(params)?;
-            server.spatial_action(Parameters(p)).await
+            server.spatial_action(Parameters(p)).await.map(|result| {
+                result
+                    .structured_content
+                    .expect("structured tool response")
+                    .to_string()
+            })
         }
         "spatial_query" => {
             let p = from_value(params)?;
-            server.spatial_query(Parameters(p)).await
+            server.spatial_query(Parameters(p)).await.map(|result| {
+                result
+                    .structured_content
+                    .expect("structured tool response")
+                    .to_string()
+            })
         }
         "spatial_delta" => {
             let p = from_value(params)?;
-            server.spatial_delta(Parameters(p)).await
+            server.spatial_delta(Parameters(p)).await.map(|result| {
+                result
+                    .structured_content
+                    .expect("structured tool response")
+                    .to_string()
+            })
         }
         "spatial_watch" => {
             let p = from_value(params)?;
-            server.spatial_watch(Parameters(p)).await
+            server.spatial_watch(Parameters(p)).await.map(|result| {
+                result
+                    .structured_content
+                    .expect("structured tool response")
+                    .to_string()
+            })
         }
         "spatial_config" => {
             let p = from_value(params)?;
-            server.spatial_config(Parameters(p)).await
+            server.spatial_config(Parameters(p)).await.map(|result| {
+                result
+                    .structured_content
+                    .expect("structured tool response")
+                    .to_string()
+            })
         }
         "clips" => {
             // Preserve image content so dual CLI/MCP journeys can assert the

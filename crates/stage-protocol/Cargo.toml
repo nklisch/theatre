@@ -17,5 +17,5 @@ rmp-serde.workspace = true
 [features]
 default = []
 async = ["tokio"]
-mcp = ["rmcp"]
+mcp = ["rmcp", "schema"]
 schema = ["schemars"]

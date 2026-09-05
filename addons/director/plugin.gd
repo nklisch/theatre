@@ -33,7 +33,8 @@ func _enter_tree() -> void:
 	_port = _resolve_port()
 
 	_server = TCPServer.new()
-	var err = _server.listen(_port)
+	# Authoring operations are unauthenticated and must not accept network peers.
+	var err = _server.listen(_port, "127.0.0.1")
 	if err != OK:
 		printerr("[Director] Failed to listen on port %d (error %d)" % [_port, err])
 		return

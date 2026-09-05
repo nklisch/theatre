@@ -77,14 +77,19 @@ pub fn run(args: InitArgs) -> Result<()> {
 
         std::fs::create_dir_all(args.project.join("addons"))
             .context("Failed to create addons directory")?;
-        copy_dir_recursive(&src, &dst, &|_| false).context("Failed to copy stage addon")?;
+        // Native payloads use sibling replacement below, never truncating a
+        // library which an existing editor or runtime may still have mapped.
+        copy_dir_recursive(&src, &dst, &|p| {
+            p.file_name().map(|name| name == "bin").unwrap_or(false)
+        })
+        .context("Failed to copy stage addon")?;
 
         // Also copy GDExtension binary
         let gdext_src = theatre.gdext_binary();
         let gdext_dst_dir = dst.join("bin").join(platform_dir());
         std::fs::create_dir_all(&gdext_dst_dir)
             .context("Failed to create GDExtension bin dir in project")?;
-        std::fs::copy(&gdext_src, gdext_dst_dir.join(gdext_filename()))
+        crate::paths::copy_native_payload(&gdext_src, &gdext_dst_dir.join(gdext_filename()))
             .with_context(|| format!("Failed to copy GDExtension from {}", gdext_src.display()))?;
 
         eprintln!(

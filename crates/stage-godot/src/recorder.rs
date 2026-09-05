@@ -366,67 +366,7 @@ struct DashcamTrigger {
 /// Max number of pending silent markers. Oldest are evicted when exceeded.
 const MAX_PENDING_SILENT_MARKERS: usize = 1000;
 
-/// Dashcam configuration — all timing in seconds, capture_interval in physics frames.
-pub struct DashcamConfig {
-    pub enabled: bool,
-    pub capture_interval: u32,
-    pub pre_window_system_sec: u32,
-    pub pre_window_deliberate_sec: u32,
-    pub post_window_system_sec: u32,
-    pub post_window_deliberate_sec: u32,
-    pub max_window_sec: u32,
-    pub min_after_sec: u32,
-    pub system_min_interval_sec: u32,
-    pub byte_cap_mb: u32,
-    // Screenshot settings
-    pub screenshot_enabled: bool,
-    pub screenshot_interval_frames: u32,
-    pub screenshot_quality: f32,
-    pub screenshot_max_dimension: u32,
-    pub screenshot_byte_cap_mb: u32,
-    pub screenshot_encode_queue: usize,
-    pub dense_burst_enabled: bool,
-    pub dense_burst_interval_frames: u32,
-    pub dense_burst_duration_sec: u32,
-    pub anomaly_enabled: bool,
-    pub anomaly_min_proportion: f64,
-    pub anomaly_relative_factor: f64,
-    pub anomaly_sustained_frames: u32,
-    pub anomaly_cooldown_sec: u32,
-    pub anomaly_noise_floor: u8,
-}
-
-impl Default for DashcamConfig {
-    fn default() -> Self {
-        Self {
-            enabled: true,
-            capture_interval: 1,
-            pre_window_system_sec: 30,
-            pre_window_deliberate_sec: 60,
-            post_window_system_sec: 10,
-            post_window_deliberate_sec: 30,
-            max_window_sec: 120,
-            min_after_sec: 5,
-            system_min_interval_sec: 2,
-            byte_cap_mb: 1024,
-            screenshot_enabled: true,
-            screenshot_interval_frames: 4,
-            screenshot_quality: 0.65,
-            screenshot_max_dimension: 480,
-            screenshot_byte_cap_mb: 32,
-            screenshot_encode_queue: 8,
-            dense_burst_enabled: false,
-            dense_burst_interval_frames: 2,
-            dense_burst_duration_sec: 15,
-            anomaly_enabled: true,
-            anomaly_min_proportion: 0.30,
-            anomaly_relative_factor: 4.0,
-            anomaly_sustained_frames: 4,
-            anomaly_cooldown_sec: 30,
-            anomaly_noise_floor: 24,
-        }
-    }
-}
+use stage_protocol::dashcam::{DashcamConfig, DashcamConfigPatch};
 
 /// Dashcam clip state machine.
 enum DashcamState {
@@ -467,6 +407,9 @@ pub struct StageRecorder {
 
     // Dashcam state
     dashcam_config: DashcamConfig,
+    config_changed_at_frame: u64,
+    last_saved_clip: Option<serde_json::Value>,
+    last_save_error: Option<String>,
     dashcam_state: DashcamState,
     ring_buffer: VecDeque<CapturedFrame>,
     ring_buffer_bytes: usize,
@@ -529,6 +472,9 @@ impl INode for StageRecorder {
             frame_counter: 0,
             collector: None,
             dashcam_config: DashcamConfig::default(),
+            config_changed_at_frame: 0,
+            last_saved_clip: None,
+            last_save_error: None,
             dashcam_state: DashcamState::Disabled,
             ring_buffer: VecDeque::new(),
             ring_buffer_bytes: 0,
@@ -614,6 +560,9 @@ impl StageRecorder {
     fn dashcam_clip_saved(clip_id: GString, tier: GString, frames: u32);
 
     #[signal]
+    fn dashcam_clip_failed(message: GString);
+
+    #[signal]
     fn dashcam_clip_started(trigger_frame: i64, tier: GString);
 
     #[func]
@@ -626,6 +575,13 @@ impl StageRecorder {
     /// Enable or disable dashcam mode at runtime.
     #[func]
     pub fn set_dashcam_enabled(&mut self, enabled: bool) {
+        if !enabled && matches!(self.dashcam_state, DashcamState::PostCapture { .. }) {
+            self.stop_screenshot_worker();
+            self.flush_dashcam_clip_from(
+                "Stopped recording before the post-window completed",
+                "human",
+            );
+        }
         self.dashcam_config.enabled = enabled;
         if enabled {
             if matches!(self.dashcam_state, DashcamState::Disabled) {
@@ -724,6 +680,51 @@ impl StageRecorder {
         }
     }
 
+    /// Live capture state shared by native controls and the agent API.
+    #[func]
+    pub fn get_dashcam_status_json(&self) -> GString {
+        let spatial_range = self
+            .ring_buffer
+            .front()
+            .zip(self.ring_buffer.back())
+            .map(|(first, last)| [first.frame, last.frame]);
+        let screenshot_range = self
+            .screenshot_ring
+            .front()
+            .zip(self.screenshot_ring.back())
+            .map(|(first, last)| [first.frame, last.frame]);
+        let span_seconds = spatial_range
+            .map(|range| range[1].saturating_sub(range[0]) as f64 / self.physics_fps.max(1) as f64);
+        let remaining_seconds = match &self.dashcam_state {
+            DashcamState::PostCapture {
+                frames_remaining, ..
+            } => {
+                *frames_remaining as f64 * self.dashcam_config.capture_interval as f64
+                    / self.physics_fps.max(1) as f64
+            }
+            _ => 0.0,
+        };
+        let parse = |value: GString| {
+            serde_json::from_str::<serde_json::Value>(&value.to_string())
+                .unwrap_or(serde_json::Value::Null)
+        };
+        let status = serde_json::json!({
+            "dashcam_enabled": self.dashcam_config.enabled,
+            "state":self.get_dashcam_state().to_string(),
+            "buffer_frames":self.get_dashcam_buffer_frames(), "buffer_kb":self.get_dashcam_buffer_kb(),
+            "screenshot_buffer_count":self.get_screenshot_buffer_count(), "screenshot_buffer_kb":self.get_screenshot_buffer_kb(),
+            "screenshots_available":self.screenshots_available(), "capture_probe":parse(self.get_capture_probe_json()),
+            "screenshot_gaps":parse(self.get_screenshot_gaps_json()), "anomaly":parse(self.get_anomaly_status_json()),
+            "config":self.dashcam_config, "preset":self.dashcam_config.matching_preset(),
+            "settings_applied_at_frame":self.config_changed_at_frame,
+            "runtime":crate::runtime_identity::identity(), "last_saved_clip":self.last_saved_clip,
+            "last_save_error":self.last_save_error,
+            "coverage":{"spatial_frame_range":spatial_range,"screenshot_frame_range":screenshot_range,
+                "buffered_seconds":span_seconds,"post_window_remaining_seconds":remaining_seconds},
+        });
+        GString::from(status.to_string().as_str())
+    }
+
     /// Trigger a dashcam clip from an external marker (TCP handler).
     /// Transitions Buffering → PostCapture or merges into existing clip.
     #[func]
@@ -737,6 +738,10 @@ impl StageRecorder {
     /// Returns the clip_id or empty string on error.
     #[func]
     pub fn flush_dashcam_clip(&mut self, label: GString) -> GString {
+        self.flush_dashcam_clip_from(&label.to_string(), "human")
+    }
+
+    pub fn flush_dashcam_clip_from(&mut self, label: &str, source: &str) -> GString {
         if matches!(self.dashcam_state, DashcamState::Disabled) {
             return GString::new();
         }
@@ -754,7 +759,7 @@ impl StageRecorder {
                 markers: vec![DashcamTrigger {
                     frame,
                     timestamp_ms,
-                    source: "human".into(),
+                    source: source.into(),
                     label: label.to_string(),
                 }],
                 last_system_trigger_frame: 0,
@@ -763,9 +768,18 @@ impl StageRecorder {
             };
         } else if let DashcamState::PostCapture {
             ref mut frames_remaining,
+            ref mut markers,
             ..
         } = self.dashcam_state
         {
+            // Save now is its own deliberate action even when another trigger
+            // already owns the pending clip. Preserve its label and provenance.
+            markers.push(DashcamTrigger {
+                frame: current_physics_frame(),
+                timestamp_ms: current_time_ms(),
+                source: source.into(),
+                label: label.into(),
+            });
             *frames_remaining = 0;
         }
 
@@ -776,144 +790,109 @@ impl StageRecorder {
         }
     }
 
-    /// Apply dashcam configuration from a JSON string.
-    /// Fields absent from the JSON are left unchanged.
-    #[func]
-    pub fn apply_dashcam_config(&mut self, config_json: GString) -> bool {
-        let s = config_json.to_string();
-        let Ok(v) = serde_json::from_str::<serde_json::Value>(&s) else {
-            tracing::warn!("[Stage] apply_dashcam_config: invalid JSON");
-            return false;
+    /// Apply a validated partial patch and return authoritative effective values.
+    pub fn apply_config_patch(
+        &mut self,
+        patch: &DashcamConfigPatch,
+    ) -> Result<DashcamConfig, String> {
+        let mut next = patch.apply_to(&self.dashcam_config)?;
+        if patch.movement_nodes.is_some() || patch.input_actions.is_some() {
+            crate::movement_capture::validate_targets(&self.base().clone(), &mut next)?;
+        }
+        for (field, seconds) in [
+            ("post_window_system_sec", next.post_window_system_sec),
+            (
+                "post_window_deliberate_sec",
+                next.post_window_deliberate_sec,
+            ),
+            ("min_after_sec", next.min_after_sec),
+        ] {
+            if seconds as u64 * self.physics_fps.max(1) as u64 / next.capture_interval as u64
+                > u32::MAX as u64
+            {
+                return Err(format!(
+                    "{field} exceeds the recorder's post-capture frame counter at this sampling rate"
+                ));
+            }
+        }
+        if next == self.dashcam_config {
+            return Ok(next);
+        }
+        // Validate pending-window arithmetic before changing worker or recorder state.
+        let pending_frames = if let DashcamState::PostCapture {
+            frames_remaining, ..
+        } = &self.dashcam_state
+        {
+            let physics_frames =
+                *frames_remaining as u64 * self.dashcam_config.capture_interval as u64;
+            Some(
+                u32::try_from(physics_frames.div_ceil(next.capture_interval as u64)).map_err(
+                    |_| "capture_interval exceeds the pending clip's frame counter".to_string(),
+                )?,
+            )
+        } else {
+            None
         };
-
-        if let Some(b) = v.get("enabled").and_then(|x| x.as_bool()) {
-            self.set_dashcam_enabled(b);
+        if next.screenshot_encode_queue != self.dashcam_config.screenshot_encode_queue {
+            self.stop_screenshot_worker();
         }
-        if let Some(n) = v.get("capture_interval").and_then(|x| x.as_u64()) {
-            self.dashcam_config.capture_interval = n as u32;
-        }
-        if let Some(n) = v.get("pre_window_system_sec").and_then(|x| x.as_u64()) {
-            self.dashcam_config.pre_window_system_sec = n as u32;
-        }
-        if let Some(n) = v.get("pre_window_deliberate_sec").and_then(|x| x.as_u64()) {
-            self.dashcam_config.pre_window_deliberate_sec = n as u32;
-        }
-        if let Some(n) = v.get("post_window_system_sec").and_then(|x| x.as_u64()) {
-            self.dashcam_config.post_window_system_sec = n as u32;
-        }
-        if let Some(n) = v.get("post_window_deliberate_sec").and_then(|x| x.as_u64()) {
-            self.dashcam_config.post_window_deliberate_sec = n as u32;
-        }
-        if let Some(n) = v.get("max_window_sec").and_then(|x| x.as_u64()) {
-            self.dashcam_config.max_window_sec = n as u32;
-        }
-        if let Some(n) = v.get("min_after_sec").and_then(|x| x.as_u64()) {
-            self.dashcam_config.min_after_sec = n as u32;
-        }
-        if let Some(n) = v.get("system_min_interval_sec").and_then(|x| x.as_u64()) {
-            self.dashcam_config.system_min_interval_sec = n as u32;
-        }
-        if let Some(n) = v.get("byte_cap_mb").and_then(|x| x.as_u64()) {
-            self.dashcam_config.byte_cap_mb = n as u32;
-        }
-        if let Some(b) = v.get("screenshot_enabled").and_then(|x| x.as_bool()) {
-            self.dashcam_config.screenshot_enabled = b;
-        }
-        if let Some(n) = v.get("screenshot_interval_frames").and_then(|x| x.as_u64())
-            && n > 0
+        // Keep the remaining post-window duration when sampling cadence changes.
+        if let (
+            Some(pending),
+            DashcamState::PostCapture {
+                frames_remaining, ..
+            },
+        ) = (pending_frames, &mut self.dashcam_state)
         {
-            self.dashcam_config.screenshot_interval_frames = n as u32;
+            *frames_remaining = pending;
         }
-        if let Some(f) = v.get("screenshot_quality").and_then(|x| x.as_f64())
-            && (0.0..=1.0).contains(&f)
-        {
-            self.dashcam_config.screenshot_quality = f as f32;
+        let enabled_changed = next.enabled != self.dashcam_config.enabled;
+        if enabled_changed {
+            self.set_dashcam_enabled(next.enabled);
         }
-        if let Some(n) = v.get("screenshot_max_dimension").and_then(|x| x.as_u64())
-            && n > 0
-        {
-            self.dashcam_config.screenshot_max_dimension = (n as u32).clamp(1, 8192);
-        }
-        if let Some(n) = v.get("screenshot_byte_cap_mb").and_then(|x| x.as_u64())
-            && n > 0
-        {
-            self.dashcam_config.screenshot_byte_cap_mb = n as u32;
-        }
-        if let Some(n) = v.get("screenshot_encode_queue").and_then(|x| x.as_u64())
-            && n > 0
-        {
-            self.dashcam_config.screenshot_encode_queue = n as usize;
-        }
-        if let Some(b) = v.get("dense_burst_enabled").and_then(|x| x.as_bool()) {
-            self.dashcam_config.dense_burst_enabled = b;
-        }
-        if let Some(n) = v
-            .get("dense_burst_interval_frames")
-            .and_then(|x| x.as_u64())
-            && n > 0
-        {
-            self.dashcam_config.dense_burst_interval_frames = n as u32;
-        }
-        if let Some(b) = v.get("anomaly_enabled").and_then(|x| x.as_bool()) {
-            self.dashcam_config.anomaly_enabled = b;
-        }
-        if let Some(f) = v.get("anomaly_min_proportion").and_then(|x| x.as_f64())
-            && (0.0..=1.0).contains(&f)
-        {
-            self.dashcam_config.anomaly_min_proportion = f;
-        }
-        if let Some(f) = v.get("anomaly_relative_factor").and_then(|x| x.as_f64())
-            && f.is_finite()
-            && f >= 1.0
-        {
-            self.dashcam_config.anomaly_relative_factor = f;
-        }
-        if let Some(n) = v.get("anomaly_sustained_frames").and_then(|x| x.as_u64())
-            && n > 0
-        {
-            self.dashcam_config.anomaly_sustained_frames = n as u32;
-        }
-        if let Some(n) = v.get("anomaly_cooldown_sec").and_then(|x| x.as_u64()) {
-            self.dashcam_config.anomaly_cooldown_sec = n as u32;
-        }
-        if let Some(n) = v.get("anomaly_noise_floor").and_then(|x| x.as_u64())
-            && n <= 255
-        {
-            self.dashcam_config.anomaly_noise_floor = n as u8;
-        }
-        true
+        self.config_changed_at_frame = current_physics_frame();
+        self.dashcam_config = next.clone();
+        self.enforce_ring_byte_cap();
+        self.enforce_screenshot_byte_cap();
+        Ok(next)
     }
 
-    /// Return dashcam config as a JSON dict string for TCP status response.
+    /// Report configuration changes separately from a pending clip's stop-save outcome.
+    pub fn configure_dashcam(
+        &mut self,
+        patch: &DashcamConfigPatch,
+    ) -> Result<serde_json::Value, String> {
+        let stopping_pending = patch.enabled == Some(false)
+            && matches!(self.dashcam_state, DashcamState::PostCapture { .. });
+        let effective = self.apply_config_patch(patch)?;
+        let mut response = serde_json::json!({"result":"ok", "config":effective});
+        if stopping_pending {
+            response["stop_save"] = if let Some(error) = &self.last_save_error {
+                serde_json::json!({"result":"error", "message":error})
+            } else {
+                serde_json::json!({"result":"ok", "clip":self.last_saved_clip})
+            };
+        }
+        Ok(response)
+    }
+
+    /// GDScript entry point with the same validation and effective-value result as MCP.
+    #[func]
+    pub fn apply_dashcam_config(&mut self, config_json: GString) -> GString {
+        let result = serde_json::from_str::<DashcamConfigPatch>(&config_json.to_string())
+            .map_err(|error| error.to_string())
+            .and_then(|patch| self.configure_dashcam(&patch));
+        let response = match result {
+            Ok(response) => response,
+            Err(error) => serde_json::json!({"error":error}),
+        };
+        GString::from(response.to_string().as_str())
+    }
+
+    /// Return the owning configuration in the same flat vocabulary accepted by patches.
     #[func]
     pub fn get_dashcam_config_json(&self) -> GString {
-        let cfg = &self.dashcam_config;
-        let json = serde_json::json!({
-            "enabled": cfg.enabled,
-            "capture_interval": cfg.capture_interval,
-            "pre_window_sec": { "system": cfg.pre_window_system_sec, "deliberate": cfg.pre_window_deliberate_sec },
-            "post_window_sec": { "system": cfg.post_window_system_sec, "deliberate": cfg.post_window_deliberate_sec },
-            "max_window_sec": cfg.max_window_sec,
-            "min_after_sec": cfg.min_after_sec,
-            "system_min_interval_sec": cfg.system_min_interval_sec,
-            "byte_cap_mb": cfg.byte_cap_mb,
-            "screenshot_enabled": cfg.screenshot_enabled,
-            "screenshot_interval_frames": cfg.screenshot_interval_frames,
-            "screenshot_quality": cfg.screenshot_quality,
-            "screenshot_max_dimension": cfg.screenshot_max_dimension,
-            "screenshot_byte_cap_mb": cfg.screenshot_byte_cap_mb,
-            "screenshot_encode_queue": cfg.screenshot_encode_queue,
-            "dense_burst_enabled": cfg.dense_burst_enabled,
-            "dense_burst_interval_frames": cfg.dense_burst_interval_frames,
-            "dense_burst_duration_sec": cfg.dense_burst_duration_sec,
-            "anomaly_enabled": cfg.anomaly_enabled,
-            "anomaly_min_proportion": cfg.anomaly_min_proportion,
-            "anomaly_relative_factor": cfg.anomaly_relative_factor,
-            "anomaly_sustained_frames": cfg.anomaly_sustained_frames,
-            "anomaly_cooldown_sec": cfg.anomaly_cooldown_sec,
-            "anomaly_noise_floor": cfg.anomaly_noise_floor,
-        });
-        GString::from(json.to_string().as_str())
+        GString::from(serde_json::json!(&self.dashcam_config).to_string().as_str())
     }
 
     /// Add a marker at the current frame. Triggers a dashcam clip.
@@ -1099,14 +1078,8 @@ impl StageRecorder {
                     };
 
                     // Build capture block JSON string for recording_handler.rs.
-                    let capture_block_json: Option<String> = capture_value.as_ref().map(|v| {
-                            serde_json::json!({
-                                "include_input": v.get("include_input").and_then(|b| b.as_bool()).unwrap_or(false),
-                                "include_signals": v.get("include_signals").and_then(|b| b.as_bool()).unwrap_or(true),
-                                "capture_interval": v.get("capture_interval").and_then(|n| n.as_u64()).unwrap_or(1),
-                            })
-                            .to_string()
-                        });
+                    let capture_block_json: Option<String> =
+                        capture_value.as_ref().map(|value| value.to_string());
 
                     let mut dict = VarDictionary::new();
                     dict.set("clip_id", &GString::from(&id));
@@ -1420,10 +1393,11 @@ impl StageRecorder {
 
     fn stop_screenshot_worker(&mut self) {
         self.screenshot_tx.take();
-        self.screenshot_rx.take();
         if let Some(handle) = self.screenshot_worker.take() {
             let _ = handle.join();
         }
+        self.drain_encoded_shots();
+        self.screenshot_rx.take();
         self.encode_depth = 0;
     }
 
@@ -1471,6 +1445,8 @@ impl StageRecorder {
 
         let snapshot = collector.bind().collect_snapshot(&params);
 
+        let mut movement =
+            crate::movement_capture::capture(&self.base().clone(), &self.dashcam_config);
         let frame_entities: Vec<FrameEntityData> = snapshot
             .entities
             .iter()
@@ -1483,6 +1459,7 @@ impl StageRecorder {
                 groups: e.groups.clone(),
                 visible: e.visible,
                 state: e.state.clone(),
+                movement: movement.remove(&e.path),
             })
             .collect();
 
@@ -1617,8 +1594,9 @@ impl StageRecorder {
             DashcamTier::System => self.dashcam_config.post_window_system_sec,
             DashcamTier::Deliberate => self.dashcam_config.post_window_deliberate_sec,
         };
-        let min_frames = self.dashcam_config.min_after_sec * fps / interval;
-        let desired_frames = post_sec * fps / interval;
+        let min_frames =
+            (self.dashcam_config.min_after_sec as u64 * fps as u64 / interval as u64) as u32;
+        let desired_frames = (post_sec as u64 * fps as u64 / interval as u64) as u32;
         desired_frames.max(min_frames)
     }
 
@@ -1795,34 +1773,26 @@ impl StageRecorder {
         let clip_id = format!("clip_{:08x}", rand_u32());
         let storage_path = "user://stage_recordings/";
         let dir_path = globalize_path(storage_path);
-        let _ = std::fs::create_dir_all(&dir_path);
         let db_path = format!("{}/{}.sqlite", dir_path, clip_id);
-
-        let db = match Connection::open(&db_path) {
-            Ok(db) => db,
-            Err(e) => {
-                tracing::error!("[Stage] Failed to create dashcam clip DB: {e}");
-                return None;
-            }
-        };
-
-        if db.execute_batch("PRAGMA journal_mode=WAL;").is_err() {
-            tracing::error!("[Stage] Failed to set WAL mode for dashcam clip");
-            return None;
-        }
-        if db.execute_batch(SCHEMA_SQL).is_err() {
-            tracing::error!("[Stage] Failed to create dashcam schema");
-            return None;
-        }
 
         let tier_str = tier.as_str();
         let all_frames: Vec<&CapturedFrame> = pre_buffer.iter().chain(post_buffer.iter()).collect();
         let total_frames = all_frames.len() as u32;
 
         let first_frame = all_frames.first().map(|f| f.frame).unwrap_or(0);
-        let last_frame = all_frames.last().map(|f| f.frame).unwrap_or(0);
+        let last_frame = all_frames
+            .last()
+            .map(|f| f.frame)
+            .unwrap_or(0)
+            .max(markers.iter().map(|marker| marker.frame).max().unwrap_or(0));
         let first_ts = all_frames.first().map(|f| f.timestamp_ms).unwrap_or(0);
-        let last_ts = all_frames.last().map(|f| f.timestamp_ms).unwrap_or(0);
+        let last_ts = all_frames.last().map(|f| f.timestamp_ms).unwrap_or(0).max(
+            markers
+                .iter()
+                .map(|marker| marker.timestamp_ms)
+                .max()
+                .unwrap_or(0),
+        );
 
         // Merge pending silent markers that fall within this clip's frame range.
         let mut all_markers = markers;
@@ -1856,21 +1826,17 @@ impl StageRecorder {
             })
             .collect();
 
-        let capture_config = serde_json::json!({
-            "capture_interval": self.dashcam_config.capture_interval,
-            "max_frames": total_frames,
-            "dashcam": true,
-            "tier": tier_str,
-            "triggers": triggers_json,
-            "screenshot_interval_frames": self.dashcam_config.screenshot_interval_frames,
-            "screenshot_quality": self.dashcam_config.screenshot_quality,
-            "screenshot_max_dimension": self.dashcam_config.screenshot_max_dimension,
-            "screenshot_byte_cap_mb": self.dashcam_config.screenshot_byte_cap_mb,
-            "screenshot_encode_queue": self.dashcam_config.screenshot_encode_queue,
-            "dense_burst_enabled": self.dashcam_config.dense_burst_enabled,
-            "dense_burst_interval_frames": self.dashcam_config.dense_burst_interval_frames,
-            "dense_burst_duration_sec": self.dashcam_config.dense_burst_duration_sec,
-        });
+        let mut capture_config = serde_json::json!(&self.dashcam_config);
+        capture_config["movement_sampling"] =
+            serde_json::json!(stage_protocol::recording::MOVEMENT_SAMPLING_LIMITS);
+        capture_config["max_frames"] = serde_json::json!(total_frames);
+        capture_config["dashcam"] = serde_json::json!(true);
+        capture_config["tier"] = serde_json::json!(tier_str);
+        capture_config["triggers"] = serde_json::json!(triggers_json);
+        capture_config["settings_applied_at_frame"] =
+            serde_json::json!(self.config_changed_at_frame);
+        capture_config["mixed_configuration"] =
+            serde_json::json!(first_frame < self.config_changed_at_frame);
 
         let physics_ticks = self.physics_fps;
         let scene_dims = detect_scene_dimensions(
@@ -1880,98 +1846,140 @@ impl StageRecorder {
         );
 
         let created_at_unix_ms = current_time_ms() as i64;
-        let _ = db.execute(
-            "INSERT INTO recording \
-             (id, name, started_at_frame, ended_at_frame, started_at_ms, ended_at_ms, \
-              scene_dimensions, physics_ticks_per_sec, capture_config, created_at_unix_ms) \
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
-            rusqlite::params![
-                &clip_id,
-                &format!("dashcam_{}", chrono_like_timestamp()),
-                first_frame,
-                last_frame,
-                first_ts,
-                last_ts,
-                scene_dims,
-                physics_ticks,
-                capture_config.to_string(),
-                created_at_unix_ms,
-            ],
+        let all_screenshots: Vec<&CapturedScreenshot> = self
+            .screenshot_ring
+            .iter()
+            .chain(post_screenshots.iter())
+            .filter(|shot| shot.frame >= first_frame && shot.frame <= last_frame)
+            .collect();
+        capture_config["runtime"] = serde_json::json!(crate::runtime_identity::identity());
+        capture_config["scene_at_save"] = serde_json::json!(
+            self.base()
+                .get_tree_or_null()
+                .and_then(|tree| tree.get_current_scene())
+                .map(|scene| scene.get_scene_file_path().to_string())
+        );
+        capture_config["spatial_frame_count"] = serde_json::json!(all_frames.len());
+        capture_config["screenshot_frame_count"] = serde_json::json!(
+            all_screenshots
+                .iter()
+                .map(|shot| shot.frame)
+                .collect::<std::collections::HashSet<_>>()
+                .len()
         );
 
-        // Write frames and markers in one transaction.
-        if let Ok(tx) = db.unchecked_transaction() {
-            if let Ok(mut stmt) = tx.prepare_cached(
-                "INSERT OR REPLACE INTO frames (frame, timestamp_ms, data) VALUES (?1, ?2, ?3)",
-            ) {
-                for f in &all_frames {
-                    let _ = stmt.execute(rusqlite::params![f.frame, f.timestamp_ms, &f.data]);
+        let mut reserved = false;
+        let saved = (|| -> Result<(), Box<dyn std::error::Error>> {
+            std::fs::create_dir_all(&dir_path)?;
+            // Never replace an existing clip, even if the generated short ID collides.
+            drop(
+                std::fs::OpenOptions::new()
+                    .write(true)
+                    .create_new(true)
+                    .open(&db_path)?,
+            );
+            reserved = true;
+            let db = Connection::open(&db_path)?;
+            db.execute_batch("PRAGMA journal_mode=WAL;")?;
+            db.execute_batch(SCHEMA_SQL)?;
+            let tx = db.unchecked_transaction()?;
+            tx.execute(
+                "INSERT INTO recording (id, name, started_at_frame, ended_at_frame, started_at_ms, ended_at_ms, scene_dimensions, physics_ticks_per_sec, capture_config, created_at_unix_ms) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                rusqlite::params![&clip_id, &format!("dashcam_{}", chrono_like_timestamp()), first_frame,
+                    last_frame, first_ts, last_ts, scene_dims, physics_ticks, capture_config.to_string(), created_at_unix_ms],
+            )?;
+            {
+                let mut stmt = tx.prepare_cached(
+                    "INSERT OR REPLACE INTO frames (frame, timestamp_ms, data) VALUES (?1, ?2, ?3)",
+                )?;
+                for frame in &all_frames {
+                    stmt.execute(rusqlite::params![
+                        frame.frame,
+                        frame.timestamp_ms,
+                        &frame.data
+                    ])?;
                 }
             }
-
-            if let Ok(mut stmt) = tx.prepare_cached(
-                "INSERT OR REPLACE INTO camera_frames (frame, timestamp_ms, camera_path, data) VALUES (?1, ?2, ?3, ?4)",
-            ) {
-                for f in &all_frames {
-                    if let Some(camera) = &f.camera
-                        && let Ok(data) = rmp_serde::to_vec(camera)
-                    {
-                        let _ = stmt.execute(rusqlite::params![f.frame, f.timestamp_ms, &camera.camera_path, data]);
+            {
+                let mut stmt = tx.prepare_cached("INSERT OR REPLACE INTO camera_frames (frame, timestamp_ms, camera_path, data) VALUES (?1, ?2, ?3, ?4)")?;
+                for frame in &all_frames {
+                    if let Some(camera) = &frame.camera {
+                        stmt.execute(rusqlite::params![
+                            frame.frame,
+                            frame.timestamp_ms,
+                            &camera.camera_path,
+                            rmp_serde::to_vec(camera)?
+                        ])?;
                     }
                 }
             }
-
-            if let Ok(mut stmt) = tx.prepare_cached(
-                "INSERT INTO markers (frame, timestamp_ms, source, label) VALUES (?1, ?2, ?3, ?4)",
-            ) {
-                for m in &all_markers {
-                    let _ = stmt.execute(rusqlite::params![
-                        m.frame,
-                        m.timestamp_ms,
-                        &m.source,
-                        &m.label
-                    ]);
-                }
-            }
-
-            if let Ok(mut stmt) = tx.prepare_cached(
-                "INSERT INTO screenshot_gaps (start_frame, end_frame, reason, dropped) VALUES (?1, ?2, ?3, ?4)",
-            ) {
-                for gap in self.gap_ledger.overlapping(first_frame, last_frame) {
-                    let _ = stmt.execute(rusqlite::params![gap.start_frame, gap.end_frame, &gap.reason, gap.dropped]);
-                }
-            }
-
-            // Write screenshots: ring entries in frame range + post_screenshots
-            let all_screenshots: Vec<&CapturedScreenshot> = self
-                .screenshot_ring
-                .iter()
-                .filter(|s| s.frame >= first_frame && s.frame <= last_frame)
-                .chain(post_screenshots.iter())
-                .collect();
-
-            if !all_screenshots.is_empty()
-                && let Ok(mut stmt) = tx.prepare_cached(
-                    "INSERT OR REPLACE INTO screenshots \
-                     (frame, timestamp_ms, image_data, width, height) \
-                     VALUES (?1, ?2, ?3, ?4, ?5)",
-                )
             {
-                for s in &all_screenshots {
-                    let _ = stmt.execute(rusqlite::params![
-                        s.frame,
-                        s.timestamp_ms,
-                        &s.jpeg_data,
-                        s.width,
-                        s.height
-                    ]);
+                let mut stmt = tx.prepare_cached("INSERT INTO markers (frame, timestamp_ms, source, label) VALUES (?1, ?2, ?3, ?4)")?;
+                for marker in &all_markers {
+                    stmt.execute(rusqlite::params![
+                        marker.frame,
+                        marker.timestamp_ms,
+                        &marker.source,
+                        &marker.label
+                    ])?;
                 }
             }
-
-            if let Err(e) = tx.commit() {
-                tracing::error!("[Stage] Failed to commit dashcam clip: {e}");
-                return None;
+            {
+                let mut stmt = tx.prepare_cached("INSERT INTO screenshot_gaps (start_frame, end_frame, reason, dropped) VALUES (?1, ?2, ?3, ?4)")?;
+                for gap in self.gap_ledger.overlapping(first_frame, last_frame) {
+                    stmt.execute(rusqlite::params![
+                        gap.start_frame,
+                        gap.end_frame,
+                        &gap.reason,
+                        gap.dropped
+                    ])?;
+                }
             }
+            {
+                let mut stmt = tx.prepare_cached("INSERT OR REPLACE INTO screenshots (frame, timestamp_ms, image_data, width, height) VALUES (?1, ?2, ?3, ?4, ?5)")?;
+                for shot in &all_screenshots {
+                    stmt.execute(rusqlite::params![
+                        shot.frame,
+                        shot.timestamp_ms,
+                        &shot.jpeg_data,
+                        shot.width,
+                        shot.height
+                    ])?;
+                }
+            }
+            tx.commit()?;
+            Ok(())
+        })();
+        if let Err(error) = saved {
+            // Only remove the new file this attempt reserved, never a colliding clip.
+            if reserved && let Err(cleanup) = std::fs::remove_file(&db_path) {
+                tracing::warn!("[Stage] Cannot remove incomplete clip {db_path}: {cleanup}");
+            }
+            let message = format!("Clip was not saved: {error}");
+            tracing::error!("[Stage] {message}");
+            self.last_save_error = Some(message.clone());
+            self.base_mut().emit_signal(
+                "dashcam_clip_failed",
+                &[GString::from(message.as_str()).to_variant()],
+            );
+            return None;
+        }
+        self.last_save_error = None;
+        self.last_saved_clip = Some(serde_json::json!({
+            "clip_id":clip_id, "frame_range":[first_frame,last_frame], "created_at_unix_ms":created_at_unix_ms,
+            "runtime":crate::runtime_identity::identity(), "scene_at_save":capture_config["scene_at_save"],
+            "spatial_frame_count":total_frames, "screenshot_frame_count":capture_config["screenshot_frame_count"]
+        }));
+
+        // Human-only capture must remain discoverable after the game closes,
+        // even when no agent connected to resolve Godot's user:// directory.
+        let hint_dir = std::path::PathBuf::from(globalize_path("res://.stage"));
+        if let Err(error) = std::fs::create_dir_all(&hint_dir)
+            .and_then(|()| std::fs::write(hint_dir.join("clip_storage_path"), &dir_path))
+        {
+            tracing::warn!(
+                "[Stage] Clip saved, but offline storage hint could not be written: {error}"
+            );
         }
 
         tracing::info!(
@@ -2033,13 +2041,13 @@ CREATE TABLE IF NOT EXISTS events (
     FOREIGN KEY (frame) REFERENCES frames(frame)
 );
 
+-- Markers refer to engine time, not necessarily to a sampled spatial frame.
 CREATE TABLE IF NOT EXISTS markers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     frame INTEGER,
     timestamp_ms INTEGER,
     source TEXT,
-    label TEXT,
-    FOREIGN KEY (frame) REFERENCES frames(frame)
+    label TEXT
 );
 
 CREATE TABLE IF NOT EXISTS screenshots (
@@ -2154,8 +2162,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn markers_are_preserved_between_sampled_spatial_frames() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch("PRAGMA foreign_keys=ON;").unwrap();
+        db.execute_batch(SCHEMA_SQL).unwrap();
+        db.execute(
+            "INSERT INTO frames (frame,timestamp_ms,data) VALUES (10,1000,X'00')",
+            [],
+        )
+        .unwrap();
+        db.execute("INSERT INTO markers (frame,timestamp_ms,source,label) VALUES (11,1016,'human','between samples')", []).unwrap();
+        assert_eq!(
+            db.query_row("SELECT frame FROM markers", [], |row| row.get::<_, u64>(0))
+                .unwrap(),
+            11
+        );
+    }
+
+    #[test]
     fn frame_entity_data_roundtrips_msgpack() {
         let entity = FrameEntityData {
+            movement: None,
             path: "enemies/scout_02".into(),
             class: "CharacterBody3D".into(),
             position: vec![12.4, 0.0, -8.2],
@@ -2348,6 +2375,7 @@ mod tests {
         db.execute_batch(SCHEMA_SQL).unwrap();
 
         let entities = vec![FrameEntityData {
+            movement: None,
             path: "test/node".into(),
             class: "Node3D".into(),
             position: vec![1.0, 2.0, 3.0],
@@ -2422,6 +2450,7 @@ mod tests {
     fn msgpack_size_is_compact() {
         let entities: Vec<FrameEntityData> = (0..50)
             .map(|i| FrameEntityData {
+                movement: None,
                 path: format!("enemies/scout_{i:02}"),
                 class: "CharacterBody3D".into(),
                 position: vec![i as f64 * 2.0, 0.0, i as f64 * -1.5],

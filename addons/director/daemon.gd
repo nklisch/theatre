@@ -22,7 +22,8 @@ func _init():
 		else DEFAULT_PORT
 
 	_server = TCPServer.new()
-	var err = _server.listen(_port)
+	# Authoring operations are unauthenticated and must not accept network peers.
+	var err = _server.listen(_port, "127.0.0.1")
 	if err != OK:
 		printerr(JSON.stringify({
 			"source": "director",

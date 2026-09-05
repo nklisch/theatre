@@ -10,8 +10,13 @@ fn stage_bin() -> &'static str {
 
 /// Run the stage binary with the given args and return (status code, stdout, stderr).
 fn run(args: &[&str]) -> (i32, String, String) {
+    // Isolate project configuration and transport from the developer's running
+    // game. Destination port zero cannot identify a listening addon.
+    let project = tempfile::tempdir().expect("temporary project");
     let output = Command::new(stage_bin())
         .args(args)
+        .env("THEATRE_PROJECT_DIR", project.path())
+        .env("THEATRE_PORT", "0")
         .output()
         .expect("failed to run stage binary");
     let code = output.status.code().unwrap_or(-1);
@@ -88,15 +93,10 @@ fn invalid_json_exits_code_2_with_error_json() {
 /// `stage spatial_snapshot '{}'` with no Godot running exits code 1 with connection error JSON.
 #[test]
 fn no_godot_exits_code_1_with_connection_error() {
-    // Use a port almost certainly not in use
     let (code, stdout, _) = run(&["spatial_snapshot", "{}"]);
-    // Either connection_failed (no Godot on default port) or exit 1
     assert_eq!(code, 1, "expected exit code 1 when Godot not running");
     let v: serde_json::Value =
         serde_json::from_str(stdout.trim()).expect("stdout must be valid JSON on connection error");
     let error = v.get("error").and_then(|e| e.as_str()).unwrap_or("");
-    assert!(
-        error == "connection_failed" || error == "tool_error",
-        "error must be connection_failed or tool_error, got: {error}"
-    );
+    assert_eq!(error, "connection_failed");
 }

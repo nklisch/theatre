@@ -31,13 +31,12 @@ fn state(project: &std::path::Path) -> Arc<Mutex<SessionState>> {
 
 async fn status(state: &Arc<Mutex<SessionState>>) -> Value {
     let server = StageServer::new(state.clone());
-    serde_json::from_str(
-        &server
-            .runtime_status(Parameters(RuntimeStatusParams {}))
-            .await
-            .unwrap(),
-    )
-    .unwrap()
+    server
+        .runtime_status(Parameters(RuntimeStatusParams {}))
+        .await
+        .unwrap()
+        .structured_content
+        .unwrap()
 }
 
 #[tokio::test]
@@ -61,7 +60,10 @@ async fn wrong_project_fails_before_ack_or_config_and_preserves_diagnostic() {
         );
     });
     let state = state(selected.path());
-    state.lock().await.config.dashcam_explicit = true;
+    state.lock().await.project_dashcam_config = Some(stage_protocol::dashcam::DashcamConfigPatch {
+        enabled: Some(false),
+        ..Default::default()
+    });
     let error = tcp::connect_once(&state, port)
         .await
         .unwrap_err()

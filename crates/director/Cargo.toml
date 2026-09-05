@@ -32,5 +32,6 @@ windows-sys = { version = "0.61", features = [
 ] }
 
 [dev-dependencies]
+rmcp = { version = "0.16", features = ["client"] }
 tempfile = "3"
 serde_json.workspace = true
