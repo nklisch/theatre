@@ -159,6 +159,7 @@ pub async fn start_wrong_version_mock() -> (u16, JoinHandle<()>) {
                 scene_dimensions: 3,
                 physics_ticks_per_sec: 60,
                 project_name: "Bad".into(),
+                identity: mock_identity(),
             };
             let _ = async_io::write_message(&mut writer, &Message::Handshake(bad_handshake)).await;
             // Don't read the error response — just drop
@@ -168,10 +169,33 @@ pub async fn start_wrong_version_mock() -> (u16, JoinHandle<()>) {
     (port, jh)
 }
 
+pub fn mock_identity() -> stage_protocol::runtime::RuntimeIdentity {
+    stage_protocol::runtime::RuntimeIdentity {
+        project_path: std::env::current_dir()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned(),
+        process_id: std::process::id(),
+        run_id: "run_mock".into(),
+    }
+}
+
 pub fn default_handshake_3d() -> Handshake {
-    Handshake::new("4.3".into(), 3, 60, "IntegrationTest".into())
+    Handshake::new(
+        "4.3".into(),
+        3,
+        60,
+        "IntegrationTest".into(),
+        mock_identity(),
+    )
 }
 
 pub fn default_handshake_2d() -> Handshake {
-    Handshake::new("4.3".into(), 2, 60, "IntegrationTest2D".into())
+    Handshake::new(
+        "4.3".into(),
+        2,
+        60,
+        "IntegrationTest2D".into(),
+        mock_identity(),
+    )
 }

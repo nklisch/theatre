@@ -23,21 +23,27 @@ impl GodotFixture {
     /// Set `GODOT_BIN` env var to override the default `godot` binary name.
     /// `THEATRE_PORT` is passed to Godot automatically via this method.
     pub fn start(scene: &str) -> anyhow::Result<Self> {
+        Self::start_with_timing(scene, true)
+    }
+
+    /// Launch without `--fixed-fps` so wall-clock lifecycle tests run in real time.
+    pub fn start_realtime(scene: &str) -> anyhow::Result<Self> {
+        Self::start_with_timing(scene, false)
+    }
+
+    fn start_with_timing(scene: &str, fixed_fps: bool) -> anyhow::Result<Self> {
         let port = portpicker::pick_unused_port()
             .ok_or_else(|| anyhow::anyhow!("no free port available"))?;
 
         let godot_bin = std::env::var("GODOT_BIN").unwrap_or_else(|_| "godot".into());
         let project_dir = Self::project_dir();
-
-        let mut child = Command::new(&godot_bin)
-            .args([
-                "--headless",
-                "--fixed-fps",
-                "60",
-                "--path",
-                &project_dir.to_string_lossy(),
-                scene,
-            ])
+        let mut command = Command::new(&godot_bin);
+        command.arg("--headless");
+        if fixed_fps {
+            command.args(["--fixed-fps", "60"]);
+        }
+        let mut child = command
+            .args(["--path", &project_dir.to_string_lossy(), scene])
             .env("THEATRE_PORT", port.to_string())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -77,6 +83,29 @@ impl GodotFixture {
         })
     }
 
+    /// Override the response timeout for a deliberately long-running query.
+    pub fn set_read_timeout(&self, timeout: Duration) -> anyhow::Result<()> {
+        self.stream.set_read_timeout(Some(timeout))?;
+        Ok(())
+    }
+
+    /// Send a query without waiting, for connection-loss lifecycle tests.
+    pub fn send_query_without_waiting(
+        &mut self,
+        method: &str,
+        params: serde_json::Value,
+    ) -> anyhow::Result<()> {
+        codec::write_message(
+            &mut self.stream,
+            &Message::Query {
+                request_id: uuid_simple(),
+                method: method.into(),
+                params,
+            },
+        )?;
+        Ok(())
+    }
+
     /// Send a query and wait for the matching response.
     pub fn query(
         &mut self,
@@ -103,6 +132,46 @@ impl GodotFixture {
                 message,
             } if rid == id => Ok(QueryResult::Err { code, message }),
             other => anyhow::bail!("Unexpected response: {:?}", other),
+        }
+    }
+
+    /// Issue one query from an additional handshaked client.
+    pub fn query_from_additional_client(
+        &self,
+        method: &str,
+        params: serde_json::Value,
+    ) -> anyhow::Result<QueryResult> {
+        let mut stream = Self::wait_for_connection(self.port, Duration::from_secs(5))?;
+        stream.set_read_timeout(Some(Duration::from_secs(10)))?;
+        match codec::read_message::<Message>(&mut stream)? {
+            Message::Handshake(_) => {}
+            other => anyhow::bail!("Expected Handshake, got {other:?}"),
+        }
+        codec::write_message(
+            &mut stream,
+            &Message::HandshakeAck(HandshakeAck {
+                stage_version: env!("CARGO_PKG_VERSION").to_string(),
+                protocol_version: PROTOCOL_VERSION,
+                session_id: "wire-test-additional-client".into(),
+            }),
+        )?;
+        let id = uuid_simple();
+        codec::write_message(
+            &mut stream,
+            &Message::Query {
+                request_id: id.clone(),
+                method: method.into(),
+                params,
+            },
+        )?;
+        match codec::read_message::<Message>(&mut stream)? {
+            Message::Response { request_id, data } if request_id == id => Ok(QueryResult::Ok(data)),
+            Message::Error {
+                request_id,
+                code,
+                message,
+            } if request_id == id => Ok(QueryResult::Err { code, message }),
+            other => anyhow::bail!("Unexpected response: {other:?}"),
         }
     }
 
@@ -140,7 +209,31 @@ impl GodotFixture {
         let port = self.port;
         let child = self.child.take().expect("child already taken");
         // self.stream is dropped here, closing the TCP connection (sends FIN to Godot)
-        (port, OwnedGodotChild(child))
+        (port, OwnedGodotChild(Some(child)))
+    }
+
+    /// Reconnect to an already-running Godot process after a deliberate client drop.
+    pub fn reconnect(port: u16, mut owned: OwnedGodotChild) -> anyhow::Result<Self> {
+        let mut stream = Self::wait_for_connection(port, Duration::from_secs(15))?;
+        stream.set_read_timeout(Some(Duration::from_secs(10)))?;
+        let handshake = match codec::read_message::<Message>(&mut stream)? {
+            Message::Handshake(handshake) => handshake,
+            other => anyhow::bail!("Expected Handshake, got {other:?}"),
+        };
+        codec::write_message(
+            &mut stream,
+            &Message::HandshakeAck(HandshakeAck {
+                stage_version: env!("CARGO_PKG_VERSION").to_string(),
+                protocol_version: PROTOCOL_VERSION,
+                session_id: "wire-test-reconnect".into(),
+            }),
+        )?;
+        Ok(Self {
+            child: owned.0.take(),
+            port,
+            stream,
+            handshake,
+        })
     }
 }
 
@@ -154,11 +247,13 @@ impl Drop for GodotFixture {
 
 /// Keeps a disconnected fixture's Godot process alive for reconnect tests,
 /// then guarantees the same process-tree cleanup as the fixture itself.
-pub struct OwnedGodotChild(Child);
+pub struct OwnedGodotChild(Option<Child>);
 
 impl Drop for OwnedGodotChild {
     fn drop(&mut self) {
-        terminate_process_tree(&mut self.0);
+        if let Some(mut child) = self.0.take() {
+            terminate_process_tree(&mut child);
+        }
     }
 }
 

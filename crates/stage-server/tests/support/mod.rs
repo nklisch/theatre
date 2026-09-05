@@ -32,6 +32,14 @@ pub async fn dispatch_tool_raw(
     }
 
     match name {
+        "runtime_status" => {
+            let p = from_value(params)?;
+            server.runtime_status(Parameters(p)).await
+        }
+        "runtime_diagnostics" => {
+            let p = from_value(params)?;
+            server.runtime_diagnostics(Parameters(p)).await
+        }
         "spatial_snapshot" => {
             let p = from_value(params)?;
             server.spatial_snapshot(Parameters(p)).await

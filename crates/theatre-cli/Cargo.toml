@@ -10,6 +10,7 @@ name = "theatre"
 path = "src/main.rs"
 
 [dependencies]
+theatre-feedback.workspace = true
 clap = { version = "4", features = ["derive"] }
 dialoguer = "0.11"
 console = "0.15"

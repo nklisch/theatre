@@ -180,6 +180,8 @@ static func op_editor_status(_params: Dictionary) -> Dictionary:
 
 	return {"success": true, "data": {
 		"editor_connected": false,
+		"project_path": ProjectSettings.globalize_path("res://"),
+		"process_id": OS.get_process_id(),
 		"active_scene": "",
 		"open_scenes": [],
 		"game_running": false,

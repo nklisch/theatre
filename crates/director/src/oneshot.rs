@@ -6,6 +6,8 @@ use std::time::Duration;
 pub struct OperationResult {
     pub success: bool,
     #[serde(default)]
+    pub persistence: crate::responses::Persistence,
+    #[serde(default)]
     pub data: serde_json::Value,
     #[serde(default)]
     pub error: Option<String>,
@@ -21,11 +23,7 @@ impl OperationResult {
         if self.success {
             Ok(self.data)
         } else {
-            Err(OperationError::OperationFailed {
-                error: self.error.unwrap_or_else(|| "unknown error".into()),
-                operation: self.operation.unwrap_or_else(|| "unknown".into()),
-                context: self.context.unwrap_or(serde_json::Value::Null),
-            })
+            Err(OperationError::OperationFailed(Box::new(self)))
         }
     }
 }
@@ -49,12 +47,8 @@ pub enum OperationError {
         stdout: String,
     },
 
-    #[error("Operation failed: {error}")]
-    OperationFailed {
-        error: String,
-        operation: String,
-        context: serde_json::Value,
-    },
+    #[error("Operation failed: {}", .0.error.as_deref().unwrap_or("unknown error"))]
+    OperationFailed(Box<OperationResult>),
 
     #[error("daemon backend failed: {daemon}; one-shot fallback also failed: {fallback}")]
     FallbackFailed {

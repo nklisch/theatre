@@ -25,20 +25,12 @@ use stage_protocol::query::{
     SnapshotResponse, SpatialContextRaw, SpriteData, TransformEntityData, TreeInclude,
 };
 
-/// State for deferred frame advance (set by action_handler, read by tcp_server).
-#[derive(Default)]
-pub struct AdvanceState {
-    /// Number of physics frames remaining to advance.
-    pub remaining: u32,
-    /// Request ID waiting for advance completion.
-    pub pending_id: Option<String>,
-}
-
 #[derive(GodotClass)]
 #[class(base = Node)]
 pub struct StageCollector {
     base: Base<Node>,
-    pub advance_state: std::cell::RefCell<AdvanceState>,
+    /// Main-thread handoff from the query handler to the TCP lifecycle owner.
+    pub deferred_action: std::cell::RefCell<Option<crate::action_handler::DeferredAction>>,
     last_entity_count: std::cell::Cell<u32>,
     last_group_count: std::cell::Cell<u32>,
 }
@@ -48,7 +40,7 @@ impl INode for StageCollector {
     fn init(base: Base<Node>) -> Self {
         Self {
             base,
-            advance_state: std::cell::RefCell::new(AdvanceState::default()),
+            deferred_action: std::cell::RefCell::new(None),
             last_entity_count: std::cell::Cell::new(0),
             last_group_count: std::cell::Cell::new(0),
         }
@@ -73,7 +65,7 @@ impl StageCollector {
 impl StageCollector {
     /// Collect scene snapshot data based on the provided parameters.
     pub fn collect_snapshot(&self, params: &GetSnapshotDataParams) -> SnapshotResponse {
-        let tree = match self.base().get_tree() {
+        let tree = match self.base().get_tree_or_null() {
             Some(t) => t,
             None => return snapshot_empty(),
         };
@@ -459,11 +451,11 @@ impl StageCollector {
                 continue;
             };
             let usage = prop
-                .get(GString::from("usage"))
+                .get("usage")
                 .and_then(|v| v.try_to::<i64>().ok())
                 .unwrap_or(0);
             let name = prop
-                .get(GString::from("name"))
+                .get("name")
                 .and_then(|v| v.try_to::<GString>().ok())
                 .map(|s| s.to_string())
                 .unwrap_or_default();
@@ -513,7 +505,7 @@ impl StageCollector {
         for i in 0..signals.len() {
             let Some(sig) = signals.get(i) else { continue };
             let name = sig
-                .get(GString::from("name"))
+                .get("name")
                 .and_then(|v| v.try_to::<GString>().ok())
                 .map(|s| s.to_string())
                 .unwrap_or_default();
@@ -571,7 +563,7 @@ impl StageCollector {
 
     /// Get the relative path of a node from the current scene root.
     fn get_relative_path(&self, node: &Gd<Node>) -> String {
-        if let Some(tree) = self.base().get_tree()
+        if let Some(tree) = self.base().get_tree_or_null()
             && let Some(root) = tree.get_current_scene()
         {
             return root.get_path_to(node).to_string();
@@ -598,7 +590,10 @@ impl StageCollector {
         &self,
         params: &GetNodeInspectParams,
     ) -> Result<NodeInspectResponse, String> {
-        let tree = self.base().get_tree().ok_or("No scene tree available")?;
+        let tree = self
+            .base()
+            .get_tree_or_null()
+            .ok_or("No scene tree available")?;
         let root = tree.get_current_scene().ok_or("No current scene")?;
         let node: Gd<Node> = root
             .try_get_node_as(params.path.as_str())
@@ -889,7 +884,7 @@ impl StageCollector {
         for i in 0..signals.len() {
             let Some(sig) = signals.get(i) else { continue };
             let name = sig
-                .get(GString::from("name"))
+                .get("name")
                 .and_then(|v| v.try_to::<GString>().ok())
                 .map(|s| s.to_string())
                 .unwrap_or_default();
@@ -902,7 +897,7 @@ impl StageCollector {
                     .filter_map(|j| {
                         let conn = conns.get(j)?;
                         let callable = conn
-                            .get(GString::from("callable"))
+                            .get("callable")
                             .and_then(|v| v.try_to::<godot::builtin::Callable>().ok())?;
                         let obj_name = callable
                             .object()
@@ -941,13 +936,12 @@ impl StageCollector {
 
         let base_class = node.get_class().to_string();
 
-        let methods = if let Ok(mut gd_script) = script.clone().try_cast::<godot::classes::Script>()
-        {
+        let methods = if let Ok(gd_script) = script.clone().try_cast::<godot::classes::Script>() {
             let method_list: Array<VarDictionary> = gd_script.get_script_method_list();
             (0..method_list.len())
                 .filter_map(|i| {
                     method_list.get(i).and_then(|m| {
-                        m.get(GString::from("name"))
+                        m.get("name")
                             .and_then(|v| v.try_to::<GString>().ok())
                             .map(|s| s.to_string())
                     })
@@ -1022,7 +1016,7 @@ impl StageCollector {
         };
 
         let mut nearby = Vec::new();
-        if let Some(tree) = self.base().get_tree()
+        if let Some(tree) = self.base().get_tree_or_null()
             && let Some(root) = tree.get_current_scene()
         {
             self.collect_nearby_recursive(&root, &pos, node, &mut nearby, 20.0);
@@ -1071,7 +1065,7 @@ impl StageCollector {
         };
 
         let mut nearby = Vec::new();
-        if let Some(tree) = self.base().get_tree()
+        if let Some(tree) = self.base().get_tree_or_null()
             && let Some(root) = tree.get_current_scene()
         {
             self.collect_nearby_recursive_2d(&root, &pos, node, &mut nearby, 500.0);
@@ -1384,7 +1378,7 @@ impl StageCollector {
             .as_ref()
             .and_then(|name| {
                 ap.get_animation(&StringName::from(name.as_str()))
-                    .map(|anim| anim.get_length() as f64)
+                    .map(|anim| anim.get_length())
             })
             .unwrap_or(0.0);
 
@@ -1533,7 +1527,7 @@ impl StageCollector {
         params: &mut serde_json::Map<String, serde_json::Value>,
     ) {
         if let Ok(shader_mat) = material.clone().try_cast::<ShaderMaterial>()
-            && let Some(mut shader) = shader_mat.get_shader()
+            && let Some(shader) = shader_mat.get_shader()
         {
             let uniform_list = shader.get_shader_uniform_list();
             for entry in uniform_list.iter_shared() {
@@ -1636,7 +1630,7 @@ impl StageCollector {
     /// Find Area3D nodes that contain (overlap) the target node.
     fn collect_containing_areas(&self, node: &Gd<Node3D>) -> Vec<String> {
         let mut areas = Vec::new();
-        if let Some(tree) = self.base().get_tree()
+        if let Some(tree) = self.base().get_tree_or_null()
             && let Some(root) = tree.get_current_scene()
         {
             self.find_areas_containing(&root, node, &mut areas);
@@ -1718,8 +1712,8 @@ impl StageCollector {
     }
 
     fn scene_tree_roots(&self, include: &[TreeInclude]) -> Result<serde_json::Value, String> {
-        let tree = self.base().get_tree().ok_or("No scene tree")?;
-        let root = tree.get_root().ok_or("No root node")?;
+        let tree = self.base().get_tree_or_null().ok_or("No scene tree")?;
+        let root = tree.get_root();
 
         let mut roots = Vec::new();
         let count = root.get_child_count();
@@ -1845,7 +1839,7 @@ impl StageCollector {
         value: &str,
         include: &[TreeInclude],
     ) -> Result<serde_json::Value, String> {
-        let tree = self.base().get_tree().ok_or("No scene tree")?;
+        let tree = self.base().get_tree_or_null().ok_or("No scene tree")?;
         let root = tree.get_current_scene().ok_or("No current scene")?;
 
         let mut results = Vec::new();
@@ -1872,7 +1866,7 @@ impl StageCollector {
 
         let matches = match find_by {
             FindBy::Name => node.get_name().to_string().contains(value),
-            FindBy::Class => node.get_class().to_string() == value,
+            FindBy::Class => node.get_class() == value,
             FindBy::Group => node.is_in_group(value),
             FindBy::Script => self
                 .get_script_path(node)
@@ -1951,7 +1945,7 @@ impl StageCollector {
     /// Paths are relative to the current scene root (same convention as snapshot
     /// entity paths). E.g. "Player", "Enemies/Scout".
     fn resolve_node(&self, path: &str) -> Result<Gd<Node>, String> {
-        let tree = self.base().get_tree().ok_or("No scene tree")?;
+        let tree = self.base().get_tree_or_null().ok_or("No scene tree")?;
         let root = tree.get_current_scene().ok_or("No current scene")?;
         root.try_get_node_as::<Node>(path)
             .ok_or_else(|| format!("Node '{}' not found", path))
@@ -1995,10 +1989,9 @@ impl StageCollector {
         to: Vector3,
         collision_mask: Option<u32>,
     ) -> Result<RaycastResponse, String> {
-        let tree = self.base().get_tree().ok_or("Not in scene tree")?;
+        let tree = self.base().get_tree_or_null().ok_or("Not in scene tree")?;
         let world = tree
             .get_root()
-            .ok_or("No root")?
             .get_world_3d()
             .ok_or("No World3D — is this a 3D scene?")?;
         let space = world.get_space();
@@ -2053,10 +2046,9 @@ impl StageCollector {
         to: Vector2,
         collision_mask: Option<u32>,
     ) -> Result<RaycastResponse, String> {
-        let tree = self.base().get_tree().ok_or("Not in scene tree")?;
+        let tree = self.base().get_tree_or_null().ok_or("Not in scene tree")?;
         let world = tree
             .get_root()
-            .ok_or("No root")?
             .get_world_2d()
             .ok_or("No World2D — is this a 2D scene?")?;
         let space = world.get_space();
@@ -2162,11 +2154,8 @@ impl StageCollector {
         }
     }
 
-    /// Set the advance state for frame-stepping.
-    pub fn set_advance_state(&self, remaining: u32, pending_id: Option<String>) {
-        let mut state = self.advance_state.borrow_mut();
-        state.remaining = remaining;
-        state.pending_id = pending_id;
+    pub fn set_deferred_action(&self, action: crate::action_handler::DeferredAction) {
+        self.deferred_action.replace(Some(action));
     }
 }
 
@@ -2253,7 +2242,7 @@ pub(crate) fn variant_to_json(v: &Variant) -> Option<serde_json::Value> {
             let mut map = serde_json::Map::new();
             for key in dict.keys_array().iter_shared() {
                 let key_str = key.to::<GString>().to_string();
-                if let Some(val) = dict.get(key).and_then(|v| variant_to_json(&v)) {
+                if let Some(val) = dict.get(&key).and_then(|v| variant_to_json(&v)) {
                     map.insert(key_str, val);
                 }
             }

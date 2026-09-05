@@ -11,4 +11,20 @@ impl From<ResolveError> for McpError {
     }
 }
 
-stage_protocol::impl_mcp_internal!(DaemonError, EditorError, OperationError);
+stage_protocol::impl_mcp_internal!(DaemonError, EditorError);
+
+impl From<OperationError> for McpError {
+    fn from(error: OperationError) -> Self {
+        let message = error.to_string();
+        let data = match error {
+            OperationError::OperationFailed(result) => Some(serde_json::json!({
+                "operation": result.operation,
+                "context": result.context,
+                "data": result.data,
+                "persistence": result.persistence,
+            })),
+            _ => None,
+        };
+        McpError::internal_error(message, data)
+    }
+}

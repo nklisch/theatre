@@ -1,142 +1,86 @@
 ---
-description: "Theatre's architecture — GDExtension addon, TCP protocol, MCP server, thread model, and security boundaries."
+description: "Theatre's engine, server, authoring, feedback, transport, and security boundaries."
 ---
 
 # Architecture Overview
 
-Theatre's architecture is built around three principles: thin addon, smart server, and zero game impact.
+Theatre places Godot engine access inside Godot and keeps typed orchestration,
+analysis, and agent response shaping in Rust processes outside it.
 
-## Design principles
+## Component boundaries
 
-### Thin addon, smart server
+- **Stage runtime:** `addons/stage` and `stage-godot` observe and act on the
+  running scene tree. Godot objects stay on the engine main thread.
+- **Stage server:** `stage-server` owns MCP and CLI handling, session state,
+  response shaping, spatial reasoning, and retained clip analysis.
+- **Shared Stage protocol:** `stage-protocol` owns the typed length-prefixed TCP
+  boundary between the server and GDExtension.
+- **Director:** the Rust server selects a verified editor, supervised headless
+  daemon, or one-shot Godot backend. GDScript operation modules use native Godot
+  serialization.
+- **Human feedback:** `addons/theatre_shared` publishes project-local evidence.
+  `theatre-feedback` gives both servers and the CLI one typed reader.
+- **Distribution:** `theatre-cli` installs, initializes, enables, deploys, and
+  configures the matched binaries and addon payloads.
 
-The GDExtension addon (`stage-godot`) does as little as possible:
-- Walk the scene tree on each physics tick
-- Collect raw node data (positions, velocities, properties)
-- Serialize to the wire format
-- Send over TCP when requested
+See [Crate Structure](/architecture/crates) for source ownership and the
+[generated API reference](/api/) for current tool schemas.
 
-All spatial reasoning — budgeting, diffing, indexing, budget trimming, query geometry — happens in the Rust server (crate: `stage-server`, binary: `stage`). This separation means:
+## Stage data flow
 
-1. The addon stays stable across Godot versions (less surface area)
-2. Bugs in spatial logic are fixed in the server without redeploying the GDExtension
-3. The addon's performance impact on the game is minimal and predictable
-
-### Zero game impact
-
-The collector runs in `_physics_process` with O(n) complexity over tracked nodes. With 100 tracked nodes, collection takes < 0.1ms per frame — invisible to the player. Data is written to a ring buffer (not streamed); TCP transmission happens only when the MCP server requests data.
-
-The addon never modifies game state (except for `spatial_action`, which is explicitly mutation). It is safe to leave the addon enabled in development builds.
-
-### Ports and adapters
-
-Both tools use the ports-and-adapters pattern internally:
-
-```
-MCP layer (stdio JSON-RPC)
-    ↕
-Domain layer (spatial queries, clip analysis, budgeting)
-    ↕
-Protocol layer (TCP codec, message types)
-    ↕
-Godot layer (GDExtension / GDScript addon)
+```text
+agent -> stage MCP handler -> TCP query -> Godot main-thread engine access
+agent <- shaped MCP result <- server/core reasoning <- typed engine response
 ```
 
-Each layer can change without affecting the others. The MCP schema can evolve without changing the TCP protocol. The TCP codec is shared between server and addon via `stage-protocol`.
+The live addon listens and the Stage server connects. The addon handshake reports
+the actual project and engine run. `runtime_status` queries current scene and
+readiness rather than treating transport connection as readiness.
 
-## Component map
+The recorder has a separate lifecycle. It owns bounded dashcam buffers, markers,
+and clip persistence, so capture can continue without an agent session. The
+on-demand `viewport` path reads and encodes the latest completed root viewport
+without using that recorder.
 
-```
-theatre/
-├── crates/
-│   ├── stage-server/     MCP server + CLI (binary: stage)
-│   │   ├── mcp/              9 MCP tool handlers
-│   │   ├── cli.rs            CLI one-shot executor
-│   │   ├── tcp.rs            TCP connection management
-│   │   ├── activity.rs       Activity logging
-│   │   └── main.rs           serve / CLI dispatch
-│   │
-│   ├── stage-godot/      GDExtension cdylib
-│   │   ├── tcp_server.rs     TCP listener + codec
-│   │   ├── collector.rs      Scene tree walker
-│   │   └── recorder.rs       Clip file writer
-│   │
-│   ├── stage-protocol/   Shared TCP types
-│   │   ├── codec.rs          Length-prefix framing
-│   │   └── messages.rs       Request/response types
-│   │
-│   ├── stage-core/       Pure spatial logic
-│   │   ├── spatial.rs        Query geometry
-│   │   ├── budget.rs         Token budget trimming
-│   │   └── diff.rs           Frame diffing
-│   │
-│   └── director/             Director MCP binary
-│       ├── tools/            Operation handlers
-│       ├── backend.rs        Backend routing
-│       └── main.rs           rmcp server setup
-│
-├── addons/
-│   ├── stage/            GDScript addon
-│   │   ├── plugin.gd         EditorPlugin
-│   │   ├── runtime.gd        GDExtension wrapper
-│   │   └── dock.gd           Editor dock UI
-│   │
-│   └── director/             Director GDScript addon
-│       ├── plugin.gd         EditorPlugin + TCP listener
-│       └── daemon.gd         Headless daemon script
-│
-└── tests/
-    ├── wire-tests/           Stage E2E tests
-    └── director-tests/       Director E2E tests
+## Director data flow
+
+```text
+agent -> director MCP handler -> verified editor | daemon | one-shot -> Godot API
 ```
 
-## Data flow: snapshot request
+Director tries its backends in that order for supported operations. Open-scene
+changes use the actual editor root and native undo. They remain unsaved until
+`scene_save`. Detached headless changes persist their target files. A batch runs
+sequentially and reports earlier or partial effects without rollback.
 
-```
-1. Agent calls spatial_snapshot tool
+`editor_run` is editor-only and controls a selected saved scene without implicitly
+saving open work. Director reports the native launch state; Stage reports runtime
+readiness and run identity.
 
-2. stage receives MCP tool call via stdin (serve mode)
+## Thread and process rules
 
-3. server serializes SnapshotRequest { detail, token_budget, ... }
-   → 4-byte length prefix + JSON
-   → writes to TCP socket
+Stage scene-tree and engine calls stay on Godot's main thread. Plain owned pixel
+or diagnostic data can cross a worker boundary where the implementation supports
+it. Stage's runtime listener is polled through the engine lifecycle rather than
+letting a socket thread touch Godot objects.
 
-4. stage-godot reads from TCP socket
-   → deserializes SnapshotRequest
-   → queries collector's ring buffer for most recent frame
-   → serializes SnapshotResponse { frame, nodes: [...] }
-   → writes back over TCP
+The Stage MCP server uses Tokio for asynchronous agent and TCP coordination.
+Director supervises its headless daemon and keeps uncertain post-dispatch outcomes
+from being replayed on another backend.
 
-5. stage reads response
-   → passes raw node list to stage-core budget trimmer
-   → trims to token_budget (prioritizing focal_node / class_filter)
-   → serializes final MCP response JSON
-   → writes to stdout
+## Performance boundary
 
-6. Agent receives tool result
-```
+Capture and engine queries have real cost. Current viewport readback is bounded
+and on-demand. The recorder uses a separate capture path for continuous evidence.
+Use detail tiers, filters, pagination, and token budgets to constrain response
+size. Do not infer a universal frame cost from one scene or machine.
 
-## Thread model
+## Security boundary
 
-### stage-godot (GDExtension)
+Theatre is a local development toolkit with powerful mutation operations and no
+protocol authentication. Stage binds its listener to loopback. Director clients
+use local addresses, but its GDScript listeners do not set an explicit bind
+address.
 
-All GDExtension code runs on Godot's **main thread**. `_physics_process` is called by the engine, and the collector accesses `Gd<Node>` only within that callback. There are no background threads in the GDExtension.
-
-The TCP server listens on a separate thread (Rust `std::thread::spawn`), but the thread only reads/writes the TCP socket and a shared `Arc<Mutex<FrameBuffer>>`. It never accesses Godot engine APIs directly.
-
-### stage (MCP server + CLI)
-
-The `stage` binary is a `tokio` async binary. In serve mode, the TCP connection to the addon runs as a persistent background task. In CLI mode, it connects once, runs one tool, and exits. MCP tool call handlers are async and await responses via `oneshot` channels stored in shared state (`Arc<Mutex<SessionState>>`).
-
-No tool handler holds the session lock while awaiting the TCP response — locks are acquired to place the request, released, then re-acquired to read the response. This prevents deadlocks.
-
-## Security model
-
-Theatre is a **local development tool only**:
-
-- All TCP ports bind to `127.0.0.1`
-- No authentication (any local process can connect)
-- GDExtension should not be included in production builds
-- Director's `spatial_action` can execute arbitrary GDScript methods
-
-Do not use Theatre in production games or on servers with remote access.
+Keep Theatre off untrusted networks. Do not expose it as a production-game
+service without an appropriate security boundary.

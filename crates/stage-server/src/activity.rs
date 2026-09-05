@@ -69,6 +69,10 @@ pub fn action_summary(params: &SpatialActionParams) -> String {
         }
         ActionType::AdvanceFrames => format!("Advanced {} frames", params.frames.unwrap_or(1)),
         ActionType::AdvanceTime => format!("Advanced {}s", params.seconds.unwrap_or(0.0)),
+        ActionType::InteractionSequence => format!(
+            "Ran interaction sequence ({} steps)",
+            params.steps.as_ref().map_or(0, Vec::len)
+        ),
         ActionType::Teleport => {
             let node = params.node.as_deref().unwrap_or("?");
             let pos = params

@@ -6,10 +6,11 @@ details.
 
 ## Thin engine boundary, smart server
 
-All reasoning — spatial math, budgeting, diffing, indexing, watch evaluation —
-lives server-side in pure-logic crates. The code running inside Godot
-(GDScript and GDExtension) only reports what the engine says and executes what
-it is told.
+Spatial reasoning, response budgeting, query diffing, indexing, and watch
+evaluation live server-side, with pure logic kept independent of Godot. The
+engine boundary gathers state and executes engine operations. Capture-local
+buffering, clip persistence, and trigger detection stay with the recorder so
+recording can continue without an agent session.
 
 ### Why
 
@@ -29,8 +30,9 @@ fast to iterate, and reusable across tools.
 ### Boundaries
 
 Frame-locked data collection, physics queries, and scene-tree access must
-happen in-engine by necessity. The principle governs where *thinking* lives,
-not where *sensing* happens.
+happen in-engine. Capture-local work has a different lifecycle from agent-side
+analysis; see [architecture](ARCHITECTURE.md) for that ownership boundary.
+Do not move work across processes solely to satisfy a slogan.
 
 ## Token economy as a design constraint
 
@@ -74,9 +76,11 @@ lossy narration loop the project was built to eliminate.
 
 - Action and verification capabilities are first-class and safe to use, not
   bolted-on exceptions to an observe-only posture.
-- Human-in-the-loop features (dock controls, hotkey markers) are designed as
+- Human-in-the-loop features such as markers and shared feedback are
   conveniences layered on the agent workflow, not prerequisites for it.
-- Presence of the addon still never changes gameplay on its own; the *agent's*
+- Feedback reads do not consume evidence. Handling and deletion remain explicit,
+  so one client cannot silently discard another client's context.
+- Presence of the addon still never changes gameplay on its own. The *agent's*
   explicit actions, not human ritual, are the intended source of intervention.
 
 ### Boundaries
@@ -84,33 +88,35 @@ lossy narration loop the project was built to eliminate.
 The human remains the authority on what the bug is and whether a fix worked.
 "Agent-driven" describes operation of the game, not ownership of the goal.
 
-## One source of truth for wire contracts
+## One source of truth for contracts
 
-Shared protocol types are defined once, in one crate consumed by both ends of
-the wire. Boundaries deserialize into typed structs so shape mismatches fail
-early and loudly.
+Code owns structural contracts. Stage's shared wire types live in its protocol
+crate; tool schemas derive from their Rust parameter types. Director's Rust
+boundary types and GDScript operations must agree through boundary validation
+and tests. Documents own semantics, invariants, and rationale, not a second
+hand-maintained set of structures. The shared feedback crate likewise owns its
+public evidence types for both servers and the CLI.
 
 ### Why
 
-The system crosses several process and language boundaries (agent ↔ MCP
-server ↔ TCP ↔ GDExtension/GDScript). Hand-mirrored shapes across those
-boundaries drift silently; a single typed definition turns drift into a
-compile error or an immediate deserialization failure.
+The system crosses several process and language boundaries: agent, MCP
+server, TCP transport, and Godot. Duplicate structural definitions drift.
+Shared types and generated references reduce that drift; cross-language
+boundaries still need real tests rather than a claim of compile-time coverage.
 
 ### Implications
 
-- Wire types live in the shared protocol crate; neither endpoint defines its
-  own private version of a message.
-- Responses crossing a boundary are caught by typed deserialization before
-  reaching business logic.
-- Schemas for tool parameters derive from the same Rust types rather than
-  being maintained by hand.
+- Shared Stage wire types live in the protocol crate rather than private
+  endpoint copies.
+- Validate boundary responses before business logic relies on their shape.
+- Derive tool parameter schemas and generated references from their owning
+  Rust types. Prose explains behavior without duplicating those schemas.
 
 ### Boundaries
 
-Godot-side GDScript glue that only passes data through need not be fully
-typed; the obligation binds at the Rust boundaries where messages are
-produced and consumed.
+GDScript does not consume Rust types directly. Keep that language boundary
+explicit and test its agreement; do not introduce a parallel schema catalog
+merely to describe existing code.
 
 ## Real-loop verification
 
@@ -127,12 +133,16 @@ caught.
 
 ### Implications
 
-- All test layers run unconditionally and must all pass; skipping the E2E
-  layer is not an accepted shortcut.
+- All required test layers must pass. Environment-dependent journeys may need a
+  separate explicit invocation; the ordinary workspace test command does not
+  count as evidence for them.
 - New user-facing capability arrives with the journey that exercises it, not
   just unit coverage of its parts.
 - A component that cannot be exercised in its real environment is treated as
   a design smell, not a testing inconvenience.
+- Test meaningful behaviors, contracts, and regressions at stable interfaces,
+  not every implementation detail or branch. Each test should justify its
+  maintenance cost through the confidence it adds.
 
 ### Boundaries
 
@@ -169,3 +179,23 @@ project.
 The obligation covers what developers actually invoke from game code, not
 the addon's internal structure or editor plumbing, which remain
 project-owned.
+
+## Leave it simpler
+
+Within the accepted scope, remove code, tests, checks, abstractions, and
+compatibility paths that the change makes unnecessary. Prefer fewer concepts
+when they preserve the behavior and guarantees that matter.
+
+### Why
+
+Theatre already crosses engine, process, language, and agent boundaries. Every
+additional mechanism has a cost in understanding, deployment, and failure
+handling. Simplification is useful when it removes that cost, not merely when it
+reduces a line count.
+
+### Boundaries
+
+Preserve meaningful validation, safety, compatibility obligations, and measured
+performance constraints. Avoid obvious plausible performance regressions. A
+change to those guarantees needs explicit approval; an adjacent cleanup idea
+belongs in the backlog rather than silently expanding the current work.

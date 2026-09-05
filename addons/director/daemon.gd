@@ -4,17 +4,7 @@ extends SceneTree
 ## Launched via: godot --headless --path <project> --script addons/director/daemon.gd
 
 const MessageCodec = preload("res://addons/director/message_codec.gd")
-const SceneOps = preload("res://addons/director/ops/scene_ops.gd")
-const NodeOps = preload("res://addons/director/ops/node_ops.gd")
-const ResourceOps = preload("res://addons/director/ops/resource_ops.gd")
-const TileMapOps = preload("res://addons/director/ops/tilemap_ops.gd")
-const GridMapOps = preload("res://addons/director/ops/gridmap_ops.gd")
-const AnimationOps = preload("res://addons/director/ops/animation_ops.gd")
-const PhysicsOps = preload("res://addons/director/ops/physics_ops.gd")
-const ShaderOps = preload("res://addons/director/ops/shader_ops.gd")
-const MetaOps = preload("res://addons/director/ops/meta_ops.gd")
-const ProjectOps = preload("res://addons/director/ops/project_ops.gd")
-const SignalOps = preload("res://addons/director/ops/signal_ops.gd")
+const Dispatcher = preload("res://addons/director/ops/dispatcher.gd")
 
 const DEFAULT_PORT := 6550
 const IDLE_TIMEOUT_SEC := 300  # 5 minutes
@@ -115,102 +105,9 @@ func _poll_client() -> void:
 
 
 func _dispatch(operation: String, params: Dictionary) -> Dictionary:
-	match operation:
-		"scene_create":
-			return SceneOps.op_scene_create(params)
-		"scene_read":
-			return SceneOps.op_scene_read(params)
-		"node_add":
-			return NodeOps.op_node_add(params)
-		"node_set_properties":
-			return NodeOps.op_node_set_properties(params)
-		"node_remove":
-			return NodeOps.op_node_remove(params)
-		"node_reparent":
-			return NodeOps.op_node_reparent(params)
-		"scene_list":
-			return SceneOps.op_scene_list(params)
-		"scene_add_instance":
-			return SceneOps.op_scene_add_instance(params)
-		"resource_read":
-			return ResourceOps.op_resource_read(params)
-		"material_create":
-			return ResourceOps.op_material_create(params)
-		"shape_create":
-			return ResourceOps.op_shape_create(params)
-		"style_box_create":
-			return ResourceOps.op_style_box_create(params)
-		"resource_duplicate":
-			return ResourceOps.op_resource_duplicate(params)
-		"tilemap_set_cells":
-			return TileMapOps.op_tilemap_set_cells(params)
-		"tilemap_get_cells":
-			return TileMapOps.op_tilemap_get_cells(params)
-		"tilemap_clear":
-			return TileMapOps.op_tilemap_clear(params)
-		"gridmap_set_cells":
-			return GridMapOps.op_gridmap_set_cells(params)
-		"gridmap_get_cells":
-			return GridMapOps.op_gridmap_get_cells(params)
-		"gridmap_clear":
-			return GridMapOps.op_gridmap_clear(params)
-		"animation_create":
-			return AnimationOps.op_animation_create(params)
-		"animation_add_track":
-			return AnimationOps.op_animation_add_track(params)
-		"animation_read":
-			return AnimationOps.op_animation_read(params)
-		"animation_remove_track":
-			return AnimationOps.op_animation_remove_track(params)
-		"physics_set_layers":
-			return PhysicsOps.op_physics_set_layers(params)
-		"physics_set_layer_names":
-			return PhysicsOps.op_physics_set_layer_names(params)
-		"visual_shader_create":
-			return ShaderOps.op_visual_shader_create(params)
-		"batch":
-			return MetaOps.op_batch(params)
-		"scene_diff":
-			return MetaOps.op_scene_diff(params)
-		"autoload_add":
-			return ProjectOps.op_autoload_add(params)
-		"autoload_remove":
-			return ProjectOps.op_autoload_remove(params)
-		"project_settings_set":
-			return ProjectOps.op_project_settings_set(params)
-		"project_reload":
-			return ProjectOps.op_project_reload(params)
-		"editor_status":
-			return ProjectOps.op_editor_status(params)
-		"uid_get":
-			return ProjectOps.op_uid_get(params)
-		"uid_update_project":
-			return ProjectOps.op_uid_update_project(params)
-		"export_mesh_library":
-			return ProjectOps.op_export_mesh_library(params)
-		"signal_connect":
-			return SignalOps.op_signal_connect(params)
-		"signal_disconnect":
-			return SignalOps.op_signal_disconnect(params)
-		"signal_list":
-			return SignalOps.op_signal_list(params)
-		"node_set_groups":
-			return NodeOps.op_node_set_groups(params)
-		"node_set_script":
-			return NodeOps.op_node_set_script(params)
-		"node_set_meta":
-			return NodeOps.op_node_set_meta(params)
-		"node_find":
-			return NodeOps.op_node_find(params)
-		"ping":
-			return {"success": true, "data": {"status": "ok"}, "operation": "ping"}
-		_:
-			return {
-				"success": false,
-				"error": "Unknown operation: " + operation,
-				"operation": operation,
-				"context": {},
-			}
+	if operation == "ping":
+		return {"success": true, "data": {"status": "ok", "backend": "daemon", "project_path": ProjectSettings.globalize_path("res://"), "process_id": OS.get_process_id()}, "operation": "ping"}
+	return Dispatcher.dispatch(operation, params)
 
 
 func _check_idle_timeout(delta: float) -> void:

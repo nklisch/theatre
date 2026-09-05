@@ -9,6 +9,7 @@ name = "stage"
 path = "src/main.rs"
 
 [dependencies]
+theatre-feedback.workspace = true
 stage-protocol = { workspace = true, features = ["async", "mcp", "schema"] }
 stage-core = { workspace = true, features = ["schema"] }
 rmcp = { version = "0.16", features = ["server", "transport-io", "macros"] }

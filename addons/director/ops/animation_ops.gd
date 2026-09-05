@@ -133,7 +133,8 @@ static func op_animation_add_track(params: Dictionary) -> Dictionary:
 		return OpsUtil._error("Animation not found: " + resource_path,
 			"animation_add_track", {"resource_path": resource_path})
 
-	var loaded = load(full_path)
+	# File operations must not mutate a cached editor resource before validation.
+	var loaded = ResourceLoader.load(full_path, "Animation", ResourceLoader.CACHE_MODE_IGNORE)
 	if loaded == null or not loaded is Animation:
 		return OpsUtil._error("Resource is not an Animation: " + resource_path,
 			"animation_add_track", {"resource_path": resource_path})
@@ -197,7 +198,8 @@ static func op_animation_read(params: Dictionary) -> Dictionary:
 		return OpsUtil._error("Animation not found: " + resource_path,
 			"animation_read", {"resource_path": resource_path})
 
-	var loaded = load(full_path)
+	# File operations must not mutate a cached editor resource before validation.
+	var loaded = ResourceLoader.load(full_path, "Animation", ResourceLoader.CACHE_MODE_IGNORE)
 	if loaded == null or not loaded is Animation:
 		return OpsUtil._error("Resource is not an Animation: " + resource_path,
 			"animation_read", {"resource_path": resource_path})
@@ -240,7 +242,8 @@ static func op_animation_remove_track(params: Dictionary) -> Dictionary:
 		return OpsUtil._error("Animation not found: " + resource_path,
 			"animation_remove_track", {"resource_path": resource_path})
 
-	var loaded = load(full_path)
+	# File operations must not mutate a cached editor resource before validation.
+	var loaded = ResourceLoader.load(full_path, "Animation", ResourceLoader.CACHE_MODE_IGNORE)
 	if loaded == null or not loaded is Animation:
 		return OpsUtil._error("Resource is not an Animation: " + resource_path,
 			"animation_remove_track", {"resource_path": resource_path})

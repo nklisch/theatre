@@ -1,14 +1,19 @@
+use godot::classes::Object;
 use godot::obj::Gd;
 use godot::prelude::*;
-use stage_protocol::query::ActionResponse;
+use stage_protocol::query::{
+    ActionResponse, INTERACTION_SEQUENCE_ENGINE_DEADLINE_SECS, InteractionSequenceStep,
+};
 use stage_protocol::{
     codec,
     connection_state::{ConnectionAction, ConnectionState},
     handshake::Handshake,
     messages::Message,
 };
+use std::collections::HashSet;
 use std::io::ErrorKind;
 use std::net::{TcpListener, TcpStream};
+use std::time::{Duration, Instant};
 
 use crate::collector::StageCollector;
 use crate::recorder::StageRecorder;
@@ -21,9 +26,37 @@ struct ClientSlot {
     last_activity_at: Option<std::time::Instant>,
 }
 
-/// Tracks which client slot initiated the current frame advance.
-struct PendingAdvance {
-    slot_idx: usize,
+const INTERACTION_SEQUENCE_DEADLINE: Duration =
+    Duration::from_secs(INTERACTION_SEQUENCE_ENGINE_DEADLINE_SECS);
+
+/// The one deferred action allowed to own physics-frame advancement.
+enum PendingAction {
+    AdvanceFrames {
+        slot_idx: usize,
+    },
+    InteractionSequence {
+        slot_idx: usize,
+        request_id: String,
+        steps: Vec<InteractionSequenceStep>,
+        next_step: usize,
+        owned_inputs: HashSet<String>,
+        started_at: Instant,
+        total_frames: u32,
+    },
+}
+
+impl PendingAction {
+    fn slot_idx(&self) -> usize {
+        match self {
+            Self::AdvanceFrames { slot_idx } | Self::InteractionSequence { slot_idx, .. } => {
+                *slot_idx
+            }
+        }
+    }
+
+    fn is_sequence(&self) -> bool {
+        matches!(self, Self::InteractionSequence { .. })
+    }
 }
 
 #[derive(GodotClass)]
@@ -37,10 +70,11 @@ pub struct StageTCPServer {
     /// Frame-advance state machine. The connected/handshake_completed fields are
     /// unused — per-slot state in `clients` is authoritative for connection status.
     conn_state: ConnectionState,
-    /// Which client slot owns the current deferred frame-advance response.
-    pending_advance: Option<PendingAdvance>,
+    /// The single client-owned deferred action using the shared frame counter.
+    pending_action: Option<PendingAction>,
     collector: Option<Gd<StageCollector>>,
     recorder: Option<Gd<StageRecorder>>,
+    runtime_logger: Option<Gd<Object>>,
     /// Seconds of silence on a handshaked connection before treating it as a zombie.
     /// 0 = disabled.
     client_idle_timeout_secs: u64,
@@ -55,9 +89,10 @@ impl INode for StageTCPServer {
             clients: Vec::new(),
             port: 9077,
             conn_state: ConnectionState::default(),
-            pending_advance: None,
+            pending_action: None,
             collector: None,
             recorder: None,
+            runtime_logger: None,
             client_idle_timeout_secs: 10,
         }
     }
@@ -75,6 +110,12 @@ impl StageTCPServer {
         active_watches: i64,
     );
 
+    /// Share the engine-owned run identity with human feedback capture.
+    #[func]
+    pub fn get_run_id(&self) -> GString {
+        GString::from(crate::runtime_identity::identity().run_id.as_str())
+    }
+
     /// Wire the collector into the TCP server.
     #[func]
     pub fn set_collector(&mut self, collector: Gd<StageCollector>) {
@@ -85,6 +126,12 @@ impl StageTCPServer {
     #[func]
     pub fn set_recorder(&mut self, recorder: Gd<StageRecorder>) {
         self.recorder = Some(recorder);
+    }
+
+    /// Wire the process-local GDScript Logger into the main-thread query bridge.
+    #[func]
+    pub fn set_runtime_logger(&mut self, logger: Gd<Object>) {
+        self.runtime_logger = Some(logger);
     }
 
     /// Set the client idle timeout in seconds. 0 disables the timeout. Default: 10.
@@ -134,29 +181,40 @@ impl StageTCPServer {
     pub fn stop(&mut self) {
         self.clients.clear();
         self.listener = None;
-        self.pending_advance = None;
+        self.cancel_pending_action();
         self.conn_state.on_disconnect();
         godot_print!("[Stage] TCP server stopped");
     }
 
     /// Returns true if at least one client has completed the handshake.
     #[func]
-    pub fn is_connected(&self) -> bool {
+    pub fn has_stage_connection(&self) -> bool {
         self.any_connected()
     }
 
     /// Poll for new connections and incoming messages. Call every _physics_process.
     #[func]
     pub fn poll(&mut self) {
-        // Phase 1: frame-advance completion
-        if let Some(advance_msg) = self.check_frame_advance() {
-            if let Some(pa) = self.pending_advance.take() {
-                self.send_response_to_slot(pa.slot_idx, advance_msg);
-            }
+        // Phase 1: deferred action progress and completion.
+        if self.check_pending_deadline() {
             return;
         }
-        // Skip new queries while a frame advance is in progress
+        if let Some((slot_idx, message)) = self.check_frame_advance() {
+            self.send_response_to_slot(slot_idx, message);
+            return;
+        }
         if self.is_advancing() {
+            // Ordinary frame advance preserves its historical exclusive polling.
+            // Sequences must continue reading sockets so owner loss cannot leave
+            // synthetic input held until all requested frames elapse.
+            if self
+                .pending_action
+                .as_ref()
+                .is_some_and(PendingAction::is_sequence)
+            {
+                self.try_accept();
+                self.poll_sequence_connections();
+            }
             return;
         }
 
@@ -258,6 +316,7 @@ impl StageTCPServer {
             self.detect_scene_dimensions(),
             self.get_physics_ticks(),
             self.get_project_name(),
+            crate::runtime_identity::identity().clone(),
         );
         let msg = Message::Handshake(handshake);
 
@@ -380,6 +439,17 @@ impl StageTCPServer {
                 method,
                 params,
             } => {
+                if method == "execute_action" && self.pending_action.is_some() {
+                    self.send_response_to_slot(
+                        slot_idx,
+                        Message::Error {
+                            request_id,
+                            code: "action_in_progress".into(),
+                            message: "Another action owns physics-frame advancement; retry after it completes.".into(),
+                        },
+                    );
+                    return;
+                }
                 if method.starts_with("recording_") || method.starts_with("dashcam_") {
                     let response_msg = if let Some(ref mut recorder) = self.recorder {
                         match crate::recording_handler::handle_recording_query(
@@ -406,14 +476,13 @@ impl StageTCPServer {
                         &method,
                         params,
                         &collector.bind(),
+                        self.runtime_logger.as_ref(),
                     );
                     match response {
                         Some(msg) => self.send_response_to_slot(slot_idx, msg),
-                        // None = deferred (advance_frames): record which slot owns the response
-                        None => {
-                            self.pending_advance = Some(PendingAdvance { slot_idx });
-                            self.sync_advance_from_collector();
-                        }
+                        // Deferred action: transfer validated state into the one
+                        // TCP-owned lifecycle before returning to the poll loop.
+                        None => self.sync_deferred_action_from_collector(slot_idx),
                     }
                 } else {
                     self.send_response_to_slot(
@@ -485,12 +554,12 @@ impl StageTCPServer {
         if slot_idx < self.clients.len() {
             self.clients[slot_idx] = None;
         }
-        // If this slot owned a pending frame advance, cancel it
-        if self.pending_advance.as_ref().map(|pa| pa.slot_idx) == Some(slot_idx) {
-            self.pending_advance = None;
-            self.conn_state.on_disconnect();
+        // Owner loss cancels the whole deferred lifecycle. For sequences this
+        // also releases only sequence-owned presses and restores pause.
+        if self.pending_action.as_ref().map(PendingAction::slot_idx) == Some(slot_idx) {
+            self.cancel_pending_action();
             godot_print!(
-                "[Stage] Slot {} disconnected during frame advance — advance cancelled",
+                "[Stage] Slot {} disconnected during deferred action — action cancelled",
                 slot_idx
             );
         }
@@ -520,20 +589,79 @@ impl StageTCPServer {
         self.conn_state.is_advancing()
     }
 
-    /// Tick the advance counter. If the advance just completed, re-pauses the
-    /// scene tree and returns the deferred response message.
-    fn check_frame_advance(&mut self) -> Option<Message> {
+    fn poll_sequence_connections(&mut self) {
+        // Probe the owner first so traffic from another client cannot starve
+        // disconnect detection and prolong synthetic input ownership.
+        let owner = self.pending_action.as_ref().map(PendingAction::slot_idx);
+        let mut query_processed = owner.is_some_and(|slot_idx| self.try_read_query(slot_idx));
+        if self.pending_action.is_none() {
+            return;
+        }
+        for slot_idx in 0..self.clients.len() {
+            if Some(slot_idx) == owner || self.clients[slot_idx].is_none() {
+                continue;
+            }
+            let handshake_complete = self.clients[slot_idx]
+                .as_ref()
+                .is_some_and(|slot| slot.handshake_complete);
+            if !handshake_complete {
+                self.try_read_handshake(slot_idx);
+            } else if !query_processed && self.try_read_query(slot_idx) {
+                query_processed = true;
+            }
+            // Valid sequence playback intentionally suppresses ordinary idle
+            // expiry, but socket reads above still detect connection loss.
+        }
+    }
+
+    fn check_pending_deadline(&mut self) -> bool {
+        let expired = matches!(
+            self.pending_action.as_ref(),
+            Some(PendingAction::InteractionSequence { started_at, .. })
+                if started_at.elapsed() >= INTERACTION_SEQUENCE_DEADLINE
+        );
+        if !expired {
+            return false;
+        }
+        let Some(PendingAction::InteractionSequence {
+            slot_idx,
+            request_id,
+            mut owned_inputs,
+            ..
+        }) = self.pending_action.take()
+        else {
+            return false;
+        };
+        crate::action_handler::release_sequence_inputs(&mut owned_inputs);
+        self.pause_scene_and_cancel_advance();
+        self.send_response_to_slot(
+            slot_idx,
+            Message::Error {
+                request_id,
+                code: "sequence_timeout".into(),
+                message: "Interaction sequence exceeded the 30-second engine deadline; owned inputs were released and the scene was paused.".into(),
+            },
+        );
+        true
+    }
+
+    /// Tick the shared advance counter and either continue the next sequence
+    /// step or finish the deferred response.
+    fn check_frame_advance(&mut self) -> Option<(usize, Message)> {
         let current_frame = self
             .collector
             .as_ref()
             .map(|c| c.bind().get_frame_info().frame)
             .unwrap_or(0);
-
-        match self.conn_state.tick_advance(current_frame) {
-            ConnectionAction::AdvanceComplete { response_id, frame } => {
-                if let Some(mut tree) = self.base().get_tree() {
-                    tree.set_pause(true);
-                }
+        let ConnectionAction::AdvanceComplete { response_id, frame } =
+            self.conn_state.tick_advance(current_frame)
+        else {
+            return None;
+        };
+        let pending = self.pending_action.take()?;
+        match pending {
+            PendingAction::AdvanceFrames { slot_idx } => {
+                self.pause_scene_and_cancel_advance();
                 let response = ActionResponse {
                     action: "advance_frames".into(),
                     result: "ok".into(),
@@ -544,29 +672,125 @@ impl StageTCPServer {
                     frame,
                 };
                 let data = serde_json::to_value(&response).unwrap_or(serde_json::Value::Null);
-                Some(Message::Response {
-                    request_id: response_id,
-                    data,
-                })
+                Some((
+                    slot_idx,
+                    Message::Response {
+                        request_id: response_id,
+                        data,
+                    },
+                ))
             }
-            _ => None,
+            PendingAction::InteractionSequence {
+                slot_idx,
+                request_id,
+                steps,
+                mut next_step,
+                mut owned_inputs,
+                started_at,
+                total_frames,
+            } => {
+                if next_step < steps.len() {
+                    let step = &steps[next_step];
+                    crate::action_handler::apply_sequence_step(step, &mut owned_inputs);
+                    let started = self
+                        .conn_state
+                        .begin_advance(step.frames, request_id.clone());
+                    debug_assert!(started, "completed step must leave frame counter idle");
+                    next_step += 1;
+                    self.pending_action = Some(PendingAction::InteractionSequence {
+                        slot_idx,
+                        request_id,
+                        steps,
+                        next_step,
+                        owned_inputs,
+                        started_at,
+                        total_frames,
+                    });
+                    None
+                } else {
+                    crate::action_handler::release_sequence_inputs(&mut owned_inputs);
+                    self.pause_scene_and_cancel_advance();
+                    let response = ActionResponse {
+                        action: "interaction_sequence".into(),
+                        result: "ok".into(),
+                        details: serde_json::Map::from_iter([
+                            ("steps_completed".into(), serde_json::json!(steps.len())),
+                            ("frames_advanced".into(), serde_json::json!(total_frames)),
+                            ("new_frame".into(), serde_json::json!(frame)),
+                        ]),
+                        frame,
+                    };
+                    let data = serde_json::to_value(&response).unwrap_or(serde_json::Value::Null);
+                    Some((slot_idx, Message::Response { request_id, data }))
+                }
+            }
         }
     }
 
-    /// Sync advance state written by action_handler (into the collector) into
-    /// `conn_state` so that `ConnectionState` becomes the authoritative tracker.
-    /// Called after `handle_query` returns `None` (deferred response).
-    fn sync_advance_from_collector(&mut self) {
-        if let Some(ref collector) = self.collector {
+    fn sync_deferred_action_from_collector(&mut self, slot_idx: usize) {
+        let action = self.collector.as_ref().and_then(|collector| {
             let bound = collector.bind();
-            let mut state = bound.advance_state.borrow_mut();
-            if state.remaining > 0 {
-                let frames = state.remaining;
-                let id = state.pending_id.take().unwrap_or_default();
-                state.remaining = 0; // transferred to conn_state
-                drop(state);
-                self.conn_state.begin_advance(frames, id);
+            bound.deferred_action.borrow_mut().take()
+        });
+        let Some(action) = action else {
+            godot_error!("[Stage] Deferred action response had no lifecycle state");
+            return;
+        };
+        match action {
+            crate::action_handler::DeferredAction::AdvanceFrames { frames, request_id } => {
+                if self.conn_state.begin_advance(frames, request_id) {
+                    self.pending_action = Some(PendingAction::AdvanceFrames { slot_idx });
+                    self.set_scene_paused(false);
+                }
             }
+            crate::action_handler::DeferredAction::InteractionSequence { steps, request_id } => {
+                let total_frames = steps.iter().map(|step| step.frames).sum();
+                let mut owned_inputs = HashSet::new();
+                crate::action_handler::apply_sequence_step(&steps[0], &mut owned_inputs);
+                if self
+                    .conn_state
+                    .begin_advance(steps[0].frames, request_id.clone())
+                {
+                    self.pending_action = Some(PendingAction::InteractionSequence {
+                        slot_idx,
+                        request_id,
+                        steps,
+                        next_step: 1,
+                        owned_inputs,
+                        started_at: Instant::now(),
+                        total_frames,
+                    });
+                    self.set_scene_paused(false);
+                } else {
+                    crate::action_handler::release_sequence_inputs(&mut owned_inputs);
+                    self.set_scene_paused(true);
+                }
+            }
+        }
+    }
+
+    fn cancel_pending_action(&mut self) {
+        // Stopping an idle listener must not change the game's pause state.
+        let Some(action) = self.pending_action.take() else {
+            return;
+        };
+        if let PendingAction::InteractionSequence {
+            mut owned_inputs, ..
+        } = action
+        {
+            crate::action_handler::release_sequence_inputs(&mut owned_inputs);
+        }
+        self.pause_scene_and_cancel_advance();
+    }
+
+    fn pause_scene_and_cancel_advance(&mut self) {
+        self.conn_state.cancel_advance();
+        self.set_scene_paused(true);
+    }
+
+    fn set_scene_paused(&self, paused: bool) {
+        if let Some(mut tree) = self.base().get_tree_or_null() {
+            tree.set_pause(paused);
         }
     }
 
@@ -584,7 +808,7 @@ impl StageTCPServer {
     }
 
     fn detect_scene_dimensions(&self) -> u32 {
-        let Some(tree) = self.base().get_tree() else {
+        let Some(tree) = self.base().get_tree_or_null() else {
             return 3;
         };
         let Some(root) = tree.get_current_scene() else {

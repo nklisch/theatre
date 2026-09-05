@@ -1,0 +1,17 @@
+[package]
+name = "theatre-feedback"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+schemars = "1"
+thiserror = "2"
+rmcp = { version = "0.16", features = ["server"] }
+base64 = "0.22"
+
+[dev-dependencies]
+tempfile = "3"
+jpeg-decoder = "0.3"

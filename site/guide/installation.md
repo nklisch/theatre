@@ -10,27 +10,30 @@ This guide covers everything you need to install Theatre and connect it to your 
 
 ### Rust toolchain
 
-Theatre is built in Rust. You need a recent stable toolchain (1.80 or later).
+Theatre is built in Rust. You need a recent stable toolchain (1.94 or later).
 
 ```bash
 # Install rustup if you don't have it
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 
 # Verify
-rustc --version   # should print 1.80.0 or later
+rustc --version   # should print 1.94.0 or later
 cargo --version
 ```
 
-### Godot 4.5 or later
+### Godot 4.7 or later
 
-Theatre's Stage GDExtension targets Godot 4.5+ with `compatibility_minimum = "4.5"`. The `api-4-5` feature flag in godot-rust requires Godot 4.5 as the minimum runtime version. Director works on any Godot version that supports GDScript plugins.
+Theatre supports Godot 4.7 or later. Stage uses godot-rust 0.5.5 with
+`api-4-7`, `experimental-godot-api`, and `compatibility_minimum = "4.7"`.
+Director also uses native editor APIs from this engine floor. The gdext dependency
+requires Rust 1.94 or later; current local engine verification used Rust 1.96.1.
 
 Make sure the Godot binary is on your `PATH`, or pass it to initialization with
 `--godot-bin`, if you want Theatre to run the initial import and headless
 verification commands:
 
 ```bash
-godot --version   # e.g. 4.3.stable.official
+godot --version   # e.g. 4.7.1.stable.official
 ```
 
 ### An MCP-capable AI agent
@@ -52,7 +55,7 @@ curl -LsSf https://github.com/nklisch/theatre/releases/latest/download/install.s
 
 This detects your OS and architecture, downloads the correct release, verifies the SHA256 checksum, and installs to:
 - `~/.local/bin/` — `theatre`, `stage`, `director` binaries
-- `~/.local/share/theatre/` — addon templates and GDExtension binary
+- `~/.local/share/theatre/` — addon templates, shared support payload, GDExtension binary, and optional client packages
 
 Override install locations with `--bin-dir` and `--share-dir` flags. Use `--no-modify-path` to skip adding `~/.local/bin` to your shell profile.
 
@@ -105,7 +108,7 @@ This walks you through:
 1. **Addon selection** — choose Stage, Director, or both
 2. **MCP configuration** — generates portable `.mcp.json` commands resolved through `PATH`
 3. **Plugin enabling** — updates `project.godot` to enable plugins and autoloads
-4. **Agent rules** — optionally generates a rules file to prevent hand-editing `.tscn`/`.tres` files
+4. **Agent rules** — optionally generates a rules file to guide native authoring of `.tscn`/`.tres` files
 
 For non-interactive setup (CI, scripting), use `--yes` to accept all defaults:
 
@@ -125,7 +128,7 @@ not add a machine-specific path to tracked `.mcp.json`.
 
 ### What `theatre init` does
 
-- Copies addon files from `~/.local/share/theatre/addons/` to your project's `addons/` directory
+- Copies selected addon files and `addons/theatre_shared` support into your project's `addons/` directory
 - Copies the GDExtension binary (`.so`/`.dylib`/`.dll`) for Stage
 - Generates `.mcp.json` with the bare `stage` and `director` commands
 - Enables plugins in `project.godot` and adds the StageRuntime autoload
@@ -217,6 +220,7 @@ Build output:
 ```bash
 cp -r addons/stage ~/path/to/your-godot-project/addons/
 cp -r addons/director ~/path/to/your-godot-project/addons/
+cp -r addons/theatre_shared ~/path/to/your-godot-project/addons/
 ```
 
 Copy the GDExtension binary to the correct platform subdirectory:
@@ -281,7 +285,7 @@ skilltap tap install   # interactive skill picker
 
 Available skills:
 - **theatre-stage** — 9 spatial observation tools for debugging a running Godot game: snapshots, deltas, queries, watches, clips, and live property mutation
-- **theatre-director** — 38 Director tools for creating and modifying Godot scenes, nodes, resources, tilemaps, animations, and signals
+- **theatre-director** — Director authoring, engine discovery, run-control, and feedback workflows
 - **godot-gdscript-patterns** — Godot 4 GDScript patterns: signals, state machines, object pooling, component systems, and performance tips
 
 ### Manual installation
@@ -296,7 +300,7 @@ cp -r .agents/skills/theatre-director <your-project>/.agents/skills/
 
 ## Agent rules (recommended)
 
-AI agents will sometimes try to directly edit `.tscn` and `.tres` files instead of using Director. This breaks UIDs, resource references, and Godot's serialization format. Theatre can generate a rules file that prevents this.
+Read and diff Godot files freely. Prefer Director for structural scene and resource edits so Godot validates types, references, ownership, and serialization. Theatre can generate this guidance for your agent.
 
 ### Via the CLI
 
@@ -325,7 +329,7 @@ If you prefer to add the rules yourself, paste this into your project's `CLAUDE.
 
 ## Using the CLI (alternative to MCP)
 
-Both Stage and Director can be used as standalone CLIs without an MCP server. This is useful when your agent prefers shell commands over MCP, or for scripting.
+Both Stage and Director support standalone CLI calls. Stage CLI calls are one-shot: they do not share session state. Use persistent MCP for deltas, watches, session configuration updates, and actions with `return_delta`. The CLI rejects these requests before connection or mutation with `persistent_session_required` and exit code 2. Empty configuration reads, ordinary observations/actions, and clip operations remain available.
 
 ```bash
 # Stage — observe a running game
@@ -346,7 +350,11 @@ director --help
 stage --version   # {"version": "0.3.4"}
 ```
 
-CLI output is always JSON to stdout. Errors are structured JSON with exit codes: 0 (success), 1 (runtime error), 2 (usage error).
+CLI output is JSON to stdout. Exit codes 1 and 2 report runtime and usage
+failures. Director can also return a structured operation result with
+`"success": false` at exit code 0, so inspect `success`, `error`, `context`, and
+`persistence` — including ordered per-entry batch results — before deciding what
+succeeded or should be retried.
 
 ## Verify the full setup
 

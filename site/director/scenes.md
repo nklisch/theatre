@@ -342,7 +342,7 @@ Get a snapshot of the Godot editor's current state. Returns which scenes are ope
   "game_running": false,
   "autoloads": { "EventBus": "autoload/event_bus.gd" },
   "recent_log": [
-    "Godot Engine v4.6.1.stable.official",
+    "Godot Engine v4.7.1.stable.official",
     "[Director] Editor plugin listening on port 6551",
     "ERROR: res://debug/test_grid.gd:20 - Parse Error: Identifier \"EventBus\" not declared"
   ],
@@ -368,7 +368,32 @@ Get a snapshot of the Godot editor's current state. Returns which scenes are ope
 }
 ```
 
-Use `editor_status` to orient yourself before making changes, to check whether the editor is connected, or to see what errors currently exist in the project.
+Use `editor_status` to orient yourself before making changes. Its project path
+and process identifier establish which editor or headless process answered. Its
+recent log is editor context, not a run-scoped diagnostic stream.
+
+### Save an open scene
+
+Use `scene_save` after an editor-backed scene mutation when the change should
+reach disk. It serializes only the selected scene, retains native undo, and does
+not save unrelated external resources. Godot's native dirty marker may remain.
+Read the returned persistence data, then reopen or diff when saved content matters.
+
+### Run a selected saved scene
+
+Use `editor_run` with `start`, `stop`, `restart`, or `status`. Start and restart
+require a scene path and a verified open editor. Launch does not implicitly save
+open work or fall back to a headless run. A successful response reports Godot's
+native play state only. Use Stage `runtime_status` to establish the actual run,
+current scene, and readiness.
+
+### Inspect the installed engine API
+
+Use `engine_api` when a class member, property type, signal, method, enum, or
+default is uncertain. Start with a class summary, then narrow to one category or
+member. The response identifies the selected engine version and bounds large
+member sets. Some defaults are text-only or unavailable rather than authoring-ready
+JSON.
 
 ## Example conversation
 

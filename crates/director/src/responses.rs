@@ -7,6 +7,36 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+/// Files written and open scenes changed by this operation, not all editor dirty state.
+#[derive(Debug, Default, Clone, Serialize, Deserialize, JsonSchema, PartialEq, Eq)]
+pub struct Persistence {
+    pub saved_paths: Vec<String>,
+    pub unsaved_scene_paths: Vec<String>,
+}
+
+/// Selected-scene serialization retains undo and never flushes external resources.
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct SceneSaveResponse {
+    pub scene_path: String,
+    pub editor_dirty_marker_may_remain: bool,
+    pub persistence: Persistence,
+}
+
+/// A batch entry retains partial data and context even when it fails.
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+pub struct BatchEntryResponse {
+    pub operation: String,
+    pub success: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub data: Option<serde_json::Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<serde_json::Value>,
+    #[serde(default)]
+    pub persistence: Persistence,
+}
+
 // ---------------------------------------------------------------------------
 // Scene operations
 // ---------------------------------------------------------------------------
@@ -14,6 +44,7 @@ use serde::{Deserialize, Serialize};
 /// Response for scene_create.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct SceneCreateResponse {
+    pub persistence: Persistence,
     pub path: String,
     pub root_type: String,
 }
@@ -53,6 +84,7 @@ pub struct SceneListEntry {
 /// Response for scene_add_instance.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct SceneAddInstanceResponse {
+    pub persistence: Persistence,
     pub node_path: String,
     pub instance_scene: String,
 }
@@ -64,6 +96,7 @@ pub struct SceneAddInstanceResponse {
 /// Response for node_add.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct NodeAddResponse {
+    pub persistence: Persistence,
     pub node_path: String,
     #[serde(rename = "type")]
     pub node_type: String,
@@ -72,6 +105,7 @@ pub struct NodeAddResponse {
 /// Response for node_set_properties.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct NodeSetPropertiesResponse {
+    pub persistence: Persistence,
     pub node_path: String,
     pub properties_set: Vec<String>,
 }
@@ -79,6 +113,7 @@ pub struct NodeSetPropertiesResponse {
 /// Response for node_remove.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct NodeRemoveResponse {
+    pub persistence: Persistence,
     /// The path of the removed node.
     pub removed: String,
     /// Number of child nodes also removed.
@@ -88,6 +123,7 @@ pub struct NodeRemoveResponse {
 /// Response for node_reparent.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct NodeReparentResponse {
+    pub persistence: Persistence,
     pub old_path: String,
     pub new_path: String,
 }
@@ -95,6 +131,7 @@ pub struct NodeReparentResponse {
 /// Response for node_set_groups.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct NodeSetGroupsResponse {
+    pub persistence: Persistence,
     pub node_path: String,
     pub groups: Vec<String>,
 }
@@ -102,6 +139,7 @@ pub struct NodeSetGroupsResponse {
 /// Response for node_set_script.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct NodeSetScriptResponse {
+    pub persistence: Persistence,
     pub node_path: String,
     pub script_path: Option<String>,
 }
@@ -109,6 +147,7 @@ pub struct NodeSetScriptResponse {
 /// Response for node_set_meta.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct NodeSetMetaResponse {
+    pub persistence: Persistence,
     pub node_path: String,
     pub meta_keys: Vec<String>,
 }
@@ -147,6 +186,7 @@ pub struct ResourceReadResponse {
 /// Response for material_create and style_box_create.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ResourceCreateResponse {
+    pub persistence: Persistence,
     pub path: String,
     #[serde(rename = "type")]
     pub resource_type: String,
@@ -155,6 +195,7 @@ pub struct ResourceCreateResponse {
 /// Response for shape_create.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ShapeCreateResponse {
+    pub persistence: Persistence,
     pub shape_type: String,
     /// Set when a save_path was provided.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -167,6 +208,7 @@ pub struct ShapeCreateResponse {
 /// Response for resource_duplicate.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ResourceDuplicateResponse {
+    pub persistence: Persistence,
     pub path: String,
     #[serde(rename = "type")]
     pub resource_type: String,
@@ -180,6 +222,7 @@ pub struct ResourceDuplicateResponse {
 /// Response for tilemap_set_cells.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct TileMapSetCellsResponse {
+    pub persistence: Persistence,
     pub cells_set: u32,
     pub node_path: String,
 }
@@ -196,6 +239,7 @@ pub struct TileMapGetCellsResponse {
 /// Response for tilemap_clear.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct TileMapClearResponse {
+    pub persistence: Persistence,
     pub cells_cleared: u32,
     pub node_path: String,
 }
@@ -207,6 +251,7 @@ pub struct TileMapClearResponse {
 /// Response for gridmap_set_cells.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct GridMapSetCellsResponse {
+    pub persistence: Persistence,
     pub cells_set: u32,
     pub node_path: String,
 }
@@ -221,6 +266,7 @@ pub struct GridMapGetCellsResponse {
 /// Response for gridmap_clear.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct GridMapClearResponse {
+    pub persistence: Persistence,
     pub cells_cleared: u32,
     pub node_path: String,
 }
@@ -232,6 +278,7 @@ pub struct GridMapClearResponse {
 /// Response for animation_create.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct AnimationCreateResponse {
+    pub persistence: Persistence,
     pub path: String,
     pub length: f64,
     pub loop_mode: String,
@@ -240,6 +287,7 @@ pub struct AnimationCreateResponse {
 /// Response for animation_add_track.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct AnimationAddTrackResponse {
+    pub persistence: Persistence,
     pub track_index: u32,
     pub keyframe_count: u32,
 }
@@ -258,6 +306,7 @@ pub struct AnimationReadResponse {
 /// Response for animation_remove_track.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct AnimationRemoveTrackResponse {
+    pub persistence: Persistence,
     pub tracks_removed: u32,
 }
 
@@ -268,6 +317,7 @@ pub struct AnimationRemoveTrackResponse {
 /// Response for physics_set_layers.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct PhysicsSetLayersResponse {
+    pub persistence: Persistence,
     pub node_path: String,
     pub collision_layer: u32,
     pub collision_mask: u32,
@@ -276,6 +326,7 @@ pub struct PhysicsSetLayersResponse {
 /// Response for physics_set_layer_names.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct PhysicsSetLayerNamesResponse {
+    pub persistence: Persistence,
     pub layer_type: String,
     pub layers_set: u32,
 }
@@ -287,6 +338,7 @@ pub struct PhysicsSetLayerNamesResponse {
 /// Response for visual_shader_create.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct VisualShaderCreateResponse {
+    pub persistence: Persistence,
     pub path: String,
     pub node_count: u32,
     pub connection_count: u32,
@@ -299,6 +351,7 @@ pub struct VisualShaderCreateResponse {
 /// Response for signal_connect and signal_disconnect.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct SignalConnectionResponse {
+    pub persistence: Persistence,
     pub source_path: String,
     pub signal_name: String,
     pub target_path: String,
@@ -319,6 +372,8 @@ pub struct SignalConnectionEntry {
     pub target_path: String,
     pub method_name: String,
     pub flags: u32,
+    #[serde(default)]
+    pub binds: Vec<serde_json::Value>,
 }
 
 // ---------------------------------------------------------------------------
@@ -328,7 +383,8 @@ pub struct SignalConnectionEntry {
 /// Response for batch.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct BatchResponse {
-    pub results: Vec<serde_json::Value>,
+    pub persistence: Persistence,
+    pub results: Vec<BatchEntryResponse>,
     pub completed: u32,
     pub failed: u32,
 }
@@ -352,6 +408,7 @@ pub struct SceneDiffResponse {
 /// Response for autoload_add.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct AutoloadAddResponse {
+    pub persistence: Persistence,
     pub name: String,
     pub script_path: String,
     pub enabled: bool,
@@ -360,12 +417,14 @@ pub struct AutoloadAddResponse {
 /// Response for autoload_remove.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct AutoloadRemoveResponse {
+    pub persistence: Persistence,
     pub name: String,
 }
 
 /// Response for project_settings_set.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ProjectSettingsSetResponse {
+    pub persistence: Persistence,
     pub keys_set: Vec<String>,
 }
 
@@ -382,6 +441,10 @@ pub struct ProjectReloadResponse {
 /// Response for editor_status.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct EditorStatusResponse {
+    /// Actual project root reported by Godot.
+    pub project_path: String,
+    /// Process answering this call; an editor only when editor_connected is true.
+    pub process_id: u32,
     /// Whether the Godot editor is running and connected.
     pub editor_connected: bool,
 
@@ -410,6 +473,8 @@ pub struct EditorStatusResponse {
 /// Raw GDScript response for editor_status — before Rust-side log parsing.
 #[derive(Debug, serde::Deserialize)]
 pub(crate) struct EditorStatusRawResponse {
+    pub project_path: String,
+    pub process_id: u32,
     pub editor_connected: bool,
     pub active_scene: String,
     pub open_scenes: Vec<String>,
@@ -428,6 +493,7 @@ pub struct UidGetResponse {
 /// Response for uid_update_project.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct UidUpdateProjectResponse {
+    pub persistence: Persistence,
     pub files_scanned: u32,
     pub uids_registered: u32,
 }
@@ -435,6 +501,7 @@ pub struct UidUpdateProjectResponse {
 /// Response for export_mesh_library.
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
 pub struct ExportMeshLibraryResponse {
+    pub persistence: Persistence,
     pub path: String,
     pub items_exported: u32,
 }

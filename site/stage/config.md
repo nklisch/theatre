@@ -18,7 +18,10 @@ const messages0 = [
 
 Configure Stage's MCP behavior.
 
-`spatial_config` adjusts how Stage formats and filters responses. Changes take effect immediately and persist for the duration of the server session. They are not saved between sessions.
+`spatial_config` adjusts how Stage formats and filters responses. Updates apply
+to the current persistent MCP session and are not saved between sessions. A
+one-shot CLI call can read defaults with an empty object, but it rejects updates
+with `persistent_session_required`. Put reusable defaults in `stage.toml`.
 
 ## When to use it
 

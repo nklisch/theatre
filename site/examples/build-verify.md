@@ -71,7 +71,10 @@ Build a corridor room connecting two larger chambers. The corridor must be:
 
 ## Phase 2: Verify with Stage
 
-Press F5 to run the game.
+Save the selected open scene. With the Director editor plugin connected, use
+`editor_run` to start the saved scene, then wait for Stage `runtime_status` to
+report the matching project, current scene, and readiness. A manual Godot launch
+remains valid when editor run control is unavailable.
 
 ### Verify basic navigation
 
@@ -101,6 +104,8 @@ Press F5 to run the game.
 | Build | Place geometry | Director batch |
 | Build | Instance enemies | Director batch |
 | Build | Configure exports | Director batch |
+| Run | Start the selected saved scene | Director `editor_run` |
+| Verify | Confirm run identity and readiness | Stage `runtime_status` |
 | Verify | Check navmesh connectivity | Stage `path_distance` |
 | Verify | Check corridor width | Stage `spatial_query radius` |
 | Verify | Check patrol routes | Stage `path_distance` |

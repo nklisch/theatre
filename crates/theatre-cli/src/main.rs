@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 
 mod deploy;
 mod enable;
+mod feedback;
 mod godot;
 mod init;
 mod install;
@@ -21,6 +22,10 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Inspect, retrieve, handle or delete retained human feedback
+    Feedback(feedback::FeedbackArgs),
+    /// Native client PostToolUse helper: reads event JSON on stdin
+    FeedbackHook,
     /// Build and install Theatre to ~/.local
     Install(install::InstallArgs),
     /// Set up a Godot project with Theatre addons and MCP config
@@ -38,6 +43,8 @@ enum Command {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
+        Command::Feedback(args) => feedback::run(args),
+        Command::FeedbackHook => feedback::hook(),
         Command::Install(args) => install::run(args),
         Command::Init(args) => init::run(args),
         Command::Deploy(args) => deploy::run(args),

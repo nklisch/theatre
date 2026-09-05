@@ -65,11 +65,17 @@ To set uniform values on a `ShaderMaterial` node, use `node_set_properties` with
 }
 ```
 
-The `shader_parameters` property on a `ShaderMaterial` node holds all uniform values as a dictionary. Setting it via `node_set_properties` saves the values to the scene file.
+The `shader_parameters` property on a `ShaderMaterial` node holds all uniform
+values as a dictionary. Against an open scene, `node_set_properties` changes the
+live scene with native undo and remains unsaved until `scene_save`. A detached
+headless scene operation persists its target file.
 
 ## Tips
 
-**Use `spatial_action` for live tuning.** For quick iteration while the game is running, use `spatial_action` to set `shader_parameters` on a `ShaderMaterial` node — no restart required. Use Director when you want to save the values to the scene file.
+**Use `spatial_action` for live tuning.** For quick iteration while the game is
+running, use `spatial_action` to set `shader_parameters` on a node. The runtime
+change is temporary. Use Director for the durable scene change, then call
+`scene_save` when the target is open in the editor.
 
 **Read current params with `scene_read`.** Use `scene_read` with `properties: true` to read the current `shader_parameters` dictionary from a node before modifying it.
 

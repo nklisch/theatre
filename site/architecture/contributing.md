@@ -10,8 +10,8 @@ How to build, test, and submit changes to Theatre.
 
 ### Prerequisites
 
-- Rust 1.80+ (`rustup update stable`)
-- Godot 4.5+ on your PATH (for E2E tests)
+- Rust 1.94+ (`rustup update stable`)
+- Godot 4.7+ on your PATH (for E2E tests)
 - `cargo` (comes with Rust)
 - Linux, macOS, or Windows (Linux is the primary development platform)
 
@@ -33,20 +33,23 @@ cargo build --workspace --release
 The E2E tests require a Godot project with the Stage GDExtension deployed. Deploy to the test project:
 
 ```bash
-theatre deploy ~/dev/theatre/tests/godot-project
+cargo run -p theatre-cli -- deploy tests/godot-project
 ```
 
 This builds `stage-godot` and copies the `.so` to the test project's addon directory.
 
 ## Running tests
 
-Run all tests — unit, integration, scenario, and E2E — with one command:
+Run ordinary and explicitly ignored tests separately:
 
 ```bash
 cargo test --workspace
+cargo test --workspace -- --ignored --test-threads=1
 ```
 
-**All test layers must pass.** Do not skip E2E tests when submitting a PR. The E2E tests are marked `#[ignore = "requires Godot binary"]` so they only run if `godot` is on your PATH and the test project has the extension deployed.
+**All required test layers must pass.** The ordinary workspace command does not
+run environment-dependent tests marked `#[ignore]`. Those journeys also require
+the relevant Stage payload, Godot editor, or graphical display.
 
 ### Test layers
 
@@ -62,8 +65,8 @@ cargo test --workspace --test '*'
 
 **E2E tests** — require Godot:
 ```bash
-# Ensure godot is on PATH and extension is deployed
-cargo test --workspace -- --include-ignored
+# Ensure Godot is on PATH and required payloads are deployed
+cargo test --workspace -- --ignored --test-threads=1
 ```
 
 The E2E tests start a real Godot process, send tool calls, and verify responses. They test the full stack: Rust server ↔ TCP ↔ GDExtension ↔ Godot engine.
@@ -78,7 +81,7 @@ cargo test -p stage-core
 cargo test -p stage-server snapshot_budget_trimming
 
 # E2E tests only
-cargo test -p wire-tests -- --include-ignored
+cargo test -p wire-tests -- --ignored --test-threads=1
 ```
 
 ## Linting
@@ -138,19 +141,20 @@ test: add E2E scenario for navmesh disconnection
 
 ### Adding a new Stage tool
 
-1. Add request/response types to `crates/stage-protocol/src/messages.rs`
-2. Add GDExtension handler in `crates/stage-godot/src/tcp_server.rs`
-3. Add any pure-logic in `crates/stage-core/`
-4. Add MCP tool handler in `crates/stage-server/src/mcp/<tool_name>.rs`
-5. Register the tool in the `#[tool_router]` impl in `crates/stage-server/src/mcp/mod.rs`
-6. Add unit tests to the relevant crates
-7. Add an E2E test in `tests/wire-tests/`
+1. Define parameters beside the owning handler in `crates/stage-server/src/mcp/`.
+2. Extend shared `stage-protocol` types when the engine boundary needs new data.
+3. Add engine dispatch in `stage-godot` and pure reasoning in `stage-core` only where each belongs.
+4. Register the handler and output schema in the Stage router.
+5. Add the smallest useful unit, transport, and real-engine evidence.
+6. Regenerate the public schema reference from the router.
 
 ### Adding a new Director operation
 
-1. Add the operation to the Director GDScript addon (`addons/director/plugin.gd`)
-2. Add the MCP tool handler in `crates/director/src/tools/`
-3. Add tests in `tests/director-tests/`
+1. Define the Rust parameter and response types in `crates/director/src/mcp/`.
+2. Add the Godot operation to the relevant `addons/director/ops/` module and shared dispatcher.
+3. Preserve editor undo/explicit-save and headless persistence semantics.
+4. Add focused Rust and real-Godot evidence at the affected boundary.
+5. Regenerate the public schema reference from the router.
 
 ## Pull request checklist
 
@@ -171,9 +175,9 @@ test: add E2E scenario for navmesh disconnection
 After changing `stage-godot`:
 
 ```bash
-theatre deploy ~/dev/theatre/tests/godot-project
+cargo run -p theatre-cli -- deploy tests/godot-project
 # Then verify it loads:
-godot --headless --quit --path ~/dev/theatre/tests/godot-project 2>&1
+godot --headless --quit --path tests/godot-project 2>&1
 ```
 
 ### Testing the MCP server manually

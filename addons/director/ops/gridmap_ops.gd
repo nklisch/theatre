@@ -1,127 +1,32 @@
 class_name GridMapOps
 
-const NodeOps = preload("res://addons/director/ops/node_ops.gd")
-const TileMapOps = preload("res://addons/director/ops/tilemap_ops.gd")
+const SceneEdit = preload("res://addons/director/ops/scene_edit.gd")
 const OpsUtil = preload("res://addons/director/ops/ops_util.gd")
 
 
-static func op_gridmap_set_cells(params: Dictionary) -> Dictionary:
-	## Set cells in a GridMap node in a scene.
-	##
-	## Params:
-	##   scene_path: String — path to the .tscn file
-	##   node_path: String — path to the GridMap node within the scene
-	##   cells: Array[Dictionary] — each cell: { position: [x, y, z], item: int,
-	##       orientation?: int (default 0) }
-	##
-	## Returns: { success, data: { cells_set: int, node_path: String } }
-	var scene_path: String = params.get("scene_path", "")
+static func op_gridmap_set_cells(params: Dictionary, edit: SceneEdit) -> Dictionary:
 	var node_path: String = params.get("node_path", "")
-	var cells = params.get("cells", [])
-
-	if scene_path == "":
-		return OpsUtil._error("scene_path is required", "gridmap_set_cells", params)
-	if node_path == "":
-		return OpsUtil._error("node_path is required", "gridmap_set_cells", params)
-	if not cells is Array or cells.is_empty():
-		return OpsUtil._error("cells must be a non-empty array", "gridmap_set_cells", params)
-
-	var loaded = TileMapOps._load_scene_and_find_node(
-		scene_path, node_path, "gridmap_set_cells")
-	if not loaded.success:
-		return loaded
-
-	var root: Node = loaded.root
-	var target: Node = loaded.target
-
-	var result = _set_cells_on_node(target, params)
-	if not result.success:
-		root.free()
-		return result
-
-	var save_result = NodeOps._repack_and_save(root, "res://" + scene_path)
-	root.free()
-	if not save_result.success:
-		return save_result
-
-	return result
+	var node: Node = edit.resolve(node_path)
+	if node_path.is_empty() or node == null:
+		return OpsUtil._error("Node not found: " + node_path, "gridmap_set_cells", params)
+	return _set_cells_on_node(node, params)
 
 
-static func op_gridmap_get_cells(params: Dictionary) -> Dictionary:
-	## Get used cells from a GridMap node in a scene.
-	##
-	## Params:
-	##   scene_path: String — path to the .tscn file
-	##   node_path: String — path to the GridMap node within the scene
-	##   bounds?: Dictionary — { min: [x, y, z], max: [x, y, z] }.
-	##       Omit for all used cells.
-	##   item?: int — filter to cells with this mesh library item only
-	##
-	## Returns: { success, data: { cells: Array[CellData], cell_count: int } }
-	## CellData: { position: [x, y, z], item: int, orientation: int }
-	var scene_path: String = params.get("scene_path", "")
+static func op_gridmap_get_cells(params: Dictionary, edit: SceneEdit) -> Dictionary:
 	var node_path: String = params.get("node_path", "")
-
-	if scene_path == "":
-		return OpsUtil._error("scene_path is required", "gridmap_get_cells", params)
-	if node_path == "":
-		return OpsUtil._error("node_path is required", "gridmap_get_cells", params)
-
-	var loaded = TileMapOps._load_scene_and_find_node(
-		scene_path, node_path, "gridmap_get_cells")
-	if not loaded.success:
-		return loaded
-
-	var root: Node = loaded.root
-	var target: Node = loaded.target
-
-	var result = _get_cells_from_node(target, params)
-	root.free()
-	return result
+	var node: Node = edit.resolve(node_path)
+	if node_path.is_empty() or node == null:
+		return OpsUtil._error("Node not found: " + node_path, "gridmap_get_cells", params)
+	return _get_cells_from_node(node, params)
 
 
-static func op_gridmap_clear(params: Dictionary) -> Dictionary:
-	## Clear cells from a GridMap node in a scene.
-	##
-	## Params:
-	##   scene_path: String — path to the .tscn file
-	##   node_path: String — path to the GridMap node within the scene
-	##   bounds?: Dictionary — { min: [x, y, z], max: [x, y, z] }.
-	##       Omit to clear all cells.
-	##
-	## Returns: { success, data: { cells_cleared: int, node_path: String } }
-	var scene_path: String = params.get("scene_path", "")
+static func op_gridmap_clear(params: Dictionary, edit: SceneEdit) -> Dictionary:
 	var node_path: String = params.get("node_path", "")
+	var node: Node = edit.resolve(node_path)
+	if node_path.is_empty() or node == null:
+		return OpsUtil._error("Node not found: " + node_path, "gridmap_clear", params)
+	return _clear_node(node, params)
 
-	if scene_path == "":
-		return OpsUtil._error("scene_path is required", "gridmap_clear", params)
-	if node_path == "":
-		return OpsUtil._error("node_path is required", "gridmap_clear", params)
-
-	var loaded = TileMapOps._load_scene_and_find_node(
-		scene_path, node_path, "gridmap_clear")
-	if not loaded.success:
-		return loaded
-
-	var root: Node = loaded.root
-	var target: Node = loaded.target
-
-	var result = _clear_node(target, params)
-	if not result.success:
-		root.free()
-		return result
-
-	var save_result = NodeOps._repack_and_save(root, "res://" + scene_path)
-	root.free()
-	if not save_result.success:
-		return save_result
-
-	return result
-
-
-# ---------------------------------------------------------------------------
-# Node-level helpers (callable with a live node — no scene loading or saving)
-# ---------------------------------------------------------------------------
 
 static func _set_cells_on_node(node: Node, params: Dictionary) -> Dictionary:
 	## Set cells on an already-resolved GridMap node.
@@ -139,14 +44,16 @@ static func _set_cells_on_node(node: Node, params: Dictionary) -> Dictionary:
 			"node_set_properties before setting cells.",
 			"gridmap_set_cells", {"node_path": node_path})
 
-	var cells_set := 0
+	if not cells is Array or cells.is_empty():
+		return OpsUtil._error("cells must be a non-empty array", "gridmap_set_cells", params)
+	var converted_cells: Array = []
 	for cell in cells:
 		if not cell is Dictionary:
 			return OpsUtil._error("Each cell must be a dictionary with position and item",
 				"gridmap_set_cells", {"cell": cell})
 
 		var pos_arr = cell.get("position", null)
-		if pos_arr == null or not pos_arr is Array or pos_arr.size() != 3:
+		if not SceneEdit.valid_coordinates(pos_arr, 3):
 			return OpsUtil._error("Cell position must be [x, y, z] array",
 				"gridmap_set_cells", {"cell": cell})
 
@@ -158,8 +65,12 @@ static func _set_cells_on_node(node: Node, params: Dictionary) -> Dictionary:
 		var orientation: int = int(cell.get("orientation", 0))
 		var pos = Vector3i(int(pos_arr[0]), int(pos_arr[1]), int(pos_arr[2]))
 
-		node.set_cell_item(pos, item, orientation)
-		cells_set += 1
+		if orientation < 0 or orientation > 23:
+			return OpsUtil._error("orientation must be 0-23", "gridmap_set_cells", params)
+		converted_cells.append([pos, item, orientation])
+	for cell in converted_cells:
+		node.set_cell_item(cell[0], cell[1], cell[2])
+	var cells_set := converted_cells.size()
 
 	return {"success": true, "data": {"cells_set": cells_set, "node_path": node_path}}
 
@@ -224,6 +135,8 @@ static func _clear_node(node: Node, params: Dictionary) -> Dictionary:
 	if not valid.success:
 		return valid
 
+	if bounds != null and (not bounds is Dictionary or not SceneEdit.valid_coordinates(bounds.get("min"), 3) or not SceneEdit.valid_coordinates(bounds.get("max"), 3)):
+		return OpsUtil._error("bounds requires min and max [x, y, z] arrays", "gridmap_clear", params)
 	var cells_cleared := 0
 
 	if bounds is Dictionary:
@@ -247,6 +160,6 @@ static func _clear_node(node: Node, params: Dictionary) -> Dictionary:
 
 
 # ---------------------------------------------------------------------------
-# Shared helpers (none — all helpers are in TileMapOps and OpsUtil)
+# Coordinate validation and undo cell state are shared through SceneEdit.
 # ---------------------------------------------------------------------------
 

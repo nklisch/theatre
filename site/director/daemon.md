@@ -1,115 +1,49 @@
 ---
-description: "Headless Daemon backend — Director operations via a background Godot process, no editor window required."
+description: "How Director uses its supervised headless Godot daemon and one-shot fallback when no verified editor is available."
 ---
 
 # Headless Daemon Backend
 
-The headless daemon is Director's fallback when the Godot editor is not open. It runs a Godot process in headless mode — no window, no GUI — and processes Director operations over TCP.
+Director uses a persistent headless Godot daemon when no verified editor backend
+is available. The Rust server supervises this process and sends native operation
+requests over the configured daemon port.
 
-## How it works
+## Backend order
 
-The daemon is a Godot script (`addons/director/daemon.gd`) that runs under `godot --headless`. It:
+For supported operations, Director tries:
 
-1. Loads your project (runs `_ready` on the main scene, or runs without a main scene if none is configured)
-2. Starts a TCP listener on **port 6550** (localhost only)
-3. Receives Director operations from the `director` binary
-4. Executes them using Godot's API (same as the editor plugin)
-5. Returns results and keeps running for the next operation
+1. A verified editor connection on the configured editor port.
+2. The supervised headless daemon on the configured daemon port.
+3. A one-shot headless Godot subprocess.
 
-The key advantage over one-shot mode: the Godot process **stays running** between operations. Subsequent operations do not pay the startup cost (~500-2000ms per operation in one-shot mode).
+Fresh editor identity failure can continue to the requested project's headless
+backend. A transport failure after editor dispatch has an unknown outcome and is
+not replayed. `editor_run` is editor-only and does not use headless fallback.
 
-## Starting the daemon
+## Persistence
 
-```bash
-# Start the daemon for your project
-godot --headless --script addons/director/daemon.gd --path /home/user/my-game
+The daemon and one-shot paths load detached scene or resource contexts and persist
+their target files through Godot serialization. They do not share live objects or
+native undo history with an open editor.
 
-# Or use the provided shell wrapper
-./addons/director/start-daemon.sh /home/user/my-game
-```
+The editor path behaves differently: mutations against an open scene use its live
+root and native undo, then remain unsaved until `scene_save`. Read the operation's
+persistence result instead of inferring it from the selected backend.
 
-The daemon prints to stderr when ready:
+## Process ownership
 
-```
-[Director Daemon] Loaded project: /home/user/my-game
-[Director Daemon] Listening on port 6550
-```
+The Director server owns daemon startup, reuse, and termination. Callers do not
+need to start a separate daemon for ordinary MCP or CLI use. `project_reload`
+stops a stale daemon and runs a fresh Godot-backed validation pass so later
+operations can see changed scripts.
 
-Keep the daemon running in a terminal while you work. The `director` binary will automatically use it when the editor backend is unavailable.
+Standalone Godot resolution uses `GODOT_BIN`, then `GODOT_PATH`, then `godot` on
+`PATH`. The daemon port can be selected with `DIRECTOR_DAEMON_PORT`. Keep the
+client and listener configuration aligned.
 
-## Stopping the daemon
+## Limits
 
-```bash
-# Send SIGTERM (Ctrl+C in the terminal)
-# Or:
-pkill -f "director/daemon.gd"
-```
-
-When stopped, the daemon closes its TCP listener cleanly.
-
-## One-shot fallback
-
-If neither port 6551 (editor) nor port 6550 (daemon) is reachable, the `director` binary falls back to **one-shot mode**:
-
-1. Spawn `godot --headless --script addons/director/oneshot.gd -- <serialized_operation>`
-2. Godot loads, executes the operation, exits
-3. The binary reads the output and returns the result
-
-One-shot is always available — it requires only `godot` on the PATH. But it is slow: each operation costs the full Godot startup time (500-2000ms). For batches of operations, use the daemon.
-
-## When each backend is used
-
-| Scenario | Backend selected |
-|---|---|
-| Editor open, project matches | Editor (port 6551) |
-| Editor open, wrong project | Daemon (port 6550) |
-| Editor closed, daemon running | Daemon (port 6550) |
-| Editor closed, no daemon | One-shot |
-| CI/CD pipeline | Daemon (started by CI) or One-shot |
-
-The `director` binary tries backends in this order: port 6551 → port 6550 → one-shot. Connection attempts time out in 200ms, so the fallback chain is fast.
-
-## Using the daemon in CI/CD
-
-In a GitHub Actions workflow:
-
-```yaml
-- name: Start Director daemon
-  run: |
-    godot --headless --script addons/director/daemon.gd --path ${{ github.workspace }}/my-game &
-    # Wait for daemon to be ready
-    sleep 3
-
-- name: Run scene generation
-  run: |
-    ./target/release/director batch-run scene-generation-script.json
-```
-
-Alternatively, use one-shot mode in CI (simpler, no background process management):
-
-```yaml
-- name: Generate level
-  run: |
-    # director will use one-shot automatically since no daemon is running
-    echo '{"op": "batch", ...}' | ./target/release/director run-stdin
-```
-
-## Port configuration
-
-The default daemon port is 6550. Change it with:
-
-```bash
-godot --headless --script addons/director/daemon.gd -- --port 7551
-```
-
-Or in project settings: **Theatre → Director → Daemon Port**.
-
-## Performance comparison
-
-| Mode | First operation | Subsequent operations |
-|---|---|---|
-| Editor backend | 10-50ms | 10-50ms |
-| Daemon backend | 50-200ms | 50-200ms |
-| One-shot | 500-2000ms | 500-2000ms each |
-
-For any batch of more than 1 operation, the daemon provides a significant speedup over one-shot. Start the daemon when doing a session of Director work.
+Headless Godot provides engine types and resource serialization, but not editor
+state, editor-native undo, scene tabs, or graphical run control. Use the editor
+backend when those capabilities matter. Do not infer fixed latency or speedup
+from backend type alone; project import state and operation cost vary.

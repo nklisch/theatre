@@ -19,7 +19,7 @@ const messages0 = [
 
 Get only what changed since the last baseline snapshot.
 
-`spatial_delta` is the efficient alternative to repeated `spatial_snapshot` calls. Instead of returning all tracked nodes, it returns only nodes whose tracked properties changed since the stored baseline. In a scene where most nodes are stationary, this can be 10-50x smaller than a full snapshot.
+`spatial_delta` is the focused alternative to repeated `spatial_snapshot` calls. Instead of returning all tracked nodes, it returns only supported changes since the stored baseline.
 
 ## When to use it
 
@@ -30,58 +30,33 @@ Get only what changed since the last baseline snapshot.
 
 Do **not** use `spatial_delta` as your first call in a session — use `spatial_snapshot` first to get oriented and establish the baseline. Delta computes changes relative to that stored baseline.
 
+Use this workflow in one persistent MCP session. Separate CLI snapshot and delta calls do not share a baseline; the CLI rejects delta requests with `persistent_session_required`.
+
 ## How the baseline works
 
-When you call `spatial_snapshot`, the server stores the response as the **baseline**. Every subsequent `spatial_delta` call computes what changed since that baseline. There is no `since_frame` parameter — the baseline is set automatically by the most recent snapshot.
-
-To update the baseline, call `spatial_snapshot` again. This is the normal pattern for watch loops:
+A `spatial_snapshot` establishes the first baseline. Each `spatial_delta` compares
+the current observation with the stored baseline and then advances that baseline
+to the current frame. An action with `return_delta: true` does the same when a
+baseline exists. There is no caller-supplied `since_frame` parameter.
 
 ```
 spatial_snapshot   → baseline established
 ... game runs ...
-spatial_delta      → what changed since snapshot?
-spatial_snapshot   → new baseline established
+spatial_delta      → changes since snapshot; baseline advances
 ... game runs ...
-spatial_delta      → what changed since second snapshot?
+spatial_delta      → changes since the prior delta; baseline advances
 ```
 
 ## Parameters
 
 <ParamTable :params="params" />
 
-## Response format
+## Response semantics
 
-```json
-{
-  "frame": 284,
-  "baseline_frame": 120,
-  "elapsed_ms": 2733,
-  "changed_node_count": 2,
-  "nodes": {
-    "Player": {
-      "class": "CharacterBody3D",
-      "global_position": [3.1, 0.0, -2.3],
-      "velocity": [2.0, 0.0, 0.0],
-      "on_floor": true
-    },
-    "Enemy_0": {
-      "class": "CharacterBody3D",
-      "global_position": [-1.5, 0.0, 4.2],
-      "velocity": [1.2, 0.0, 0.5]
-    }
-  }
-}
-```
-
-| Field | Description |
-|---|---|
-| `frame` | The current frame when the delta was computed |
-| `baseline_frame` | The frame from the most recent `spatial_snapshot` |
-| `elapsed_ms` | Milliseconds between baseline_frame and frame |
-| `changed_node_count` | Number of nodes with changes |
-| `nodes` | Map of node name → changed properties only |
-
-**Only changed properties are included** in each node entry. If the player's position changed but velocity did not, only `global_position` appears in the player's entry.
+The response identifies `from_frame` and `to_frame`, then includes only non-empty
+change categories such as movement, state changes, entered or exited entities,
+signals, and watch triggers. See the [generated Stage reference](/api/) for the
+current structural schema.
 
 ## Example conversation
 
@@ -93,19 +68,10 @@ The typical watch pattern is:
 
 1. Call `spatial_snapshot` to get the current state and establish the baseline
 2. Optionally call `spatial_watch` on nodes of interest
-3. Periodically call `spatial_delta` to check changes since the baseline
-4. Call `spatial_snapshot` again when you want a new baseline
+3. Call `spatial_delta` when you want changes since the prior baseline or delta.
+4. Call `spatial_snapshot` again when you need a fresh full view and replacement baseline.
 
-```
-spatial_snapshot   → baseline
-... game runs ...
-spatial_delta      → player moved, enemy_0 moved
-spatial_snapshot   → new baseline
-... game runs ...
-spatial_delta      → enemy_0 changed velocity
-```
-
-Each delta response is small because it only includes actual changes.
+Each delta response advances the baseline and omits empty change categories.
 
 ## Tips
 

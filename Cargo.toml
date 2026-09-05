@@ -8,6 +8,7 @@ members = [
     "crates/director",
     "crates/theatre-docs-gen",
     "crates/theatre-cli",
+    "crates/theatre-feedback",
     "tests/wire-tests",
     "tests/director-tests",
     "tests/live-tests",
@@ -40,3 +41,4 @@ rusqlite = { version = "0.33", features = ["bundled"] }
 rmp-serde = "1"
 stage-protocol = { path = "crates/stage-protocol" }
 stage-core = { path = "crates/stage-core" }
+theatre-feedback = { path = "crates/theatre-feedback" }

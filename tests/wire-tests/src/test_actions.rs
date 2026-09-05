@@ -713,6 +713,337 @@ fn teleport_with_rotation_sets_yaw() {
 
 #[test]
 #[ignore = "requires Godot binary and built GDExtension"]
+fn stopping_an_idle_listener_does_not_pause_gameplay() {
+    let mut f = GodotFixture::start("test_scene_3d.tscn").unwrap();
+    let scheduled = f
+        .query(
+            "execute_action",
+            serde_json::json!({
+                "action": "call_method",
+                "path": "Player",
+                "method": "restart_stage_listener_deferred"
+            }),
+        )
+        .unwrap()
+        .unwrap_data();
+    assert_eq!(scheduled["details"]["return_value"], true);
+
+    // The deferred helper closes this connection, records pause state after
+    // stop(), then restarts the same listener. Keep ownership of the process
+    // while waiting so every failure path still tears it down.
+    let (port, child) = f.disconnect_keep_alive();
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    let mut f = GodotFixture::reconnect(port, child).unwrap();
+    let pause_state = f
+        .query(
+            "execute_action",
+            serde_json::json!({
+                "action": "call_method",
+                "path": "Player",
+                "method": "was_paused_after_idle_stage_stop"
+            }),
+        )
+        .unwrap()
+        .unwrap_data();
+    assert_eq!(pause_state["details"]["return_value"], false);
+}
+
+#[test]
+#[ignore = "requires Godot binary and built GDExtension"]
+fn interaction_sequence_moves_player_releases_input_and_remains_paused() {
+    let mut f = GodotFixture::start("test_scene_3d.tscn").unwrap();
+    f.query(
+        "execute_action",
+        serde_json::json!({"action": "pause", "paused": true}),
+    )
+    .unwrap()
+    .unwrap_data();
+    let before = find_entity(&snapshot(&mut f), "Player")["position"][0]
+        .as_f64()
+        .unwrap();
+
+    let result = f
+        .query(
+            "execute_action",
+            serde_json::json!({
+                "action": "interaction_sequence",
+                "steps": [
+                    {"press": [{"action_name": "test_jump"}], "frames": 30}
+                ]
+            }),
+        )
+        .unwrap()
+        .unwrap_data();
+    assert_eq!(result["action"], "interaction_sequence");
+    assert_eq!(result["details"]["steps_completed"], 1);
+    assert_eq!(result["details"]["frames_advanced"], 30);
+
+    let after = find_entity(&snapshot(&mut f), "Player")["position"][0]
+        .as_f64()
+        .unwrap();
+    assert!(
+        after > before + 1.0,
+        "player did not move: {before} -> {after}"
+    );
+    let held = f
+        .query(
+            "execute_action",
+            serde_json::json!({
+                "action": "call_method",
+                "path": "Player",
+                "method": "is_sequence_test_input_pressed"
+            }),
+        )
+        .unwrap()
+        .unwrap_data();
+    assert_eq!(held["details"]["return_value"], false);
+
+    // A successful follow-up advance proves the sequence restored pause. Since
+    // its synthetic press was released, those frames must not move the player.
+    f.query(
+        "execute_action",
+        serde_json::json!({"action": "advance_frames", "frames": 5}),
+    )
+    .unwrap()
+    .unwrap_data();
+    let settled = find_entity(&snapshot(&mut f), "Player")["position"][0]
+        .as_f64()
+        .unwrap();
+    assert_approx(settled, after);
+}
+
+#[test]
+#[ignore = "requires Godot binary and built GDExtension"]
+fn invalid_later_sequence_action_is_atomic_and_preheld_input_is_not_taken() {
+    let mut f = GodotFixture::start("test_scene_3d.tscn").unwrap();
+    f.query(
+        "execute_action",
+        serde_json::json!({"action": "pause", "paused": true}),
+    )
+    .unwrap()
+    .unwrap_data();
+    let before = find_entity(&snapshot(&mut f), "Player")["position"][0]
+        .as_f64()
+        .unwrap();
+
+    let (code, message) = f
+        .query(
+            "execute_action",
+            serde_json::json!({
+                "action": "interaction_sequence",
+                "steps": [
+                    {"press": [{"action_name": "test_jump"}], "frames": 2},
+                    {"release": ["test_jump"], "frames": 0}
+                ]
+            }),
+        )
+        .unwrap()
+        .unwrap_err();
+    assert_eq!(code, "action_failed");
+    assert!(message.contains("step 1"));
+    let held_after_zero = f
+        .query(
+            "execute_action",
+            serde_json::json!({
+                "action": "call_method",
+                "path": "Player",
+                "method": "is_sequence_test_input_pressed"
+            }),
+        )
+        .unwrap()
+        .unwrap_data();
+    assert_eq!(held_after_zero["details"]["return_value"], false);
+
+    let (code, message) = f
+        .query(
+            "execute_action",
+            serde_json::json!({
+                "action": "interaction_sequence",
+                "steps": [
+                    {"press": [{"action_name": "test_jump"}], "frames": 2},
+                    {"press": [{"action_name": "not_in_input_map"}], "frames": 2}
+                ]
+            }),
+        )
+        .unwrap()
+        .unwrap_err();
+    assert_eq!(code, "action_failed");
+    assert!(message.contains("not_in_input_map"));
+    let after = find_entity(&snapshot(&mut f), "Player")["position"][0]
+        .as_f64()
+        .unwrap();
+    assert_approx(after, before);
+
+    f.query(
+        "execute_action",
+        serde_json::json!({"action": "action_press", "action_name": "test_jump"}),
+    )
+    .unwrap()
+    .unwrap_data();
+    let (_, message) = f
+        .query(
+            "execute_action",
+            serde_json::json!({
+                "action": "interaction_sequence",
+                "steps": [{"press": [{"action_name": "test_jump"}], "frames": 1}]
+            }),
+        )
+        .unwrap()
+        .unwrap_err();
+    assert!(message.contains("already held"));
+    let held = f
+        .query(
+            "execute_action",
+            serde_json::json!({
+                "action": "call_method",
+                "path": "Player",
+                "method": "is_sequence_test_input_pressed"
+            }),
+        )
+        .unwrap()
+        .unwrap_data();
+    assert_eq!(held["details"]["return_value"], true);
+    f.query(
+        "execute_action",
+        serde_json::json!({"action": "action_release", "action_name": "test_jump"}),
+    )
+    .unwrap()
+    .unwrap_data();
+}
+
+#[test]
+#[ignore = "requires Godot binary and built GDExtension"]
+fn competing_action_is_rejected_while_sequence_owns_advancement() {
+    let mut f = GodotFixture::start("test_scene_3d.tscn").unwrap();
+    f.query(
+        "execute_action",
+        serde_json::json!({"action": "pause", "paused": true}),
+    )
+    .unwrap()
+    .unwrap_data();
+    f.send_query_without_waiting(
+        "execute_action",
+        serde_json::json!({
+            "action": "interaction_sequence",
+            "steps": [{"press": [{"action_name": "test_jump"}], "frames": 600}]
+        }),
+    )
+    .unwrap();
+
+    let (code, message) = f
+        .query_from_additional_client(
+            "execute_action",
+            serde_json::json!({"action": "advance_frames", "frames": 1}),
+        )
+        .unwrap()
+        .unwrap_err();
+    assert_eq!(code, "action_in_progress");
+    assert!(message.contains("owns physics-frame advancement"));
+}
+
+#[test]
+#[ignore = "requires Godot binary and built GDExtension"]
+fn sequence_deadline_releases_input_and_restores_pause() {
+    let mut f = GodotFixture::start_realtime("test_scene_3d.tscn").unwrap();
+    f.query(
+        "execute_action",
+        serde_json::json!({"action": "pause", "paused": true}),
+    )
+    .unwrap()
+    .unwrap_data();
+    f.query(
+        "execute_action",
+        serde_json::json!({
+            "action": "call_method",
+            "path": "Player",
+            "method": "set_sequence_test_physics_ticks_per_second",
+            "args": [1]
+        }),
+    )
+    .unwrap()
+    .unwrap_data();
+
+    // At one physics tick per second, 600 frames cannot finish before the
+    // engine's real 30-second wall-clock deadline.
+    f.set_read_timeout(std::time::Duration::from_secs(40))
+        .unwrap();
+    let (code, message) = f
+        .query(
+            "execute_action",
+            serde_json::json!({
+                "action": "interaction_sequence",
+                "steps": [{"press": [{"action_name": "test_jump"}], "frames": 600}]
+            }),
+        )
+        .unwrap()
+        .unwrap_err();
+    assert_eq!(code, "sequence_timeout");
+    assert!(message.contains("owned inputs were released"));
+
+    let held = f
+        .query(
+            "execute_action",
+            serde_json::json!({
+                "action": "call_method",
+                "path": "Player",
+                "method": "is_sequence_test_input_pressed"
+            }),
+        )
+        .unwrap()
+        .unwrap_data();
+    assert_eq!(held["details"]["return_value"], false);
+    f.query(
+        "execute_action",
+        serde_json::json!({"action": "advance_frames", "frames": 1}),
+    )
+    .unwrap()
+    .unwrap_data();
+}
+
+#[test]
+#[ignore = "requires Godot binary and built GDExtension"]
+fn sequence_owner_disconnect_releases_input_and_restores_pause() {
+    let mut f = GodotFixture::start("test_scene_3d.tscn").unwrap();
+    f.query(
+        "execute_action",
+        serde_json::json!({"action": "pause", "paused": true}),
+    )
+    .unwrap()
+    .unwrap_data();
+    f.send_query_without_waiting(
+        "execute_action",
+        serde_json::json!({
+            "action": "interaction_sequence",
+            "steps": [{"press": [{"action_name": "test_jump"}], "frames": 600}]
+        }),
+    )
+    .unwrap();
+    let (port, child) = f.disconnect_keep_alive();
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    let mut f = GodotFixture::reconnect(port, child).unwrap();
+
+    let held = f
+        .query(
+            "execute_action",
+            serde_json::json!({
+                "action": "call_method",
+                "path": "Player",
+                "method": "is_sequence_test_input_pressed"
+            }),
+        )
+        .unwrap()
+        .unwrap_data();
+    assert_eq!(held["details"]["return_value"], false);
+    f.query(
+        "execute_action",
+        serde_json::json!({"action": "advance_frames", "frames": 1}),
+    )
+    .unwrap()
+    .unwrap_data();
+}
+
+#[test]
+#[ignore = "requires Godot binary and built GDExtension"]
 fn teleport_non_spatial_node_returns_error() {
     let mut f = GodotFixture::start("test_scene_3d.tscn").unwrap();
 

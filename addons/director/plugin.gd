@@ -3,6 +3,9 @@ extends EditorPlugin
 
 const MessageCodec = preload("res://addons/director/message_codec.gd")
 const EditorOps = preload("res://addons/director/editor_ops.gd")
+const EditorFeedback = preload("res://addons/director/editor_feedback.gd")
+var _feedback := EditorFeedback.new()
+var _share_button: Button
 
 const DEFAULT_PORT := 6551
 const SETTING_PATH := "director/connection/editor_port"
@@ -14,6 +17,18 @@ var _port: int
 
 
 func _enter_tree() -> void:
+	_share_button = Button.new()
+	_share_button.text = "Share feedback"
+	_share_button.tooltip_text = "Capture the scene viewport and selection for the agent (Ctrl+Shift+F8)"
+	var key := InputEventKey.new()
+	key.keycode = KEY_F8
+	key.ctrl_pressed = true
+	key.shift_pressed = true
+	_share_button.shortcut = Shortcut.new()
+	_share_button.shortcut.events = [key]
+	_share_button.pressed.connect(func() -> void: _feedback.share(self))
+	add_control_to_container(CONTAINER_TOOLBAR, _share_button)
+	main_screen_changed.connect(func(screen: String) -> void: _feedback.main_screen = screen)
 	_register_settings()
 	_port = _resolve_port()
 
@@ -27,6 +42,10 @@ func _enter_tree() -> void:
 
 
 func _exit_tree() -> void:
+	_feedback.close()
+	if is_instance_valid(_share_button):
+		remove_control_from_container(CONTAINER_TOOLBAR, _share_button)
+		_share_button.queue_free()
 	if _client != null and _client.get_status() == StreamPeerTCP.STATUS_CONNECTED:
 		_client.disconnect_from_host()
 	_client = null
@@ -86,10 +105,10 @@ func _poll_client() -> void:
 	var params: Dictionary = msg.get("params", {})
 
 	if operation == "ping":
-		_client.put_data(MessageCodec.encode({"success": true, "data": {"status": "ok", "backend": "editor"}, "operation": "ping"}))
+		_client.put_data(MessageCodec.encode({"success": true, "data": {"status": "ok", "backend": "editor", "project_path": ProjectSettings.globalize_path("res://"), "process_id": OS.get_process_id()}, "operation": "ping"}))
 		return
 
-	var result = EditorOps.dispatch(operation, params)
+	var result = EditorOps.dispatch(operation, params, get_undo_redo())
 	_client.put_data(MessageCodec.encode(result))
 
 

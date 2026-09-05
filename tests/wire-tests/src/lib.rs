@@ -11,6 +11,8 @@ mod test_handshake;
 #[cfg(test)]
 mod test_inspect;
 #[cfg(test)]
+mod test_runtime_diagnostics;
+#[cfg(test)]
 mod test_scene_tree;
 #[cfg(test)]
 mod test_snapshot;

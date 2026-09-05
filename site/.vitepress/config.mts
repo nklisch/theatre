@@ -133,6 +133,7 @@ export default defineConfig({
 						{ text: 'Installation', link: '/guide/installation' },
 						{ text: 'Quick Start', link: '/guide/getting-started' },
 						{ text: 'Your First Session', link: '/guide/first-session' },
+						{ text: 'Human Feedback', link: '/guide/human-feedback' },
 					]
 				},
 				{

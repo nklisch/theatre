@@ -31,7 +31,9 @@ Your agent gains the ability to:
 - Scrub through recorded gameplay to find the exact frame a bug occurs
 - Create and modify scenes, tilemaps, animations, and resources
 
-The agent does not see a screenshot. It sees **structured data** — the same data you would read from Godot's debugger, but accessible programmatically, queryable, and integrated into the agent's reasoning loop.
+The agent can combine **structured engine data** with a bounded current viewport
+image. The structured data explains positions, properties, relationships, and
+physics. Pixels show layout, lighting, occlusion, and appearance.
 
 ## Two Tools, One Stage
 
@@ -40,7 +42,7 @@ The agent does not see a screenshot. It sees **structured data** — the same da
 Stage is a live observation and interaction tool for running Godot games. It consists of:
 
 - **A Rust GDExtension addon** (`addons/stage/`) that runs inside your game and collects spatial data from the scene tree on every physics tick. It listens for incoming TCP connections on port 9077.
-- **A Rust MCP server + CLI** (`stage`) that connects to the addon and exposes 9 tools to your AI agent — via MCP (`stage serve`) or CLI (`stage <tool> '<json>'`).
+- **A Rust MCP server + CLI** (`stage`) that connects to the addon and exposes live identity, diagnostics, viewport, spatial, action, clip, and feedback tools through MCP or one-shot CLI calls.
 
 Stage answers questions like:
 
@@ -65,9 +67,14 @@ Director answers requests like:
 - "Fill these 10 tile coordinates with tile ID 5 in the main TileMap"
 - "Create an animation that bounces the node from y=0 to y=2 over 0.5 seconds"
 
-Director never runs the game. It modifies the project files on disk through Godot's own API, so the changes are valid and immediately visible in the editor.
+Director authors project content through Godot's own API. Open-scene changes use
+native undo and remain unsaved until an explicit selected-scene save. Through a
+verified open editor, Director can also start, stop, and restart a selected saved
+scene without implicitly saving unrelated work.
 
-Together, Stage and Director form a complete loop: Stage observes and tests the running game; Director makes the permanent changes. The agent can diagnose, prototype a fix at runtime, verify it works, then commit the change through Director — all without the human touching the editor.
+Together, Stage and Director support an author, save, run, observe, act, and
+verify loop. Stage runtime changes remain temporary. Durable changes belong in
+source code or Director-authored resources.
 
 ## Who Is Theatre For?
 
@@ -79,16 +86,27 @@ Theatre is designed for developers who:
 
 **Want to automate scene construction** — building levels, configuring physics layers, wiring signals — and have the agent verify the result by actually running the game.
 
-**Build AI-driven gameplay features** where the agent needs to observe game state to make decisions — procedural level adjustment, automated QA, dynamic balancing.
+**Share a hard-to-describe observation** from the running game or editor with
+viewport, selection or pointer context, and an optional note.
 
-Theatre does not require any specific AI agent. It uses MCP (Model Context Protocol), which is supported by Claude Code, Cursor, Windsurf, and any other agent that supports MCP tool servers.
+Theatre does not require one specific AI client. Its primary integration is MCP.
+Optional native Claude and Codex packages can announce pending feedback at a
+later tool boundary after explicit installation and trust.
 
 ## Design Philosophy
 
-**Agents see data, not pixels.** Screenshots require vision models and lose precision. Theatre exposes the engine's own data structures — positions as `Vector3`, velocities as `Vector3`, collision layers as bitmasks. Agents reason over numbers, not images.
+**Use state and pixels for different questions.** Engine structures provide exact
+positions, velocities, and collision layers. Current viewport images and retained
+clip images show visual results that those values cannot express.
 
-**Thin addon, smart server.** The GDExtension addon does as little as possible — it collects raw data and sends it over TCP. All spatial reasoning, diffing, budgeting, and indexing happens in the Rust server. This keeps the addon stable across Godot versions and keeps game performance impact minimal.
+**Thin engine boundary, smart server.** The GDExtension gathers engine-owned data
+and executes engine operations. Spatial reasoning, diffing, budgeting, and
+indexing stay in the Rust server. Capture-local buffering and clip persistence
+stay with the recorder because they must continue without an agent session.
 
 **Token budgets first.** Spatial snapshots can be enormous. Every tool that returns scene data accepts a `token_budget` parameter and a `detail` level. Theatre will never blow up your context window with a 500-node scene dump when you only needed the player's position.
 
-**No screenshots required.** The workflow is: play your game, press **F9** to mark the bug moment, and ask your agent to analyze the clip. The agent scrubs the spatial timeline, finds the exact frame, diagnoses the cause, and suggests a fix — all from structured data.
+**Capture only the evidence you need.** Use a summary snapshot for current state,
+`viewport` for the latest completed render, a marked clip for temporal evidence,
+or **Share feedback** when a developer needs to attach context and a note. These
+surfaces complement one another.

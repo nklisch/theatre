@@ -1,10 +1,10 @@
 class_name SignalOps
 
-const NodeOps = preload("res://addons/director/ops/node_ops.gd")
+const SceneEdit = preload("res://addons/director/ops/scene_edit.gd")
 const OpsUtil = preload("res://addons/director/ops/ops_util.gd")
 
 
-static func op_signal_connect(params: Dictionary) -> Dictionary:
+static func op_signal_connect(params: Dictionary, edit: SceneEdit) -> Dictionary:
 	## Connect a signal between two nodes in a scene.
 	##
 	## Params:
@@ -36,21 +36,12 @@ static func op_signal_connect(params: Dictionary) -> Dictionary:
 	if method_name == "":
 		return OpsUtil._error("method_name is required", "signal_connect", params)
 
-	var full_path = "res://" + scene_path
-	if not ResourceLoader.exists(full_path):
-		return OpsUtil._error("Scene not found: " + scene_path, "signal_connect", {"scene_path": scene_path})
-
-	var packed: PackedScene = load(full_path)
-	var root = packed.instantiate()
-
-	var source: Node = _resolve_node(root, source_path)
+	var source: Node = edit.resolve(source_path)
 	if source == null:
-		root.free()
 		return OpsUtil._error("Source node not found: " + source_path, "signal_connect", {"scene_path": scene_path, "source_path": source_path})
 
-	var target: Node = _resolve_node(root, target_path)
+	var target: Node = edit.resolve(target_path)
 	if target == null:
-		root.free()
 		return OpsUtil._error("Target node not found: " + target_path, "signal_connect", {"scene_path": scene_path, "target_path": target_path})
 
 	# Validate signal exists on source node
@@ -61,7 +52,7 @@ static func op_signal_connect(params: Dictionary) -> Dictionary:
 			break
 	if not signal_exists:
 		var source_class: String = source.get_class()
-		root.free()
+
 		return OpsUtil._error(
 			"Signal '" + signal_name + "' not found on " + source_class,
 			"signal_connect",
@@ -80,16 +71,10 @@ static func op_signal_connect(params: Dictionary) -> Dictionary:
 
 	var connect_err := source.connect(signal_name, callable, flags)
 	if connect_err != OK:
-		root.free()
 		return OpsUtil._error(
 			"Failed to connect '%s' (error %d). Godot 4.7+ validates bound callables at connect time — does '%s' exist on the target?" % [signal_name, connect_err, method_name],
 			"signal_connect",
 			{"source_path": source_path, "signal_name": signal_name, "method_name": method_name})
-
-	var save_result = NodeOps._repack_and_save(root, full_path)
-	root.free()
-	if not save_result.success:
-		return save_result
 
 	return {"success": true, "data": {
 		"source_path": source_path,
@@ -99,7 +84,7 @@ static func op_signal_connect(params: Dictionary) -> Dictionary:
 	}}
 
 
-static func op_signal_disconnect(params: Dictionary) -> Dictionary:
+static func op_signal_disconnect(params: Dictionary, edit: SceneEdit) -> Dictionary:
 	## Remove a signal connection from a scene.
 	##
 	## Params:
@@ -128,38 +113,23 @@ static func op_signal_disconnect(params: Dictionary) -> Dictionary:
 	if method_name == "":
 		return OpsUtil._error("method_name is required", "signal_disconnect", params)
 
-	var full_path = "res://" + scene_path
-	if not ResourceLoader.exists(full_path):
-		return OpsUtil._error("Scene not found: " + scene_path, "signal_disconnect", {"scene_path": scene_path})
-
-	var packed: PackedScene = load(full_path)
-	var root = packed.instantiate()
-
-	var source: Node = _resolve_node(root, source_path)
+	var source: Node = edit.resolve(source_path)
 	if source == null:
-		root.free()
 		return OpsUtil._error("Source node not found: " + source_path, "signal_disconnect", {"scene_path": scene_path, "source_path": source_path})
 
-	var target: Node = _resolve_node(root, target_path)
+	var target: Node = edit.resolve(target_path)
 	if target == null:
-		root.free()
 		return OpsUtil._error("Target node not found: " + target_path, "signal_disconnect", {"scene_path": scene_path, "target_path": target_path})
 
-	var callable := Callable(target, method_name)
-	if not source.is_connected(signal_name, callable):
-		root.free()
-		return OpsUtil._error(
-			"Connection does not exist: " + source_path + "." + signal_name + " → " + target_path + "." + method_name,
-			"signal_disconnect",
-			{"source_path": source_path, "signal_name": signal_name, "target_path": target_path, "method_name": method_name}
-		)
-
-	source.disconnect(signal_name, callable)
-
-	var save_result = NodeOps._repack_and_save(root, full_path)
-	root.free()
-	if not save_result.success:
-		return save_result
+	var matching: Array = []
+	if source.has_signal(signal_name):
+		for connection in source.get_signal_connection_list(signal_name):
+			if connection.callable.get_object() == target and connection.callable.get_method() == method_name:
+				matching.append(connection.callable)
+	if matching.is_empty():
+		return OpsUtil._error("Connection does not exist", "signal_disconnect", params)
+	for callable in matching:
+		source.disconnect(signal_name, callable)
 
 	return {"success": true, "data": {
 		"source_path": source_path,
@@ -169,70 +139,23 @@ static func op_signal_disconnect(params: Dictionary) -> Dictionary:
 	}}
 
 
-static func op_signal_list(params: Dictionary) -> Dictionary:
-	## List all signal connections in a scene.
-	##
-	## Params:
-	##   scene_path: String
-	##   node_path: String? (optional — filter to connections from/to this node)
-	##
-	## Returns: { success, data: { connections: [{ source_path, signal_name,
-	##           target_path, method_name, flags }] } }
-
-	var scene_path: String = params.get("scene_path", "")
-	var node_path_filter = params.get("node_path", null)
-
-	if scene_path == "":
-		return OpsUtil._error("scene_path is required", "signal_list", params)
-
-	var full_path = "res://" + scene_path
-	if not ResourceLoader.exists(full_path):
-		return OpsUtil._error("Scene not found: " + scene_path, "signal_list", {"scene_path": scene_path})
-
-	var packed: PackedScene = load(full_path)
-	var state: SceneState = packed.get_state()
-
+static func op_signal_list(params: Dictionary, edit: SceneEdit) -> Dictionary:
 	var connections: Array = []
-	var count: int = state.get_connection_count()
-
-	for i in range(count):
-		var src_path: String = str(state.get_connection_source(i))
-		var sig_name: String = state.get_connection_signal(i)
-		var tgt_path: String = str(state.get_connection_target(i))
-		var meth_name: String = state.get_connection_method(i)
-		var conn_flags: int = state.get_connection_flags(i)
-
-		# Normalize paths: SceneState returns NodePath, remove leading "./"
-		src_path = src_path.trim_prefix("./")
-		if src_path == "":
-			src_path = "."
-		tgt_path = tgt_path.trim_prefix("./")
-		if tgt_path == "":
-			tgt_path = "."
-
-		# Apply node_path filter if provided
-		if node_path_filter != null and node_path_filter != "":
-			var filter: String = node_path_filter
-			if src_path != filter and tgt_path != filter:
-				continue
-
-		connections.append({
-			"source_path": src_path,
-			"signal_name": sig_name,
-			"target_path": tgt_path,
-			"method_name": meth_name,
-			"flags": conn_flags,
-			"binds": state.get_connection_binds(i),
-		})
-
+	_collect_connections(edit.root, edit.root, str(params.get("node_path", "")), connections)
 	return {"success": true, "data": {"connections": connections}}
 
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-static func _resolve_node(root: Node, path: String) -> Node:
-	if path == "" or path == ".":
-		return root
-	return root.get_node_or_null(NodePath(path))
+static func _collect_connections(root: Node, node: Node, filter: String, connections: Array) -> void:
+	for signal_info in node.get_signal_list():
+		for connection in node.get_signal_connection_list(signal_info.name):
+			if not connection.flags & CONNECT_PERSIST:
+				continue
+			var target = connection.callable.get_object()
+			if not target is Node or (target != root and not root.is_ancestor_of(target)):
+				continue
+			var source_path := str(root.get_path_to(node))
+			var target_path := str(root.get_path_to(target))
+			if filter != "" and filter != source_path and filter != target_path:
+				continue
+			connections.append({"source_path": source_path, "signal_name": signal_info.name, "target_path": target_path, "method_name": connection.callable.get_method(), "flags": connection.flags, "binds": connection.callable.get_bound_arguments()})
+	for child in node.get_children():
+		_collect_connections(root, child, filter, connections)

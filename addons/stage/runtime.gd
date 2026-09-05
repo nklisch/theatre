@@ -1,8 +1,14 @@
 extends Node
 
+const RuntimeLoggerScript := preload("res://addons/stage/runtime_logger.gd")
+const Feedback := preload("res://addons/theatre_shared/feedback.gd")
+const FeedbackComposer := preload("res://addons/theatre_shared/feedback_composer.gd")
+var _feedback_composer: ConfirmationDialog
+
 var tcp_server
 var collector
 var recorder
+var _runtime_logger: Logger
 
 var _overlay: CanvasLayer
 var _pause_label: Label
@@ -19,11 +25,19 @@ var _marker_keycode: int = KEY_F9
 var _pause_keycode: int = KEY_F11
 
 
+func _init() -> void:
+	# Register before _ready so capture begins as early as the autoload lifecycle
+	# permits. Godot initialization and pre-registration history are unavailable.
+	_runtime_logger = RuntimeLoggerScript.new()
+	OS.add_logger(_runtime_logger)
+
+
 func _ready() -> void:
 	# Run even when the game tree is paused so TCP polling and recording continue.
 	process_mode = Node.PROCESS_MODE_ALWAYS
 
 	_resolve_shortcut_keys()
+	_setup_overlay()
 
 	for extension_class in [&"StageTCPServer", &"StageCollector", &"StageRecorder"]:
 		if not ClassDB.class_exists(extension_class):
@@ -41,6 +55,7 @@ func _ready() -> void:
 	tcp_server = ClassDB.instantiate(&"StageTCPServer")
 	add_child(tcp_server)
 	tcp_server.set_collector(collector)
+	tcp_server.set_runtime_logger(_runtime_logger)
 	tcp_server.activity_received.connect(_on_activity_received)
 
 	recorder = ClassDB.instantiate(&"StageRecorder")
@@ -66,8 +81,6 @@ func _ready() -> void:
 		"theatre/stage/connection/client_idle_timeout_secs", 10)
 	tcp_server.set_idle_timeout(idle_timeout)
 
-	_setup_overlay()
-
 	# Push status to editor dock every 2s via EngineDebugger (only active in editor play mode).
 	if EngineDebugger.is_active():
 		EngineDebugger.register_message_capture("stage", _on_debugger_command)
@@ -89,7 +102,7 @@ func _push_status_to_editor() -> void:
 	if tcp_server:
 		status = tcp_server.get_connection_status()
 		port = tcp_server.get_port()
-	if collector and tcp_server and tcp_server.is_connected():
+	if collector and tcp_server and tcp_server.has_stage_connection():
 		tracked = collector.get_tracked_count()
 		groups = collector.get_group_count()
 	EngineDebugger.send_message("stage:status",
@@ -175,6 +188,13 @@ func _setup_overlay() -> void:
 	_marker_btn.pressed.connect(_drop_marker)
 	_overlay.add_child(_marker_btn)
 
+	var share := Button.new()
+	share.text = "Share feedback"
+	share.tooltip_text = "Capture the game and add a note for the agent (Ctrl+Shift+F8)"
+	share.position = Vector2(50, 32)
+	share.pressed.connect(share_feedback)
+	_overlay.add_child(share)
+
 
 var _dashcam_label_tick: int = 0
 
@@ -193,12 +213,29 @@ func _shortcut_input(event: InputEvent) -> void:
 		return
 	if event is InputEventKey:
 		var code: int = event.keycode
-		if code == _marker_keycode:
+		if code == KEY_F8 and event.ctrl_pressed and event.shift_pressed:
+			share_feedback()
+			get_viewport().set_input_as_handled()
+		elif code == _marker_keycode:
 			_drop_marker()
 			get_viewport().set_input_as_handled()
 		elif code == _pause_keycode:
 			_toggle_pause()
 			get_viewport().set_input_as_handled()
+
+
+## Deliberate capture, separate from the compatible marker API and recorder.
+func share_feedback() -> void:
+	if is_instance_valid(_feedback_composer):
+		_feedback_composer.grab_focus()
+		return
+	var scene := get_tree().current_scene
+	var scene_path := scene.scene_file_path if scene != null else ""
+	var run_id: Variant = tcp_server.get_run_id() if tcp_server != null else null
+	var composition := Feedback.capture(get_tree().root, "runtime", scene_path, [], "root_viewport", run_id)
+	_feedback_composer = FeedbackComposer.new()
+	add_child(_feedback_composer)
+	_feedback_composer.compose(composition)
 
 
 func _toggle_pause() -> void:
@@ -302,5 +339,7 @@ func _show_toast(text: String) -> void:
 
 
 func _exit_tree() -> void:
+	if _runtime_logger:
+		OS.remove_logger(_runtime_logger)
 	if tcp_server:
 		tcp_server.stop()

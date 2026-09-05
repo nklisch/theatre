@@ -7,9 +7,11 @@ use dialoguer::{Confirm, Select};
 
 use crate::project::validate_project;
 
-/// The rules content that tells AI agents not to hand-edit Godot files.
+/// Guidance distributed to project-local AI agents.
 /// Single source of truth: `rules-template.md` at the repo root.
 const RULES_CONTENT: &str = include_str!("../../../rules-template.md");
+const RULES_MARKER: &str = "# Godot Project File Guidance";
+const LEGACY_RULES_MARKER: &str = "## Never hand-edit Godot files";
 
 #[derive(Args)]
 pub struct RulesArgs {
@@ -58,7 +60,7 @@ pub fn run_from_init(project: &Path, yes: bool) -> Result<()> {
     }
 
     let generate = Confirm::new()
-        .with_prompt("Generate AI agent rules file? (prevents hand-editing .tscn/.tres)")
+        .with_prompt("Generate AI agent guidance for Godot project files?")
         .default(true)
         .interact()
         .context("Rules prompt cancelled")?;
@@ -126,8 +128,19 @@ fn append_to_file(project: &Path, filename: &str) -> Result<()> {
         String::new()
     };
 
-    // Check if rules are already present
-    if existing.contains("Never hand-edit Godot files") {
+    // The legacy generated section contradicts the current guidance. Preserve the
+    // surrounding user-owned file and require an intentional reconciliation instead
+    // of silently appending a second, conflicting policy.
+    if existing.contains(LEGACY_RULES_MARKER) {
+        eprintln!(
+            "  {} {filename} contains legacy generated Godot rules that conflict with current guidance — left unchanged. Remove or reconcile the 'Never hand-edit Godot files' section, then rerun `theatre rules`.",
+            style("⚠").yellow()
+        );
+        return Ok(());
+    }
+
+    // Avoid appending a second copy of the current generated guidance.
+    if existing.contains(RULES_MARKER) {
         eprintln!(
             "  {} {filename} already contains Godot rules — skipped",
             style("⚠").yellow()
@@ -153,4 +166,59 @@ fn append_to_file(project: &Path, filename: &str) -> Result<()> {
         );
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{RULES_CONTENT, RULES_MARKER, append_to_file};
+
+    #[test]
+    fn generated_rules_allow_inspection_and_keep_source_code_code_first() {
+        assert!(RULES_CONTENT.contains("Read Godot project files"));
+        assert!(RULES_CONTENT.contains("inspect their diffs"));
+        assert!(RULES_CONTENT.contains("GDScript (`.gd`)"));
+        assert!(RULES_CONTENT.contains("shader source (`.gdshader`)"));
+    }
+
+    #[test]
+    fn generated_rules_prefer_native_structural_edits_without_blanket_claims() {
+        assert!(RULES_CONTENT.starts_with(RULES_MARKER));
+        assert!(RULES_CONTENT.contains("prefer **Director**"));
+        assert!(RULES_CONTENT.contains("Do not automatically fall back"));
+        assert!(RULES_CONTENT.contains("live root and native undo history"));
+        assert!(RULES_CONTENT.contains("remain unsaved until `scene_save`"));
+        assert!(RULES_CONTENT.contains("saved content after partial failures"));
+        assert!(RULES_CONTENT.contains("Detached headless scene and resource operations persist"));
+        assert!(!RULES_CONTENT.contains("Do NOT directly read"));
+        assert!(!RULES_CONTENT.contains("will produce corrupt"));
+    }
+
+    #[test]
+    fn append_preserves_user_content_and_adds_current_guidance() {
+        let project = tempfile::tempdir().unwrap();
+        let original = "# My project\n\nKeep this user-authored section.\n";
+        std::fs::write(project.path().join("CLAUDE.md"), original).unwrap();
+
+        append_to_file(project.path(), "CLAUDE.md").unwrap();
+
+        let content = std::fs::read_to_string(project.path().join("CLAUDE.md")).unwrap();
+        assert!(content.starts_with(original));
+        assert_eq!(content.matches(RULES_MARKER).count(), 1);
+    }
+
+    #[test]
+    fn append_refuses_legacy_generated_rules_without_changing_user_content() {
+        let project = tempfile::tempdir().unwrap();
+        for filename in ["CLAUDE.md", "AGENTS.md"] {
+            let original = String::from(
+                "# My project\n\nUser-authored content.\n\n## Never hand-edit Godot files\n\nDo NOT directly read Godot files.\n",
+            );
+            let path = project.path().join(filename);
+            std::fs::write(&path, &original).unwrap();
+
+            append_to_file(project.path(), filename).unwrap();
+
+            assert_eq!(std::fs::read_to_string(path).unwrap(), original);
+        }
+    }
 }

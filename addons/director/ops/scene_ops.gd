@@ -1,5 +1,6 @@
 class_name SceneOps
 
+const SceneEdit = preload("res://addons/director/ops/scene_edit.gd")
 const NodeOps = preload("res://addons/director/ops/node_ops.gd")
 const OpsUtil = preload("res://addons/director/ops/ops_util.gd")
 
@@ -23,7 +24,7 @@ static func op_scene_create(params: Dictionary) -> Dictionary:
 		return OpsUtil._error("Unknown node type: " + root_type, "scene_create", {"scene_path": scene_path, "root_type": root_type})
 
 	# Ensure the class is a Node subclass
-	if not ClassDB.is_parent_class(root_type, "Node"):
+	if not ClassDB.is_parent_class(root_type, "Node") or not ClassDB.can_instantiate(root_type):
 		return OpsUtil._error(root_type + " is not a Node subclass", "scene_create", {"scene_path": scene_path, "root_type": root_type})
 
 	# Create the root node
@@ -51,7 +52,7 @@ static func op_scene_create(params: Dictionary) -> Dictionary:
 	return {"success": true, "data": {"path": scene_path, "root_type": root_type}}
 
 
-static func op_scene_read(params: Dictionary) -> Dictionary:
+static func op_scene_read(params: Dictionary, edit: SceneEdit) -> Dictionary:
 	## Read the full node tree of a scene file.
 	##
 	## Params: scene_path (String), depth (int, optional), properties (bool, default true)
@@ -61,15 +62,7 @@ static func op_scene_read(params: Dictionary) -> Dictionary:
 	if scene_path == "":
 		return OpsUtil._error("scene_path is required", "scene_read", params)
 
-	var full_path = "res://" + scene_path
-	if not ResourceLoader.exists(full_path):
-		return OpsUtil._error("Scene not found: " + scene_path, "scene_read", {"scene_path": scene_path})
-
-	var packed: PackedScene = load(full_path)
-	if packed == null:
-		return OpsUtil._error("Failed to load scene: " + scene_path, "scene_read", {"scene_path": scene_path})
-
-	var root = packed.instantiate()
+	var root: Node = edit.root
 	if root == null:
 		return OpsUtil._error("Failed to instantiate scene: " + scene_path, "scene_read", {"scene_path": scene_path})
 
@@ -77,7 +70,6 @@ static func op_scene_read(params: Dictionary) -> Dictionary:
 	var include_props: bool = params.get("properties", true)
 
 	var node_data = _read_node(root, 0, max_depth, include_props)
-	root.free()
 
 	return {"success": true, "data": {"root": node_data}}
 
@@ -130,7 +122,7 @@ static func op_scene_list(params: Dictionary) -> Dictionary:
 	return {"success": true, "data": {"scenes": scenes}}
 
 
-static func op_scene_add_instance(params: Dictionary) -> Dictionary:
+static func op_scene_add_instance(params: Dictionary, edit: SceneEdit) -> Dictionary:
 	## Add a scene instance (reference) as a child in another scene.
 	##
 	## Params: scene_path, instance_scene, parent_path (default "."), node_name (optional)
@@ -145,10 +137,8 @@ static func op_scene_add_instance(params: Dictionary) -> Dictionary:
 		return OpsUtil._error("scene_path is required", "scene_add_instance", params)
 	if instance_scene == "":
 		return OpsUtil._error("instance_scene is required", "scene_add_instance", params)
-
-	var full_path = "res://" + scene_path
-	if not ResourceLoader.exists(full_path):
-		return OpsUtil._error("Scene not found: " + scene_path, "scene_add_instance", {"scene_path": scene_path})
+	if node_name != null and not NodeOps.valid_node_name(str(node_name)):
+		return OpsUtil._error("Invalid node_name: " + str(node_name), "scene_add_instance", params)
 
 	var instance_full_path = "res://" + instance_scene
 	if not ResourceLoader.exists(instance_full_path):
@@ -160,8 +150,7 @@ static func op_scene_add_instance(params: Dictionary) -> Dictionary:
 		return OpsUtil._error("Not a valid scene file: " + instance_scene, "scene_add_instance", {"instance_scene": instance_scene})
 
 	# Load and instantiate the target scene
-	var packed: PackedScene = load(full_path)
-	var root = packed.instantiate()
+	var root: Node = edit.root
 
 	# Create the instance node
 	var instance_node = instance_packed.instantiate()
@@ -169,21 +158,17 @@ static func op_scene_add_instance(params: Dictionary) -> Dictionary:
 		instance_node.name = node_name
 
 	# Find the parent node
-	var parent: Node
-	if parent_path == "." or parent_path == "":
-		parent = root
-	else:
-		parent = root.get_node_or_null(parent_path)
+	var parent: Node = edit.resolve(parent_path)
 	if parent == null:
 		instance_node.free()
-		root.free()
+
 		return OpsUtil._error("Parent node not found: " + parent_path, "scene_add_instance", {"scene_path": scene_path, "parent_path": parent_path})
 
 	# Name collision check
 	var instance_name := str(instance_node.name)
-	if parent.has_node(NodePath(instance_name)):
+	if not NodeOps.valid_node_name(instance_name) or parent.has_node(NodePath(instance_name)):
 		instance_node.free()
-		root.free()
+
 		return OpsUtil._error("Name collision: " + instance_name + " already exists under " + parent_path + ". Use node_name to resolve.", "scene_add_instance", {"parent_path": parent_path, "instance_scene": instance_scene})
 
 	# Add instance and set owner — do NOT recurse into instance's children
@@ -192,12 +177,6 @@ static func op_scene_add_instance(params: Dictionary) -> Dictionary:
 	# Do not call _set_owner_recursive on instance's children; they belong to the instanced scene
 
 	var node_path_str = str(root.get_path_to(instance_node))
-
-	# Re-pack and save
-	var save_result = NodeOps._repack_and_save(root, full_path)
-	root.free()
-	if not save_result.success:
-		return save_result
 
 	return {"success": true, "data": {"node_path": node_path_str, "instance_scene": instance_scene}}
 

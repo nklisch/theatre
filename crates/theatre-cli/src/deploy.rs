@@ -150,6 +150,13 @@ fn build_and_update_share(
     copy_dir_recursive(&director_src, &director_share_dst, &|_| false)
         .context("Failed to sync director addon to share dir")?;
 
+    crate::paths::copy_feedback_support(&source.addon_source(), &theatre.addon_source())?;
+    copy_dir_recursive(
+        &source.repo_root.join("client-plugins"),
+        &theatre.share_dir.join("client-plugins"),
+        &|_| false,
+    )
+    .context("Failed to sync optional client hook packages")?;
     eprintln!("  {} Synced addon scripts to share dir", style("✓").green());
 
     // Copy fresh server binaries to bin_dir
@@ -176,6 +183,9 @@ fn deploy_to_project(
     source_deployment: Option<&SourceDeployment>,
 ) -> Result<()> {
     eprintln!("  Deploying to {}...", project.display());
+
+    crate::paths::copy_feedback_support(&theatre.addon_source(), &project.join("addons"))?;
+    crate::paths::ignore_feedback(project)?;
 
     // Deploy stage addon
     let stage_project_dst = project.join("addons").join("stage");

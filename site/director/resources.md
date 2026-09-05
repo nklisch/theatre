@@ -220,4 +220,6 @@ Used by `MeshInstance3D.material_override` or surface materials:
 
 **Read before modifying.** Use `resource_read` to check current property values before creating or duplicating resources.
 
-**Use `resource_duplicate` to create variants.** Duplicate an existing material with `property_overrides` to change specific properties — faster than creating from scratch.
+**Use `resource_duplicate` to create variants.** Duplicate an existing material
+with `property_overrides` when the new resource should retain the source's
+remaining properties.

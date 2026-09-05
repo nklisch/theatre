@@ -1,147 +1,79 @@
 ---
-description: "Stage provides 9 MCP tools for observing running Godot games — spatial snapshots, deltas, queries, watches, and recordings."
+description: "Observe and interact with a running Godot game through spatial state, current viewport images, diagnostics, input, and retained clips."
 ---
 
 # Stage
 
-Stage gives your AI agent spatial awareness of your running Godot game. It is a read-only observation layer — it never modifies game state, never affects physics, and has negligible performance impact.
+Stage gives an agent direct evidence from a running Godot game. It combines
+structured scene state with explicit debug actions, current viewport images,
+bounded process diagnostics, and retained clip analysis.
 
-## What Stage does
+Stage does not stay read-only. `spatial_action` can change the current game for
+debugging, including property changes, method calls, input, pausing, and bounded
+interaction sequences. These changes are temporary and do not save project files.
 
-Stage continuously tracks every node in your scene tree that has spatial relevance — `CharacterBody3D`, `RigidBody3D`, `Area3D`, `Camera3D`, `AnimationPlayer`, `NavigationAgent3D`, and more. On every physics tick, it snapshots their positions, velocities, and key properties into an in-memory frame buffer.
+## Start with identity
 
-Your AI agent can then:
-- Ask for an instant picture of the whole scene
-- Query what changed since a specific frame
-- Find all nodes within a radius of a point
-- Inspect a specific node's complete property set
-- Set up watches on nodes of interest
-- Record gameplay and scrub through the timeline
+Call `runtime_status` before a run-sensitive workflow. It identifies the actual
+Godot project, process, run, current scene, and readiness. A TCP connection or a
+Director launch request alone does not establish that the scene completed its
+ready notification.
 
-## The 9 tools
+Then use a summary `spatial_snapshot` and narrow the question with inspection,
+queries, filters, or a smaller radius. Use persistent MCP when a workflow needs
+a delta baseline, watches, or session configuration across calls. Each one-shot
+CLI invocation has fresh session state.
 
-<div class="tool-cards">
-<ToolCard
-  title="spatial_snapshot"
-  icon="📸"
-  description="Instant picture of every tracked node's position and properties. The starting point for most investigations."
-  link="/stage/snapshot"
-/>
-<ToolCard
-  title="spatial_delta"
-  icon="⚡"
-  description="Only what changed since a given frame. Much smaller than a full snapshot when most nodes are stationary."
-  link="/stage/delta"
-/>
-<ToolCard
-  title="spatial_query"
-  icon="🔍"
-  description="Geometric queries: nearest nodes, radius search, area query, raycast, path distance, relationship between two nodes."
-  link="/stage/query"
-/>
-<ToolCard
-  title="spatial_inspect"
-  icon="🔬"
-  description="Deep inspection of a single node: all properties, signals, children, and spatial context."
-  link="/stage/inspect"
-/>
-<ToolCard
-  title="spatial_watch"
-  icon="👁️"
-  description="Monitor a node continuously. Returns a watch_id; poll with spatial_delta to see changes."
-  link="/stage/watch"
-/>
-<ToolCard
-  title="spatial_config"
-  icon="⚙️"
-  description="Configure tick rate, capture radius, and which node types are tracked."
-  link="/stage/config"
-/>
-<ToolCard
-  title="spatial_action"
-  icon="🎮"
-  description="Set a property, call a method, or emit a signal on a running game node. For testing, not production."
-  link="/stage/action"
-/>
-<ToolCard
-  title="scene_tree"
-  icon="🌳"
-  description="Scene tree structure without spatial data. Fast and compact — good for understanding node layout."
-  link="/stage/scene-tree"
-/>
-<ToolCard
-  title="clips"
-  icon="🎬"
-  description="Record gameplay clips, query frame ranges, mark bug moments. The foundation of the dashcam workflow."
-  link="/stage/recording"
-/>
-</div>
+## Capability groups
 
-## When to use each tool
+- **Live identity and health:** `runtime_status` and `runtime_diagnostics`.
+- **Current visual evidence:** `viewport`, independent of recording.
+- **Structured state:** snapshots, deltas, focused inspection, hierarchy, and
+  spatial queries.
+- **Debug controls:** pause, frame advancement, temporary mutations, input, and
+  bounded paused interaction sequences.
+- **Retained evidence:** dashcam markers, saved clips, temporal queries, and
+  generated visual artifacts.
+- **Human feedback:** project-local runtime or editor evidence that can be
+  retrieved after the engine exits.
 
-Choosing the right tool saves tokens and gives the agent better signal. Here is the decision guide:
+The [generated Stage reference](/api/) owns the complete current tool and
+parameter catalog.
 
-### "What does my scene look like right now?"
+## Current viewport and diagnostics
 
-→ **`spatial_snapshot`** with `detail: summary`
+`viewport` returns a bounded JPEG of the latest completed root-viewport render.
+It does not enable recording or save a clip. Its run identity and readback
+counters describe provenance, but the pixels are not atomic with a separate
+spatial query. Headless and empty-pixel outcomes leave structured observation
+available.
 
-Start here. Get a broad picture of node positions and types. Then drill down with `spatial_inspect` or `spatial_query` if you need more.
+`runtime_diagnostics` returns bounded errors, warnings, script errors, and shader
+errors captured after the Stage autoload registered its Logger. Reads do not
+consume entries. Diagnostics survive client reconnects but not a game restart.
+They do not replace project validation or a source debugger.
 
-### "What changed in the last few seconds?"
+## Human feedback
 
-→ **`spatial_delta`** — compares against your last snapshot baseline
+The runtime **Share feedback** control lets a developer review a captured root
+viewport, add an optional note, and queue it with pointer and run context. Editor
+feedback uses the same project-local queue with the active 2D or 3D viewport and
+selection context.
 
-Much more efficient than repeated snapshots. Only includes nodes that moved or changed properties.
+A `feedback_notice` on a later result means evidence is pending. Use `feedback`
+status, retrieve the matching item, and handle it only after addressing it.
+Retrieval is non-destructive. Handling suppresses notices for every reader but
+keeps the item. Deletion remains separate and explicit.
 
-### "Is there anything near the player?"
+## Limits
 
-→ **`spatial_query`** with `type: radius`
+Stage reports the engine state that its collector exposes. A snapshot is current
+to a collected physics frame, not a frozen world. Interaction sequences release
+their held named actions during supported completion and cleanup, but they do not
+make gameplay deterministic. A stopped or natively hung engine cannot execute
+cleanup callbacks.
 
-Geometric search returns nodes sorted by distance. Use for debugging detection zones, pickup ranges, spawn distances, etc.
-
-### "Why does this specific node behave wrong?"
-
-→ **`spatial_inspect`** with `include: ["properties", "spatial_context"]`
-
-Gets everything: all tracked properties, parent/child relationships, nearby nodes, signal connections.
-
-### "I need to watch a node over time"
-
-→ **`spatial_watch`** then poll with **`spatial_delta`**
-
-Set up the watch once, poll the delta periodically. The watch ensures the node is tracked even if it was not in the default capture set.
-
-### "I want to understand the scene structure"
-
-→ **`scene_tree`**
-
-Returns hierarchy without spatial data. Compact and fast — good for understanding what exists before deciding what to inspect.
-
-### "I recorded a bug moment"
-
-→ **`clips`** with `action: query_range`
-
-The main dashcam tool. Query the spatial timeline around the marked frame. Combine with `nodes` filter to stay focused.
-
-### "I need to test my fix right now"
-
-→ **`spatial_action`** with `action: set_property`
-
-Mutates the running game for testing. Changes are not saved — they only affect the current session. Use Director for permanent changes.
-
-## Performance impact
-
-Stage is designed to be invisible to the player:
-
-- **Collection**: O(n) walk of tracked nodes during `_physics_process`. With 100 tracked nodes, this takes < 0.1ms per frame.
-- **Memory**: The ring buffer holds 600 frames (10 seconds at 60Hz) by default. Each frame is roughly 1-2KB depending on node count.
-- **Network**: Data is only sent when the MCP server requests it. No background transmission.
-- **Recordings**: Clip files are written to disk asynchronously. The write does not block the main thread.
-
-You can adjust the collection tick rate with `spatial_config` if you need to reduce overhead for a performance-sensitive scene.
-
-## Limitations
-
-Stage reads the **engine's view** of node properties. Properties that are computed at render time (shader uniforms on the GPU, specific animation blend results) may not be available. Properties that are only in GDScript variables (not Godot node properties) are not visible — only exported properties and built-in node properties are tracked.
-
-Stage cannot read data from `@tool` scripts running in the editor — it only sees the running game.
+Capture has real main-thread cost. Current viewport reads are bounded and
+on-demand; the continuous recorder keeps its separate capture path. Use the
+smallest evidence that answers the question rather than assuming an unmeasured
+universal overhead.

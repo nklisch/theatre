@@ -1,5 +1,6 @@
 class_name ResourceOps
 
+const SceneEdit = preload("res://addons/director/ops/scene_edit.gd")
 const NodeOps = preload("res://addons/director/ops/node_ops.gd")
 const SceneOps = preload("res://addons/director/ops/scene_ops.gd")
 const OpsUtil = preload("res://addons/director/ops/ops_util.gd")
@@ -127,7 +128,7 @@ static func op_material_create(params: Dictionary) -> Dictionary:
 	# Set properties
 	var properties = params.get("properties", null)
 	if properties is Dictionary and not properties.is_empty():
-		var result = _set_properties_on_resource(material, properties)
+		var result = NodeOps.set_properties(material, properties)
 		if not result.success:
 			return result
 
@@ -142,7 +143,7 @@ static func op_material_create(params: Dictionary) -> Dictionary:
 	return {"success": true, "data": {"path": resource_path, "type": material_type}}
 
 
-static func op_shape_create(params: Dictionary) -> Dictionary:
+static func op_shape_create(params: Dictionary, edit: SceneEdit) -> Dictionary:
 	## Create a collision shape and save/attach it.
 	##
 	## Params: shape_type, shape_params?, save_path?, scene_path?, node_path?
@@ -176,56 +177,37 @@ static func op_shape_create(params: Dictionary) -> Dictionary:
 	# Set shape params
 	var shape_params = params.get("shape_params", null)
 	if shape_params is Dictionary and not shape_params.is_empty():
-		var result = _set_properties_on_resource(shape, shape_params)
+		var result = NodeOps.set_properties(shape, shape_params)
 		if not result.success:
 			return result
 
 	var data: Dictionary = {"shape_type": shape_type}
 
-	# Save to file if requested
+	var target: Node = null
+	if scene_path != "":
+		target = edit.resolve(node_path)
+		if target == null:
+			return OpsUtil._error("Node not found: " + node_path, "shape_create", params)
+		var checked = NodeOps.validate_properties(target, {"shape": shape})
+		if not checked.success:
+			return checked
+	var persistence := {"saved_paths": [], "unsaved_scene_paths": []}
 	if save_path != "":
 		var full_save = "res://" + save_path
 		_ensure_directory(full_save)
 		var err = ResourceSaver.save(shape, full_save)
 		if err != OK:
-			return OpsUtil._error("Failed to save shape: " + str(err),
-				"shape_create", {"save_path": save_path})
+			return OpsUtil._error("Failed to save shape: " + str(err), "shape_create", params)
 		data["saved_to"] = save_path
-
-	# Attach to scene node if requested
-	if scene_path != "":
-		var full_scene = "res://" + scene_path
-		if not ResourceLoader.exists(full_scene):
-			return OpsUtil._error("Scene not found: " + scene_path,
-				"shape_create", {"scene_path": scene_path})
-		var packed: PackedScene = load(full_scene)
-		var root = packed.instantiate()
-		var target = root.get_node_or_null(node_path)
-		if target == null:
-			root.free()
-			return OpsUtil._error("Node not found: " + node_path,
-				"shape_create", {"scene_path": scene_path, "node_path": node_path})
-
-		# Verify the node has a "shape" property
-		var has_shape_prop := false
-		for prop_info in target.get_property_list():
-			if prop_info["name"] == "shape":
-				has_shape_prop = true
-				break
-		if not has_shape_prop:
-			root.free()
-			return OpsUtil._error("Node " + node_path + " (" + target.get_class() +
-				") has no 'shape' property",
-				"shape_create", {"node_path": node_path, "class": target.get_class()})
-
-		target.shape = shape
-		var save_result = NodeOps._repack_and_save(root, full_scene)
-		root.free()
-		if not save_result.success:
-			return save_result
+		persistence.saved_paths.append(save_path)
+	if target != null:
+		var applied = NodeOps.set_properties(target, {"shape": shape})
+		if not applied.success:
+			applied["persistence"] = persistence
+			return applied
 		data["attached_to"] = node_path
+	return {"success": true, "data": data, "persistence": persistence}
 
-	return {"success": true, "data": data}
 
 
 static func op_style_box_create(params: Dictionary) -> Dictionary:
@@ -252,7 +234,7 @@ static func op_style_box_create(params: Dictionary) -> Dictionary:
 
 	var properties = params.get("properties", null)
 	if properties is Dictionary and not properties.is_empty():
-		var result = _set_properties_on_resource(style_box, properties)
+		var result = NodeOps.set_properties(style_box, properties)
 		if not result.success:
 			return result
 
@@ -296,7 +278,7 @@ static func op_resource_duplicate(params: Dictionary) -> Dictionary:
 
 	var property_overrides = params.get("property_overrides", null)
 	if property_overrides is Dictionary and not property_overrides.is_empty():
-		var result = _set_properties_on_resource(duplicate, property_overrides)
+		var result = NodeOps.set_properties(duplicate, property_overrides)
 		if not result.success:
 			return result
 		overrides_applied = result.properties_set
@@ -313,29 +295,6 @@ static func op_resource_duplicate(params: Dictionary) -> Dictionary:
 		"type": duplicate.get_class(),
 		"overrides_applied": overrides_applied,
 	}}
-
-
-static func _set_properties_on_resource(resource: Resource, properties: Dictionary) -> Dictionary:
-	## Set multiple properties on a resource with type conversion.
-	## Mirrors NodeOps._set_properties_on_node but for Resource instead of Node.
-	var properties_set: Array = []
-	var prop_list = resource.get_property_list()
-	var type_map: Dictionary = {}
-	for prop_info in prop_list:
-		type_map[prop_info["name"]] = prop_info["type"]
-
-	for prop_name in properties:
-		var value = properties[prop_name]
-		if not type_map.has(prop_name):
-			return {"success": false, "error": "Unknown property: " + prop_name +
-				" on " + resource.get_class(), "operation": "set_properties",
-				"context": {"resource": resource.get_class(), "property": prop_name}}
-		var expected_type = type_map[prop_name]
-		var converted = NodeOps.convert_value(value, expected_type)
-		resource.set(prop_name, converted)
-		properties_set.append(prop_name)
-
-	return {"success": true, "properties_set": properties_set}
 
 
 static func _ensure_directory(full_path: String) -> void:

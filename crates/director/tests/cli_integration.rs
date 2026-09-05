@@ -1,9 +1,43 @@
-use std::process::Command;
+use std::{path::Path, process::Command};
 
 #[cfg(windows)]
 use std::io::{BufRead as _, BufReader};
 #[cfg(windows)]
 use std::time::{Duration, Instant};
+
+fn publish_pending_feedback(project: &Path) {
+    let directory = project.join(".theatre/feedback/feedback_cli");
+    std::fs::create_dir_all(&directory).unwrap();
+    std::fs::write(
+        directory.join("item.json"),
+        serde_json::json!({
+            "feedback_id": "feedback_cli",
+            "source": "editor",
+            "timestamp_ms": 1,
+            "project_path": project,
+            "process_id": 7,
+            "scene": "res://main.tscn",
+            "surface": "2d",
+            "selection": [],
+            "pointer": {"status": "unavailable"},
+            "capture": {"status": "unavailable", "reason": "test"},
+            "readback_render_frame": 0,
+            "readback_physics_frame": 0,
+            "note": "Inspect this run"
+        })
+        .to_string(),
+    )
+    .unwrap();
+}
+
+fn assert_pending_notice(result: &serde_json::Value) {
+    assert!(
+        result["feedback_notice"]
+            .as_str()
+            .unwrap()
+            .contains("1 pending")
+    );
+}
 
 #[test]
 fn director_help_lists_tools() {
@@ -15,6 +49,7 @@ fn director_help_lists_tools() {
     assert!(stderr.contains("scene_create"));
     assert!(stderr.contains("node_add"));
     assert!(stderr.contains("batch"));
+    assert!(stderr.contains("editor_run"));
 }
 
 #[test]
@@ -43,6 +78,90 @@ fn director_missing_params_exits_2() {
     let parsed: serde_json::Value = serde_json::from_str(stdout.trim()).unwrap();
     // stdin is null (empty), so params = {}, which triggers missing_project_path
     assert_eq!(parsed["error"], "missing_project_path");
+}
+
+#[test]
+fn editor_run_requires_action_specific_scene_path() {
+    let project = tempfile::TempDir::new().unwrap();
+    std::fs::write(project.path().join("project.godot"), "config_version=5\n").unwrap();
+    publish_pending_feedback(project.path());
+    let output = Command::new(env!("CARGO_BIN_EXE_director"))
+        .arg("editor_run")
+        .arg(
+            serde_json::json!({
+                "project_path": project.path(),
+                "action": "start"
+            })
+            .to_string(),
+        )
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(
+        result["message"]
+            .as_str()
+            .unwrap()
+            .contains("scene_path is required")
+    );
+    assert_pending_notice(&result);
+}
+
+#[test]
+fn editor_run_invalid_parameters_keep_pending_notice() {
+    let project = tempfile::TempDir::new().unwrap();
+    std::fs::write(project.path().join("project.godot"), "config_version=5\n").unwrap();
+    publish_pending_feedback(project.path());
+    let output = Command::new(env!("CARGO_BIN_EXE_director"))
+        .arg("editor_run")
+        .arg(
+            serde_json::json!({
+                "project_path": project.path(),
+                "action": "unknown"
+            })
+            .to_string(),
+        )
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(2));
+    let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(result["error"], "invalid_parameters");
+    assert_pending_notice(&result);
+}
+
+#[test]
+fn editor_run_has_no_headless_fallback() {
+    let project = tempfile::TempDir::new().unwrap();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
+    drop(listener);
+    std::fs::write(
+        project.path().join("project.godot"),
+        format!("config_version=5\n[director]\nconnection/editor_port={port}\n"),
+    )
+    .unwrap();
+    publish_pending_feedback(project.path());
+    let output = Command::new(env!("CARGO_BIN_EXE_director"))
+        .arg("editor_run")
+        .arg(
+            serde_json::json!({
+                "project_path": project.path(),
+                "action": "status"
+            })
+            .to_string(),
+        )
+        .env("GODOT_BIN", "/must-not-be-launched")
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(1));
+    let result: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let message = result["message"].as_str().unwrap();
+    assert!(message.contains("requires the Godot editor"), "{message}");
+    assert!(
+        message.contains("no headless backend was started"),
+        "{message}"
+    );
+    assert_pending_notice(&result);
 }
 
 #[test]

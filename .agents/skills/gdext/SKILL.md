@@ -14,8 +14,9 @@ This skill covers the `godot-rust/gdext` crate used in `crates/stage-godot`. Tha
 crate-type = ["cdylib"]   # Required — produces .so/.dll/.dylib
 
 [dependencies]
-godot = { version = "0.4", features = ["api-4-5", "experimental-godot-api", "lazy-function-tables"] }
-# api-4-5 = minimum Godot version we target (requires Godot 4.5+)
+godot = { version = "0.5.5", features = ["api-4-7", "experimental-godot-api", "lazy-function-tables"] }
+# api-4-7 = minimum Godot API/runtime version we target (requires Godot 4.7+)
+# godot 0.5 requires Rust 1.94+.
 ```
 
 ## Entry Point
@@ -87,7 +88,8 @@ impl StageCollector {             // Custom methods — second impl block
 
 ```rust
 // Immutable access to base class methods
-self.base().get_tree()                 // Option<Gd<SceneTree>>
+self.base().get_tree()                 // Gd<SceneTree>; panics outside the tree
+self.base().get_tree_or_null()         // Option<Gd<SceneTree>>
 self.base().get_parent()               // Option<Gd<Node>>
 self.base().get_name()                 // StringName
 
@@ -109,8 +111,11 @@ if let Some(enemy) = node {
 let enemy = self.base().get_node_as::<CharacterBody3D>("enemies/scout_02");
 
 // Get scene tree root
-let tree = self.base().get_tree().expect("not in scene tree");
-let root = tree.get_root().expect("no root");
+// Godot-required objects are non-optional in gdext 0.5. These calls panic when
+// their documented engine precondition is violated; use *_or_null() when absence
+// is an expected state.
+let tree = self.base().get_tree();
+let root = tree.get_root();
 
 // Iterate children
 let parent = self.base().get_node_as::<Node>("enemies");
@@ -264,7 +269,7 @@ let obj: Gd<Object> = node3d.upcast();
 
 // Downcast (can fail)
 let node: Gd<Node> = ...;
-let body: Option<Gd<CharacterBody3D>> = node.try_cast::<CharacterBody3D>();
+let body: Result<Gd<CharacterBody3D>, Gd<Node>> = node.try_cast::<CharacterBody3D>();
 
 // Variant conversions
 let v: Variant = 42i32.to_variant();
@@ -290,12 +295,16 @@ collector.bind_mut().poll();                      // calls &mut self method
 
 **Properties vs methods for Godot built-ins:** Godot's `CharacterBody3D.velocity` is a property, accessed via `get_velocity()` / `set_velocity()` in gdext, not as a field.
 
+**Godot integers are signed:** gdext 0.5 no longer permits `u64` in `#[func]` or `#[signal]` boundaries because Godot `Variant` integers are `i64`. Keep unsigned counters internal and convert at the exported boundary.
+
+**Variant dictionaries borrow reference-passed values:** `VarDictionary` is the untyped `Dictionary<Variant, Variant>` alias in gdext 0.5. Borrow `Variant`, `GString`, object, and callable keys or values when `AsArg` requires reference passing (for example, `dict.set(&key, &value)`).
+
 **`.gdextension` file must match entry symbol:**
 ```ini
 [configuration]
 entry_symbol = "gdext_rust_init"
-compatibility_minimum = "4.5"
-reloadable = true          # enables hot-reload in Godot 4.5+
+compatibility_minimum = "4.7"
+reloadable = true          # enables hot-reload in Godot 4.7+
 
 [libraries]
 linux.debug.x86_64 = "res://addons/stage/bin/linux/libstage_godot.so"

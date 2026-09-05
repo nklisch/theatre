@@ -1,5 +1,8 @@
 pub mod animation;
 pub mod defaults;
+pub mod editor_run;
+pub mod engine_api;
+pub mod feedback;
 pub mod gridmap;
 pub mod meta;
 pub mod node;
@@ -23,6 +26,8 @@ use crate::server::DirectorServer;
 use animation::{
     AnimationAddTrackParams, AnimationCreateParams, AnimationReadParams, AnimationRemoveTrackParams,
 };
+use editor_run::{EditorRunParams, EditorRunResponse};
+use engine_api::{EngineApiParams, EngineApiResponse};
 use gridmap::{GridMapClearParams, GridMapGetCellsParams, GridMapSetCellsParams};
 use meta::{BatchParams, SceneDiffParams};
 use node::{
@@ -38,7 +43,9 @@ use resource::{
     MaterialCreateParams, ResourceDuplicateParams, ResourceReadParams, ShapeCreateParams,
     StyleBoxCreateParams,
 };
-use scene::{SceneAddInstanceParams, SceneCreateParams, SceneListParams, SceneReadParams};
+use scene::{
+    SceneAddInstanceParams, SceneCreateParams, SceneListParams, SceneReadParams, SceneSaveParams,
+};
 use shader::VisualShaderCreateParams;
 use signal::{SignalConnectParams, SignalDisconnectParams, SignalListParams};
 use tilemap::{TileMapClearParams, TileMapGetCellsParams, TileMapSetCellsParams};
@@ -55,9 +62,9 @@ use crate::responses::{
     PhysicsSetLayersResponse, ProjectReloadResponse, ProjectSettingsSetResponse,
     ResourceCreateResponse, ResourceDuplicateResponse, ResourceReadResponse,
     SceneAddInstanceResponse, SceneCreateResponse, SceneDiffResponse, SceneListResponse,
-    SceneReadResponse, ShapeCreateResponse, SignalConnectionResponse, SignalListResponse,
-    TileMapClearResponse, TileMapGetCellsResponse, TileMapSetCellsResponse, UidGetResponse,
-    UidUpdateProjectResponse, VisualShaderCreateResponse,
+    SceneReadResponse, SceneSaveResponse, ShapeCreateResponse, SignalConnectionResponse,
+    SignalListResponse, TileMapClearResponse, TileMapGetCellsResponse, TileMapSetCellsResponse,
+    UidGetResponse, UidUpdateProjectResponse, VisualShaderCreateResponse,
 };
 
 // ---------------------------------------------------------------------------
@@ -100,10 +107,31 @@ async fn run_operation(
 #[tool_router(vis = "pub")]
 impl DirectorServer {
     #[tool(
+        description = "Read and manage persistent project-local human feedback without launching Godot. Status lists retained evidence and incomplete storage; retrieve returns matching selection, pointer, image and note without consuming it. Handle suppresses notices for all readers, while delete or cleanup explicitly removes storage."
+    )]
+    pub async fn feedback(
+        &self,
+        Parameters(params): Parameters<feedback::FeedbackParams>,
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
+        theatre_feedback::mcp::execute(std::path::Path::new(&params.project_path), params.operation)
+    }
+
+    #[tool(
+        name = "scene_save",
+        description = "Save only the selected scene through Godot serialization. Open-scene edits remain unsaved until this explicit call. Preserves undo history and does not save unrelated scenes or external resources. The editor dirty marker may remain until a native editor save."
+    )]
+    pub async fn scene_save(
+        &self,
+        Parameters(params): Parameters<SceneSaveParams>,
+    ) -> Result<String, McpError> {
+        director_tool!(self, params, "scene_save", SceneSaveResponse)
+    }
+
+    #[tool(
         name = "scene_create",
         description = "Create a new Godot scene file (.tscn) with a specified root node type. \
-            Always use this tool instead of creating .tscn files directly — the scene \
-            serialization format is fragile and hand-editing will produce corrupt scenes."
+            Prefer this Godot-backed operation for structural scene creation so engine types, \
+            ownership, resource references, and serialization are handled natively."
     )]
     pub async fn scene_create(
         &self,
@@ -128,8 +156,8 @@ impl DirectorServer {
     #[tool(
         name = "node_add",
         description = "Add a node to a Godot scene file (.tscn). Optionally set initial \
-            properties. Always use this tool instead of editing .tscn files directly — the scene \
-            serialization format is fragile and hand-editing will produce corrupt scenes."
+            properties. Prefer this Godot-backed operation for structural scene edits so node \
+            ownership, engine types, resource references, and serialization are handled natively."
     )]
     pub async fn node_add(
         &self,
@@ -142,7 +170,7 @@ impl DirectorServer {
         name = "node_set_properties",
         description = "Set properties on a node in a Godot scene file (.tscn). Handles type \
             conversion automatically (Vector2, Vector3, Color, NodePath, resource paths). \
-            Always use this tool instead of editing .tscn files directly."
+            Prefer this Godot-backed operation for structural property edits."
     )]
     pub async fn node_set_properties(
         &self,
@@ -159,7 +187,7 @@ impl DirectorServer {
     #[tool(
         name = "node_remove",
         description = "Remove a node (and all its children) from a Godot scene file (.tscn). \
-            Always use this tool instead of editing .tscn files directly."
+            Prefer this Godot-backed operation for structural scene edits."
     )]
     pub async fn node_remove(
         &self,
@@ -184,7 +212,7 @@ impl DirectorServer {
         name = "scene_add_instance",
         description = "Add a scene instance (reference) as a child node in another Godot scene. \
             The instanced scene is linked, not copied — changes to the source scene propagate. \
-            Always use this tool instead of editing .tscn files directly."
+            Prefer this Godot-backed operation for structural scene edits."
     )]
     pub async fn scene_add_instance(
         &self,
@@ -196,14 +224,28 @@ impl DirectorServer {
     #[tool(
         name = "node_reparent",
         description = "Move a node to a new parent within the same Godot scene. Optionally \
-            rename the node during the move. Always use this tool instead of editing .tscn \
-            files directly."
+            rename the node during the move. Keeps the local transform rather than global \
+            position; native container layout still applies."
     )]
     pub async fn node_reparent(
         &self,
         Parameters(params): Parameters<NodeReparentParams>,
     ) -> Result<String, McpError> {
         director_tool!(self, params, "node_reparent", NodeReparentResponse)
+    }
+
+    #[tool(
+        name = "engine_api",
+        description = "Query the installed Godot engine's ClassDB for one class. Defaults to a \
+            bounded summary; select properties, methods, signals, or enums, optionally by exact \
+            member name. Focused results include inherited-member ownership, native type metadata, \
+            relevant defaults, runtime engine version, and bounded pagination."
+    )]
+    pub async fn engine_api(
+        &self,
+        Parameters(params): Parameters<EngineApiParams>,
+    ) -> Result<String, McpError> {
+        director_tool!(self, params, "engine_api", EngineApiResponse)
     }
 
     #[tool(
@@ -223,7 +265,7 @@ impl DirectorServer {
         name = "material_create",
         description = "Create a Godot material resource (.tres). Supports StandardMaterial3D, \
             ORMMaterial3D, ShaderMaterial, CanvasItemMaterial, ParticleProcessMaterial, and \
-            any ClassDB Material subclass. Always use this instead of hand-writing .tres files."
+            any ClassDB Material subclass. Prefer this operation for Godot-serialized materials."
     )]
     pub async fn material_create(
         &self,
@@ -249,8 +291,8 @@ impl DirectorServer {
     #[tool(
         name = "style_box_create",
         description = "Create a Godot StyleBox resource (.tres) for UI theming. Supports \
-            StyleBoxFlat, StyleBoxTexture, StyleBoxLine, and StyleBoxEmpty. Always use this \
-            instead of hand-writing .tres files."
+            StyleBoxFlat, StyleBoxTexture, StyleBoxLine, and StyleBoxEmpty. Prefer this \
+            operation for Godot-serialized StyleBox resources."
     )]
     pub async fn style_box_create(
         &self,
@@ -280,7 +322,7 @@ impl DirectorServer {
         name = "tilemap_set_cells",
         description = "Set cells on a TileMapLayer node in a Godot scene. Each cell is placed by \
             grid coordinates, TileSet source ID, and atlas coordinates. The TileMapLayer must already \
-            have a TileSet resource assigned. Always use this instead of editing .tscn files directly."
+            have a TileSet resource assigned. Prefer this Godot-backed structural edit."
     )]
     pub async fn tilemap_set_cells(
         &self,
@@ -318,7 +360,7 @@ impl DirectorServer {
         name = "gridmap_set_cells",
         description = "Set cells in a GridMap node in a Godot scene. Each cell is placed by 3D grid \
             position and MeshLibrary item index. The GridMap must already have a MeshLibrary resource \
-            assigned. Always use this instead of editing .tscn files directly."
+            assigned. Prefer this Godot-backed structural edit."
     )]
     pub async fn gridmap_set_cells(
         &self,
@@ -355,7 +397,7 @@ impl DirectorServer {
         name = "animation_create",
         description = "Create a Godot Animation resource (.tres) with specified length and \
             loop mode. The animation starts empty — use animation_add_track to add tracks \
-            and keyframes. Always use this instead of hand-writing .tres files."
+            and keyframes. Prefer this operation for Godot-serialized animations."
     )]
     pub async fn animation_create(
         &self,
@@ -369,7 +411,7 @@ impl DirectorServer {
         description = "Add a track with keyframes to a Godot Animation resource. Supports \
             value, position_3d, rotation_3d, scale_3d, blend_shape, method, and bezier \
             track types. Node paths are relative to the AnimationPlayer that will play this \
-            animation. Always use this instead of editing .tres files directly."
+            animation. Prefer this Godot-backed structural edit."
     )]
     pub async fn animation_add_track(
         &self,
@@ -418,8 +460,8 @@ impl DirectorServer {
         name = "physics_set_layers",
         description = "Set collision_layer and/or collision_mask bitmasks on a physics \
             node in a Godot scene. Works with any node that has collision properties \
-            (PhysicsBody2D/3D, Area2D/3D, TileMapLayer, etc.). Always use this tool \
-            instead of editing .tscn files directly."
+            (PhysicsBody2D/3D, Area2D/3D, TileMapLayer, etc.). Prefer this Godot-backed \
+            structural edit."
     )]
     pub async fn physics_set_layers(
         &self,
@@ -454,7 +496,8 @@ impl DirectorServer {
             Godot's VisualShader API. Each node specifies a shader_function (vertex, \
             fragment, light, or particle functions) to target the correct processing \
             stage. Supports spatial (3D), canvas_item (2D), particles, sky, and fog \
-            shader modes. Always use this instead of hand-writing shader .tres files."
+            shader modes. Prefer this operation for Godot-serialized visual shaders; edit \
+            shader source files directly with normal code tools."
     )]
     pub async fn visual_shader_create(
         &self,
@@ -472,8 +515,10 @@ impl DirectorServer {
         name = "batch",
         description = "Execute multiple Director operations in a single Godot process \
             invocation. Reduces cold-start overhead from N operations to 1. Operations \
-            run in sequence. Use stop_on_error to control failure behavior. Cannot \
-            contain nested batch calls."
+            run in sequence using the same editor/headless context as individual calls. \
+            Each changed open-scene entry is undoable and unsaved until scene_save. \
+            Use stop_on_error to control failure behavior. Errors retain earlier and partial \
+            results and persistence; no rollback. Cannot contain nested batch calls."
     )]
     pub async fn batch(
         &self,
@@ -499,8 +544,8 @@ impl DirectorServer {
         name = "autoload_add",
         description = "Add or update an autoload singleton in project.godot. Autoloads are \
             globally accessible singletons available in all GDScript files by name \
-            (e.g. EventBus, GameState). Call this instead of hand-editing project.godot. \
-            Use project_reload after creating the script file and before calling this."
+            (e.g. EventBus, GameState). Prefer this Godot-backed operation for the project \
+            setting. Use project_reload after creating the script file and before calling this."
     )]
     pub async fn autoload_add(
         &self,
@@ -529,8 +574,8 @@ impl DirectorServer {
             \"application/config/name\" (project name), \
             \"display/window/size/viewport_width\", \
             \"display/window/size/viewport_height\". \
-            Set a value to null to erase the key. \
-            Use this instead of hand-editing project.godot."
+            Set a value to null to erase the key. Prefer this Godot-backed operation for \
+            structural project-setting changes."
     )]
     pub async fn project_settings_set(
         &self,
@@ -607,12 +652,26 @@ impl DirectorServer {
     }
 
     #[tool(
+        name = "editor_run",
+        description = "Control a saved scene through the verified Godot editor. Start and restart require scene_path; stop is idempotent and status is observational. Launch requests never implicitly save open work and never fall back to a headless process. The response reports native editor play state only; query Stage runtime_status separately for readiness and run_id."
+    )]
+    pub async fn editor_run(
+        &self,
+        Parameters(params): Parameters<EditorRunParams>,
+    ) -> Result<String, McpError> {
+        let response: EditorRunResponse = editor_run::run_editor(&self.backend, &params).await?;
+        serialize_response(&response)
+    }
+
+    #[tool(
         name = "editor_status",
         description = "Get a snapshot of the Godot editor's current state — which scenes are \
             open, which is active, whether the game is running, registered autoloads, and \
             recent log output (errors, warnings, print statements from godot.log). \
             Use this to orient yourself before making changes, to check whether the editor \
-            is running, or to see what errors exist. Works in headless mode too."
+            is running, or to see what errors exist. Reports Godot's actual project root and \
+            answering process id. Works in headless mode too; editor_connected=false then \
+            identifies a headless process, not an editor."
     )]
     pub async fn editor_status(
         &self,
@@ -645,6 +704,8 @@ impl DirectorServer {
             .collect();
 
         serialize_response(&EditorStatusResponse {
+            project_path: raw.project_path,
+            process_id: raw.process_id,
             editor_connected: raw.editor_connected,
             active_scene: raw.active_scene,
             open_scenes: raw.open_scenes,
@@ -704,9 +765,8 @@ impl DirectorServer {
     #[tool(
         name = "signal_connect",
         description = "Connect a signal between two nodes in a Godot scene file (.tscn). \
-            The connection is serialized into the scene and persists across loads. \
-            Always use this tool instead of editing .tscn files directly — signal \
-            connection blocks in .tscn are fragile and hand-editing will break them."
+            The connection is serialized into the scene and persists across loads. Prefer this \
+            Godot-backed operation for structural signal edits."
     )]
     pub async fn signal_connect(
         &self,
@@ -718,7 +778,7 @@ impl DirectorServer {
     #[tool(
         name = "signal_disconnect",
         description = "Remove a signal connection between two nodes in a Godot scene file (.tscn). \
-            Always use this tool instead of editing .tscn files directly."
+            Prefer this Godot-backed operation for structural signal edits."
     )]
     pub async fn signal_disconnect(
         &self,
@@ -744,8 +804,8 @@ impl DirectorServer {
         name = "node_set_groups",
         description = "Add or remove a node from named groups in a Godot scene file (.tscn). \
             Groups are used for gameplay logic (e.g., 'enemies', 'interactable') and are \
-            queryable at runtime via get_tree().get_nodes_in_group(). Always use this \
-            tool instead of editing .tscn files directly."
+            queryable at runtime via get_tree().get_nodes_in_group(). Prefer this Godot-backed \
+            structural edit."
     )]
     pub async fn node_set_groups(
         &self,
@@ -758,8 +818,8 @@ impl DirectorServer {
         name = "node_set_script",
         description = "Attach or detach a GDScript (.gd) file to/from a node in a Godot \
             scene file (.tscn). The script must already exist on disk. Omit script_path \
-            to detach. Always use this tool instead of editing .tscn files directly — \
-            script references use internal resource IDs that are fragile to hand-edit."
+            to detach. Edit the GDScript source directly, then prefer this Godot-backed \
+            operation for the structural scene attachment."
     )]
     pub async fn node_set_script(
         &self,
@@ -773,7 +833,7 @@ impl DirectorServer {
         description = "Set or remove metadata entries on a node in a Godot scene file (.tscn). \
             Metadata is arbitrary key-value data stored on nodes, useful for editor \
             annotations, gameplay tags, or tool configuration. Set a value to null to \
-            remove that key. Always use this tool instead of editing .tscn files directly."
+            remove that key. Prefer this Godot-backed structural edit."
     )]
     pub async fn node_set_meta(
         &self,

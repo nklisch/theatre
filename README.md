@@ -14,10 +14,14 @@ Theatre connects your agent to the running game through the **Model Context Prot
 
 | Tool | What it does | Interface |
 |---|---|---|
-| **Stage** | Observe and interact with a running Godot game — spatial snapshots, deltas, watches, clips, live property mutation | 9 MCP tools or `stage <tool> '<json>'` |
-| **Director** | Create and modify Godot scenes, resources, tilemaps, and animations | 38 MCP tools or `director <tool> '<json>'` |
+| **Stage** | Observe and interact with a running Godot game through state, current viewport images, diagnostics, input, and retained clips | MCP or `stage <tool> '<json>'` |
+| **Director** | Author scenes and resources, inspect the installed engine API, and control saved-scene runs through an open editor | MCP or `director <tool> '<json>'` |
 
 ## Quick Start
+
+The current extension targets Godot 4.7 or newer. Building from source requires
+Rust 1.94 or newer because of the gdext dependency; current local verification
+uses Rust 1.96.1.
 
 ### 1. Install
 
@@ -62,7 +66,9 @@ Teaches your agent how to use Stage and Director effectively — tool selection,
 
 ### 4. Run your game and ask
 
-Open your Godot project, press F5, then ask your agent: `"Take a spatial snapshot"`.
+Open your Godot project, run a scene, then ask your agent: `"Take a spatial snapshot"`.
+With the Director editor plugin connected, the agent can also start, stop, or
+restart a selected saved scene without implicitly saving other open work.
 
 ## Theatre CLI
 
@@ -74,6 +80,7 @@ Open your Godot project, press F5, then ask your agent: `"Take a spatial snapsho
 | `theatre enable <project>` | Enable or disable plugins in `project.godot` |
 | `theatre rules <project>` | Generate agent rules file to prevent hand-editing Godot files |
 | `theatre mcp <project>` | Generate or regenerate `.mcp.json` without reinstalling addons |
+| `theatre feedback` | Read or manage project-local human feedback without a running engine |
 
 ## Agent CLI
 
@@ -90,7 +97,26 @@ director scene_create '{"project_path": "/path/to/game", "scene_path": "res://le
 director node_add '{"project_path": "/path/to/game", "scene_path": "res://level.tscn", "parent_path": ".", "node_type": "Sprite2D", "node_name": "Hero"}'
 ```
 
-Output is always JSON to stdout. Exit codes: 0 success, 1 runtime error, 2 usage error.
+CLI output is JSON to stdout. Exit codes 1 and 2 report runtime and usage
+failures. Director can also return a structured operation result with
+`"success": false` at exit code 0, so inspect `success`, `error`, `context`, and
+`persistence` (including per-entry batch results) before deciding what succeeded
+or should be retried. Stateful Stage workflows such as deltas, watches,
+configuration updates, and actions with `return_delta` require one persistent
+MCP session.
+
+## Human feedback
+
+The Stage runtime and Director editor each provide a native **Share feedback**
+affordance. A developer can queue viewport evidence, selection or pointer context,
+and an optional note under the project's `.theatre/feedback` directory. Retrieval
+is non-destructive. Handling suppresses notices for all readers, while deletion
+remains explicit.
+
+Stage, Director, and `theatre feedback` read the same queue. Optional Claude and
+Codex plugin packages can add a text notice at a later tool boundary after the
+user installs and trusts them. They do not wake idle agents or deliver images
+automatically.
 
 ## Manual Setup
 
@@ -103,6 +129,7 @@ cargo build --workspace --release
 # Copy addons
 cp -r addons/stage ~/your-project/addons/
 cp -r addons/director ~/your-project/addons/
+cp -r addons/theatre_shared ~/your-project/addons/
 
 # Copy GDExtension binary (Linux)
 mkdir -p ~/your-project/addons/stage/bin/linux/
@@ -110,6 +137,8 @@ cp target/release/libstage_godot.so ~/your-project/addons/stage/bin/linux/
 ```
 
 Then enable both plugins in Godot: **Project → Project Settings → Plugins**.
+Add `.theatre/feedback/` to the project ignore rules so retained local evidence is
+not committed.
 
 Create `.mcp.json` in your project root:
 
@@ -147,13 +176,14 @@ Verify with `godot --headless --quit --path /your/project 2>&1` — expect no `S
 
 **Wrong port** — default is 9077. Override with `THEATRE_PORT=XXXX` for the MCP server and `theatre/stage/connection/port` in Godot Project Settings for the addon.
 
-**GDExtension hash panic** — built against a different Godot API version. The current build targets `api-4-5` with `lazy-function-tables` for forward compatibility with 4.6+. Minimum supported version is Godot 4.5.
+**GDExtension hash panic** — built against a different Godot API version. The current build targets `api-4-7` with `lazy-function-tables`. Minimum supported version is Godot 4.7. Deferred lookup does not guarantee that an unavailable or changed API can be called successfully.
 
 ## Development
 
 ```bash
 cargo build --workspace       # build everything
-cargo test --workspace        # run all tests
+cargo test --workspace        # run ordinary workspace tests
+cargo test --workspace -- --ignored --test-threads=1  # run the engine-dependent gate; see .work/CONVENTIONS.md
 cargo clippy --workspace      # lint
 ./scripts/copy-gdext.sh       # copy .so into addons/ within this repo
 ```

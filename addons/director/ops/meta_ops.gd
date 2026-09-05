@@ -1,19 +1,10 @@
 class_name MetaOps
 
 const SceneOps = preload("res://addons/director/ops/scene_ops.gd")
-const NodeOps = preload("res://addons/director/ops/node_ops.gd")
-const ResourceOps = preload("res://addons/director/ops/resource_ops.gd")
-const TileMapOps = preload("res://addons/director/ops/tilemap_ops.gd")
-const GridMapOps = preload("res://addons/director/ops/gridmap_ops.gd")
-const AnimationOps = preload("res://addons/director/ops/animation_ops.gd")
-const PhysicsOps = preload("res://addons/director/ops/physics_ops.gd")
-const ShaderOps = preload("res://addons/director/ops/shader_ops.gd")
-const ProjectOps = preload("res://addons/director/ops/project_ops.gd")
-const SignalOps = preload("res://addons/director/ops/signal_ops.gd")
 const OpsUtil = preload("res://addons/director/ops/ops_util.gd")
 
 
-static func op_batch(params: Dictionary) -> Dictionary:
+static func op_batch(params: Dictionary, dispatcher: Callable) -> Dictionary:
 	## Execute multiple operations in sequence within a single Godot process.
 	##
 	## Params:
@@ -58,15 +49,12 @@ static func op_batch(params: Dictionary) -> Dictionary:
 				break
 			continue
 
-		var result: Dictionary = _dispatch_single(operation, op_params)
+		var result: Dictionary = dispatcher.call(operation, op_params)
 		var success: bool = result.get("success", false)
 
-		results.append({
-			"operation": operation,
-			"success": success,
-			"data": result.get("data", null) if success else null,
-			"error": result.get("error", null) if not success else null,
-		})
+		result["operation"] = operation
+		results.append(result)
+
 
 		if success:
 			completed += 1
@@ -75,11 +63,23 @@ static func op_batch(params: Dictionary) -> Dictionary:
 			if stop_on_error:
 				break
 
-	return {"success": failed == 0, "data": {
-		"results": results,
-		"completed": completed,
-		"failed": failed,
-	}}
+	var persistence := {"saved_paths": [], "unsaved_scene_paths": []}
+	for result in results:
+		var effects: Dictionary = result.get("persistence", {})
+		for path in effects.get("saved_paths", []):
+			if not path in persistence.saved_paths:
+				persistence.saved_paths.append(path)
+			persistence.unsaved_scene_paths.erase(path)
+		for path in effects.get("unsaved_scene_paths", []):
+			if not path in persistence.unsaved_scene_paths:
+				persistence.unsaved_scene_paths.append(path)
+	var response := {"success": failed == 0, "data": {
+		"results": results, "completed": completed, "failed": failed, "persistence": persistence,
+	}, "persistence": persistence}
+	if failed > 0:
+		response.merge({"operation": "batch", "error": "%d batch operation(s) failed" % failed, "context": {"stop_on_error": stop_on_error}})
+	return response
+
 
 
 static func op_scene_diff(params: Dictionary) -> Dictionary:
@@ -228,53 +228,6 @@ static func _cleanup_temp(src: Dictionary) -> void:
 	if src.get("is_temp", false) and src.get("temp_path", "") != "":
 		DirAccess.remove_absolute(ProjectSettings.globalize_path(src.temp_path))
 
-
-static func _dispatch_single(operation: String, params: Dictionary) -> Dictionary:
-	match operation:
-		"scene_create": return SceneOps.op_scene_create(params)
-		"scene_read": return SceneOps.op_scene_read(params)
-		"node_add": return NodeOps.op_node_add(params)
-		"node_set_properties": return NodeOps.op_node_set_properties(params)
-		"node_remove": return NodeOps.op_node_remove(params)
-		"node_reparent": return NodeOps.op_node_reparent(params)
-		"scene_list": return SceneOps.op_scene_list(params)
-		"scene_add_instance": return SceneOps.op_scene_add_instance(params)
-		"resource_read": return ResourceOps.op_resource_read(params)
-		"material_create": return ResourceOps.op_material_create(params)
-		"shape_create": return ResourceOps.op_shape_create(params)
-		"style_box_create": return ResourceOps.op_style_box_create(params)
-		"resource_duplicate": return ResourceOps.op_resource_duplicate(params)
-		"tilemap_set_cells": return TileMapOps.op_tilemap_set_cells(params)
-		"tilemap_get_cells": return TileMapOps.op_tilemap_get_cells(params)
-		"tilemap_clear": return TileMapOps.op_tilemap_clear(params)
-		"gridmap_set_cells": return GridMapOps.op_gridmap_set_cells(params)
-		"gridmap_get_cells": return GridMapOps.op_gridmap_get_cells(params)
-		"gridmap_clear": return GridMapOps.op_gridmap_clear(params)
-		"animation_create": return AnimationOps.op_animation_create(params)
-		"animation_add_track": return AnimationOps.op_animation_add_track(params)
-		"animation_read": return AnimationOps.op_animation_read(params)
-		"animation_remove_track": return AnimationOps.op_animation_remove_track(params)
-		"physics_set_layers": return PhysicsOps.op_physics_set_layers(params)
-		"physics_set_layer_names": return PhysicsOps.op_physics_set_layer_names(params)
-		"visual_shader_create": return ShaderOps.op_visual_shader_create(params)
-		"scene_diff": return op_scene_diff(params)
-		"autoload_add": return ProjectOps.op_autoload_add(params)
-		"autoload_remove": return ProjectOps.op_autoload_remove(params)
-		"project_settings_set": return ProjectOps.op_project_settings_set(params)
-		"project_reload": return ProjectOps.op_project_reload(params)
-		"editor_status": return ProjectOps.op_editor_status(params)
-		"uid_get": return ProjectOps.op_uid_get(params)
-		"uid_update_project": return ProjectOps.op_uid_update_project(params)
-		"export_mesh_library": return ProjectOps.op_export_mesh_library(params)
-		"signal_connect": return SignalOps.op_signal_connect(params)
-		"signal_disconnect": return SignalOps.op_signal_disconnect(params)
-		"signal_list": return SignalOps.op_signal_list(params)
-		"node_set_groups": return NodeOps.op_node_set_groups(params)
-		"node_set_script": return NodeOps.op_node_set_script(params)
-		"node_set_meta": return NodeOps.op_node_set_meta(params)
-		"node_find": return NodeOps.op_node_find(params)
-		_:
-			return OpsUtil._error("Unknown operation: " + operation, operation, {})
 
 
 static func _collect_node_map(node: Node, root: Node, result: Dictionary) -> void:

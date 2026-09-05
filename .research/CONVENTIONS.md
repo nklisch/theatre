@@ -1,3 +1,9 @@
+---
+owner: workbench-research
+schema: 1
+verification_rigor: adaptive
+---
+
 # Research Conventions
 
 Grounding, citation, and authority rules for `.research/` artifacts in this

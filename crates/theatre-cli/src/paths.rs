@@ -302,10 +302,90 @@ pub fn copy_dir_recursive(src: &Path, dst: &Path, skip: &dyn Fn(&Path) -> bool) 
     Ok(count)
 }
 
+/// Ignore only explicitly queued local evidence, without changing other project rules.
+pub fn ignore_feedback(project: &Path) -> Result<()> {
+    let path = project.join(".gitignore");
+    let mut text = match std::fs::read_to_string(&path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
+        Err(error) => return Err(error.into()),
+    };
+    if text
+        .lines()
+        .any(|line| matches!(line.trim(), ".theatre/feedback/" | "/.theatre/feedback/"))
+    {
+        return Ok(());
+    }
+    if !text.is_empty() && !text.ends_with('\n') {
+        text.push('\n');
+    }
+    text.push_str(".theatre/feedback/\n");
+    std::fs::write(path, text).context("Failed to ignore project-local feedback evidence")
+}
+
+/// Support scripts ship with either addon but have no independent plugin lifecycle.
+pub fn copy_feedback_support(source_addons: &Path, project_addons: &Path) -> Result<()> {
+    let destination = project_addons.join("theatre_shared");
+    if std::fs::symlink_metadata(&destination).is_ok_and(|m| m.file_type().is_symlink()) {
+        // Development links already expose the support source, as with addon scripts.
+        return Ok(());
+    }
+    copy_dir_recursive(&source_addons.join("theatre_shared"), &destination, &|_| {
+        false
+    })
+    .context("Failed to copy shared feedback support; reinstall Theatre templates if missing")?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use tempfile::TempDir;
+
+    #[test]
+    fn feedback_support_ships_with_either_addon_and_ignore_is_narrow() {
+        for addons in [vec!["stage"], vec!["director"], vec!["stage", "director"]] {
+            let source = TempDir::new().unwrap();
+            let project = TempDir::new().unwrap();
+            let shared = source.path().join("theatre_shared");
+            std::fs::create_dir(&shared).unwrap();
+            std::fs::write(
+                shared.join("feedback.gd"),
+                include_str!("../../../addons/theatre_shared/feedback.gd"),
+            )
+            .unwrap();
+            std::fs::write(
+                shared.join("feedback_composer.gd"),
+                include_str!("../../../addons/theatre_shared/feedback_composer.gd"),
+            )
+            .unwrap();
+            for addon in &addons {
+                std::fs::create_dir_all(project.path().join("addons").join(addon)).unwrap();
+            }
+            std::fs::write(project.path().join(".gitignore"), "existing-local-file\n").unwrap();
+            copy_feedback_support(source.path(), &project.path().join("addons")).unwrap();
+            ignore_feedback(project.path()).unwrap();
+            ignore_feedback(project.path()).unwrap();
+            assert!(
+                project
+                    .path()
+                    .join("addons/theatre_shared/feedback_composer.gd")
+                    .is_file()
+            );
+            assert_eq!(
+                std::fs::read_to_string(project.path().join(".gitignore")).unwrap(),
+                "existing-local-file\n.theatre/feedback/\n"
+            );
+            assert_eq!(
+                project.path().join("addons/director").exists(),
+                addons.contains(&"director")
+            );
+            assert_eq!(
+                project.path().join("addons/stage").exists(),
+                addons.contains(&"stage")
+            );
+        }
+    }
 
     #[test]
     fn test_gdext_filename() {

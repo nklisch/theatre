@@ -1,0 +1,10 @@
+{
+  "name": "theatre-local",
+  "interface": {"displayName": "Theatre"},
+  "plugins": [{
+    "name": "theatre-feedback",
+    "source": {"source": "local", "path": "./codex"},
+    "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
+    "category": "Productivity"
+  }]
+}

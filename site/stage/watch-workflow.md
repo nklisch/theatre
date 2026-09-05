@@ -99,7 +99,9 @@ Typical patterns:
 - **Periodic**: poll every 10-30 seconds during a long session
 - **Event-triggered**: poll after specific in-game events ("I just finished wave 3, check it")
 
-There is no overhead from not polling — the watch just accumulates data. Poll whenever you want; all changes since the last poll are included.
+Poll when you need the next delta. The watch remains session state between calls,
+and each delta advances the baseline. Do not infer zero runtime cost from a lack
+of network polling.
 
 ## Cleaning up
 

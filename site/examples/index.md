@@ -6,7 +6,9 @@ description: "Real debugging scenarios with full AI session transcripts — phys
 
 Real debugging and development scenarios using [Theatre](/guide/what-is-theatre), an AI agent toolkit for Godot. Each example is a complete story — from problem identification through diagnosis to fix — written as a real AI agent session transcript. You can see exactly which MCP tools the agent calls, in what order, and why.
 
-Every scenario uses a real Godot project as the debugging target. The agent connects via Theatre's Stage tools to observe spatial data from the running game, then uses that data to diagnose and fix the issue — no screenshots, no guessing from code alone.
+Every scenario uses a real Godot project as the debugging target. The agent uses
+Stage to observe structured runtime state and adds current or retained visual
+evidence when the question depends on pixels.
 
 ## Debugging Examples
 

@@ -104,6 +104,11 @@ pub fn run(args: InitArgs) -> Result<()> {
         eprintln!("  {} Copied addons/director/", style("✓").green());
     }
 
+    if do_stage || do_director {
+        crate::paths::copy_feedback_support(&theatre.addon_source(), &args.project.join("addons"))?;
+        crate::paths::ignore_feedback(&args.project)?;
+    }
+
     // Step 6b: Generate and write .mcp.json
     if do_mcp {
         let stage_bin = theatre.executable("stage");

@@ -1,3 +1,7 @@
+#[cfg(test)]
+#[path = "backend_identity_tests.rs"]
+mod identity_tests;
+
 use std::path::Path;
 
 use tokio::sync::Mutex;
@@ -36,6 +40,7 @@ impl Backend {
         // 1. Try editor plugin
         match self.try_editor(project_path, operation, params).await {
             Ok(result) => return Ok(result),
+            Err(e @ EditorError::UnknownOutcome { .. }) => return Err(e.into()),
             Err(EditorError::NotReachable(_)) => {
                 // Editor not running — fall through to daemon silently.
             }
@@ -49,6 +54,24 @@ impl Backend {
             .await
     }
 
+    /// Run an editor-only operation without starting or falling back to a headless backend.
+    ///
+    /// Run control belongs to Godot's existing editor process. A lost response
+    /// after dispatch therefore retains the same unknown-outcome semantics as
+    /// authoring operations and is never replayed.
+    pub async fn run_editor_operation(
+        &self,
+        project_path: &Path,
+        operation: &str,
+        params: &serde_json::Value,
+    ) -> Result<OperationResult, OperationError> {
+        match self.try_editor(project_path, operation, params).await {
+            Ok(result) => Ok(result),
+            Err(EditorError::NotReachable(port)) => Err(EditorError::Required { port }.into()),
+            Err(error) => Err(error.into()),
+        }
+    }
+
     /// Attempt to run an operation via the editor plugin.
     async fn try_editor(
         &self,
@@ -59,26 +82,33 @@ impl Backend {
         let port = resolve_editor_port(project_path);
         let mut guard = self.editor.lock().await;
 
-        // Use cached connection if alive.
-        if let Some(ref mut handle) = *guard {
-            if handle.is_alive() {
-                match handle.send_operation(operation, params).await {
-                    Ok(result) => return Ok(result),
-                    Err(e) => {
-                        tracing::warn!("editor send failed ({e}), reconnecting");
-                        *guard = None;
-                    }
-                }
-            } else {
-                *guard = None;
-            }
+        let canonical = std::fs::canonicalize(project_path).map_err(EditorError::IoError)?;
+        if guard
+            .as_ref()
+            .is_some_and(|handle| !handle.matches_project(&canonical, port) || !handle.is_alive())
+        {
+            *guard = None;
+        }
+        if guard.is_none() {
+            *guard = Some(EditorHandle::connect_verified(port, &canonical).await?);
         }
 
-        // Try fresh connection.
-        let mut handle = EditorHandle::connect(port).await?;
-        let result = handle.send_operation(operation, params).await?;
-        *guard = Some(handle);
-        Ok(result)
+        // Once dispatch begins, even a write error may mean Godot applied the
+        // operation. Never replay on a fresh editor connection or headless backend.
+        let result = match guard.as_mut() {
+            Some(handle) => handle.send_operation(operation, params).await,
+            None => unreachable!("verified connection established above"),
+        };
+        match result {
+            Ok(result) => Ok(result),
+            Err(source) => {
+                *guard = None;
+                Err(EditorError::UnknownOutcome {
+                    operation: operation.to_string(),
+                    source: Box::new(source),
+                })
+            }
+        }
     }
 
     /// Daemon → one-shot fallback logic.

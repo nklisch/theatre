@@ -4,11 +4,15 @@ pub mod config;
 pub mod conversions;
 pub mod defaults;
 pub mod delta;
+pub mod feedback;
 pub mod inspect;
 pub mod query;
 pub mod responses;
+pub mod runtime_diagnostics;
+pub mod runtime_status;
 pub mod scene_tree;
 pub mod snapshot;
+pub mod viewport;
 pub mod watch;
 
 use rmcp::handler::server::wrapper::Parameters;
@@ -23,11 +27,15 @@ use stage_core::{
     types::{vec_to_array2, vec_to_array3},
 };
 use stage_protocol::query::{
-    DetailLevel, GetNodeInspectParams, GetSnapshotDataParams, NodeInspectResponse, SnapshotResponse,
+    ActionRequest, DetailLevel, GetNodeInspectParams, GetSnapshotDataParams,
+    INTERACTION_SEQUENCE_ENGINE_DEADLINE_SECS, NodeInspectResponse, SnapshotResponse,
 };
 
 use crate::server::StageServer;
 use crate::tcp::{SessionState, get_config, query_addon};
+
+const INTERACTION_SEQUENCE_SERVER_TIMEOUT: tokio::time::Duration =
+    tokio::time::Duration::from_secs(INTERACTION_SEQUENCE_ENGINE_DEADLINE_SECS + 2);
 
 // ---------------------------------------------------------------------------
 // Shared MCP helpers
@@ -349,7 +357,20 @@ pub async fn handle_action(
     let bctx = budget_context(state).await;
 
     let action_request = build_action_request(&params)?;
-    let data = query_addon(state, "execute_action", serialize_params(&action_request)?).await?;
+    let serialized = serialize_params(&action_request)?;
+    let data = if matches!(action_request, ActionRequest::InteractionSequence { .. }) {
+        // The server must remain waiting long enough for the engine's own
+        // 30-second deadline to release inputs, re-pause, and report the error.
+        crate::tcp::query_addon_with_timeout(
+            state,
+            "execute_action",
+            serialized,
+            INTERACTION_SEQUENCE_SERVER_TIMEOUT,
+        )
+        .await?
+    } else {
+        query_addon(state, "execute_action", serialized).await?
+    };
 
     let mut response: serde_json::Value = data;
     let action_budget = bctx.resolve(None, 500);
@@ -468,6 +489,55 @@ pub async fn handle_clips_cli(
 
 #[tool_router(vis = "pub")]
 impl StageServer {
+    #[tool(
+        description = "Read and manage persistent human feedback for this selected project, even when the game is stopped. Status lists pending evidence and incomplete storage; retrieve returns context, note and an image without consuming it. Handle suppresses notices for all readers; delete and cleanup are deliberate removal."
+    )]
+    pub async fn feedback(
+        &self,
+        Parameters(params): Parameters<theatre_feedback::Operation>,
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
+        feedback::handle(params, &self.state).await
+    }
+
+    #[tool(
+        description = "Read the latest completed game viewport render without recording or saving a clip. Returns JPEG and run identity, readback physics frame and render counter. Pixels are not an atomic snapshot with spatial queries. Headless or missing pixels return explicit visual unavailability; spatial tools still work."
+    )]
+    pub async fn viewport(
+        &self,
+        Parameters(params): Parameters<viewport::ViewportParams>,
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
+        let result = viewport::handle_viewport(params, &self.state).await;
+        self.log_activity("query", "Viewport observation", "viewport")
+            .await;
+        result
+    }
+
+    #[tool(
+        description = "Read bounded errors, warnings, script errors, and shader errors captured in the current Godot game process. Returns engine-owned run identity, exact retained/omitted counts, bounded origin/message/backtrace data, pagination, response-budget accounting, and explicit capture limitations. Capture begins when the Stage autoload registers its Logger; this is not pre-registration history or a debugger."
+    )]
+    pub async fn runtime_diagnostics(
+        &self,
+        Parameters(params): Parameters<runtime_diagnostics::RuntimeDiagnosticsParams>,
+    ) -> Result<String, McpError> {
+        let result = runtime_diagnostics::handle_runtime_diagnostics(params, &self.state).await;
+        self.log_activity("query", "Runtime diagnostics", "runtime_diagnostics")
+            .await;
+        result
+    }
+
+    #[tool(
+        description = "Identify the connected Godot project and game run, distinct from this client session. Queries current scene and readiness; disconnected status never presents retained identity as current and reports actionable connection failures."
+    )]
+    pub async fn runtime_status(
+        &self,
+        Parameters(params): Parameters<runtime_status::RuntimeStatusParams>,
+    ) -> Result<String, McpError> {
+        let result = runtime_status::handle_runtime_status(params, &self.state).await;
+        self.log_activity("query", "Runtime status", "runtime_status")
+            .await;
+        result
+    }
+
     /// Get a spatial snapshot of the current scene from a perspective.
     /// Use detail 'summary' for a cheap overview (~200 tokens), 'standard' for per-entity data
     /// (~400-800 tokens), or 'full' for everything including transforms, physics, and children
@@ -521,11 +591,12 @@ impl StageServer {
 
     /// Manipulate game state for debugging. Actions: pause (pause/unpause scene),
     /// advance_frames (step N physics frames while paused), advance_time (step N seconds
-    /// while paused), teleport (move node to position), set_property (change a property),
+    /// while paused), interaction_sequence (bounded named input and frame steps),
+    /// teleport (move node to position), set_property (change a property),
     /// call_method (call a method), emit_signal (emit a signal), spawn_node (instantiate
     /// a scene), remove_node (queue_free a node).
     #[tool(
-        description = "Manipulate game state for debugging. Actions and required parameters:\n- 'pause' — pause/unpause. Requires: paused (bool).\n- 'advance_frames' — step physics frames. Requires: frames (int).\n- 'advance_time' — step seconds. Requires: seconds (float).\n- 'teleport' — move node. Requires: node, position. Optional: rotation_deg.\n- 'set_property' — change property. Requires: node, property, value.\n- 'call_method' — call method. Requires: node, method. Optional: args.\n- 'emit_signal' — emit signal. Requires: node, signal. Optional: args.\n- 'spawn_node' — instantiate scene. Requires: scene_path, parent. Optional: name, position.\n- 'remove_node' — delete node. Requires: node.\nSet return_delta=true to get a spatial delta showing what changed."
+        description = "Manipulate game state for debugging. Actions and required parameters:\n- 'pause' — pause/unpause. Requires: paused (bool).\n- 'advance_frames' — step physics frames. Requires: frames (int).\n- 'advance_time' — step seconds. Requires: seconds (float).\n- 'interaction_sequence' — run 1-64 InputMap press/release steps while paused, up to 600 total frames. Requires: steps.\n- 'teleport' — move node. Requires: node, position. Optional: rotation_deg.\n- 'set_property' — change property. Requires: node, property, value.\n- 'call_method' — call method. Requires: node, method. Optional: args.\n- 'emit_signal' — emit signal. Requires: node, signal. Optional: args.\n- 'spawn_node' — instantiate scene. Requires: scene_path, parent. Optional: name, position.\n- 'remove_node' — delete node. Requires: node.\nSet return_delta=true to get a spatial delta showing what changed."
     )]
     pub async fn spatial_action(
         &self,

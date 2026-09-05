@@ -4,7 +4,9 @@ description: "Theatre's Rust crate structure — addon, server, protocol, and sh
 
 # Crate Structure
 
-Theatre's Rust workspace contains 5 crates. Each has a specific scope and dependency set designed to keep concerns separated.
+Theatre's Rust workspace separates engine access, shared protocols, spatial
+reasoning, agent servers, feedback storage, documentation generation, and project
+setup. The workspace manifest owns the current member list.
 
 ## `stage-protocol`
 
@@ -65,9 +67,12 @@ The no-`stage-core` rule keeps the GDExtension lean. The addon collects raw data
 
 ### GDExtension version targeting
 
-The crate targets `api-4-5` with `lazy-function-tables` enabled. The `api-4-5` flag requires Godot 4.5+ at runtime (API version ≤ runtime version). The `lazy-function-tables` feature defers method hash validation to first call rather than on load, providing forward compatibility with Godot 4.6+ without panicking when method hashes change between Godot versions in classes the extension never uses.
-
-To target a newer API, bump `api-4-5` to `api-4-6` in `Cargo.toml` once godot-rust adds that feature flag.
+The crate uses godot-rust 0.5.5 and targets `api-4-7` with
+`experimental-godot-api` and `lazy-function-tables`. It requires Godot 4.7 or
+newer at runtime. The dependency declares Rust 1.94 as its compiler floor;
+current local engine verification used Rust 1.96.1 rather than a minimum-compiler
+test. Lazy lookup defers method validation until use; it does not make an
+unavailable or incompatible API safe to call.
 
 ## `stage-server`
 
@@ -95,6 +100,19 @@ It:
 - `tcp.rs` — TCP connection management and request-response matching
 - `activity.rs` — Activity logging to editor dock
 
+## `theatre-feedback`
+
+**Type**: Library (`lib`)
+**Purpose**: Shared project-local human feedback reader and management surface
+
+This crate owns the typed feedback item, status, retrieval, handling, deletion,
+and explicit incomplete-publication cleanup used by Stage, Director, and the
+Theatre CLI. It reads `.theatre/feedback` without a live Godot connection.
+Retrieval is non-destructive, and handling remains separate from deletion.
+
+The Godot producer lives in `addons/theatre_shared`. That directory is a shared
+support payload, not another plugin.
+
 ## `director`
 
 **Type**: Binary (`bin`)
@@ -118,7 +136,9 @@ Each backend implements the same `Backend` trait, so tool handlers are backend-a
 **Type**: Binary (`bin`, produces `theatre` executable)
 **Purpose**: Unified CLI for installation, project setup, and deployment
 
-The CLI replaces manual build-copy-configure workflows with five commands: `install`, `init`, `deploy`, `enable`, `rules`. It has no runtime dependencies on Godot or MCP — just filesystem operations and cargo invocations.
+The CLI replaces manual build-copy-configure workflows with installation,
+project setup, deployment, enablement, rules, MCP configuration, and project-local
+feedback commands. Its feedback reader does not require Godot or MCP.
 
 **Key commands**:
 - `theatre install` — builds all crates in release mode, copies binaries to `~/.local/bin/` and addon templates to `~/.local/share/theatre/`
@@ -126,9 +146,11 @@ The CLI replaces manual build-copy-configure workflows with five commands: `inst
 - `theatre deploy <project...>` — rebuilds from source and updates target projects
 - `theatre enable <project>` — toggles plugins in `project.godot`
 - `theatre rules <project>` — generates agent rules file (`.claude/rules/godot.md`, `CLAUDE.md`, or `AGENTS.md`)
+- `theatre mcp <project>` — regenerates the project's MCP configuration
+- `theatre feedback` — reads or manages retained feedback without a running engine
 
 **Dependency rules**:
-- Depends on: `clap`, `dialoguer`, `console`, `serde_json`, `anyhow`
+- Depends on: `clap`, `dialoguer`, `console`, `serde_json`, `anyhow`, `theatre-feedback`
 - No dependency on any stage, director, rmcp, tokio, or gdext crate
 - All operations are synchronous (`std::process::Command` for cargo builds)
 
@@ -143,7 +165,9 @@ members = [
     "crates/stage-godot",
     "crates/stage-server",
     "crates/director",
+    "crates/theatre-feedback",
     "crates/theatre-cli",
+    "crates/theatre-docs-gen",
 ]
 
 [workspace.dependencies]

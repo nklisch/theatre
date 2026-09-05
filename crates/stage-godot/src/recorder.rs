@@ -608,13 +608,13 @@ impl INode for StageRecorder {
 #[godot_api]
 impl StageRecorder {
     #[signal]
-    fn marker_added(frame: u64, source: GString, label: GString);
+    fn marker_added(frame: i64, source: GString, label: GString);
 
     #[signal]
     fn dashcam_clip_saved(clip_id: GString, tier: GString, frames: u32);
 
     #[signal]
-    fn dashcam_clip_started(trigger_frame: u64, tier: GString);
+    fn dashcam_clip_started(trigger_frame: i64, tier: GString);
 
     #[func]
     pub fn set_collector(&mut self, collector: Gd<StageCollector>) {
@@ -928,7 +928,11 @@ impl StageRecorder {
 
         self.base_mut().emit_signal(
             "marker_added",
-            &[frame.to_variant(), source.to_variant(), label.to_variant()],
+            &[
+                (frame as i64).to_variant(),
+                source.to_variant(),
+                label.to_variant(),
+            ],
         );
     }
 
@@ -957,7 +961,7 @@ impl StageRecorder {
                 self.base_mut().emit_signal(
                     "marker_added",
                     &[
-                        frame.to_variant(),
+                        (frame as i64).to_variant(),
                         GString::from("code").to_variant(),
                         label.to_variant(),
                     ],
@@ -975,7 +979,7 @@ impl StageRecorder {
                 self.base_mut().emit_signal(
                     "marker_added",
                     &[
-                        frame.to_variant(),
+                        (frame as i64).to_variant(),
                         GString::from("code").to_variant(),
                         label.to_variant(),
                     ],
@@ -1105,8 +1109,8 @@ impl StageRecorder {
                         });
 
                     let mut dict = VarDictionary::new();
-                    dict.set("clip_id", GString::from(&id));
-                    dict.set("name", GString::from(&name));
+                    dict.set("clip_id", &GString::from(&id));
+                    dict.set("name", &GString::from(&name));
                     dict.set("frames_captured", frame_count as u32);
                     dict.set("duration_ms", duration_ms);
                     dict.set("frame_range_start", start_frame);
@@ -1115,12 +1119,12 @@ impl StageRecorder {
                     dict.set("size_kb", size_kb as u32);
                     dict.set("created_at_unix_ms", created_at_unix_ms);
                     dict.set("dashcam", is_dashcam);
-                    dict.set("dashcam_tier", GString::from(&dashcam_tier));
+                    dict.set("dashcam_tier", &GString::from(&dashcam_tier));
                     if let Some(label) = trigger_label {
-                        dict.set("trigger_label", GString::from(&label));
+                        dict.set("trigger_label", &GString::from(&label));
                     }
                     if let Some(capture_json) = capture_block_json {
-                        dict.set("capture_json", GString::from(&capture_json));
+                        dict.set("capture_json", &GString::from(&capture_json));
                     }
                     result.push(&dict);
                 }
@@ -1178,8 +1182,8 @@ impl StageRecorder {
                 let mut dict = VarDictionary::new();
                 dict.set("frame", frame);
                 dict.set("timestamp_ms", timestamp_ms);
-                dict.set("source", GString::from(&source));
-                dict.set("label", GString::from(&label));
+                dict.set("source", &GString::from(&source));
+                dict.set("label", &GString::from(&label));
                 result.push(&dict);
             }
         }
@@ -1275,7 +1279,7 @@ impl StageRecorder {
         // Godot's headless display server has no viewport texture to read. Calling
         // `Viewport::get_texture` there emits a rendering error every capture tick.
         // Spatial dashcam capture remains available; only rendered screenshots degrade.
-        if DisplayServer::singleton().get_name().to_string() == "headless" {
+        if DisplayServer::singleton().get_name() == "headless" {
             return;
         }
         let started = Instant::now();
@@ -1387,7 +1391,7 @@ impl StageRecorder {
                     self.base_mut().emit_signal(
                         "marker_added",
                         &[
-                            shot.frame.to_variant(),
+                            (shot.frame as i64).to_variant(),
                             GString::from("system").to_variant(),
                             GString::from(&label).to_variant(),
                         ],
@@ -1684,7 +1688,10 @@ impl StageRecorder {
             let tier_str = tier.as_str();
             self.base_mut().emit_signal(
                 "dashcam_clip_started",
-                &[frame.to_variant(), GString::from(tier_str).to_variant()],
+                &[
+                    (frame as i64).to_variant(),
+                    GString::from(tier_str).to_variant(),
+                ],
             );
         } else if is_post_capture {
             self.merge_dashcam_trigger(tier, source, label, frame, timestamp_ms);
@@ -1709,7 +1716,7 @@ impl StageRecorder {
         self.base_mut().emit_signal(
             "marker_added",
             &[
-                frame.to_variant(),
+                (frame as i64).to_variant(),
                 GString::from(source).to_variant(),
                 GString::from(label).to_variant(),
             ],
@@ -1866,8 +1873,11 @@ impl StageRecorder {
         });
 
         let physics_ticks = self.physics_fps;
-        let scene_dims =
-            detect_scene_dimensions(self.base().get_tree().and_then(|t| t.get_current_scene()));
+        let scene_dims = detect_scene_dimensions(
+            self.base()
+                .get_tree_or_null()
+                .and_then(|t| t.get_current_scene()),
+        );
 
         let created_at_unix_ms = current_time_ms() as i64;
         let _ = db.execute(

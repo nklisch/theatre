@@ -47,6 +47,8 @@ pub struct SessionState {
     pub connected: bool,
     pub session_id: Option<String>,
     pub handshake_info: Option<HandshakeInfo>,
+    /// Most recent connection failure, retained for actionable disconnected status.
+    pub connection_error: Option<String>,
     /// Pending query response channels: request_id → sender.
     pub pending_queries: HashMap<String, oneshot::Sender<QueryResult>>,
     /// Spatial index built from the most recent snapshot.
@@ -72,6 +74,7 @@ impl Default for SessionState {
             connected: false,
             session_id: None,
             handshake_info: None,
+            connection_error: None,
             pending_queries: HashMap::new(),
             spatial_index: SpatialIndex::empty(),
             delta_engine: DeltaEngine::new(),
@@ -84,6 +87,20 @@ impl Default for SessionState {
     }
 }
 
+impl SessionState {
+    fn disconnect(&mut self, diagnostic: String) {
+        self.tcp_writer = None;
+        self.connected = false;
+        self.session_id = None;
+        self.handshake_info = None;
+        self.pending_queries.clear();
+        self.delta_engine = DeltaEngine::new();
+        self.spatial_index = SpatialIndex::empty();
+        // Watch/config intent persists, but no retained identity is current.
+        self.connection_error = Some(diagnostic);
+    }
+}
+
 /// Information received from the addon during handshake.
 #[derive(Debug, Clone)]
 pub struct HandshakeInfo {
@@ -92,6 +109,7 @@ pub struct HandshakeInfo {
     pub scene_dimensions: u32,
     pub physics_ticks_per_sec: u32,
     pub project_name: String,
+    pub identity: stage_protocol::runtime::RuntimeIdentity,
 }
 
 /// Background task: connect to addon, handle handshake, reconnect on disconnect.
@@ -108,22 +126,13 @@ pub async fn tcp_client_loop(state: Arc<Mutex<SessionState>>, port: u16) {
                     Err(e) => tracing::warn!("Connection error: {}", e),
                 }
 
-                // Clean up state on disconnect — cancel all pending queries
-                {
-                    let mut s = state.lock().await;
-                    s.tcp_writer = None;
-                    s.connected = false;
-                    // Drop all pending senders — receivers will get RecvError
-                    s.pending_queries.clear();
-                    // Clear delta baseline on disconnect (game state resets)
-                    s.delta_engine = DeltaEngine::new();
-                    // Watch engine persists — watches survive reconnect
-                }
-
                 tracing::info!("Addon disconnected, will retry in 2s");
             }
             Err(e) => {
                 tracing::debug!("Connection failed: {}", e);
+                state.lock().await.connection_error = Some(format!(
+                    "Cannot connect to Stage on port {port}: {e}. Start the intended project with the Stage addon active."
+                ));
             }
         }
 
@@ -137,13 +146,14 @@ pub async fn connect_once(state: &Arc<Mutex<SessionState>>, port: u16) -> Result
     let addr = format!("127.0.0.1:{port}");
     let timeout = tokio::time::Duration::from_secs(5);
 
+    state.lock().await.connection_error = None;
     let stream = tokio::time::timeout(timeout, tokio::net::TcpStream::connect(&addr))
         .await
         .map_err(|_| anyhow::anyhow!("Connection timed out after 5s"))?
         .map_err(|e| anyhow::anyhow!("TCP connection failed: {e}"))?;
 
     let state_clone = state.clone();
-    tokio::spawn(async move {
+    let task = tokio::spawn(async move {
         if let Err(e) = handle_connection(stream, state_clone).await {
             tracing::warn!("Connection ended: {e}");
         }
@@ -158,11 +168,16 @@ pub async fn connect_once(state: &Arc<Mutex<SessionState>>, port: u16) -> Result
             if s.connected {
                 return Ok(());
             }
+            if let Some(error) = &s.connection_error {
+                return Err(anyhow::anyhow!(error.clone()));
+            }
         }
         if start.elapsed() > handshake_timeout {
-            return Err(anyhow::anyhow!(
-                "Handshake timed out — addon did not respond within 3s"
-            ));
+            task.abort();
+            let _ = task.await;
+            let diagnostic = "Handshake timed out — addon did not respond within 3s";
+            state.lock().await.disconnect(diagnostic.into());
+            return Err(anyhow::anyhow!(diagnostic));
         }
         tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
     }
@@ -172,6 +187,15 @@ pub(crate) async fn handle_connection(
     stream: TcpStream,
     state: Arc<Mutex<SessionState>>,
 ) -> Result<()> {
+    let result = run_connection(stream, state.clone()).await;
+    state.lock().await.disconnect(match &result {
+        Err(error) => error.to_string(),
+        Ok(()) => "Stage disconnected. Start or reconnect the intended running game.".into(),
+    });
+    result
+}
+
+async fn run_connection(stream: TcpStream, state: Arc<Mutex<SessionState>>) -> Result<()> {
     let (mut reader, writer) = tokio::io::split(stream);
 
     // Step 1: Read handshake from addon (timeout: Godot may have another client active)
@@ -211,6 +235,28 @@ pub(crate) async fn handle_connection(
         );
     }
 
+    // A local selected Godot project is an intent to operate on that project.
+    // Refuse a different engine before ACK/config push, not after a mutation.
+    let selected = state.lock().await.project_dir.clone();
+    if selected.join("project.godot").is_file() {
+        let expected = std::fs::canonicalize(&selected)?;
+        let actual = std::fs::canonicalize(&handshake.identity.project_path).map_err(|e| {
+            anyhow::anyhow!(
+                "Cannot verify Stage project {}: {e}",
+                handshake.identity.project_path
+            )
+        })?;
+        if actual != expected {
+            anyhow::bail!(
+                "Stage project mismatch: selected {}, but process {} (run {}) serves {}. Set THEATRE_PROJECT_DIR to the intended project and THEATRE_PORT to its Stage listener, or stop the wrong running game.",
+                expected.display(),
+                handshake.identity.process_id,
+                handshake.identity.run_id,
+                actual.display()
+            );
+        }
+    }
+
     // Step 3: Send ACK
     let session_id = format!("sess_{}", Uuid::new_v4().as_simple());
     let ack = HandshakeAck::new(session_id.clone());
@@ -226,6 +272,7 @@ pub(crate) async fn handle_connection(
         let mut s = state.lock().await;
         s.tcp_writer = Some(TcpClientHandle { writer, next_id: 0 });
         s.connected = true;
+        s.connection_error = None;
         s.session_id = Some(session_id);
         s.scene_dimensions = handshake.dimensions();
         s.handshake_info = Some(HandshakeInfo {
@@ -234,6 +281,7 @@ pub(crate) async fn handle_connection(
             scene_dimensions: handshake.scene_dimensions,
             physics_ticks_per_sec: handshake.physics_ticks_per_sec,
             project_name: handshake.project_name,
+            identity: handshake.identity,
         });
     }
 
@@ -350,6 +398,17 @@ pub async fn query_addon(
     method: &str,
     params: serde_json::Value,
 ) -> Result<serde_json::Value, McpError> {
+    query_addon_with_timeout(state, method, params, QUERY_TIMEOUT).await
+}
+
+/// Send a query with a route-specific timeout. Long engine-owned operations
+/// use this without weakening the ordinary five-second responsiveness bound.
+pub async fn query_addon_with_timeout(
+    state: &Arc<Mutex<SessionState>>,
+    method: &str,
+    params: serde_json::Value,
+    timeout: Duration,
+) -> Result<serde_json::Value, McpError> {
     let (tx, rx) = oneshot::channel();
     let request_id;
 
@@ -357,6 +416,14 @@ pub async fn query_addon(
     {
         let mut s = state.lock().await;
 
+        if !s.connected {
+            return Err(McpError::internal_error(
+                s.connection_error
+                    .clone()
+                    .unwrap_or_else(|| "Not connected to Godot addon. Is the game running?".into()),
+                None,
+            ));
+        }
         // Check connected and get request_id — brief borrow of tcp_writer
         {
             let writer = s.tcp_writer.as_mut().ok_or_else(|| {
@@ -380,17 +447,21 @@ pub async fn query_addon(
     }
     // Lock released — wait for response
 
-    let result = tokio::time::timeout(QUERY_TIMEOUT, rx)
-        .await
-        .map_err(|_| {
-            McpError::internal_error(
-                "Addon did not respond within 5000ms. Game may be frozen or at a breakpoint.",
-                None,
-            )
-        })?
-        .map_err(|_| {
+    let result = match tokio::time::timeout(timeout, rx).await {
+        Ok(result) => result.map_err(|_| {
             McpError::internal_error("TCP connection dropped while waiting for response", None)
-        })?;
+        })?,
+        Err(_) => {
+            state.lock().await.pending_queries.remove(&request_id);
+            return Err(McpError::internal_error(
+                format!(
+                    "Addon did not respond within {}ms. Game may be frozen or at a breakpoint.",
+                    timeout.as_millis()
+                ),
+                None,
+            ));
+        }
+    };
 
     // Clean up pending entry if timeout didn't do it
     match result {

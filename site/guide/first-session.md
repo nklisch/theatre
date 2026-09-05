@@ -19,7 +19,7 @@ const messages2 = [
 ]
 const messages3 = [
   { role: 'human', text: `Fix the collision mask on the detection zone. The player should be on layer 1 and the zone should detect layer 1.` },
-  { role: 'agent', text: `Done. The EnemyDetectionZone.collision_mask is now 1 (layer 1). The Area3D will now register body_entered for the Player. Save and reload the scene to see the fix.` },
+  { role: 'agent', text: `Done. The open scene now has collision_mask=1 with a native undo entry. I will save only this scene, then run it and verify Stage readiness.` },
 ]
 const messages4 = [
   { role: 'human', text: `Looks fixed. Can you confirm the layers are set correctly now in the running game?` },
@@ -42,7 +42,9 @@ You have already tried reading the detection script and the collision layer sett
 
 ## Step 1: Reproduce the bug and save a clip
 
-Stage's dashcam is always running — it automatically buffers the last 60 seconds of spatial data in memory. There is nothing to start.
+Stage's dashcam starts buffering automatically when its project setting is enabled.
+Check `clips` status before relying on retained history; projects can disable
+dashcam startup independently of live observation.
 
 Walk the player in front of the enemy a few times. On the third or fourth pass, the enemy fails to detect you — you see the player enters the zone visually but the alert animation does not play.
 
@@ -66,7 +68,10 @@ Press **F9** (or click the **⚑** flag button in the top-left corner of the gam
 
 ## Step 6: Verify the fix
 
-Press F5 to run the game with the fix applied. Walk the player in front of the enemy. The alert triggers every time.
+Save the selected scene through Director. With the Director editor plugin connected,
+use `editor_run` to start or restart that saved scene, then check Stage
+`runtime_status` for the actual run and readiness. A manual editor launch remains
+valid. Walk the player in front of the enemy and observe the result.
 
 To confirm with the agent:
 
@@ -87,7 +92,7 @@ With Theatre:
 1. Mark the bug moment with F9 — the dashcam saves the clip automatically
 2. Agent queries the spatial recording around the marked frame
 3. Agent compares positions and inspects properties — finds the mismatch in < 60 seconds
-4. Agent fixes it via Director without hand-editing the scene file
+4. Agent fixes it via Director, saves only the selected scene, and verifies a fresh run
 
 The key insight — that the `collision_mask` was wrong — came from the agent reading the **actual runtime property values**, not from reading the code. The code was correct; the configuration was wrong.
 

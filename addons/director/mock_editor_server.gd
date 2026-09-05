@@ -8,12 +8,7 @@ extends SceneTree
 ## and backend selection logic without requiring the actual Godot editor.
 
 const MessageCodec = preload("res://addons/director/message_codec.gd")
-const SceneOps = preload("res://addons/director/ops/scene_ops.gd")
-const NodeOps = preload("res://addons/director/ops/node_ops.gd")
-const ResourceOps = preload("res://addons/director/ops/resource_ops.gd")
-const TileMapOps = preload("res://addons/director/ops/tilemap_ops.gd")
-const GridMapOps = preload("res://addons/director/ops/gridmap_ops.gd")
-const AnimationOps = preload("res://addons/director/ops/animation_ops.gd")
+const Dispatcher = preload("res://addons/director/ops/dispatcher.gd")
 
 const DEFAULT_PORT := 6551
 
@@ -88,41 +83,6 @@ func _poll_client() -> void:
 
 
 func _dispatch(operation: String, params: Dictionary) -> Dictionary:
-	match operation:
-		"scene_create": return SceneOps.op_scene_create(params)
-		"scene_read": return SceneOps.op_scene_read(params)
-		"node_add": return NodeOps.op_node_add(params)
-		"node_set_properties": return NodeOps.op_node_set_properties(params)
-		"node_remove": return NodeOps.op_node_remove(params)
-		"node_reparent": return NodeOps.op_node_reparent(params)
-		"scene_list": return SceneOps.op_scene_list(params)
-		"scene_add_instance": return SceneOps.op_scene_add_instance(params)
-		"resource_read": return ResourceOps.op_resource_read(params)
-		"material_create": return ResourceOps.op_material_create(params)
-		"shape_create": return ResourceOps.op_shape_create(params)
-		"style_box_create": return ResourceOps.op_style_box_create(params)
-		"resource_duplicate": return ResourceOps.op_resource_duplicate(params)
-		"tilemap_set_cells": return TileMapOps.op_tilemap_set_cells(params)
-		"tilemap_get_cells": return TileMapOps.op_tilemap_get_cells(params)
-		"tilemap_clear": return TileMapOps.op_tilemap_clear(params)
-		"gridmap_set_cells": return GridMapOps.op_gridmap_set_cells(params)
-		"gridmap_get_cells": return GridMapOps.op_gridmap_get_cells(params)
-		"gridmap_clear": return GridMapOps.op_gridmap_clear(params)
-		"animation_create": return AnimationOps.op_animation_create(params)
-		"animation_add_track": return AnimationOps.op_animation_add_track(params)
-		"animation_read": return AnimationOps.op_animation_read(params)
-		"animation_remove_track": return AnimationOps.op_animation_remove_track(params)
-		"autoload_add": return ProjectOps.op_autoload_add(params)
-		"autoload_remove": return ProjectOps.op_autoload_remove(params)
-		"project_settings_set": return ProjectOps.op_project_settings_set(params)
-		"project_reload": return ProjectOps.op_project_reload(params)
-		"editor_status": return ProjectOps.op_editor_status(params)
-		"ping":
-			return {"success": true, "data": {"status": "ok", "backend": "editor"}, "operation": "ping"}
-		_:
-			return {
-				"success": false,
-				"error": "Unknown operation: " + operation,
-				"operation": operation,
-				"context": {},
-			}
+	if operation == "ping":
+		return {"success": true, "data": {"status": "ok", "backend": "editor", "project_path": ProjectSettings.globalize_path("res://"), "process_id": OS.get_process_id()}, "operation": "ping"}
+	return Dispatcher.dispatch(operation, params)

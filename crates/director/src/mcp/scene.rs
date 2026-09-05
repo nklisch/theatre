@@ -74,3 +74,10 @@ pub struct SceneAddInstanceParams {
     #[serde(default)]
     pub node_name: Option<String>,
 }
+
+/// Save only the selected scene, preserving native undo history.
+#[derive(Debug, Deserialize, Serialize, JsonSchema)]
+pub struct SceneSaveParams {
+    pub project_path: String,
+    pub scene_path: String,
+}

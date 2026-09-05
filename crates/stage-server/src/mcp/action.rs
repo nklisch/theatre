@@ -2,7 +2,7 @@ use rmcp::model::ErrorData as McpError;
 use schemars::JsonSchema;
 use serde::Deserialize;
 
-use stage_protocol::query::ActionRequest;
+use stage_protocol::query::{ActionRequest, InteractionSequenceStep};
 
 use super::require_param;
 
@@ -16,6 +16,8 @@ pub enum ActionType {
     AdvanceFrames,
     /// Step N seconds while paused. Requires: seconds (float).
     AdvanceTime,
+    /// Run bounded InputMap changes and physics-frame steps. Requires: steps.
+    InteractionSequence,
     /// Move a node to a position. Requires: node, position. Optional: rotation_deg.
     Teleport,
     /// Change a node property. Requires: node, property, value.
@@ -57,6 +59,10 @@ pub struct SpatialActionParams {
     /// For advance_time: seconds to advance.
     pub seconds: Option<f64>,
 
+    /// For interaction_sequence: 1-64 steps, each with press/release changes
+    /// followed by 1 or more physics frames; total frames may not exceed 600.
+    pub steps: Option<Vec<InteractionSequenceStep>>,
+
     /// For teleport: target position [x, y, z] or [x, y].
     pub position: Option<Vec<f64>>,
 
@@ -87,7 +93,7 @@ pub struct SpatialActionParams {
     /// For spawn_node: name for the new node.
     pub name: Option<String>,
 
-    /// Whether to return a spatial_delta after the action (M4 placeholder).
+    /// Whether to return a spatial_delta after the action in a persistent session.
     #[serde(default)]
     pub return_delta: bool,
 
@@ -104,8 +110,7 @@ pub struct SpatialActionParams {
     pub pressed: Option<bool>,
 
     /// For inject_key: whether this is an echo event.
-    #[serde(default)]
-    pub echo: bool,
+    pub echo: Option<bool>,
 
     /// For inject_mouse_button: button name ("left", "right", "middle",
     /// "wheel_up", "wheel_down").
@@ -115,7 +120,47 @@ pub struct SpatialActionParams {
 /// Build the addon ActionRequest from MCP params.
 /// Validates required fields per action type.
 pub fn build_action_request(params: &SpatialActionParams) -> Result<ActionRequest, McpError> {
-    match &params.action {
+    if !matches!(params.action, ActionType::InteractionSequence) && params.steps.is_some() {
+        return Err(McpError::invalid_params(
+            "'steps' is only supported by interaction_sequence",
+            None,
+        ));
+    }
+    if matches!(params.action, ActionType::InteractionSequence) {
+        // Sequence input changes belong to individual steps. Silently dropping
+        // another action's fields would execute a different request.
+        let incompatible = [
+            ("node", params.node.is_some()),
+            ("paused", params.paused.is_some()),
+            ("frames", params.frames.is_some()),
+            ("seconds", params.seconds.is_some()),
+            ("position", params.position.is_some()),
+            ("rotation_deg", params.rotation_deg.is_some()),
+            ("property", params.property.is_some()),
+            ("value", params.value.is_some()),
+            ("signal", params.signal.is_some()),
+            ("args", params.args.is_some()),
+            ("method", params.method.is_some()),
+            ("scene_path", params.scene_path.is_some()),
+            ("parent", params.parent.is_some()),
+            ("name", params.name.is_some()),
+            ("input_action", params.input_action.is_some()),
+            ("strength", params.strength.is_some()),
+            ("keycode", params.keycode.is_some()),
+            ("pressed", params.pressed.is_some()),
+            ("echo", params.echo.is_some()),
+            ("button", params.button.is_some()),
+        ];
+        if let Some((field, _)) = incompatible.into_iter().find(|(_, present)| *present) {
+            return Err(McpError::invalid_params(
+                format!(
+                    "'{field}' is not supported at the top level of interaction_sequence; use 'steps' for input changes and frame counts"
+                ),
+                None,
+            ));
+        }
+    }
+    let request = match &params.action {
         ActionType::Pause => {
             let paused = require_param!(
                 params.paused,
@@ -136,6 +181,15 @@ pub fn build_action_request(params: &SpatialActionParams) -> Result<ActionReques
                 "'seconds' (float) is required for advance_time action"
             );
             Ok(ActionRequest::AdvanceTime { seconds })
+        }
+        ActionType::InteractionSequence => {
+            let steps = require_param!(
+                params.steps.as_ref(),
+                "'steps' is required for interaction_sequence action"
+            );
+            Ok(ActionRequest::InteractionSequence {
+                steps: steps.clone(),
+            })
         }
         ActionType::Teleport => {
             let node = require_param!(
@@ -257,7 +311,7 @@ pub fn build_action_request(params: &SpatialActionParams) -> Result<ActionReques
             Ok(ActionRequest::InjectKey {
                 keycode: keycode.clone(),
                 pressed,
-                echo: params.echo,
+                echo: params.echo.unwrap_or(false),
             })
         }
         ActionType::InjectMouseButton => {
@@ -275,7 +329,11 @@ pub fn build_action_request(params: &SpatialActionParams) -> Result<ActionReques
                 position: params.position.clone(),
             })
         }
-    }
+    }?;
+    request
+        .validate()
+        .map_err(|message| McpError::invalid_params(message, None))?;
+    Ok(request)
 }
 
 #[cfg(test)]
@@ -289,6 +347,7 @@ mod tests {
             paused: None,
             frames: None,
             seconds: None,
+            steps: None,
             position: None,
             rotation_deg: None,
             property: None,
@@ -304,7 +363,7 @@ mod tests {
             strength: None,
             keycode: None,
             pressed: None,
-            echo: false,
+            echo: None,
             button: None,
         }
     }
@@ -315,6 +374,38 @@ mod tests {
         p.paused = Some(true);
         let req = build_action_request(&p).unwrap();
         assert!(matches!(req, ActionRequest::Pause { paused: true }));
+    }
+
+    #[test]
+    fn interaction_sequence_server_timeout_outlasts_engine_deadline() {
+        assert!(
+            super::super::INTERACTION_SEQUENCE_SERVER_TIMEOUT
+                > std::time::Duration::from_secs(
+                    stage_protocol::query::INTERACTION_SEQUENCE_ENGINE_DEADLINE_SECS
+                )
+        );
+    }
+
+    #[test]
+    fn build_interaction_sequence_rejects_invalid_later_step() {
+        let mut p = base_params(ActionType::InteractionSequence);
+        p.steps = Some(vec![
+            InteractionSequenceStep {
+                press: vec![stage_protocol::query::SequenceInputPress {
+                    action_name: "test_jump".into(),
+                    strength: 1.0,
+                }],
+                release: vec![],
+                frames: 1,
+            },
+            InteractionSequenceStep {
+                press: vec![],
+                release: vec![],
+                frames: 0,
+            },
+        ]);
+        let error = build_action_request(&p).unwrap_err();
+        assert!(error.message.contains("step 1"));
     }
 
     #[test]
@@ -601,7 +692,7 @@ mod tests {
         let mut p = base_params(ActionType::InjectKey);
         p.keycode = Some("A".into());
         p.pressed = Some(true);
-        p.echo = true;
+        p.echo = Some(true);
         let req = build_action_request(&p).unwrap();
         assert!(
             matches!(req, ActionRequest::InjectKey { keycode, pressed: true, echo: true } if keycode == "A")

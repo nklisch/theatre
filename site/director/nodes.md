@@ -268,8 +268,13 @@ For ambiguous cases (e.g., a 4-element array that could be a `Quaternion` or `Co
 
 ## Tips
 
-**Use `node_set_properties` for all property setting.** Setting 5 properties with one call is faster than 5 separate calls — see [Batch Operations](/director/batch).
+**Use `node_set_properties` for related property changes.** One call validates the
+submitted property collection before mutation and keeps the result together. See
+[Batch Operations](/director/batch) for sequential multi-operation work.
 
 **Node paths are relative to the scene root.** The root node itself is `"."`. A child named `Player` is `"Player"`. A grandchild is `"Player/Camera3D"`. Use `scene_read` to confirm paths.
 
-**`node_remove` is permanent.** There is no undo within Director. If you are making destructive changes, use `scene_diff` or git to review before removing.
+**Check persistence after `node_remove`.** Against an open scene, removal creates
+a native undo entry and remains unsaved until `scene_save`. Against a detached
+headless scene, the target file is saved. Read the persistence result rather than
+assuming either outcome.

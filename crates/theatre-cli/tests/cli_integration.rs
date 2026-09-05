@@ -19,6 +19,7 @@ fn make_project(dir: &Path) {
 
 /// Create a fake "installed" share directory with addon stubs.
 fn make_share_dir(dir: &Path) {
+    make_feedback_support(dir);
     let stage = dir.join("addons").join("stage");
     fs::create_dir_all(stage.join("bin").join(platform_dir())).unwrap();
     fs::write(
@@ -46,6 +47,8 @@ fn make_share_dir(dir: &Path) {
 
 #[cfg(unix)]
 fn make_source_repo(dir: &Path, command_dir: &Path) {
+    make_feedback_support(dir);
+    fs::create_dir_all(dir.join("client-plugins")).unwrap();
     fs::write(dir.join("Cargo.toml"), "[workspace]\nmembers = []\n").unwrap();
 
     let stage = dir.join("addons/stage");
@@ -68,6 +71,21 @@ fn make_source_repo(dir: &Path, command_dir: &Path) {
     let mut permissions = fs::metadata(&cargo).unwrap().permissions();
     permissions.set_mode(0o755);
     fs::set_permissions(cargo, permissions).unwrap();
+}
+
+fn make_feedback_support(dir: &Path) {
+    let destination = dir.join("addons/theatre_shared");
+    fs::create_dir_all(&destination).unwrap();
+    // Fixtures use the actual support payload, not a differently shaped stub.
+    for name in ["feedback.gd", "feedback_composer.gd"] {
+        fs::copy(
+            Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../addons/theatre_shared")
+                .join(name),
+            destination.join(name),
+        )
+        .unwrap();
+    }
 }
 
 /// Build a Command with isolated env vars for testing.
@@ -694,7 +712,7 @@ fn enable_readonly_project_godot() {
 // ============================================================
 
 #[test]
-fn rules_creates_claude_rules_file() {
+fn rules_creates_practical_godot_file_guidance() {
     let dir = tempfile::tempdir().unwrap();
     make_project(dir.path());
 
@@ -715,11 +733,14 @@ fn rules_creates_claude_rules_file() {
     );
 
     let content = fs::read_to_string(&rules_path).unwrap();
-    assert!(
-        content.contains("Never hand-edit Godot files"),
-        "Should contain the core rule"
-    );
-    assert!(content.contains("Director"), "Should mention Director");
+    assert!(content.contains("Inspect project files freely"));
+    assert!(content.contains("GDScript (`.gd`) and shader source (`.gdshader`)"));
+    assert!(content.contains("prefer **Director**"));
+    assert!(content.contains("Do not automatically fall back"));
+    assert!(content.contains("live root and native undo history"));
+    assert!(content.contains("remain unsaved until `scene_save`"));
+    assert!(!content.contains("Do NOT directly read"));
+    assert!(!content.contains("will produce corrupt"));
     assert!(content.contains("Stage"), "Should mention Stage");
 }
 
@@ -768,22 +789,14 @@ fn rules_nonexistent_project() {
 }
 
 #[test]
-fn rules_append_to_existing_claude_md() {
+fn rules_yes_leaves_existing_claude_md_untouched() {
     let dir = tempfile::tempdir().unwrap();
     make_project(dir.path());
 
-    // Pre-create CLAUDE.md with user content
     let original = "# My Project\n\nThis is my project documentation.\n";
     fs::write(dir.path().join("CLAUDE.md"), original).unwrap();
 
-    // We need to test the CLAUDE.md append path — rules --yes defaults to .claude/rules/godot.md
-    // So test directly by verifying that if godot.md already exists, CLAUDE.md would get appended.
-    // Instead, test the append logic by pre-creating the rules file and checking CLAUDE.md is untouched,
-    // then verify append behavior by calling with a project that has no rules dir and checking the
-    // append path indirectly.
-    //
-    // Since --yes always writes to .claude/rules/godot.md, we just verify that path works
-    // and that CLAUDE.md is not touched.
+    // --yes deliberately chooses the separate .claude/rules/godot.md target.
     let output = Command::new(env!("CARGO_BIN_EXE_theatre"))
         .args(["rules", dir.path().to_str().unwrap(), "--yes"])
         .output()

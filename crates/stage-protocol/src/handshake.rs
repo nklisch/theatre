@@ -54,6 +54,8 @@ pub struct Handshake {
 
     /// Godot project name from ProjectSettings
     pub project_name: String,
+
+    pub identity: crate::runtime::RuntimeIdentity,
 }
 
 /// Sent by the server in response to a valid Handshake.
@@ -83,7 +85,7 @@ pub struct HandshakeError {
 }
 
 /// Current protocol version. Incremented on breaking wire format changes.
-pub const PROTOCOL_VERSION: u32 = 2;
+pub const PROTOCOL_VERSION: u32 = 3;
 
 impl Handshake {
     pub fn new(
@@ -91,6 +93,7 @@ impl Handshake {
         scene_dimensions: u32,
         physics_ticks_per_sec: u32,
         project_name: String,
+        identity: crate::runtime::RuntimeIdentity,
     ) -> Self {
         Self {
             stage_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -99,6 +102,7 @@ impl Handshake {
             scene_dimensions,
             physics_ticks_per_sec,
             project_name,
+            identity,
         }
     }
 
@@ -152,17 +156,25 @@ mod tests {
         assert!(SceneDimensions::Mixed.is_mixed());
     }
 
+    fn identity() -> crate::runtime::RuntimeIdentity {
+        crate::runtime::RuntimeIdentity {
+            project_path: "/test".into(),
+            process_id: 42,
+            run_id: "run_test".into(),
+        }
+    }
+
     #[test]
     fn handshake_dimensions_helper() {
-        let h = Handshake::new("4.3".into(), 2, 60, "TestProject".into());
+        let h = Handshake::new("4.3".into(), 2, 60, "TestProject".into(), identity());
         assert_eq!(h.dimensions(), SceneDimensions::Two);
-        let h3 = Handshake::new("4.3".into(), 3, 60, "TestProject".into());
+        let h3 = Handshake::new("4.3".into(), 3, 60, "TestProject".into(), identity());
         assert_eq!(h3.dimensions(), SceneDimensions::Three);
     }
 
     #[test]
     fn handshake_round_trip() {
-        let h = Handshake::new("4.3".into(), 3, 60, "TestProject".into());
+        let h = Handshake::new("4.3".into(), 3, 60, "TestProject".into(), identity());
         let msg = Message::Handshake(h.clone());
         let json = serde_json::to_string(&msg).unwrap();
         let parsed: Message = serde_json::from_str(&json).unwrap();
@@ -171,7 +183,7 @@ mod tests {
 
     #[test]
     fn handshake_has_type_tag() {
-        let h = Handshake::new("4.3".into(), 3, 60, "TestProject".into());
+        let h = Handshake::new("4.3".into(), 3, 60, "TestProject".into(), identity());
         let msg = Message::Handshake(h);
         let json = serde_json::to_string(&msg).unwrap();
         assert!(json.contains(r#""type":"handshake""#));

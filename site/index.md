@@ -29,7 +29,7 @@ It's like debugging a web app without being able to open the browser.
   title="Stage"
   icon="🎭"
   description="See and interact with the running game. Spatial snapshots, real-time deltas, watches, recordings — plus live property mutation and method calls for testing hypotheses without restarting."
-  tool="9 MCP tools"
+  tool="MCP + CLI"
   tokens="200–3000"
   link="/stage/"
 />
@@ -37,7 +37,7 @@ It's like debugging a web app without being able to open the browser.
   title="Director"
   icon="🎬"
   description="Build and modify scenes, resources, tilemaps, and animations through Godot's own API. No hand-editing .tscn files."
-  tool="38+ operations"
+  tool="MCP + CLI"
   tokens="50–500"
   link="/director/"
 />
@@ -59,9 +59,10 @@ The killer workflow: **human plays, AI analyzes**.
 
 <AgentConversation :messages="messages0" />
 
-You press **F9** to mark the bug moment — the dashcam saves the last 60 seconds of spatial data — and the agent
-scrubs through the spatial timeline to find exactly what went wrong — no
-screenshots, no narration, no guessing from code.
+You press **F9** to mark the bug moment, and the dashcam saves retained spatial
+and optional visual evidence around it. For a deliberate observation, **Share
+feedback** queues the current viewport, pointer or selection context, and a note
+for later agent retrieval.
 
 ## Real Debugging Scenarios
 

@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use stage_protocol::codec::async_io;
@@ -16,6 +16,11 @@ pub enum EditorError {
     #[error("editor plugin not reachable on port {0}")]
     NotReachable(u16),
 
+    #[error(
+        "editor_run requires the Godot editor with the Director plugin enabled on port {port}; no headless backend was started"
+    )]
+    Required { port: u16 },
+
     #[error("editor plugin TCP I/O error: {0}")]
     IoError(#[source] std::io::Error),
 
@@ -28,6 +33,18 @@ pub enum EditorError {
 
     #[error("editor plugin operation timed out")]
     Timeout,
+
+    #[error("editor project identity could not be verified: {0}")]
+    Identity(String),
+
+    #[error(
+        "editor operation '{operation}' has an unknown outcome: {source}. It was not retried or sent to a headless backend; inspect the editor before retrying."
+    )]
+    UnknownOutcome {
+        operation: String,
+        #[source]
+        source: Box<EditorError>,
+    },
 }
 
 impl From<EditorError> for OperationError {
@@ -46,21 +63,55 @@ impl From<EditorError> for OperationError {
 pub struct EditorHandle {
     stream: TcpStream,
     port: u16,
+    project_path: PathBuf,
 }
 
 impl EditorHandle {
-    /// Attempt to connect to the editor plugin on the given port.
-    ///
-    /// Returns `Err(EditorError::NotReachable)` if the plugin is not
-    /// listening (editor closed or plugin not enabled). The connect
-    /// attempt times out after CONNECT_TIMEOUT (2s).
-    pub async fn connect(port: u16) -> Result<Self, EditorError> {
+    /// Connect and verify engine-owned project identity before returning a handle.
+    /// The connection attempt times out after two seconds.
+    pub async fn connect_verified(port: u16, project_path: &Path) -> Result<Self, EditorError> {
+        let expected = std::fs::canonicalize(project_path).map_err(EditorError::IoError)?;
         let addr = format!("127.0.0.1:{port}");
         let stream = tokio::time::timeout(CONNECT_TIMEOUT, TcpStream::connect(&addr))
             .await
             .map_err(|_| EditorError::NotReachable(port))?
             .map_err(|_| EditorError::NotReachable(port))?;
-        Ok(EditorHandle { stream, port })
+        let mut handle = Self {
+            stream,
+            port,
+            project_path: expected.clone(),
+        };
+        let response = handle
+            .send_operation("ping", &serde_json::json!({}))
+            .await?;
+        if !response.success {
+            return Err(EditorError::Identity(
+                "editor rejected identity ping".into(),
+            ));
+        }
+        #[derive(serde::Deserialize)]
+        struct Identity {
+            project_path: PathBuf,
+            process_id: u32,
+        }
+        let identity: Identity = serde_json::from_value(response.data)
+            .map_err(|e| EditorError::Identity(e.to_string()))?;
+        let actual = std::fs::canonicalize(&identity.project_path).map_err(|e| {
+            EditorError::Identity(format!("{}: {e}", identity.project_path.display()))
+        })?;
+        if actual != expected {
+            return Err(EditorError::Identity(format!(
+                "requested {}, but editor process {} on port {port} serves {}",
+                expected.display(),
+                identity.process_id,
+                actual.display()
+            )));
+        }
+        Ok(handle)
+    }
+
+    pub fn matches_project(&self, project_path: &Path, port: u16) -> bool {
+        self.port == port && self.project_path == project_path
     }
 
     /// Send an operation and return the result.

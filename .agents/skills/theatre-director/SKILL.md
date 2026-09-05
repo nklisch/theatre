@@ -14,7 +14,7 @@ description: >
 
 # Director — Godot Scene & Resource Authoring
 
-Director is part of the **Theatre** toolkit (alongside Stage). It gives you 43 tools to create and modify Godot project files: scenes, nodes, resources, tilemaps, gridmaps, animations, physics, signals, shaders, and project settings — plus diagnostics and editor state visibility.
+Director is part of the **Theatre** toolkit (alongside Stage). It creates and modifies Godot project files, queries the installed engine API, controls saved-scene runs through an open editor, and reads project-local human feedback.
 
 **Two interfaces, identical capabilities:**
 
@@ -31,9 +31,34 @@ director --help                            # list all tools (categorized)
 director --version                         # {"version": "0.1.0"}
 ```
 
-All CLI output is JSON to stdout. Errors are JSON to stdout with exit codes: 0 success, 1 runtime error, 2 usage error.
+All CLI output is JSON to stdout. Exit codes 1 and 2 report runtime and usage
+failures. A Director operation can also return `"success": false` with exit code
+0, so inspect the JSON `success`, `error`, `context`, and `persistence` fields —
+including ordered per-entry batch results — before deciding what succeeded or
+should be retried.
 
 **Every tool requires `project_path`** — the absolute path to the Godot project directory.
+
+## Working with Godot project files
+
+Read Godot project files and inspect their diffs whenever raw serialized detail is useful.
+Director's structured reads and `scene_diff` complement normal file inspection; they do not
+make `.tscn`, `.tres`, `project.godot`, or related files off-limits for reading.
+
+Edit GDScript (`.gd`) and shader source (`.gdshader`) directly with normal code tools, then
+use `project_reload` when Godot-backed validation is useful. For structural scene, resource,
+and project-setting mutations, prefer Director or the Godot editor so engine types, resource
+references, UIDs, ownership, and serialization are handled through Godot. If the available
+operations cannot express a structural change, do not automatically fall back to arbitrary
+text mutation; inspect the project and choose or report the missing Godot-backed path.
+
+Director changes any open target scene through its live root and native undo, for
+individual and batch calls. Edits remain unsaved until `scene_save`. Read persistence
+results to distinguish saved files from changed unsaved scenes, including partial
+failures.
+`scene_save` saves only its selected scene and retains undo; unrelated edited external
+resources are not saved, and the native editor dirty marker may remain. Headless scene
+and resource operations persist their target files.
 
 ## Tool Reference
 
@@ -42,6 +67,7 @@ All CLI output is JSON to stdout. Errors are JSON to stdout with exit codes: 0 s
 |---|---|
 | `scene_create` | Create a new .tscn with a root node type |
 | `scene_read` | Read full node tree with types, properties, hierarchy |
+| `scene_save` | Save only the selected scene, retaining native undo |
 | `scene_list` | List all .tscn files (with root type + node count) |
 | `scene_diff` | Compare two scenes structurally (supports git refs) |
 | `scene_add_instance` | Add a scene instance as a child node |
@@ -109,7 +135,10 @@ All CLI output is JSON to stdout. Errors are JSON to stdout with exit codes: 0 s
 | `autoload_remove` | Remove an autoload singleton |
 | `project_settings_set` | Set project.godot settings (main scene, window size, etc.) |
 | `project_reload` | Restart daemon + validate scripts — returns parse errors |
-| `editor_status` | Editor viewport: open scenes, active scene, game running, recent log, errors |
+| `engine_api` | Query one installed-engine class and focused members/defaults |
+| `editor_run` | Start, stop, restart, or inspect a saved-scene run through a verified editor |
+| `editor_status` | Editor project/process identity, open scenes, play state, and recent editor log |
+| `feedback` | Status, retrieve, handle, delete, or clean up project-local human feedback without Godot |
 | `uid_get` | Resolve a file's Godot UID |
 | `uid_update_project` | Scan and register missing UIDs |
 | `export_mesh_library` | Export MeshInstance3D nodes as MeshLibrary |
@@ -228,6 +257,45 @@ All CLI output is JSON to stdout. Errors are JSON to stdout with exit codes: 0 s
 { "project_path": "/home/user/game", "scene_path": "scenes/main.tscn", ... }
 ```
 
+### Run and Verify a Saved Scene
+
+```jsonc
+// Start without implicitly saving open editor work
+{ "project_path": "/home/user/game", "action": "start",
+  "scene_path": "res://scenes/main.tscn" }
+```
+
+A successful `editor_run` start or restart reports that Godot accepted the native
+play request. It does not prove that Stage attached or that the scene completed
+`_ready`. Call Stage `runtime_status` separately and compare project, scene, and
+`run_id`. Stop is idempotent. Run control requires a verified open editor and does
+not fall back to a headless backend.
+
+### Discover an Engine Type
+
+```jsonc
+{ "project_path": "/home/user/game", "class_name": "CharacterBody3D",
+  "category": "properties", "member": "floor_snap_length" }
+```
+
+Start with the default summary, then request one category or exact member. Defaults
+may be JSON values, Director text serialization, text-only descriptions, or
+unavailable. Do not treat every returned default as an authoring-ready value.
+
+### Read Human Feedback
+
+```jsonc
+{ "project_path": "/home/user/game", "action": "status" }
+{ "project_path": "/home/user/game", "action": "retrieve",
+  "feedback_id": "feedback_..." }
+{ "project_path": "/home/user/game", "action": "handle",
+  "feedback_id": "feedback_..." }
+```
+
+Status and retrieval work without an editor or game. Retrieval does not consume
+the item. Handling suppresses pending notices for all readers but preserves the
+evidence; deletion is separate.
+
 ### Check Editor State
 
 ```jsonc
@@ -290,4 +358,4 @@ Director auto-converts string property values to Godot types:
 
 ## Full Parameter Reference
 
-See [references/director-tools.md](references/director-tools.md) for complete parameter specifications for all 43 tools.
+See [references/director-tools.md](references/director-tools.md) for generated parameter specifications. Let generated schemas and current tool discovery own the complete catalog.

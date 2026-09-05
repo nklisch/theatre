@@ -14,9 +14,9 @@ description: >
 
 # Stage — Spatial Debugging for Godot
 
-Stage is part of the **Theatre** toolkit (alongside Director). It gives you 9 MCP tools to observe and interact with a running Godot game: positions, distances, relationships, physics, signals — organized in space, not as code.
+Stage is part of the **Theatre** toolkit (alongside Director). It observes and interacts with a running Godot game through spatial state, current viewport images, bounded runtime diagnostics, retained clips, and explicit debug actions.
 
-**Two interfaces, identical capabilities:**
+**Two interfaces, different session lifetimes:**
 
 | Interface | When to use | Example |
 |---|---|---|
@@ -31,22 +31,40 @@ stage --help                           # list all tools
 stage --version                        # {"version": "0.1.0"}
 ```
 
-All CLI output is JSON to stdout. Errors are JSON to stdout with exit code 1 (runtime) or 2 (usage). Logs go to stderr.
+CLI tool results are JSON to stdout. Errors are JSON to stdout with exit code 1 (runtime) or 2 (usage). Logs go to stderr.
 
-**Prerequisite:** Stage addon must be enabled in the Godot project and the game must be running. If tools return `not_connected` / `connection_failed`, the game isn't running.
+Each CLI call starts a fresh session. `spatial_delta`, all `spatial_watch`
+operations, `spatial_config` updates, and actions with `return_delta: true`
+return `persistent_session_required` (exit 2) before connecting or acting.
+A snapshot in one CLI invocation cannot establish another invocation's baseline.
+`spatial_config '{}'` still reads project defaults; put reusable defaults in
+`stage.toml`. Ordinary snapshots, inspection, queries, actions without delta,
+and addon-owned clip operations remain available.
+
+For stateful workflows, configure your MCP client with command `stage` and
+arguments `["serve"]`. Keep snapshot, watch/config, action, and delta calls in
+that same MCP session. `stage serve` speaks MCP over stdio; it is not a shell
+session command for passing subsequent CLI calls into. In shell-only workflows,
+act without `return_delta`, then inspect or snapshot the result explicitly.
+
+**Prerequisite for live tools:** The Stage addon must be enabled and the game must be running. If live tools return `not_connected` or `connection_failed`, use `runtime_status` and start the selected saved scene through Director `editor_run` or Godot. Project-local `feedback` remains available without a running game.
 
 ## When to Use Which Tool
 
 ```
+"Which project and run is connected?"     → runtime_status
+"What errors occurred in this run?"        → runtime_diagnostics
+"Show the latest completed render"         → viewport
 "What's in the scene right now?"          → spatial_snapshot
 "What changed since last time?"           → spatial_delta
 "What's near X? Can A see B?"             → spatial_query
 "Tell me everything about this node"      → spatial_inspect
 "Alert me when health drops below 20"     → spatial_watch
-"Teleport/pause/set property"             → spatial_action
+"Teleport/pause/run bounded input"         → spatial_action
 "How is this scene structured?"           → scene_tree
 "Configure what to track"                 → spatial_config
 "Mark this moment / save a clip"          → clips
+"What did the developer share?"           → feedback
 ```
 
 ## Standard Opening Move
@@ -54,10 +72,15 @@ All CLI output is JSON to stdout. Errors are JSON to stdout with exit code 1 (ru
 Always start cheap and drill down:
 
 ```
-1. spatial_snapshot(detail: "summary")         → ~200 tokens, scene overview
-2. spatial_snapshot(expand: "enemies")          → ~400 tokens, enemy details
-3. spatial_inspect(node: "enemies/scout_02")    → ~800 tokens, deep dive
+1. runtime_status()                              → verify project, run, scene, readiness
+2. spatial_snapshot(detail: "summary")         → cheap scene overview
+3. spatial_snapshot(expand: "enemies")          → focused entity details
+4. spatial_inspect(node: "enemies/scout_02")    → deep dive
 ```
+
+If a result includes `feedback_notice`, check `feedback(action: "status")` and
+retrieve the matching item before continuing past the human's observation.
+Retrieval is non-destructive; handle the item explicitly after addressing it.
 
 Never start with `detail: "full"` on the full scene — that's expensive and usually unnecessary.
 
@@ -99,7 +122,7 @@ Never start with `detail: "full"` on the full scene — that's expensive and usu
 
 ## spatial_delta — What Changed?
 
-Use after taking an action or advancing time. Compares against the baseline from the most recent `spatial_snapshot` or `spatial_action`.
+Use in persistent MCP after taking an action or advancing time. Compares against the baseline established by `spatial_snapshot` in that same session, then updated by deltas (including action-returned deltas). One-shot CLI delta calls are rejected.
 
 ```jsonc
 // See what changed (all defaults)
@@ -192,7 +215,7 @@ Response includes: `from_frame`, `to_frame`, and any non-empty of: `moved`, `sta
 
 Watch triggers arrive in `spatial_delta` responses under `watch_triggers`.
 
-**Note:** Watches require a persistent session (MCP mode). In CLI one-shot mode, watches only exist for the duration of a single call.
+**Note:** Watches require a persistent MCP session. One-shot CLI watch operations are rejected; they cannot access another session's subscriptions.
 
 ## spatial_action — Debugging Manipulation
 
@@ -230,8 +253,8 @@ Watch triggers arrive in `spatial_delta` responses under `watch_triggers`.
   "position": [10.0, 0.0, 0.0]
 }
 
-// Advance time (physics frames at given delta)
-{ "action": "advance_time", "duration": 0.5, "delta": 0.016 }
+// Advance half a second while paused
+{ "action": "advance_time", "seconds": 0.5 }
 
 // Remove a node
 { "action": "remove_node", "node": "enemies/scout_02" }
@@ -245,7 +268,53 @@ Watch triggers arrive in `spatial_delta` responses under `watch_triggers`.
 
 // Inject mouse button event
 { "action": "inject_mouse_button", "button": "left", "pressed": true, "position": [400, 300] }
+
+// Run a bounded InputMap sequence while already paused
+{
+  "action": "interaction_sequence",
+  "steps": [
+    { "press": [{ "action_name": "move_right" }], "frames": 20 },
+    { "press": [{ "action_name": "jump" }], "frames": 1 },
+    { "release": ["jump", "move_right"], "frames": 10 }
+  ]
+}
 ```
+
+An interaction sequence accepts a bounded step and frame count, keeps the game
+paused, and releases sequence-held actions on supported completion and cleanup
+paths. It does not make gameplay deterministic. If the engine is stopped or hung
+inside a native debugger, its cleanup callback cannot run.
+
+## Current Runtime Evidence
+
+Use `runtime_status` before a run-sensitive workflow. It reports the actual
+project, process, `run_id`, current scene, and readiness. A Director launch
+request and a TCP connection do not by themselves establish readiness.
+
+Use `runtime_diagnostics` for bounded errors, warnings, script errors, and shader
+errors captured after the Stage autoload registered its Logger. Reads do not
+consume diagnostics. The queue survives client reconnects but not a game restart.
+It does not recover early engine initialization output, suppressed log streams,
+or unavailable release backtraces.
+
+Use `viewport` for a bounded JPEG of the latest completed root-viewport render.
+It does not start recording, save a clip, or use the recorder. Readback counters
+show provenance but do not make pixels atomic with a separate spatial query.
+Headless or empty-pixel responses leave spatial observation available.
+
+## feedback — Human Context
+
+```jsonc
+{ "action": "status" }
+{ "action": "retrieve", "feedback_id": "feedback_..." }
+{ "action": "handle", "feedback_id": "feedback_..." }
+```
+
+Feedback is retained under the selected project's `.theatre/feedback` directory
+and remains readable after the game exits. It can contain runtime or editor
+selection/pointer context, an optional JPEG, and a note. Retrieval does not handle
+or delete evidence. Handling suppresses pending notices for every reader but
+keeps retrieval available; deletion is a separate explicit action.
 
 ## scene_tree — Navigate Hierarchy
 
@@ -271,7 +340,9 @@ Watch triggers arrive in `spatial_delta` responses under `watch_triggers`.
 
 ## spatial_config — Session Setup
 
-Call at the start of a session to tune what Stage tracks:
+Call at the start of a persistent MCP session to tune what Stage tracks.
+One-shot CLI accepts an empty configuration read, not updates; use `stage.toml`
+for defaults shared by future invocations:
 
 ```jsonc
 {
@@ -406,9 +477,10 @@ Clips are captured by the dashcam ring buffer. Mark a moment to save; analyze sa
 
 | Error | Meaning | Fix |
 |---|---|---|
-| `not_connected` / `connection_failed` | Game not running or addon not enabled | Start the game in Godot |
+| `not_connected` / `connection_failed` | Game not running or addon not enabled | Check `runtime_status`; start the selected scene through Director or Godot |
 | `unknown_tool` | Invalid tool name (CLI only) | Check `stage --help` |
 | `invalid_json` | Bad JSON params (CLI only) | Fix JSON syntax |
+| `persistent_session_required` | One-shot call needs retained server state (CLI only) | Use the same `stage serve` MCP session; for one-shot actions omit `return_delta` |
 | `scene_not_loaded` | Between scene transitions | Wait for scene to load |
 | `node_not_found` | Path doesn't exist | Use `scene_tree(action: "find")` |
 | `timeout` | Game frozen or at breakpoint | Check if game is paused |

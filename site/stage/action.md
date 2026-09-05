@@ -10,8 +10,8 @@ const messages0 = [
   { role: 'human', text: `I think the collision_mask on the detection zone is wrong. Can you test setting it to 1 right now without restarting?` },
   { role: 'agent', text: `Done. collision_mask is now 1. Walk the player through the detection zone and see if the enemy alerts.` },
   { role: 'human', text: `It worked! The enemy detects me now. Can you now use Director to make this permanent?` },
-  { role: 'agent', text: `Great. Setting the permanent fix via Director now.` },
-  { role: 'agent', text: `Permanent fix applied. The scene file is updated. The collision_mask: 1 will persist after restart.` },
+  { role: 'agent', text: `Great. I will apply the durable change through Director, save only the selected scene, and verify a fresh run.` },
+  { role: 'agent', text: `The scene was saved with collision_mask=1. I restarted it through the editor and Stage reports the new run is ready.` },
 ]
 </script>
 
@@ -84,6 +84,31 @@ Step the game forward by N seconds while paused:
 ```
 
 Advances the physics simulation by the specified duration. Useful when you need to move forward by a specific time rather than a frame count.
+
+### `interaction_sequence`
+
+Run a bounded sequence of named InputMap changes and physics-frame steps while
+the game is already paused:
+
+```json
+{
+  "action": "interaction_sequence",
+  "steps": [
+    { "press": [{ "action_name": "move_right" }], "frames": 20 },
+    { "press": [{ "action_name": "jump" }], "frames": 1 },
+    { "release": ["jump", "move_right"], "frames": 10 }
+  ]
+}
+```
+
+The engine validates the complete request before changing input. A sequence is
+limited to 64 steps and 600 total frames. It releases sequence-held actions on
+normal completion, supported failure, timeout, or owner disconnect, then leaves
+the game paused. It does not make gameplay deterministic. A stopped or natively
+hung engine cannot execute its cleanup callback.
+
+Use `viewport`, a snapshot, or focused inspection after completion. Keep longer
+interactions as separate requests with observation between them.
 
 ### `teleport`
 
@@ -345,7 +370,7 @@ The server does basic validation (node existence, action type), but cannot valid
 
 **Use `spatial_inspect` first to get property names.** Property names must match exactly what Godot expects. `"collision_mask"` is correct; `"collisionMask"` or `"mask"` will fail.
 
-**Pause then step frame-by-frame for timing bugs.** Call `pause: true`, then `advance_frames: 1` repeatedly, taking a snapshot after each step to see exactly how state evolves.
+**Pause then step frame-by-frame for timing bugs.** Call `pause: true`, then `advance_frames: 1` repeatedly, taking a snapshot after each step to see how state evolves. Use `interaction_sequence` when several named inputs must span a bounded set of frames with reliable release.
 
 **Test hypotheses before applying Director fixes.** The workflow is: `spatial_action` to test the change at runtime → confirm it works → `director` to make it permanent.
 

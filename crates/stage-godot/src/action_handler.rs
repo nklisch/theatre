@@ -7,9 +7,22 @@ use godot::global::{Key, MouseButton};
 use godot::obj::Gd;
 use godot::prelude::*;
 
-use stage_protocol::query::{ActionRequest, ActionResponse};
+use stage_protocol::query::{ActionRequest, ActionResponse, InteractionSequenceStep};
+use std::collections::HashSet;
 
 use crate::collector::StageCollector;
+
+#[derive(Debug)]
+pub enum DeferredAction {
+    AdvanceFrames {
+        frames: u32,
+        request_id: String,
+    },
+    InteractionSequence {
+        steps: Vec<InteractionSequenceStep>,
+        request_id: String,
+    },
+}
 
 /// Result of an action execution.
 /// `Ok(Some(resp))` = action completed synchronously.
@@ -36,6 +49,9 @@ pub fn execute_action(
         }
         ActionRequest::AdvanceTime { seconds } => {
             execute_advance_time(*seconds, collector, request_id)
+        }
+        ActionRequest::InteractionSequence { steps } => {
+            execute_interaction_sequence(steps, collector, request_id)
         }
         ActionRequest::Teleport {
             path,
@@ -97,7 +113,7 @@ fn get_frame(collector: &StageCollector) -> u64 {
 fn get_scene_tree(collector: &StageCollector) -> Result<Gd<SceneTree>, String> {
     collector
         .base()
-        .get_tree()
+        .get_tree_or_null()
         .ok_or_else(|| "Not in scene tree".to_string())
 }
 
@@ -121,16 +137,19 @@ fn execute_advance_frames(
     collector: &StageCollector,
     request_id: &str,
 ) -> Result<ActionResult, String> {
-    let mut tree = get_scene_tree(collector)?;
+    let tree = get_scene_tree(collector)?;
     if !tree.is_paused() {
         return Err(
             "not_paused: Cannot advance frames while unpaused. Use pause action first.".into(),
         );
     }
-    // Store advance state — tcp_server.poll() will drive it
-    collector.set_advance_state(frames, Some(request_id.to_string()));
-    // Unpause to allow physics ticks
-    tree.set_pause(false);
+    if frames == 0 {
+        return Err("invalid_frames: Frame advancement requires at least one frame".into());
+    }
+    collector.set_deferred_action(DeferredAction::AdvanceFrames {
+        frames,
+        request_id: request_id.to_string(),
+    });
     Ok(ActionResult::Pending)
 }
 
@@ -149,6 +168,75 @@ fn execute_advance_time(
     let frames = (seconds * tps).round() as u32;
     // Delegate to advance_frames logic
     execute_advance_frames(frames, collector, request_id)
+}
+
+fn execute_interaction_sequence(
+    steps: &[InteractionSequenceStep],
+    collector: &StageCollector,
+    request_id: &str,
+) -> Result<ActionResult, String> {
+    let request = ActionRequest::InteractionSequence {
+        steps: steps.to_vec(),
+    };
+    request.validate()?;
+
+    let tree = get_scene_tree(collector)?;
+    if !tree.is_paused() {
+        return Err(
+            "not_paused: Interaction sequences require a paused scene. Use pause first.".into(),
+        );
+    }
+
+    // Validate every name and reject ambiguous pre-held state before mutating
+    // Input. Godot does not expose which caller owns an action press, so taking
+    // over an already-held action could release unrelated gameplay input later.
+    let input_map = InputMap::singleton();
+    let input = Input::singleton();
+    let mut names = HashSet::new();
+    for step in steps {
+        names.extend(step.press.iter().map(|press| press.action_name.as_str()));
+        names.extend(step.release.iter().map(String::as_str));
+    }
+    for action_name in names {
+        let name = StringName::from(action_name);
+        if !input_map.has_action(&name) {
+            return Err(format!("Unknown InputMap action: '{action_name}'"));
+        }
+        if input.is_action_pressed(&name) {
+            return Err(format!(
+                "InputMap action '{action_name}' is already held; sequence ownership would be ambiguous"
+            ));
+        }
+    }
+
+    collector.set_deferred_action(DeferredAction::InteractionSequence {
+        steps: steps.to_vec(),
+        request_id: request_id.to_string(),
+    });
+    Ok(ActionResult::Pending)
+}
+
+/// Apply one prevalidated step and update exactly the set of presses owned by
+/// the sequence. This is called only from the main-thread TCP lifecycle.
+pub fn apply_sequence_step(step: &InteractionSequenceStep, owned: &mut HashSet<String>) {
+    let mut input = Input::singleton();
+    for press in &step.press {
+        let name = StringName::from(press.action_name.as_str());
+        input.action_press_ex(&name).strength(press.strength).done();
+        owned.insert(press.action_name.clone());
+    }
+    for release in &step.release {
+        input.action_release(&StringName::from(release.as_str()));
+        owned.remove(release);
+    }
+}
+
+/// Release only synthetic presses still owned by the sequence.
+pub fn release_sequence_inputs(owned: &mut HashSet<String>) {
+    let mut input = Input::singleton();
+    for action_name in owned.drain() {
+        input.action_release(&StringName::from(action_name.as_str()));
+    }
 }
 
 fn execute_teleport(
@@ -629,7 +717,7 @@ pub fn json_to_variant(value: &serde_json::Value) -> Result<Variant, String> {
             for (k, v) in map {
                 let key = GString::from(k.as_str()).to_variant();
                 let val = json_to_variant(v)?;
-                dict.set(key, val);
+                dict.set(&key, &val);
             }
             Ok(dict.to_variant())
         }

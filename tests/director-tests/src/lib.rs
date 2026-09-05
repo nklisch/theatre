@@ -15,6 +15,8 @@ mod test_deferred;
 #[cfg(test)]
 mod test_editor;
 #[cfg(test)]
+mod test_engine_api;
+#[cfg(test)]
 mod test_gaps;
 #[cfg(test)]
 mod test_gridmap;

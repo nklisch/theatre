@@ -1,3 +1,5 @@
+use godot::classes::Object;
+use godot::obj::{Gd, WithBaseField};
 use stage_protocol::{
     messages::Message,
     query::{
@@ -17,8 +19,40 @@ pub fn handle_query(
     method: &str,
     params: serde_json::Value,
     collector: &StageCollector,
+    runtime_logger: Option<&Gd<Object>>,
 ) -> Option<Message> {
     match method {
+        "get_viewport" => Some(simple_query(
+            request_id,
+            parse_params::<stage_protocol::viewport::ViewportParams>(params).and_then(|params| {
+                params.validate().map_err(|message| QueryError {
+                    code: "invalid_params".into(),
+                    message,
+                })?;
+                let capture =
+                    crate::viewport::capture(collector.base().get_tree_or_null(), &params)
+                        .map_err(|message| QueryError {
+                            code: "internal".into(),
+                            message,
+                        })?;
+                to_json_value(&capture)
+            }),
+        )),
+        "runtime_status" => Some(simple_query(
+            request_id,
+            parse_params::<stage_protocol::runtime::RuntimeStatusParams>(params).and_then(|_| {
+                to_json_value(&crate::runtime_identity::status(
+                    collector.base().get_tree_or_null(),
+                ))
+            }),
+        )),
+        "runtime_diagnostics" => Some(simple_query(
+            request_id,
+            parse_params::<stage_protocol::runtime_diagnostics::RuntimeDiagnosticsQueryParams>(
+                params,
+            )
+            .and_then(|_| handle_runtime_diagnostics(runtime_logger)),
+        )),
         "get_snapshot_data" => Some(simple_query(
             request_id,
             handle_get_snapshot_data(params, collector),
@@ -74,6 +108,66 @@ fn to_json_value<T: serde::Serialize>(data: &T) -> Result<serde_json::Value, Que
     serde_json::to_value(data).map_err(|e| QueryError {
         code: "internal".to_string(),
         message: format!("Serialization error: {e}"),
+    })
+}
+
+fn handle_runtime_diagnostics(
+    runtime_logger: Option<&Gd<Object>>,
+) -> Result<serde_json::Value, QueryError> {
+    use stage_protocol::runtime_diagnostics::{
+        RuntimeDiagnosticCapture, RuntimeDiagnosticLimits, RuntimeDiagnosticsEngineResponse,
+    };
+
+    let limitations = vec![
+        "Capture starts when StageRuntime registers its Logger; engine initialization and earlier messages are unavailable.".to_string(),
+        "Godot stdout/stderr project settings can suppress Logger delivery.".to_string(),
+        "Release builds can omit script backtraces unless call-stack tracking is enabled.".to_string(),
+        "A blocked or hung runtime may not execute callbacks or answer this query.".to_string(),
+    ];
+    let Some(logger) = runtime_logger else {
+        return to_json_value(&RuntimeDiagnosticsEngineResponse {
+            identity: crate::runtime_identity::identity().clone(),
+            available: false,
+            diagnostics: Vec::new(),
+            retained_count: 0,
+            omitted_count: 0,
+            limits: RuntimeDiagnosticLimits {
+                queue_capacity: 128,
+                message_max_chars: 2048,
+                file_max_chars: 512,
+                function_max_chars: 256,
+                backtrace_max_frames: 16,
+            },
+            limitations,
+        });
+    };
+
+    let snapshot = logger.clone().call("snapshot", &[]);
+    let json = crate::collector::variant_to_json(&snapshot).ok_or_else(|| QueryError {
+        code: "internal".into(),
+        message: "Runtime logger returned unsupported diagnostic data".into(),
+    })?;
+    let capture: RuntimeDiagnosticCapture =
+        serde_json::from_value(json).map_err(|error| QueryError {
+            code: "internal".into(),
+            message: format!("Runtime logger returned invalid diagnostic data: {error}"),
+        })?;
+    if capture.retained_count as usize != capture.entries.len()
+        || capture.retained_count > capture.limits.queue_capacity
+    {
+        return Err(QueryError {
+            code: "internal".into(),
+            message: "Runtime logger returned inconsistent retained diagnostic counts".into(),
+        });
+    }
+    to_json_value(&RuntimeDiagnosticsEngineResponse {
+        identity: crate::runtime_identity::identity().clone(),
+        available: true,
+        diagnostics: capture.entries,
+        retained_count: capture.retained_count,
+        omitted_count: capture.omitted_count,
+        limits: capture.limits,
+        limitations,
     })
 }
 

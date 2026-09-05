@@ -1,10 +1,11 @@
 class_name PhysicsOps
 
+const SceneEdit = preload("res://addons/director/ops/scene_edit.gd")
 const NodeOps = preload("res://addons/director/ops/node_ops.gd")
 const OpsUtil = preload("res://addons/director/ops/ops_util.gd")
 
 
-static func op_physics_set_layers(params: Dictionary) -> Dictionary:
+static func op_physics_set_layers(params: Dictionary, edit: SceneEdit) -> Dictionary:
 	## Set collision_layer and/or collision_mask on a node in a scene.
 	##
 	## Params: scene_path, node_path, collision_layer?, collision_mask?
@@ -26,16 +27,8 @@ static func op_physics_set_layers(params: Dictionary) -> Dictionary:
 			"physics_set_layers", params)
 
 	# Load scene + find node
-	var full_scene = "res://" + scene_path
-	if not ResourceLoader.exists(full_scene):
-		return OpsUtil._error("Scene not found: " + scene_path,
-			"physics_set_layers", {"scene_path": scene_path})
-
-	var packed: PackedScene = load(full_scene)
-	var root = packed.instantiate()
-	var target = root.get_node_or_null(node_path)
+	var target: Node = edit.resolve(node_path)
 	if target == null:
-		root.free()
 		return OpsUtil._error("Node not found: " + node_path,
 			"physics_set_layers", {"scene_path": scene_path, "node_path": node_path})
 
@@ -49,41 +42,23 @@ static func op_physics_set_layers(params: Dictionary) -> Dictionary:
 		if prop_info["name"] == "collision_mask":
 			has_mask = true
 	if not has_layer and not has_mask:
-		root.free()
 		return OpsUtil._error(
 			"Node " + node_path + " (" + target_class +
 			") has no collision_layer/collision_mask properties",
 			"physics_set_layers",
 			{"node_path": node_path, "class": target_class})
 
-	# Apply values
+	var properties := {}
 	if collision_layer != null:
-		if not has_layer:
-			root.free()
-			return OpsUtil._error(
-				"Node does not have collision_layer property",
-				"physics_set_layers",
-				{"node_path": node_path, "class": target_class})
-		target.collision_layer = int(collision_layer)
-
+		properties["collision_layer"] = collision_layer
 	if collision_mask != null:
-		if not has_mask:
-			root.free()
-			return OpsUtil._error(
-				"Node does not have collision_mask property",
-				"physics_set_layers",
-				{"node_path": node_path, "class": target_class})
-		target.collision_mask = int(collision_mask)
+		properties["collision_mask"] = collision_mask
+	var applied = NodeOps.set_properties(target, properties)
+	if not applied.success:
+		return applied
 
-	# Read final values before freeing
 	var final_layer: int = target.collision_layer
 	var final_mask: int = target.collision_mask
-
-	# Repack and save
-	var save_result = NodeOps._repack_and_save(root, full_scene)
-	root.free()
-	if not save_result.success:
-		return save_result
 
 	return {"success": true, "data": {
 		"node_path": node_path,

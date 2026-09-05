@@ -1,0 +1,8 @@
+{
+  "hooks": {
+    "PostToolUse": [{
+      "matcher": ".*",
+      "hooks": [{"type": "command", "command": "theatre feedback-hook", "timeout": 5}]
+    }]
+  }
+}

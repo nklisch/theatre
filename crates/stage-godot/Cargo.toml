@@ -3,13 +3,14 @@ name = "stage-godot"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+rust-version = "1.94"
 
 [lib]
 crate-type = ["cdylib"]
 
 [dependencies]
 stage-protocol.workspace = true
-godot = { version = "0.4", features = ["api-4-5", "experimental-godot-api", "lazy-function-tables"] }
+godot = { version = "0.5.5", features = ["api-4-7", "experimental-godot-api", "lazy-function-tables"] }
 serde.workspace = true
 serde_json.workspace = true
 tracing.workspace = true

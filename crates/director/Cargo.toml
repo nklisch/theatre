@@ -9,6 +9,7 @@ name = "director"
 path = "src/main.rs"
 
 [dependencies]
+theatre-feedback.workspace = true
 rmcp = { version = "0.16", features = ["server", "transport-io", "macros"] }
 stage-protocol = { workspace = true, features = ["mcp", "async"] }
 tokio.workspace = true

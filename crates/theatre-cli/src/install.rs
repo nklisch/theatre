@@ -143,6 +143,19 @@ pub fn run(args: InstallArgs) -> Result<()> {
     );
     eprintln!();
 
+    copy_dir_recursive(
+        &source.addon_source().join("theatre_shared"),
+        &share_addons.join("theatre_shared"),
+        &|_| false,
+    )
+    .context("Failed to install shared feedback payload")?;
+    copy_dir_recursive(
+        &source.repo_root.join("client-plugins"),
+        &share_dir.join("client-plugins"),
+        &|_| false,
+    )
+    .context("Failed to install optional client hook packages")?;
+
     // Step 9: Check if bin_dir is in PATH
     if !path_contains(&bin_dir) {
         eprintln!(

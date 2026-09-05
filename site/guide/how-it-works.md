@@ -19,7 +19,10 @@ This page explains Theatre's architecture: how data flows from the running Godot
   { label: 'Godot engine APIs' },
 ]" />
 
-The flow is always initiated by the AI agent (via the MCP server). The GDExtension does not push data unprompted — it collects data on every physics tick and serves it when the server requests.
+Live tool queries start from the agent through the MCP server. The runtime polls
+its local listener on physics frames and answers explicit requests. The recorder
+separately retains capture data without an agent connection, and a developer can
+publish deliberate feedback for later retrieval.
 
 ## Stage: GDExtension architecture
 
@@ -31,16 +34,22 @@ The Stage GDExtension (`libstage_godot.so`) is a compiled Rust library loaded by
 - **`StageCollector`** — walks the scene tree on each `_physics_process` tick, collecting positions, velocities, and properties of tracked nodes into an in-memory frame buffer
 - **`StageRecorder`** — manages the dashcam ring buffer and writes clip files to disk
 
-These classes are instantiated by `addons/stage/plugin.gd` (the GDScript `EditorPlugin`), which also manages the editor dock.
+These classes are instantiated by the `StageRuntime` autoload in
+`addons/stage/runtime.gd`. The GDScript EditorPlugin manages the autoload, editor
+dock, debugger bridge, and project settings.
 
-The collector runs at Godot's physics tick rate (default 60 Hz). It captures data in a ring buffer — old frames are dropped to keep memory bounded. The buffer depth determines how far back a `clips` query can look without an explicit clip file.
+The collector reads current scene state at the engine boundary. The recorder owns
+bounded dashcam buffers, markers, and clip persistence. Keeping those roles
+separate lets current observation work without recording and lets recording
+continue without an agent connection.
 
 ### The GDScript layer
 
-`addons/stage/runtime.gd` is a thin GDScript file that:
-- Checks if the GDExtension loaded via `ClassDB.class_exists`
-- Instantiates extension classes using direct constructors (e.g. `StageTCPServer.new()`)
-- Provides graceful degradation if the extension is missing (logs a warning, no crash)
+`addons/stage/runtime.gd`:
+- Checks extension classes through `ClassDB.class_exists`.
+- Instantiates them dynamically so a missing platform binary does not cause a parse failure.
+- Registers the bounded current-process Logger.
+- Owns runtime controls, overlays, markers, and the feedback composer entrypoint.
 
 This design means the addon can be enabled in a project even if the GDExtension binary is missing — it just won't collect any data. This prevents parse errors when the `.so` is not yet deployed.
 
@@ -61,7 +70,7 @@ When a tool is called (via MCP or CLI), the server:
 7. Serializes the result as JSON
 8. Writes it to stdout
 
-In serve mode, the server maintains a persistent TCP connection. If the game restarts, it automatically reconnects. In CLI mode, it connects once and exits after the tool completes.
+In serve mode, the server maintains a persistent TCP connection. If the game restarts, it automatically reconnects. In CLI mode, it connects once and exits after a supported tool completes. Deltas, watches, session configuration updates, and actions requesting a delta require persistent MCP and are rejected by the CLI before connection.
 
 ## TCP Protocol
 
@@ -95,7 +104,9 @@ Director auto-selects which backend to use for each operation:
 
 **Headless daemon backend** (port 6550): A separate Godot instance runs headless (`godot --headless`), loads your project, and processes operations. Used when the editor is not running.
 
-**One-shot fallback**: If neither TCP backend is reachable, Director spawns a temporary Godot headless process, executes the operation, and exits. Slower (one Godot startup per operation) but always available.
+**One-shot fallback**: If neither TCP backend is reachable, Director can spawn a
+temporary headless Godot process for supported operations when the selected Godot
+executable and project are available. Editor-only run control does not fall back.
 
 The Rust `director` binary handles the routing logic — it tries port 6551, then port 6550, then falls back to one-shot. You never need to manage this manually.
 
@@ -105,7 +116,25 @@ The Rust `director` binary handles the routing logic — it tries port 6551, the
 AI Agent → director binary (MCP) → [editor | daemon | one-shot] → scene file on disk
 ```
 
-The GDScript addon receives operations as TCP messages, executes them using Godot's scene API (`PackedScene`, `Resource`, `TileMap`, `AnimationPlayer`, etc.), and returns success/error responses.
+The GDScript addon receives operations as TCP messages, executes them using Godot's scene API (`PackedScene`, `Resource`, `TileMap`, `AnimationPlayer`, etc.), and returns success/error responses. Open-scene edits use the live root and native undo, and remain unsaved until `scene_save`. Batch entries run sequentially and preserve partial effects without rollback.
+
+Director also verifies editor project identity, queries ClassDB through
+`engine_api`, and controls selected saved-scene runs through `editor_run`. Stage
+remains the authority for runtime readiness and run identity.
+
+## Project-local human feedback
+
+Stage runtime and Director editor controls can capture a viewport, pointer or
+selection context, and an optional note. The shared `addons/theatre_shared`
+payload publishes complete immutable item directories under
+`.theatre/feedback`. Stage, Director, and the Theatre CLI use the same typed Rust
+reader.
+
+Retrieval does not consume evidence. Handling suppresses notices for all readers
+but keeps the item, while deletion remains explicit. Optional Claude and Codex
+hooks invoke a thin CLI helper after client tool calls. They inject a text notice
+only and do not wake idle agents, steer a session asynchronously, or deliver the
+JPEG as text.
 
 ## MCP Transport
 
@@ -130,12 +159,21 @@ The agent can always request more detail by narrowing scope — use `spatial_ins
 
 ## Data freshness
 
-Stage data is always one physics tick old. When you call `spatial_snapshot`, the server requests the most recent collected frame from the GDExtension. The GDExtension collects data at the end of each `_physics_process` call, so the data is current to within ~16ms (at 60 Hz).
+A spatial response identifies the collected physics frame that produced its
+state. It does not freeze the world while the server shapes the response. The
+on-demand `viewport` result identifies readback counters and engine run identity,
+but its pixels are not atomic with a separate spatial query.
 
-For monitoring changes over time, use `spatial_delta` (returns only what changed since a given frame) or `spatial_watch` (set up a watch that the server polls automatically).
+For changes over time, establish a baseline with `spatial_snapshot`, then use
+`spatial_delta` or a watch in the same persistent MCP session. One-shot CLI calls
+do not share that state.
 
 ## Security model
 
-Theatre is a local development tool. Both TCP ports (9077, 6550, 6551) bind to `127.0.0.1` only — they do not accept connections from other machines on the network. The MCP servers run as local processes, not as network services.
+Theatre is a local development tool. Stage binds its runtime listener to
+loopback. Director clients use local addresses, but the GDScript editor and daemon
+listeners do not set an explicit bind address. None of these protocols authenticate
+callers.
 
-There is no authentication — any process on localhost can connect. This is intentional for a developer tool. Do not run Theatre in production game builds.
+Keep Theatre listeners off untrusted networks. Do not expose them as a
+production-game service without adding an appropriate security boundary.

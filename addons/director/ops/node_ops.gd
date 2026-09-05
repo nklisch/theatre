@@ -1,9 +1,10 @@
 class_name NodeOps
 
+const SceneEdit = preload("res://addons/director/ops/scene_edit.gd")
 const OpsUtil = preload("res://addons/director/ops/ops_util.gd")
 
 
-static func op_node_add(params: Dictionary) -> Dictionary:
+static func op_node_add(params: Dictionary, edit: SceneEdit) -> Dictionary:
 	## Add a node to an existing scene.
 	##
 	## Params: scene_path, parent_path (default "."), node_type, node_name, properties (optional)
@@ -22,55 +23,38 @@ static func op_node_add(params: Dictionary) -> Dictionary:
 	if node_name == "":
 		return OpsUtil._error("node_name is required", "node_add", params)
 
-	var full_path = "res://" + scene_path
-	if not ResourceLoader.exists(full_path):
-		return OpsUtil._error("Scene not found: " + scene_path, "node_add", {"scene_path": scene_path})
-
-	if not ClassDB.class_exists(node_type):
-		return OpsUtil._error("Unknown node type: " + node_type, "node_add", {"node_type": node_type})
-	if not ClassDB.is_parent_class(node_type, "Node"):
-		return OpsUtil._error(node_type + " is not a Node subclass", "node_add", {"node_type": node_type})
-
-	# Load and instantiate the scene
-	var packed: PackedScene = load(full_path)
-	var root = packed.instantiate()
+	if not ClassDB.class_exists(node_type) or not ClassDB.is_parent_class(node_type, "Node") or not ClassDB.can_instantiate(node_type):
+		return OpsUtil._error("Unknown or non-instantiable node type: " + node_type, "node_add", params)
+	var root: Node = edit.root
 
 	# Find the parent node
-	var parent: Node
-	if parent_path == "." or parent_path == "":
-		parent = root
-	else:
-		parent = root.get_node_or_null(parent_path)
+	var parent: Node = edit.resolve(parent_path)
 	if parent == null:
-		root.free()
 		return OpsUtil._error("Parent node not found: " + parent_path, "node_add", {"scene_path": scene_path, "parent_path": parent_path})
 
+	if not valid_node_name(node_name) or parent.has_node(NodePath(node_name)):
+		return OpsUtil._error("Invalid or colliding node name: " + node_name, "node_add", params)
 	# Create and add the new node
 	var new_node = ClassDB.instantiate(node_type)
 	new_node.name = node_name
-	parent.add_child(new_node)
-	new_node.owner = root  # Required for PackedScene serialization
-
-	# Set properties if provided
 	if properties is Dictionary:
-		var prop_result = _set_properties_on_node(new_node, properties)
-		if not prop_result.success:
-			root.free()
-			return prop_result
-
-	# Re-pack and save
-	var save_result = _repack_and_save(root, full_path)
-	if not save_result.success:
-		root.free()
-		return save_result
+		var checked = validate_properties(new_node, properties)
+		if not checked.success:
+			new_node.free()
+			return checked
+	parent.add_child(new_node)
+	new_node.owner = root
+	if properties is Dictionary:
+		var applied = set_properties(new_node, properties)
+		if not applied.success:
+			return applied
 
 	var result_path = str(root.get_path_to(new_node))
-	root.free()
 
 	return {"success": true, "data": {"node_path": result_path, "type": node_type}}
 
 
-static func op_node_set_properties(params: Dictionary) -> Dictionary:
+static func op_node_set_properties(params: Dictionary, edit: SceneEdit) -> Dictionary:
 	## Set properties on an existing node in a scene.
 	##
 	## Params: scene_path, node_path, properties (Dictionary)
@@ -87,39 +71,20 @@ static func op_node_set_properties(params: Dictionary) -> Dictionary:
 	if not properties is Dictionary or properties.is_empty():
 		return OpsUtil._error("properties must be a non-empty dictionary", "node_set_properties", params)
 
-	var full_path = "res://" + scene_path
-	if not ResourceLoader.exists(full_path):
-		return OpsUtil._error("Scene not found: " + scene_path, "node_set_properties", {"scene_path": scene_path})
-
-	var packed: PackedScene = load(full_path)
-	var root = packed.instantiate()
-
 	# Find the target node
-	var target: Node
-	if node_path == "." or node_path == "":
-		target = root
-	else:
-		target = root.get_node_or_null(node_path)
+	var target: Node = edit.resolve(node_path)
 	if target == null:
-		root.free()
 		return OpsUtil._error("Node not found: " + node_path, "node_set_properties", {"scene_path": scene_path, "node_path": node_path})
 
 	# Set properties with type conversion
-	var set_result = _set_properties_on_node(target, properties)
+	var set_result = set_properties(target, properties)
 	if not set_result.success:
-		root.free()
 		return set_result
-
-	# Re-pack and save
-	var save_result = _repack_and_save(root, full_path)
-	root.free()
-	if not save_result.success:
-		return save_result
 
 	return {"success": true, "data": {"node_path": node_path, "properties_set": set_result.properties_set}}
 
 
-static func op_node_remove(params: Dictionary) -> Dictionary:
+static func op_node_remove(params: Dictionary, edit: SceneEdit) -> Dictionary:
 	## Remove a node (and all children) from a scene.
 	##
 	## Params: scene_path, node_path
@@ -133,32 +98,21 @@ static func op_node_remove(params: Dictionary) -> Dictionary:
 	if node_path == "" or node_path == ".":
 		return OpsUtil._error("Cannot remove root node", "node_remove", {"scene_path": scene_path})
 
-	var full_path = "res://" + scene_path
-	if not ResourceLoader.exists(full_path):
-		return OpsUtil._error("Scene not found: " + scene_path, "node_remove", {"scene_path": scene_path})
+	var root: Node = edit.root
 
-	var packed: PackedScene = load(full_path)
-	var root = packed.instantiate()
-
-	var target = root.get_node_or_null(node_path)
+	var target: Node = edit.resolve(node_path)
+	if target == root:
+		return OpsUtil._error("Cannot remove root node", "node_remove", params)
 	if target == null:
-		root.free()
 		return OpsUtil._error("Node not found: " + node_path, "node_remove", {"scene_path": scene_path, "node_path": node_path})
 
 	var children_count = _count_descendants(target)
 	target.get_parent().remove_child(target)
-	target.free()
-
-	# Re-pack and save
-	var save_result = _repack_and_save(root, full_path)
-	root.free()
-	if not save_result.success:
-		return save_result
 
 	return {"success": true, "data": {"removed": node_path, "children_removed": children_count}}
 
 
-static func op_node_reparent(params: Dictionary) -> Dictionary:
+static func op_node_reparent(params: Dictionary, edit: SceneEdit) -> Dictionary:
 	## Move a node to a new parent within the same scene.
 	##
 	## Params: scene_path, node_path, new_parent_path, new_name (optional)
@@ -176,61 +130,49 @@ static func op_node_reparent(params: Dictionary) -> Dictionary:
 	if new_parent_path == "":
 		return OpsUtil._error("new_parent_path is required", "node_reparent", params)
 
-	var full_path = "res://" + scene_path
-	if not ResourceLoader.exists(full_path):
-		return OpsUtil._error("Scene not found: " + scene_path, "node_reparent", {"scene_path": scene_path})
-
-	var packed: PackedScene = load(full_path)
-	var root = packed.instantiate()
+	var root: Node = edit.root
 
 	# Find the target node
-	var target = root.get_node_or_null(node_path)
+	var target: Node = edit.resolve(node_path)
+	if target == root:
+		return OpsUtil._error("Cannot reparent root node", "node_reparent", params)
 	if target == null:
-		root.free()
 		return OpsUtil._error("Node not found: " + node_path, "node_reparent", {"scene_path": scene_path, "node_path": node_path})
 
 	# Find the new parent
-	var new_parent: Node
-	if new_parent_path == "." or new_parent_path == "":
-		new_parent = root
-	else:
-		new_parent = root.get_node_or_null(new_parent_path)
+	var new_parent: Node = edit.resolve(new_parent_path)
 	if new_parent == null:
-		root.free()
 		return OpsUtil._error("New parent not found: " + new_parent_path, "node_reparent", {"scene_path": scene_path, "new_parent_path": new_parent_path})
 
 	# Check for circular reparent: target cannot be moved to itself or its own descendant
 	if target == new_parent or target.is_ancestor_of(new_parent):
-		root.free()
 		return OpsUtil._error("Circular reparent: cannot move a node to itself or its own descendant", "node_reparent", {"node_path": node_path, "new_parent_path": new_parent_path})
 
 	# Determine final name
 	var final_name = new_name if new_name != null else str(target.name)
 
 	# Name collision check
-	if new_parent.has_node(NodePath(final_name)):
-		root.free()
+	if not valid_node_name(final_name):
+		return OpsUtil._error("Invalid node name: " + str(final_name), "node_reparent", params)
+	if new_parent.has_node(NodePath(final_name)) and new_parent.get_node(NodePath(final_name)) != target:
 		return OpsUtil._error("Name collision: " + final_name + " already exists under " + new_parent_path + ". Use new_name to resolve.", "node_reparent", {"node_path": node_path, "new_parent_path": new_parent_path})
 
 	# Record old path
 	var old_path = str(root.get_path_to(target))
 
 	# Reparent
+	var owners := {}
+	edit.capture_owners(target, owners)
 	target.get_parent().remove_child(target)
 	if new_name != null:
 		target.name = new_name
 	new_parent.add_child(target)
-	target.owner = root
-	_set_owner_recursive(target, root)
+	for child in owners:
+		var old_owner = owners[child]
+		child.owner = old_owner if old_owner == null or old_owner.is_ancestor_of(child) else root
 
 	# Record new path
 	var new_path_str = str(root.get_path_to(target))
-
-	# Re-pack and save
-	var save_result = _repack_and_save(root, full_path)
-	root.free()
-	if not save_result.success:
-		return save_result
 
 	return {"success": true, "data": {"old_path": old_path, "new_path": new_path_str}}
 
@@ -241,7 +183,7 @@ static func op_node_reparent(params: Dictionary) -> Dictionary:
 
 static func convert_value(value, expected_type: int):
 	## Convert a JSON value to the expected Godot type.
-	## Called by _set_properties_on_node after querying get_property_list().
+	## Called by set_properties after querying get_property_list().
 	match expected_type:
 		TYPE_BOOL:
 			return bool(value)
@@ -251,6 +193,8 @@ static func convert_value(value, expected_type: int):
 			return float(value)
 		TYPE_STRING:
 			return str(value)
+		TYPE_STRING_NAME:
+			return StringName(str(value))
 		TYPE_VECTOR2:
 			if value is Dictionary:
 				return Vector2(value.get("x", 0), value.get("y", 0))
@@ -289,74 +233,69 @@ static func convert_value(value, expected_type: int):
 			return value
 
 
-static func _set_properties_on_node(node: Node, properties: Dictionary) -> Dictionary:
-	## Set multiple properties on a node with automatic type conversion.
-	## Returns { success: true, properties_set: [...] } or { success: false, error: ... }
-	var properties_set: Array = []
-	var prop_list = node.get_property_list()
-	var type_map: Dictionary = {}
-	for prop_info in prop_list:
-		type_map[prop_info["name"]] = prop_info["type"]
+static func valid_node_name(value: String) -> bool:
+	return not value.is_empty() and value not in [".", ".."] and value.validate_node_name() == value
 
-	for prop_name in properties:
-		var value = properties[prop_name]
+static func validate_properties(object: Object, properties: Dictionary) -> Dictionary:
+	var info_by_name := {}
+	for info in object.get_property_list():
+		info_by_name[info.name] = info
+	var converted := {}
+	for name in properties:
+		if not info_by_name.has(name):
+			return OpsUtil._error("Unknown property: " + name + " on " + object.get_class(), "set_properties", {"property": name})
+		var info: Dictionary = info_by_name[name]
+		var value = convert_value(properties[name], info.type)
+		if info.type == TYPE_OBJECT and properties[name] is String and value == null:
+			return OpsUtil._error("Resource not found for property: " + name, "set_properties", {"property": name})
+		if info.type != TYPE_NIL and typeof(value) != info.type and not (value == null and info.type == TYPE_OBJECT):
+			return OpsUtil._error("Invalid value type for property: " + name, "set_properties", {"property": name})
+		if value is Object and info.class_name != &"":
+			# Resource property hints may list alternatives, e.g. BaseMaterial3D,ShaderMaterial.
+			var matches_class := false
+			for allowed in str(info.class_name).split(","):
+				if value.is_class(allowed):
+					matches_class = true
+				var script: Script = value.get_script()
+				while script != null:
+					if script.get_global_name() == allowed:
+						matches_class = true
+					script = script.get_base_script()
+			if not matches_class:
+				return OpsUtil._error("Invalid resource class for property: " + name, "set_properties", {"property": name})
+		if object is Node and name == "name":
+			if not valid_node_name(str(value)):
+				return OpsUtil._error("Invalid node name", "set_properties", {"property": name})
+			var parent: Node = object.get_parent()
+			if parent != null and parent.has_node(NodePath(value)) and parent.get_node(NodePath(value)) != object:
+				return OpsUtil._error("Name collision: " + str(value), "set_properties", {"property": name})
+		converted[name] = value
+	return {"success": true, "values": converted}
 
-		if not type_map.has(prop_name):
-			return {"success": false, "error": "Unknown property: " + prop_name + " on " + node.get_class(), "operation": "node_set_properties", "context": {"node": str(node.name), "property": prop_name}}
+static func set_properties(object: Object, properties: Dictionary) -> Dictionary:
+	var checked := validate_properties(object, properties)
+	if not checked.success:
+		return checked
+	var applied: Array = []
+	for name in checked.values:
+		object.set(name, checked.values[name])
+		if not values_match(object.get(name), checked.values[name]):
+			var failure := OpsUtil._error("Property setter did not retain requested value: " + name, "set_properties", {"property": name})
+			failure["data"] = {"properties_set": applied}
+			return failure
+		applied.append(name)
+	return {"success": true, "properties_set": applied}
 
-		var expected_type = type_map[prop_name]
-		var converted = convert_value(value, expected_type)
-		node.set(prop_name, converted)
-		properties_set.append(prop_name)
-
-	return {"success": true, "properties_set": properties_set}
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-static func _apply_properties(node: Node, properties: Dictionary) -> Array:
-	## Apply a dict of properties to a live node. Returns list of set property names.
-	## Unknown properties are skipped. Used by EditorOps for live tree manipulation.
-	var set_props: Array = []
-	var prop_list = node.get_property_list()
-	var type_map: Dictionary = {}
-	for prop_info in prop_list:
-		type_map[prop_info["name"]] = prop_info["type"]
-	for prop_name in properties:
-		if not type_map.has(prop_name):
-			continue
-		var expected_type = type_map[prop_name]
-		var converted = convert_value(properties[prop_name], expected_type)
-		node.set(prop_name, converted)
-		set_props.append(prop_name)
-	return set_props
-
-
-static func _repack_and_save(root: Node, full_path: String) -> Dictionary:
-	## Re-pack a modified node tree and save it to disk.
-	var packed = PackedScene.new()
-	# Set ownership for all descendants so they get included in the packed scene
-	_set_owner_recursive(root, root)
-	var err = packed.pack(root)
-	if err != OK:
-		return {"success": false, "error": "Failed to pack scene: " + str(err), "operation": "save", "context": {"path": full_path}}
-	err = ResourceSaver.save(packed, full_path)
-	if err != OK:
-		return {"success": false, "error": "Failed to save scene: " + str(err), "operation": "save", "context": {"path": full_path}}
-	return {"success": true}
-
-
-static func _set_owner_recursive(node: Node, owner: Node):
-	## Set owner on all descendants, but skip children of scene instances.
-	## A node with a non-empty scene_file_path is an instance root from
-	## another scene — its children belong to that scene, not this one.
-	for child in node.get_children():
-		child.owner = owner
-		if child.scene_file_path == "":
-			# Only recurse into non-instance children
-			_set_owner_recursive(child, owner)
+static func values_match(actual: Variant, requested: Variant) -> bool:
+	if actual == requested:
+		return true
+	# Engine storage often narrows a JSON float to float32 (materials, shapes),
+	# and rotation setters convert units. Native rounding is not a rejected edit.
+	if actual is float and requested is float:
+		return is_equal_approx(actual, requested)
+	if typeof(actual) == typeof(requested) and (actual is Vector2 or actual is Vector3 or actual is Color):
+		return actual.is_equal_approx(requested)
+	return false
 
 
 static func _count_descendants(node: Node) -> int:
@@ -366,7 +305,7 @@ static func _count_descendants(node: Node) -> int:
 	return count
 
 
-static func op_node_set_groups(params: Dictionary) -> Dictionary:
+static func op_node_set_groups(params: Dictionary, edit: SceneEdit) -> Dictionary:
 	## Add or remove a node from groups.
 	##
 	## Params:
@@ -390,20 +329,8 @@ static func op_node_set_groups(params: Dictionary) -> Dictionary:
 		(remove == null or (remove is Array and remove.is_empty())):
 		return OpsUtil._error("At least one of 'add' or 'remove' must be provided", "node_set_groups", params)
 
-	var full_path = "res://" + scene_path
-	if not ResourceLoader.exists(full_path):
-		return OpsUtil._error("Scene not found: " + scene_path, "node_set_groups", {"scene_path": scene_path})
-
-	var packed: PackedScene = load(full_path)
-	var root = packed.instantiate()
-
-	var target: Node
-	if node_path == "." or node_path == "":
-		target = root
-	else:
-		target = root.get_node_or_null(node_path)
+	var target: Node = edit.resolve(node_path)
 	if target == null:
-		root.free()
 		return OpsUtil._error("Node not found: " + node_path, "node_set_groups", {"scene_path": scene_path, "node_path": node_path})
 
 	if add is Array:
@@ -420,15 +347,10 @@ static func op_node_set_groups(params: Dictionary) -> Dictionary:
 		if not str(group).begins_with("_"):
 			final_groups.append(group)
 
-	var save_result = _repack_and_save(root, full_path)
-	root.free()
-	if not save_result.success:
-		return save_result
-
 	return {"success": true, "data": {"node_path": node_path, "groups": final_groups}}
 
 
-static func op_node_set_script(params: Dictionary) -> Dictionary:
+static func op_node_set_script(params: Dictionary, edit: SceneEdit) -> Dictionary:
 	## Attach or detach a script from a node in a scene.
 	##
 	## Params:
@@ -448,20 +370,8 @@ static func op_node_set_script(params: Dictionary) -> Dictionary:
 	if node_path == "":
 		return OpsUtil._error("node_path is required", "node_set_script", params)
 
-	var full_path = "res://" + scene_path
-	if not ResourceLoader.exists(full_path):
-		return OpsUtil._error("Scene not found: " + scene_path, "node_set_script", {"scene_path": scene_path})
-
-	var packed: PackedScene = load(full_path)
-	var root = packed.instantiate()
-
-	var target: Node
-	if node_path == "." or node_path == "":
-		target = root
-	else:
-		target = root.get_node_or_null(node_path)
+	var target: Node = edit.resolve(node_path)
 	if target == null:
-		root.free()
 		return OpsUtil._error("Node not found: " + node_path, "node_set_script", {"scene_path": scene_path, "node_path": node_path})
 
 	var result_script_path = null
@@ -473,28 +383,25 @@ static func op_node_set_script(params: Dictionary) -> Dictionary:
 			sp = "res://" + sp
 
 		if not ResourceLoader.exists(sp):
-			root.free()
 			return OpsUtil._error("Script not found: " + sp, "node_set_script", {"script_path": sp})
 
 		var script = load(sp)
 		if not script is Script:
-			root.free()
 			return OpsUtil._error("File is not a Script resource: " + sp, "node_set_script", {"script_path": sp})
 
+		if not target.is_class(script.get_instance_base_type()):
+			return OpsUtil._error("Script base type is incompatible with " + target.get_class(), "node_set_script", params)
 		target.set_script(script)
+		if target.get_script() != script:
+			return OpsUtil._error("Godot rejected script attachment", "node_set_script", params)
 		result_script_path = sp.replace("res://", "")
 	else:
 		target.set_script(null)
 
-	var save_result = _repack_and_save(root, full_path)
-	root.free()
-	if not save_result.success:
-		return save_result
-
 	return {"success": true, "data": {"node_path": node_path, "script_path": result_script_path}}
 
 
-static func op_node_set_meta(params: Dictionary) -> Dictionary:
+static func op_node_set_meta(params: Dictionary, edit: SceneEdit) -> Dictionary:
 	## Set or remove metadata entries on a node in a scene.
 	##
 	## Params:
@@ -515,22 +422,13 @@ static func op_node_set_meta(params: Dictionary) -> Dictionary:
 	if not meta is Dictionary:
 		return OpsUtil._error("meta must be a Dictionary", "node_set_meta", params)
 
-	var full_path = "res://" + scene_path
-	if not ResourceLoader.exists(full_path):
-		return OpsUtil._error("Scene not found: " + scene_path, "node_set_meta", {"scene_path": scene_path})
-
-	var packed: PackedScene = load(full_path)
-	var root = packed.instantiate()
-
-	var target: Node
-	if node_path == "." or node_path == "":
-		target = root
-	else:
-		target = root.get_node_or_null(node_path)
+	var target: Node = edit.resolve(node_path)
 	if target == null:
-		root.free()
 		return OpsUtil._error("Node not found: " + node_path, "node_set_meta", {"scene_path": scene_path, "node_path": node_path})
 
+	for key in meta:
+		if not str(key).is_valid_identifier():
+			return OpsUtil._error("Metadata key must be a valid identifier: " + str(key), "node_set_meta", params)
 	for key in meta:
 		var value = meta[key]
 		if value == null:
@@ -541,15 +439,10 @@ static func op_node_set_meta(params: Dictionary) -> Dictionary:
 
 	var meta_keys: Array = target.get_meta_list()
 
-	var save_result = _repack_and_save(root, full_path)
-	root.free()
-	if not save_result.success:
-		return save_result
-
 	return {"success": true, "data": {"node_path": node_path, "meta_keys": meta_keys}}
 
 
-static func op_node_find(params: Dictionary) -> Dictionary:
+static func op_node_find(params: Dictionary, edit: SceneEdit) -> Dictionary:
 	## Search for nodes in a scene tree by class, group, property, or name.
 	##
 	## Params:
@@ -581,18 +474,12 @@ static func op_node_find(params: Dictionary) -> Dictionary:
 			"node_find", params
 		)
 
-	var full_path = "res://" + scene_path
-	if not ResourceLoader.exists(full_path):
-		return OpsUtil._error("Scene not found: " + scene_path, "node_find", {"scene_path": scene_path})
-
-	var packed: PackedScene = load(full_path)
-	var root = packed.instantiate()
+	var root: Node = edit.root
 
 	var results: Array = []
 	_find_nodes_recursive(root, root, filter_class, filter_group, filter_name_pattern,
 		filter_property, filter_property_value, limit, results)
 
-	root.free()
 	return {"success": true, "data": {"results": results}}
 
 

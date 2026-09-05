@@ -39,9 +39,10 @@ impl ConnectionState {
         self.advance_request_id = None;
     }
 
-    /// Begin a frame advance. Returns `true` if accepted, `false` if one is already in progress.
+    /// Begin a frame advance. Returns `true` if accepted, `false` for zero
+    /// frames or if one is already in progress.
     pub fn begin_advance(&mut self, frames: u32, request_id: String) -> bool {
-        if self.advance_remaining > 0 {
+        if frames == 0 || self.advance_remaining > 0 {
             return false;
         }
         self.advance_remaining = frames;
@@ -65,6 +66,11 @@ impl ConnectionState {
             };
         }
         ConnectionAction::None
+    }
+
+    pub fn cancel_advance(&mut self) {
+        self.advance_remaining = 0;
+        self.advance_request_id = None;
     }
 
     pub fn is_advancing(&self) -> bool {
@@ -183,15 +189,14 @@ mod tests {
     }
 
     #[test]
-    fn begin_advance_zero_frames_completes_immediately() {
+    fn begin_advance_rejects_zero_frames_without_retaining_request() {
         let mut state = ConnectionState::default();
         state.on_client_connected();
         state.on_handshake_ack();
 
-        // Zero frames: begin_advance sets remaining=0, immediately not advancing
-        assert!(state.begin_advance(0, "req-zero".into()));
-        // remaining is 0 so is_advancing() is false, but request_id is set
+        assert!(!state.begin_advance(0, "req-zero".into()));
         assert!(!state.is_advancing());
+        assert!(state.advance_request_id.is_none());
     }
 
     #[test]

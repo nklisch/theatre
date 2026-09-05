@@ -1,100 +1,76 @@
-# Stage — Vision
+# Theatre — Vision
 
-## One-Liner
+Theatre helps coding agents build and debug Godot projects using the engine's
+own view of scenes, resources, and running games. It connects ordinary source
+editing to structured engine operations and observable results.
 
-Stage gives AI agents spatial awareness of your running Godot game — where DAP tells you what the code is doing, Stage tells you what the world is doing.
+## The problem
 
-## The Problem
+Source code describes what a game should do. It does not show where an enemy
+actually moved, which collision shape blocked it, or how a menu rendered.
+Without engine feedback, an agent depends on a developer to reproduce a problem,
+describe it, and test each proposed fix. Scene and resource authoring also needs
+care with Godot's ownership, references, and serialization rules.
 
-AI coding agents are blind to game state. They can read your source files, set breakpoints, inspect variables — but they cannot *see* your game. When an enemy clips through a wall, when a patrol path overshoots, when a physics body tunnels through geometry — the agent has no way to observe these problems spatially. It's like debugging a web app without being able to open the browser.
+Theatre gives the agent direct access to those engine capabilities while
+keeping the developer in charge of the goal and the acceptable result.
 
-Game bugs are fundamentally spatial. They happen in world space: wrong positions, missed collisions, broken pathfinding, incorrect line-of-sight. Diagnosing them requires understanding *where things are and how they relate to each other* — not just what values variables hold.
+## Two complementary tools
 
-Today, the debugging loop is:
+**Director** authors scenes and resources through Godot APIs. It handles node
+composition, properties, signals, materials, animation, tilemaps, and project
+settings. It can work through an editor plugin or a headless Godot process.
+Scripts and shaders remain source files edited with normal coding tools.
 
-1. Human sees a bug in the running game
-2. Human describes it to the agent in natural language ("the enemy walks through the east wall")
-3. Agent guesses at the cause from code alone
-4. Agent suggests a fix
-5. Human tests it, reports back
-6. Repeat
+**Stage** observes and interacts with a running game. It exposes scene structure,
+spatial relationships, node state, physics queries, signals, and explicit debug
+actions. An on-demand viewport image shows the latest completed render without
+recording. Its recorder can retain spatial frames and viewport images for later
+clip analysis, including storyboards and node-following filmstrips.
 
-This loop is slow, lossy, and fundamentally limited by the human's ability to translate spatial observations into text.
+The **Theatre CLI** installs and deploys these tools and configures Godot
+projects. The tools support the Model Context Protocol (MCP) for agent clients
+and command-line invocation for shell-based use. Session-dependent behavior is
+not interchangeable between persistent MCP and one-shot CLI calls.
 
-## The Solution
+## The working relationship
 
-Stage makes the agent a **spatial collaborator**. It provides a structured, token-efficient view of the running game's spatial state through MCP (Model Context Protocol), giving any compatible AI agent the ability to:
+The agent should be able to observe, act, advance the game, and verify the
+result without requiring a human to narrate every step. A developer can also
+play the game, mark an interesting moment, or share editor and runtime context
+for the agent to investigate. Shared feedback can include the relevant viewport,
+selection or pointer, and a note. Human controls complement agent operation;
+they are not its prerequisite.
 
-- **See** the scene — positions, distances, bearings, velocities, spatial relationships
-- **Query** specific spatial questions — "what's near the player?", "can this enemy see that door?", "what's the navmesh distance?"
-- **Watch** for changes — subscribe to nodes or conditions, get notified when something interesting happens
-- **Inspect** deeply — drill into any node's full state, physics, signals, resources, children
-- **Act** for debugging — pause, teleport nodes, change properties, advance frames, reproduce conditions
-- **Record and analyze** — the human reproduces a bug while Stage captures a frame-by-frame timeline; the agent scrubs through it to diagnose what went wrong
+Structured state and images serve different purposes. Exact positions,
+velocities, and collision properties explain engine behavior; rendered pixels
+show layout, lighting, occlusion, and appearance. Useful feedback combines the
+two without overwhelming the agent with an entire scene dump.
 
-The agent doesn't need screenshots, doesn't need the human to narrate, doesn't need to guess from code. It has direct, structured access to the game's spatial reality.
+The desired working loop is source inspection, authoring, validation, running,
+interaction, observation, and explicit human feedback. The
+[journeys](JOURNEYS.md) describe the supported paths and their limitations. This
+vision does not promise that every step is a single Theatre tool call.
 
-## Design Principles
+## Boundaries
 
-### 1. Spatial-First
+- Theatre extends Godot; it does not replace the engine or simulate game logic.
+- Director's authored project content and Stage's temporary runtime actions are
+  distinct. Debugging a live object does not automatically save a scene change.
+- Theatre complements source editing and a code debugger. Breakpoints, stack
+  frames, and source-level stepping are not Stage's spatial-debugging role.
+- The target is a developer's local Godot project and scene tree, not a hosted
+  multi-tenant control service or a multiplayer replication debugger.
+- Observation should not change game logic. Explicit agent actions are allowed
+  interventions; capture overhead and debugging overlays still need to be
+  considered when interpreting a run.
+- Theatre supplies evidence and controls, not an assertion framework or an
+  automatic verdict that a game is correct.
+- Feedback is project-local evidence, not asynchronous agent steering. Optional
+  client hooks can announce pending evidence at a later tool boundary.
+- Ordinary GDScript remains the escape hatch for unusual procedural authoring.
+  Theatre does not expose a general arbitrary-code execution tool.
 
-Everything is organized around *where things are in space*, not how they're represented in code. Positions, distances, bearings, proximity, line-of-sight, areas — these are the primitives. The agent thinks about the game the way a player does: spatially.
-
-### 2. Token-Efficient
-
-LLM context windows are finite and expensive. Every response is budgeted. Summary views are cheap (~200 tokens). The agent drills deeper only when needed. Pagination prevents blowouts. The system is designed so a typical debugging session costs ~1200 tokens of spatial data across multiple tool calls — not thousands of tokens dumped in one response.
-
-### 3. Human-Agent Collaboration
-
-The human and agent are partners. The human drives the game — they know how to reproduce the bug, when it happens, what looks wrong. The agent analyzes — it can scrub timelines, compute spatial relationships, cross-reference collision layers and navmesh edges. The dashcam captures context automatically around interesting moments; the agent scrubs through saved clips to diagnose what went wrong.
-
-### 4. Observational by Default
-
-Stage is a *debugger*, not a game controller. It observes without affecting the game unless the agent explicitly uses the action tools. The addon running inside Godot should never alter gameplay behavior just by being present. Actions (teleport, set_property, pause) are opt-in debugging operations, not gameplay automation.
-
-### 5. LLM-Agnostic
-
-Stage uses MCP, an open protocol. It works with any MCP-compatible client: Claude Code, Cursor, Windsurf, or any future tool. The spatial data is structured for LLM consumption (bearings like "ahead_left" alongside exact degrees) but doesn't assume a specific model or client.
-
-### 6. Godot-Native
-
-The addon should feel like a natural part of the Godot editor. The dock panel uses Godot's UI conventions. Keybindings are familiar. Configuration lives where Godot developers expect it. The addon doesn't fight the engine — it extends it.
-
-## What Stage Is Not
-
-- **Not a code debugger.** DAP (Debug Adapter Protocol) handles breakpoints, stack frames, variable inspection, stepping through code. Stage handles the spatial world. They're complementary — use both.
-- **Not a game engine.** Stage doesn't run game logic, simulate physics, or render frames. It observes the engine that does.
-- **Not a testing framework.** It doesn't assert, doesn't pass/fail, doesn't run suites. It's an interactive debugging tool for spatial problems.
-- **Not a visual editor.** The agent doesn't see rendered pixels. It sees structured spatial data — positions, relationships, properties. This is by design: structured data is what LLMs reason about effectively.
-- **Not multiplayer-aware.** Network replication state, authority, client/server scene trees — these are explicitly out of scope. Stage observes a single local scene tree.
-
-## The North Star
-
-A Godot developer opens their project, enables the Stage addon, and starts a conversation with their AI agent. The agent can immediately understand the running game's spatial state as naturally as it reads source code. When a bug involves space — collision, pathfinding, positioning, physics, spatial logic — the agent diagnoses it directly from observation, not from guesswork. The human and agent work as a team: human reproduces, agent analyzes, together they fix.
-
-The spatial view becomes as fundamental to AI-assisted game development as the text editor view is to AI-assisted programming.
-
-## Relationship to the Ecosystem
-
-```
-┌──────────────────────────────────────────────────────┐
-│                    AI Agent                          │
-│              (Claude Code, Cursor, etc.)             │
-└──────┬───────────────────┬───────────────────┬───────┘
-       │                   │                   │
-  Read/Write          Stage (MCP)      DAP / Agent Lens
-  Source Code          Spatial State        Code Debugging
-       │                   │                   │
-  ┌────▼────┐      ┌──────▼──────┐      ┌─────▼─────┐
-  │  Files  │      │   Running   │      │ Debugger  │
-  │  .gd    │      │   Game      │      │ Breakpts  │
-  │  .tscn  │      │   World     │      │ Stack     │
-  └─────────┘      └─────────────┘      └───────────┘
-```
-
-Three complementary views of a Godot project:
-1. **Source code** — what the developer wrote (files)
-2. **Spatial state** — what the game world looks like right now (Stage)
-3. **Code execution** — what the code is doing right now (DAP)
-
-Stage fills the gap between static code and runtime execution — the *spatial runtime* that exists only when the game is running.
+See [architecture](ARCHITECTURE.md) for ownership and execution boundaries,
+[contracts](CONTRACT.md) for observable semantics, and
+[principles](PRINCIPLES.md) for the engineering trade-offs behind them.

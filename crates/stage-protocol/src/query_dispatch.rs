@@ -2,6 +2,7 @@ use crate::query::{
     ActionRequest, GetFrameInfoParams, GetNodeInspectParams, GetSceneTreeParams,
     GetSnapshotDataParams, SpatialQueryRequest,
 };
+use crate::viewport::ViewportParams;
 
 /// Known query method names dispatched by the addon's TCP query handler.
 ///
@@ -15,6 +16,9 @@ pub enum QueryMethod {
     // Spatial query methods (routed through query_handler.rs)
     GetSnapshotData,
     GetFrameInfo,
+    GetViewport,
+    RuntimeStatus,
+    RuntimeDiagnostics,
     GetNodeInspect,
     GetSceneTree,
     ExecuteAction,
@@ -36,6 +40,9 @@ impl QueryMethod {
         match s {
             "get_snapshot_data" => Some(Self::GetSnapshotData),
             "get_frame_info" => Some(Self::GetFrameInfo),
+            "get_viewport" => Some(Self::GetViewport),
+            "runtime_status" => Some(Self::RuntimeStatus),
+            "runtime_diagnostics" => Some(Self::RuntimeDiagnostics),
             "get_node_inspect" => Some(Self::GetNodeInspect),
             "get_scene_tree" => Some(Self::GetSceneTree),
             "execute_action" => Some(Self::ExecuteAction),
@@ -57,6 +64,9 @@ impl QueryMethod {
         match self {
             Self::GetSnapshotData => "get_snapshot_data",
             Self::GetFrameInfo => "get_frame_info",
+            Self::GetViewport => "get_viewport",
+            Self::RuntimeStatus => "runtime_status",
+            Self::RuntimeDiagnostics => "runtime_diagnostics",
             Self::GetNodeInspect => "get_node_inspect",
             Self::GetSceneTree => "get_scene_tree",
             Self::ExecuteAction => "execute_action",
@@ -94,6 +104,19 @@ impl QueryMethod {
     /// than typed structs, so only minimal structural validation is done for them.
     pub fn validate_params(self, params: &serde_json::Value) -> Result<(), String> {
         match self {
+            Self::RuntimeStatus => {
+                serde_json::from_value::<crate::runtime::RuntimeStatusParams>(params.clone())
+                    .map(|_| ())
+                    .map_err(|e| e.to_string())
+            }
+            Self::RuntimeDiagnostics => serde_json::from_value::<
+                crate::runtime_diagnostics::RuntimeDiagnosticsQueryParams,
+            >(params.clone())
+            .map(|_| ())
+            .map_err(|e| e.to_string()),
+            Self::GetViewport => serde_json::from_value::<ViewportParams>(params.clone())
+                .map_err(|e| e.to_string())?
+                .validate(),
             Self::GetSnapshotData => {
                 serde_json::from_value::<GetSnapshotDataParams>(params.clone())
                     .map(|_| ())
@@ -109,8 +132,8 @@ impl QueryMethod {
                 .map(|_| ())
                 .map_err(|e| e.to_string()),
             Self::ExecuteAction => serde_json::from_value::<ActionRequest>(params.clone())
-                .map(|_| ())
-                .map_err(|e| e.to_string()),
+                .map_err(|e| e.to_string())?
+                .validate(),
             Self::SpatialQuery => serde_json::from_value::<SpatialQueryRequest>(params.clone())
                 .map(|_| ())
                 .map_err(|e| e.to_string()),
@@ -150,6 +173,9 @@ mod tests {
         let cases = [
             ("get_snapshot_data", QueryMethod::GetSnapshotData),
             ("get_frame_info", QueryMethod::GetFrameInfo),
+            ("get_viewport", QueryMethod::GetViewport),
+            ("runtime_status", QueryMethod::RuntimeStatus),
+            ("runtime_diagnostics", QueryMethod::RuntimeDiagnostics),
             ("get_node_inspect", QueryMethod::GetNodeInspect),
             ("get_scene_tree", QueryMethod::GetSceneTree),
             ("execute_action", QueryMethod::ExecuteAction),
@@ -184,6 +210,9 @@ mod tests {
         let methods = [
             QueryMethod::GetSnapshotData,
             QueryMethod::GetFrameInfo,
+            QueryMethod::GetViewport,
+            QueryMethod::RuntimeStatus,
+            QueryMethod::RuntimeDiagnostics,
             QueryMethod::GetNodeInspect,
             QueryMethod::GetSceneTree,
             QueryMethod::ExecuteAction,
@@ -338,6 +367,34 @@ mod tests {
         assert!(QueryMethod::GetFrameInfo.validate_params(&params).is_ok());
     }
 
+    #[test]
+    fn viewport_params_validate_bounds() {
+        assert!(
+            QueryMethod::GetViewport
+                .validate_params(&json!({"max_dimension": 2048}))
+                .is_ok()
+        );
+        assert!(
+            QueryMethod::GetViewport
+                .validate_params(&json!({"max_dimension": 0}))
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn runtime_diagnostics_accepts_only_empty_params() {
+        assert!(
+            QueryMethod::RuntimeDiagnostics
+                .validate_params(&json!({}))
+                .is_ok()
+        );
+        assert!(
+            QueryMethod::RuntimeDiagnostics
+                .validate_params(&json!({"max_entries": 20}))
+                .is_err()
+        );
+    }
+
     // --- validate_params: get_node_inspect ---
 
     #[test]
@@ -427,6 +484,21 @@ mod tests {
     fn action_params_validate_advance_frames() {
         let params = json!({"action": "advance_frames", "frames": 5});
         assert!(QueryMethod::ExecuteAction.validate_params(&params).is_ok());
+    }
+
+    #[test]
+    fn action_params_reject_zero_frame_in_later_sequence_step() {
+        let params = json!({
+            "action": "interaction_sequence",
+            "steps": [
+                {"press": [{"action_name": "jump"}], "frames": 1},
+                {"release": ["jump"], "frames": 0}
+            ]
+        });
+        let error = QueryMethod::ExecuteAction
+            .validate_params(&params)
+            .unwrap_err();
+        assert!(error.contains("step 1"));
     }
 
     #[test]

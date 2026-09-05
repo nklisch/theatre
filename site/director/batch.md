@@ -19,21 +19,16 @@ const messages0 = [
 
 Execute multiple Director operations in a single round-trip.
 
-## The cost of individual operations
+## Why group operations
 
-Every Director operation requires a round-trip through the MCP protocol to Godot (and back). Depending on the backend, each round-trip takes:
-
-- Editor backend: ~10-50ms
-- Headless daemon: ~50-200ms
-- One-shot: ~500-2000ms (Godot startup overhead)
-
-Building a level with 21 individual `tilemap_set_cells` calls takes 21 round-trips. With the daemon backend, that is 1-4 seconds of pure latency. With one-shot, it could take over 40 seconds.
-
-`batch` collapses all of that into one round-trip.
+Every Director call crosses the agent and Godot boundary. A batch groups related
+operations into one request and one selected backend. This is especially useful
+for a one-shot backend because it avoids a separate Godot launch per operation.
+Choose a batch for sequentially related work, not for an atomicity guarantee.
 
 ## `batch`
 
-Run a list of operations atomically in sequence.
+Run a list of operations in sequence through the same selected context.
 
 ```json
 {
@@ -51,7 +46,7 @@ Run a list of operations atomically in sequence.
       "operation": "node_add",
       "params": {
         "scene_path": "scenes/room_b.tscn",
-        "parent_path": "RoomB",
+        "parent_path": ".",
         "node_type": "StaticBody3D",
         "node_name": "Floor"
       }
@@ -70,18 +65,51 @@ Note: Each operation in the `operations` array does **not** need `project_path` 
 
 ```json
 {
-  "op": "batch",
-  "total": 5,
-  "succeeded": 5,
-  "failed": 0,
+  "persistence": {
+    "saved_paths": ["scenes/room_b.tscn"],
+    "unsaved_scene_paths": []
+  },
   "results": [
-    { "operation": "scene_create", "path": "scenes/room_b.tscn", "result": "ok" },
-    { "operation": "node_add", "name": "Floor", "result": "ok" }
-  ]
+    {
+      "operation": "scene_create",
+      "success": true,
+      "data": {
+        "path": "scenes/room_b.tscn",
+        "root_type": "Node3D",
+        "persistence": {
+          "saved_paths": ["scenes/room_b.tscn"],
+          "unsaved_scene_paths": []
+        }
+      },
+      "persistence": {
+        "saved_paths": ["scenes/room_b.tscn"],
+        "unsaved_scene_paths": []
+      }
+    },
+    {
+      "operation": "node_add",
+      "success": true,
+      "data": {
+        "node_path": "Floor",
+        "type": "StaticBody3D",
+        "persistence": {
+          "saved_paths": ["scenes/room_b.tscn"],
+          "unsaved_scene_paths": []
+        }
+      },
+      "persistence": {
+        "saved_paths": ["scenes/room_b.tscn"],
+        "unsaved_scene_paths": []
+      }
+    }
+  ],
+  "completed": 2,
+  "failed": 0
 }
 ```
 
-If an error occurs with `stop_on_error: true` (default), the batch stops at the failing operation and the rest are not executed.
+Results stay in request order. With `stop_on_error: true` (default), execution
+stops after the first entry whose `success` is false; later entries are not run.
 
 ## Example: Building a platform level
 
@@ -91,15 +119,10 @@ This example builds a platform section with a floor, three raised platforms, col
 
 ## When to use batch
 
-**Always batch multi-step construction.** If you are:
-- Building a level (many tiles)
-- Creating a scene from scratch (create + add several nodes + set properties)
-- Configuring multiple enemies (same properties on N nodes)
-- Making related changes across multiple scenes
-
-...use `batch`. It is faster by a factor equal to the number of operations, and it presents the AI agent with a single success/failure response to reason about.
-
-**For single operations, batching is not necessary.** The overhead of wrapping one operation in a batch is negligible but adds syntactic noise.
+Use `batch` when later operations should observe earlier results or when grouping
+related work avoids repeated backend startup. Keep independent or failure-sensitive
+changes separate when their individual persistence is easier to inspect that way.
+A single operation does not need a batch wrapper.
 
 ## Partial failure handling
 
@@ -116,12 +139,20 @@ With `stop_on_error: false`, the batch continues even if individual operations f
 
 Use this when operations are independent and you want to apply as many as possible (e.g., setting properties on 20 nodes where 1-2 might not exist).
 
-With `stop_on_error: true` (default), the batch is transactional — a failure stops execution. Use this for ordered operations where later steps depend on earlier ones (e.g., create scene → add nodes → set properties).
+With `stop_on_error: true` (default), the batch stops after the failing entry.
+Earlier successful operations and partial effects remain. Use this for ordered
+operations where later steps depend on earlier ones.
 
 ## Tips
 
 **Operations share `project_path`.** You do not need to repeat `"project_path"` in each operation — the batch wrapper applies it.
 
-**Check `error_at` on failure.** The response tells you exactly which operation in the array failed, making it easy to diagnose and retry.
+**Inspect ordered results on failure.** Find the first entry with
+`"success": false`, then read its `error`, `context`, and `persistence`. Also
+inspect the batch-level persistence summary before retrying because the failed
+entry itself may have partial effects.
 
-**Batches are not rolled back on failure.** If operation 8 fails, operations 1-7 are already applied. There is no automatic rollback. If you need atomicity, use git to snapshot the project before a large batch.
+**Batches are not rolled back on failure.** Earlier successful entries remain,
+and a failing entry can also report partial effects. Read each entry's result and
+persistence data before deciding what to retry. Open-scene mutations create one
+native undo entry per changed batch entry and remain unsaved until `scene_save`.

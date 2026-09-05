@@ -116,7 +116,7 @@ queries, and actions remain available.
 
 After a playtest session:
 
-1. Have the tester play normally (the dashcam is always running)
+1. Confirm dashcam startup is enabled, then have the tester play normally
 2. Have them press **F9** whenever something seems wrong
 3. Collect the clip files afterward
 4. Ask the agent to analyze all markers across clips

@@ -481,6 +481,32 @@ pub struct SceneTreeResponse {
 
 // --- spatial_action protocol types ---
 
+pub const MAX_INTERACTION_SEQUENCE_STEPS: usize = 64;
+pub const MAX_INTERACTION_SEQUENCE_FRAMES: u32 = 600;
+pub const INTERACTION_SEQUENCE_ENGINE_DEADLINE_SECS: u64 = 30;
+
+/// One named InputMap press in an interaction sequence.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct SequenceInputPress {
+    pub action_name: String,
+    #[serde(default = "default_strength")]
+    pub strength: f32,
+}
+
+/// Input changes to apply before advancing a bounded number of physics frames.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "schema", derive(JsonSchema))]
+#[serde(deny_unknown_fields)]
+pub struct InteractionSequenceStep {
+    #[serde(default)]
+    pub press: Vec<SequenceInputPress>,
+    #[serde(default)]
+    pub release: Vec<String>,
+    pub frames: u32,
+}
+
 /// Parameters for action execution queries.
 /// The server sends one of these per spatial_action MCP call.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -494,6 +520,10 @@ pub enum ActionRequest {
     },
     AdvanceTime {
         seconds: f64,
+    },
+    /// Run a bounded, engine-owned sequence while the scene is paused.
+    InteractionSequence {
+        steps: Vec<InteractionSequenceStep>,
     },
     Teleport {
         path: String,
@@ -566,6 +596,67 @@ pub enum ActionRequest {
 
 fn default_strength() -> f32 {
     1.0
+}
+
+impl ActionRequest {
+    /// Validate bounds and ownership flow without touching Godot input state.
+    pub fn validate(&self) -> Result<(), String> {
+        let Self::InteractionSequence { steps } = self else {
+            return Ok(());
+        };
+        if steps.is_empty() {
+            return Err("interaction_sequence requires at least one step".into());
+        }
+        if steps.len() > MAX_INTERACTION_SEQUENCE_STEPS {
+            return Err(format!(
+                "interaction_sequence supports at most {MAX_INTERACTION_SEQUENCE_STEPS} steps"
+            ));
+        }
+
+        let mut total_frames = 0u32;
+        let mut held = std::collections::HashSet::new();
+        for (index, step) in steps.iter().enumerate() {
+            if step.frames == 0 {
+                return Err(format!(
+                    "interaction_sequence step {index} must advance at least one frame"
+                ));
+            }
+            total_frames = total_frames.checked_add(step.frames).ok_or_else(|| {
+                "interaction_sequence total frame count exceeds supported range".to_string()
+            })?;
+            if total_frames > MAX_INTERACTION_SEQUENCE_FRAMES {
+                return Err(format!(
+                    "interaction_sequence supports at most {MAX_INTERACTION_SEQUENCE_FRAMES} total frames"
+                ));
+            }
+            for press in &step.press {
+                if press.action_name.is_empty() {
+                    return Err(format!(
+                        "interaction_sequence step {index} has an empty press action name"
+                    ));
+                }
+                if !press.strength.is_finite() || !(0.0..=1.0).contains(&press.strength) {
+                    return Err(format!(
+                        "interaction_sequence step {index} press strength must be between 0.0 and 1.0"
+                    ));
+                }
+                held.insert(press.action_name.as_str());
+            }
+            for release in &step.release {
+                if release.is_empty() {
+                    return Err(format!(
+                        "interaction_sequence step {index} has an empty release action name"
+                    ));
+                }
+                if !held.remove(release.as_str()) {
+                    return Err(format!(
+                        "interaction_sequence step {index} cannot release '{release}' because the sequence does not hold it"
+                    ));
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 /// Response from action execution.
@@ -777,6 +868,84 @@ mod tests {
         assert!(json.contains(r#""action":"teleport""#), "got: {json}");
         let parsed: ActionRequest = serde_json::from_str(&json).unwrap();
         assert!(matches!(parsed, ActionRequest::Teleport { .. }));
+    }
+
+    #[test]
+    fn interaction_sequence_validates_bounds_and_release_ownership() {
+        let valid = ActionRequest::InteractionSequence {
+            steps: vec![
+                InteractionSequenceStep {
+                    press: vec![SequenceInputPress {
+                        action_name: "move_right".into(),
+                        strength: 1.0,
+                    }],
+                    release: vec![],
+                    frames: 5,
+                },
+                InteractionSequenceStep {
+                    press: vec![],
+                    release: vec!["move_right".into()],
+                    frames: 1,
+                },
+            ],
+        };
+        assert!(valid.validate().is_ok());
+
+        let zero = ActionRequest::InteractionSequence {
+            steps: vec![InteractionSequenceStep {
+                press: vec![],
+                release: vec![],
+                frames: 0,
+            }],
+        };
+        assert!(zero.validate().unwrap_err().contains("at least one frame"));
+
+        let unrelated_release = ActionRequest::InteractionSequence {
+            steps: vec![InteractionSequenceStep {
+                press: vec![],
+                release: vec!["jump".into()],
+                frames: 1,
+            }],
+        };
+        assert!(
+            unrelated_release
+                .validate()
+                .unwrap_err()
+                .contains("does not hold")
+        );
+    }
+
+    #[test]
+    fn interaction_sequence_rejects_request_limits() {
+        let too_many = ActionRequest::InteractionSequence {
+            steps: (0..=MAX_INTERACTION_SEQUENCE_STEPS)
+                .map(|_| InteractionSequenceStep {
+                    press: vec![],
+                    release: vec![],
+                    frames: 1,
+                })
+                .collect(),
+        };
+        assert!(
+            too_many
+                .validate()
+                .unwrap_err()
+                .contains("at most 64 steps")
+        );
+
+        let too_long = ActionRequest::InteractionSequence {
+            steps: vec![InteractionSequenceStep {
+                press: vec![],
+                release: vec![],
+                frames: 601,
+            }],
+        };
+        assert!(
+            too_long
+                .validate()
+                .unwrap_err()
+                .contains("at most 600 total frames")
+        );
     }
 
     #[test]

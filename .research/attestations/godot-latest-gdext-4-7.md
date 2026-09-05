@@ -1,0 +1,23 @@
+---
+source_handle: godot-latest-gdext-4-7
+fetched: 2026-09-04
+source_title: Published godot-rust 0.5.4 and 0.5.5 manifests, releases, and v0.5 migration guide
+source_url: https://docs.rs/crate/godot/0.5.5/source/Cargo.toml
+---
+
+The fetched published crate manifests establish the available Godot 4.7 feature and accompanying existing feature names. The fetched release record and migration guide establish the earliest published 4.7 API-level release and the 0.4-to-0.5 migration consequences. This attestation records evidence only; it does not modify Theatre.
+
+## Attested details
+
+1. The crates.io API reports `godot` `0.5.5` as the crate’s current default, maximum, and maximum stable version; it is not yanked. [crates.io `godot` registry metadata](https://crates.io/api/v1/crates/godot)
+2. The published `godot` `0.5.5` Cargo manifest declares `api-4-7`, `experimental-godot-api`, and `lazy-function-tables` features. Their forwarding targets are `godot-core/api-4-7`, `godot-core/experimental-godot-api`, and `godot-core/codegen-lazy-fptrs`, respectively. [published 0.5.5 Cargo manifest](https://docs.rs/crate/godot/0.5.5/source/Cargo.toml)
+3. The published `godot` `0.5.4` Cargo manifest also declares all three of `api-4-7`, `experimental-godot-api`, and `lazy-function-tables`, and sets its `rust-version` to `1.94` under Rust edition `2024`. [published 0.5.4 Cargo manifest](https://docs.rs/crate/godot/0.5.4/source/Cargo.toml)
+4. The tagged v0.5.4 release changelog says that it adds the Godot 4.7 `api-4-7` level. This is direct release evidence that 0.5.4 is the first published 0.5 release containing that exact feature; the current 0.5.5 published manifest retains it. [v0.5.4 release changelog](https://raw.githubusercontent.com/godot-rust/gdext/v0.5.4/Changelog.md#v054); [published 0.5.5 Cargo manifest](https://docs.rs/crate/godot/0.5.5/source/Cargo.toml)
+5. godot-rust distinguishes API version (the GDExtension surface compiled against) from runtime version. From Godot 4.2 onward, its documented guarantee is that a runtime can load an extension when runtime version is greater than or equal to API version. The API version controls statically available Rust engine symbols and the runtime lower bound. [compatibility guide](https://godot-rust.github.io/book/toolchain/compatibility.html#current-guarantees); [API versus runtime version](https://godot-rust.github.io/book/toolchain/godot-version.html#motivation)
+6. The version-selection guide says only one `api-*` feature may be active at a time. Its current published 0.5 manifests expose minor-level API features through `api-4-7`, with no patch-level `api-4-7-*` entry. [API feature mutual exclusivity](https://godot-rust.github.io/book/toolchain/godot-version.html#lower-minor-version); [published 0.5.5 Cargo manifest](https://docs.rs/crate/godot/0.5.5/source/Cargo.toml)
+7. The official migration guide gives the supported staged route from 0.4: first update to v0.4.5 and resolve its deprecation warnings, then update the dependency to v0.5. It says v0.5 adopts Rust 2024 and raises MSRV to Rust 1.94. [v0.5 migration overview](https://godot-rust.github.io/book/migrate/v0.5.html); [Rust 2024 and MSRV](https://godot-rust.github.io/book/migrate/v0.5.html#rust-2024-edition)
+8. The same migration guide documents source-compatibility consequences relevant to a 0.4-to-0.5 move: Godot-required objects become non-optional in many APIs; API-level features are minor-version-only; and it enumerates additional breaking changes to properties, typed collections, engine methods, imports, and removed deprecated symbols. [Godot-version changes](https://godot-rust.github.io/book/migrate/v0.5.html#godot-versions); [required objects](https://godot-rust.github.io/book/migrate/v0.5.html#required-objects-in-engine-apis); [migration guide contents](https://godot-rust.github.io/book/migrate/v0.5.html)
+
+## Bounded upgrade-route evidence
+
+Given a requirement to compile against Godot API level 4.7, the evidence identifies `godot` 0.5.4 as the earliest published version exposing `api-4-7`, and 0.5.5 as the currently published stable release retaining it. The published manifests show the exact feature-name set `api-4-7`, `experimental-godot-api`, and `lazy-function-tables`; no `api-4-7` feature exists in the fetched 0.4.5 registry metadata. The normal 0.5 migration remains a breaking minor upgrade with Rust 1.94 and source migration implications. [crates.io `godot` registry metadata](https://crates.io/api/v1/crates/godot); [published 0.5.5 Cargo manifest](https://docs.rs/crate/godot/0.5.5/source/Cargo.toml); [v0.5 migration overview](https://godot-rust.github.io/book/migrate/v0.5.html)

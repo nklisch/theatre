@@ -1,10 +1,93 @@
 # Generated from .research/attestations. Do not edit by hand.
 schema: 1
 sources:
+  - source_handle: godot-interaction-debugger
+    title: "Godot Engine latest documentation — EditorDebuggerPlugin"
+    source_url: "https://docs.godotengine.org/en/latest/classes/class_editordebuggerplugin.html"
+    fetched: "2026-09-04"
+  - source_handle: godot-interaction-input
+    title: "Godot Engine stable documentation — InputEventMouseButton and Node input propagation"
+    source_url: "https://docs.godotengine.org/en/stable/classes/class_inputeventmousebutton.html"
+    fetched: "2026-09-04"
+  - source_handle: godot-interaction-viewport
+    title: "Godot Engine latest documentation — Viewport and RenderingServer"
+    source_url: "https://docs.godotengine.org/en/latest/classes/class_viewport.html"
+    fetched: "2026-09-04"
+  - source_handle: godot-latest-docs-status
+    title: "Godot Docs – master branch"
+    source_url: "https://docs.godotengine.org/en/latest/"
+    fetched: "2026-09-04"
+  - source_handle: godot-latest-editor-interface
+    title: "EditorInterface — Godot Engine 4.7 documentation"
+    source_url: "https://docs.godotengine.org/en/stable/classes/class_editorinterface.html"
+    fetched: "2026-09-04"
+  - source_handle: godot-latest-gdext-4-7
+    title: "Published godot-rust 0.5.4 and 0.5.5 manifests, releases, and v0.5 migration guide"
+    source_url: "https://docs.rs/crate/godot/0.5.5/source/Cargo.toml"
+    fetched: "2026-09-04"
+  - source_handle: godot-latest-gdext-compatibility
+    title: "godot-rust compatibility, migration, and v0.4.5 changelog"
+    source_url: "https://godot-rust.github.io/book/toolchain/compatibility.html"
+    fetched: "2026-09-04"
+  - source_handle: godot-latest-lazy-function-tables
+    title: "godot crate feature documentation"
+    source_url: "https://docs.rs/godot/latest/godot/index.html"
+    fetched: "2026-09-04"
+  - source_handle: godot-latest-logger
+    title: "Godot 4.5 and 4.7 Logger, OS, ScriptBacktrace, and logging references"
+    source_url: "https://docs.godotengine.org/en/4.5/classes/class_logger.html"
+    fetched: "2026-09-04"
+  - source_handle: godot-latest-logger-debugger
+    title: "Godot editor debugger session API and Logger script-error delivery correction"
+    source_url: "https://docs.godotengine.org/en/stable/classes/class_editordebuggersession.html"
+    fetched: "2026-09-04"
+  - source_handle: godot-latest-releases
+    title: "Godot archive"
+    source_url: "https://godotengine.org/download/archive/"
+    fetched: "2026-09-04"
+  - source_handle: godot-latest-unsaved-scenes-version
+    title: "EditorInterface declarations across Godot 4.5, 4.6, and 4.7 stable tags"
+    source_url: "https://raw.githubusercontent.com/godotengine/godot/4.7-stable/editor/editor_interface.h"
+    fetched: "2026-09-04"
+  - source_handle: godot-local-api-probe
+    title: "Installed Godot version and temporary native editor probes"
+    fetched: "2026-09-04"
   - source_handle: krometrail-repo
     title: "krometrail repository (local checkout)"
     source_url: "https://github.com/nklisch/krometrail/tree/3414f57b83787aaa21fb3b6cc112ca03f4df60e8"
     fetched: "2026-07-25"
+  - source_handle: temporal-current-krometrail
+    title: "Krometrail repository at observed origin/HEAD commit eb5b465618fcaeb232c2038d8c6cf960ff499b99"
+    source_url: "https://github.com/nklisch/krometrail/tree/eb5b465618fcaeb232c2038d8c6cf960ff499b99"
+    fetched: "2026-09-04"
+  - source_handle: temporal-current-registry
+    title: "crates.io API metadata for temporal-vision 0.1.1"
+    source_url: "https://crates.io/api/v1/crates/temporal-vision/0.1.1"
+    fetched: "2026-09-04"
+  - source_handle: temporal-current-theatre
+    title: "Theatre repository at observed origin/HEAD commit 2486f021bad0c81efab5a04f982614b5bc81938e"
+    source_url: "https://github.com/nklisch/theatre/tree/2486f021bad0c81efab5a04f982614b5bc81938e"
+    fetched: "2026-09-04"
+  - source_handle: theatre-client-feedback-claude-hooks
+    title: "Hooks reference - Claude Code Docs"
+    source_url: "https://docs.anthropic.com/en/docs/claude-code/hooks"
+    fetched: "2026-09-04"
+  - source_handle: theatre-client-feedback-claude-plugins
+    title: "Create plugins - Claude Code Docs"
+    source_url: "https://docs.anthropic.com/en/docs/claude-code/plugins"
+    fetched: "2026-09-04"
+  - source_handle: theatre-client-feedback-codex-hooks
+    title: "Hooks - ChatGPT Learn"
+    source_url: "https://developers.openai.com/codex/hooks"
+    fetched: "2026-09-04"
+  - source_handle: theatre-client-feedback-codex-plugins
+    title: "Package your plugin - OpenAI Developers"
+    source_url: "https://developers.openai.com/plugins/build/plugins"
+    fetched: "2026-09-04"
+  - source_handle: theatre-human-feedback
+    title: "Theatre human marker and event paths at commit 2486f021bad0c81efab5a04f982614b5bc81938e"
+    source_url: "https://github.com/nklisch/theatre/tree/2486f021bad0c81efab5a04f982614b5bc81938e"
+    fetched: "2026-09-04"
   - source_handle: theatre-repo
     title: "theatre repository (this project)"
     source_url: "https://github.com/nklisch/theatre/tree/d8351e11ffcd36da9d78c254ea283209ff0b0458"

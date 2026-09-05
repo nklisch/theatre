@@ -14,7 +14,9 @@ By the end of this guide, your AI agent will be able to call `spatial_snapshot` 
 
 Theatre's Stage tool only works while a Godot game is running. The GDExtension starts its TCP listener when the scene tree initializes, and shuts it down on exit.
 
-Press **F5** (or the play button) in Godot to run your project. Any scene will work — even an empty one with a single Node3D.
+Press **F5** in Godot, or ask Director `editor_run` to start a selected saved
+scene through a verified open editor. Director reports the launch request; Stage
+`runtime_status` separately reports the actual project, scene, run, and readiness.
 
 In the Godot output panel, you should see something like:
 
@@ -25,7 +27,13 @@ In the Godot output panel, you should see something like:
 
 If you do not see this, confirm the Stage addon is enabled in **Project → Project Settings → Plugins**.
 
-## Step 2: Ask for a snapshot
+## Step 2: Check the runtime
+
+Ask the agent to call `runtime_status`. Continue when it reports the expected
+project and a ready current scene. This avoids treating a stale connection or an
+accepted editor launch request as the run you intended.
+
+## Step 3: Ask for a snapshot
 
 In your AI agent (Claude Code, Cursor, etc.), type:
 
@@ -58,9 +66,10 @@ The agent will call the `spatial_snapshot` MCP tool. After a moment, you will se
 }
 ```
 
-The exact content depends on your scene. The agent now has accurate, real-time spatial data from the running game.
+The exact content depends on your scene. The response identifies the collected
+physics frame; it is not a frozen or atomic world snapshot.
 
-## Step 3: Ask a follow-up question
+## Step 4: Ask a follow-up question
 
 Now that the agent has observed your scene, you can ask questions that depend on spatial context:
 
@@ -76,7 +85,7 @@ with a StaticBody3D, so the player is resting on the ground surface. The
 CharacterBody3D.is_on_floor() property would confirm this at runtime.
 ```
 
-## Step 4: Try a spatial query
+## Step 5: Try a spatial query
 
 The `spatial_query` tool lets you ask geometric questions. Try:
 
@@ -103,7 +112,8 @@ You now have a working Theatre setup. Here are the natural next steps:
 - **[Your first debugging session](/guide/first-session)** — A complete worked example of finding and fixing a real bug.
 - **[Recording workflow](/stage/dashcam)** — Record gameplay, mark the bug moment, and have the agent analyze the clip.
 - **[Watch & React](/stage/watch-workflow)** — Set up watches on specific nodes to monitor changes over time.
-- **[spatial_snapshot reference](/stage/snapshot)** — Full parameter documentation for the snapshot tool.
+- **[spatial_snapshot reference](/stage/snapshot)** — Snapshot usage and parameters.
+- **[Human feedback](/guide/human-feedback)** — Share an editor or runtime observation with viewport and context.
 
 ## Common first-time issues
 

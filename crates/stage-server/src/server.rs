@@ -1,7 +1,6 @@
 use rmcp::handler::server::ServerHandler;
 use rmcp::handler::server::tool::ToolRouter;
 use rmcp::model::{Implementation, ServerCapabilities, ServerInfo};
-use rmcp::tool_handler;
 use schemars::JsonSchema;
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -45,10 +44,20 @@ impl StageServer {
     /// Used by both `new()` and `docs_router()`.
     pub fn router_with_schemas() -> ToolRouter<Self> {
         let mut router = Self::tool_router();
+        attach_output_schema::<theatre_feedback::Response>(&mut router, "feedback");
         attach_output_schema::<SnapshotSummaryResponse>(&mut router, "spatial_snapshot");
         attach_output_schema::<DeltaResponse>(&mut router, "spatial_delta");
         attach_output_schema::<WatchAddResponse>(&mut router, "spatial_watch");
         attach_output_schema::<ConfigResponse>(&mut router, "spatial_config");
+        attach_output_schema::<crate::mcp::runtime_status::RuntimeStatusResponse>(
+            &mut router,
+            "runtime_status",
+        );
+        attach_output_schema::<crate::mcp::runtime_diagnostics::RuntimeDiagnosticsResponse>(
+            &mut router,
+            "runtime_diagnostics",
+        );
+        attach_output_schema::<crate::mcp::viewport::ViewportMetadata>(&mut router, "viewport");
         sanitize_schemas(&mut router);
         router
     }
@@ -84,8 +93,35 @@ impl StageServer {
     }
 }
 
-#[tool_handler]
 impl ServerHandler for StageServer {
+    async fn call_tool(
+        &self,
+        request: rmcp::model::CallToolRequestParams,
+        context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<rmcp::model::CallToolResult, rmcp::ErrorData> {
+        let project = self.state.lock().await.project_dir.clone();
+        let call = rmcp::handler::server::tool::ToolCallContext::new(self, request, context);
+        let mut result = self.tool_router.call(call).await;
+        theatre_feedback::mcp::append_notice(&mut result, &project);
+        result
+    }
+
+    async fn list_tools(
+        &self,
+        _request: Option<rmcp::model::PaginatedRequestParams>,
+        _context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<rmcp::model::ListToolsResult, rmcp::ErrorData> {
+        Ok(rmcp::model::ListToolsResult {
+            tools: self.tool_router.list_all(),
+            meta: None,
+            next_cursor: None,
+        })
+    }
+
+    fn get_tool(&self, name: &str) -> Option<rmcp::model::Tool> {
+        self.tool_router.get(name).cloned()
+    }
+
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
             server_info: Implementation {

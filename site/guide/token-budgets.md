@@ -132,7 +132,7 @@ When the game is running and you want to know what changed since the last snapsh
 }
 ```
 
-If only the player moved, you get only the player — not 200 unchanged nodes. This is often 10-50x smaller than a full snapshot.
+If only the player moved, the delta omits unchanged nodes. The exact response-size reduction depends on the scene and selected properties.
 
 ## `spatial_inspect` for single nodes
 
@@ -145,7 +145,7 @@ When you need full detail on exactly one node, `spatial_inspect` is more efficie
 }
 ```
 
-This returns every tracked property of the node plus its spatial context (nearby nodes, parent/child relationships). No budget truncation needed — a single node's data is always manageable.
+This returns the selected tracked categories for one node plus its requested spatial context. It narrows the response, but the normal response budget still applies.
 
 ## Recording budget behavior
 

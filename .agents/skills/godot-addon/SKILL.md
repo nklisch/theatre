@@ -5,11 +5,13 @@ description: Working with the Godot addon GDScript layer in addons/stage/. Cover
 
 # Godot Addon — GDScript Layer
 
-This skill covers `addons/stage/` — the GDScript side of Stage. There are four GDScript files:
-- `plugin.gd` — `@tool` EditorPlugin (dock, autoload registration)
-- `runtime.gd` — Autoload singleton (instantiates GDExtension classes, input handling)
-- `dock.gd` — Dock panel script
-- `debugger_plugin.gd` — Editor debugger plugin for agent activity
+This skill covers `addons/stage/` and its shared GDScript support payload:
+
+- `plugin.gd` — `@tool` EditorPlugin for the dock, debugger bridge, settings, and autoload registration.
+- `runtime.gd` — game autoload for GDExtension lifecycle, input, overlays, markers, and runtime feedback.
+- `runtime_logger.gd` — native Logger that retains bounded current-process diagnostics.
+- `dock.gd` and `debugger_plugin.gd` — editor UI and editor-to-game debugger messages.
+- `addons/theatre_shared/` — shared feedback producer and composer used by Stage and Director. It is not a third plugin.
 
 ## Plugin Structure
 
@@ -20,7 +22,8 @@ addons/stage/
 ├── runtime.gd            # Autoload singleton script
 ├── dock.tscn             # Dock panel scene
 ├── dock.gd               # Dock panel script
-├── stage.gdextension # GDExtension manifest
+├── runtime_logger.gd     # Bounded native Logger
+├── stage.gdextension     # GDExtension manifest
 └── bin/                  # Compiled Rust libraries
     ├── linux/libstage_godot.so
     ├── windows/stage_godot.dll
@@ -82,22 +85,27 @@ The autoload is the runtime hub. It instantiates GDExtension classes and acts as
 ```gdscript
 extends Node
 
-# GDExtension class instances (defined in stage-godot Rust crate)
-var collector: StageCollector
-var tcp_server: StageTCPServer
-var recorder: StageRecorder
+# GDExtension instances stay untyped so a missing platform binary does not
+# create a parse-time failure.
+var collector
+var tcp_server
+var recorder
 
 func _ready() -> void:
-    collector = StageCollector.new()
+    if not ClassDB.class_exists(&"StageTCPServer"):
+        push_error("Stage GDExtension is unavailable")
+        return
+
+    collector = ClassDB.instantiate(&"StageCollector")
     add_child(collector)
 
-    tcp_server = StageTCPServer.new()
+    tcp_server = ClassDB.instantiate(&"StageTCPServer")
     add_child(tcp_server)
     tcp_server.start(ProjectSettings.get_setting(
         "theatre/stage/connection/port", 9077
     ))
 
-    recorder = StageRecorder.new()
+    recorder = ClassDB.instantiate(&"StageRecorder")
     add_child(recorder)
 
 func _physics_process(_delta: float) -> void:
@@ -118,6 +126,17 @@ func _drop_marker() -> void:
 func _toggle_pause() -> void:
     get_tree().paused = not get_tree().paused
 ```
+
+### Runtime diagnostics
+
+`runtime.gd` registers `runtime_logger.gd` during `_init`, before the autoload's
+`_ready`. The Logger callback can run on worker threads, so it only copies bounded
+plain data under a mutex. It never traverses the scene tree, writes to the network,
+or logs recursively. `StageTCPServer` reads retained entries on the Godot main
+thread and attaches the engine-owned run identity.
+
+Registration cannot recover earlier engine initialization output. Disabled log
+streams and release builds without backtraces remain explicit limitations.
 
 ### StageRuntime.marker() — Code Markers API
 
@@ -193,67 +212,33 @@ Use `_shortcut_input` for Stage's hotkeys to intercept before the game does.
 
 ## Dock Panel — `dock.gd`
 
+The dock runs in the editor process. It cannot access the running game's
+`/root/StageRuntime`, even while Play mode is active. Use the debugger bridge:
+`addons/stage/debugger_plugin.gd` forwards `stage:status` messages to the dock's
+`receive_status` method and `stage:activity` messages to `receive_activity`.
+
 ```gdscript
 extends VBoxContainer
 
-@onready var status_dot: ColorRect = $StatusBar/StatusDot
 @onready var status_label: Label = $StatusBar/StatusLabel
-@onready var port_label: Label = $Details/Port
-@onready var tracking_label: Label = $Details/Tracking
-@onready var watches_label: Label = $Details/Watches
-@onready var frame_label: Label = $Details/Frame
-@onready var activity_list: VBoxContainer = $Activity/ScrollContainer/List
-@onready var activity_scroll: ScrollContainer = $Activity/ScrollContainer
-@onready var collapse_btn: Button = $Activity/CollapseButton
 
-func _ready() -> void:
-    record_btn.pressed.connect(_on_record_pressed)
-    stop_btn.pressed.connect(_on_stop_pressed)
-    marker_btn.pressed.connect(_on_marker_pressed)
-
-    # Update UI every second (not every frame — reduce overhead)
-    var timer = Timer.new()
-    timer.wait_time = 1.0
-    timer.timeout.connect(_update_ui)
-    add_child(timer)
-    timer.start()
-
-func _update_ui() -> void:
-    # Access the autoload singleton by name
-    var runtime = get_node_or_null("/root/StageRuntime")
-    if not runtime:
-        connection_label.text = "No runtime"
-        return
-
-    var is_connected: bool = runtime.tcp_server.is_connected()
-    connection_label.text = "Connected" if is_connected else "Disconnected"
-
-func _on_save_clip_pressed() -> void:
-    var runtime = get_node("/root/StageRuntime")
-    var clip_id: String = runtime.recorder.flush_dashcam_clip("manual save")
-    if not clip_id.is_empty():
-        _update_clip_ui(clip_id)
-
-func add_activity_entry(text: String) -> void:
-    activity_list.add_item(text)
-    if activity_list.item_count > 20:
-        activity_list.remove_item(0)   # keep most recent 20
-    activity_list.ensure_current_is_visible()
+# Called by the editor debugger bridge, not by polling the game's scene tree.
+func receive_status(status_text: String, _port: int, _tracked: int,
+        _groups: int, _frame: int, _fps: float) -> void:
+    status_label.text = status_text
 ```
 
-**Accessing the autoload from the dock:**
+**Accessing the autoload from a running-game script:**
+
 ```gdscript
-# Safe — returns null if not found
 var runtime = get_node_or_null("/root/StageRuntime")
-
-# Panics if not found — only use when certain it exists
-var runtime = get_node("/root/StageRuntime")
-
-# Or use the autoload global name directly (only works at runtime, not in editor)
-StageRuntime.tcp_server.is_connected()
+if runtime:
+    var connected: bool = runtime.tcp_server.has_stage_connection()
 ```
 
-The dock runs inside the editor, so accessing `StageRuntime` only works when the game is running (Play mode). Use `get_node_or_null` and check for null.
+Editor-to-game commands require an attached debugger session and a matching
+runtime message handler. Do not replace that boundary with editor-side autoload
+lookups: those lookups inspect the editor tree, not the game tree.
 
 ## Project Settings
 
@@ -281,9 +266,22 @@ Read settings from any script:
 var port: int = ProjectSettings.get_setting("theatre/stage/connection/port", 9077)
 ```
 
+## Human Feedback
+
+`runtime.gd` preloads the shared feedback producer and composer. The **Share
+feedback** button and its distinct shortcut synchronously copy root-viewport
+pixels and pointer context before opening the composer. Queuing is deliberate and
+separate from markers and the recorder. It does not pause gameplay.
+
+The Director editor integration uses the same support payload with the active 2D
+or 3D scene viewport and current selection. Keep the payload lifecycle-free: both
+existing addons can use it, but it must never register as a third EditorPlugin.
+Publication uses a temporary item directory followed by rename. Do not replace
+this with a queue index, a live engine dependency, or silent consumption.
+
 ## In-Game Overlay (CanvasLayer)
 
-For F8/F9/F10 visual feedback and agent action notifications, add a CanvasLayer to the autoload:
+For pause state, dashcam status, markers, feedback, and agent activity notifications, add a CanvasLayer to the autoload:
 
 ```gdscript
 # In runtime.gd _ready()
@@ -310,6 +308,8 @@ func show_notification(text: String, duration: float = 3.0) -> void:
 
 **`@tool` is required:** Without `@tool` at the top of `plugin.gd`, the EditorPlugin lifecycle methods (`_enable_plugin`, `_disable_plugin`) won't run in the editor.
 
-**Dock scenes must be freed:** If you `instantiate()` a scene for the dock, you must `queue_free()` it in `_disable_plugin`. Forgetting leaks the Control node into the editor.
+**Dock scenes must be freed:** If `_enter_tree()` instantiates a dock scene,
+remove and free it in `_exit_tree()`. Otherwise the Control can survive plugin
+reloads inside the editor.
 
 **Autoload path:** Autoloads live at `/root/AutoloadName`. Access via `get_node("/root/StageRuntime")` or just `StageRuntime` (global alias, only works at game runtime, not in `@tool` editor code).

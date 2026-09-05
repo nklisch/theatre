@@ -3,10 +3,11 @@ use std::sync::Arc;
 use rmcp::handler::server::ServerHandler;
 use rmcp::handler::server::tool::ToolRouter;
 use rmcp::model::{Implementation, ServerCapabilities, ServerInfo};
-use rmcp::tool_handler;
 use schemars::JsonSchema;
 
 use crate::backend::Backend;
+use crate::mcp::editor_run::EditorRunResponse;
+use crate::mcp::engine_api::EngineApiResponse;
 use crate::responses::{
     AnimationAddTrackResponse, AnimationCreateResponse, AnimationReadResponse,
     AnimationRemoveTrackResponse, AutoloadAddResponse, AutoloadRemoveResponse, BatchResponse,
@@ -16,9 +17,10 @@ use crate::responses::{
     NodeSetScriptResponse, PhysicsSetLayerNamesResponse, PhysicsSetLayersResponse,
     ProjectReloadResponse, ProjectSettingsSetResponse, ResourceCreateResponse,
     ResourceDuplicateResponse, ResourceReadResponse, SceneAddInstanceResponse, SceneCreateResponse,
-    SceneDiffResponse, SceneListResponse, SceneReadResponse, ShapeCreateResponse,
-    SignalConnectionResponse, SignalListResponse, TileMapClearResponse, TileMapGetCellsResponse,
-    TileMapSetCellsResponse, UidGetResponse, UidUpdateProjectResponse, VisualShaderCreateResponse,
+    SceneDiffResponse, SceneListResponse, SceneReadResponse, SceneSaveResponse,
+    ShapeCreateResponse, SignalConnectionResponse, SignalListResponse, TileMapClearResponse,
+    TileMapGetCellsResponse, TileMapSetCellsResponse, UidGetResponse, UidUpdateProjectResponse,
+    VisualShaderCreateResponse,
 };
 
 #[derive(Clone)]
@@ -54,6 +56,8 @@ impl DirectorServer {
     pub fn new() -> Self {
         let mut router = Self::tool_router();
 
+        attach_output_schema::<theatre_feedback::Response>(&mut router, "feedback");
+        attach_output_schema::<SceneSaveResponse>(&mut router, "scene_save");
         attach_output_schema::<SceneCreateResponse>(&mut router, "scene_create");
         attach_output_schema::<SceneReadResponse>(&mut router, "scene_read");
         attach_output_schema::<SceneListResponse>(&mut router, "scene_list");
@@ -67,6 +71,7 @@ impl DirectorServer {
         attach_output_schema::<NodeSetScriptResponse>(&mut router, "node_set_script");
         attach_output_schema::<NodeSetMetaResponse>(&mut router, "node_set_meta");
         attach_output_schema::<NodeFindResponse>(&mut router, "node_find");
+        attach_output_schema::<EngineApiResponse>(&mut router, "engine_api");
         attach_output_schema::<ResourceReadResponse>(&mut router, "resource_read");
         attach_output_schema::<ResourceCreateResponse>(&mut router, "material_create");
         attach_output_schema::<ShapeCreateResponse>(&mut router, "shape_create");
@@ -96,6 +101,7 @@ impl DirectorServer {
         attach_output_schema::<AutoloadRemoveResponse>(&mut router, "autoload_remove");
         attach_output_schema::<ProjectSettingsSetResponse>(&mut router, "project_settings_set");
         attach_output_schema::<ProjectReloadResponse>(&mut router, "project_reload");
+        attach_output_schema::<EditorRunResponse>(&mut router, "editor_run");
         attach_output_schema::<EditorStatusResponse>(&mut router, "editor_status");
         attach_output_schema::<SignalConnectionResponse>(&mut router, "signal_connect");
         attach_output_schema::<SignalConnectionResponse>(&mut router, "signal_disconnect");
@@ -116,8 +122,42 @@ impl Default for DirectorServer {
     }
 }
 
-#[tool_handler]
 impl ServerHandler for DirectorServer {
+    async fn call_tool(
+        &self,
+        request: rmcp::model::CallToolRequestParams,
+        context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<rmcp::model::CallToolResult, rmcp::ErrorData> {
+        let project = request
+            .arguments
+            .as_ref()
+            .and_then(|args| args.get("project_path"))
+            .and_then(|value| value.as_str())
+            .map(std::path::PathBuf::from);
+        let call = rmcp::handler::server::tool::ToolCallContext::new(self, request, context);
+        let mut result = self.tool_router.call(call).await;
+        if let Some(project) = project {
+            theatre_feedback::mcp::append_notice(&mut result, &project);
+        }
+        result
+    }
+
+    async fn list_tools(
+        &self,
+        _request: Option<rmcp::model::PaginatedRequestParams>,
+        _context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> Result<rmcp::model::ListToolsResult, rmcp::ErrorData> {
+        Ok(rmcp::model::ListToolsResult {
+            tools: self.tool_router.list_all(),
+            meta: None,
+            next_cursor: None,
+        })
+    }
+
+    fn get_tool(&self, name: &str) -> Option<rmcp::model::Tool> {
+        self.tool_router.get(name).cloned()
+    }
+
     fn get_info(&self) -> ServerInfo {
         ServerInfo {
             server_info: Implementation {
@@ -126,6 +166,7 @@ impl ServerHandler for DirectorServer {
                 ..Default::default()
             },
             capabilities: ServerCapabilities::builder().enable_tools().build(),
+            instructions: Some("Edits to any open scene are native-undoable and remain unsaved, including batch entries. Use scene_save to save only that scene without flushing external resources; its native dirty marker may remain. Closed-scene and headless edits save to disk. Read persistence in results and error data; batches are sequential, not atomic.".into()),
             ..Default::default()
         }
     }

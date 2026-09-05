@@ -77,6 +77,18 @@ fn scene_add_instance_with_custom_name() {
     .unwrap()
     .unwrap_data();
 
+    // Reject the submitted name before Godot can silently normalize it.
+    for invalid_name in ["Bad/Name", "Bad:Name", "Bad@Name"] {
+        let result = f
+            .run(
+                "scene_add_instance",
+                json!({"scene_path": parent_scene, "instance_scene": child_scene, "node_name": invalid_name}),
+            )
+            .unwrap();
+        assert!(!result.success, "Invalid name was accepted: {invalid_name}");
+        assert!(result.error.unwrap().contains("Invalid node_name"));
+    }
+
     f.run(
         "scene_add_instance",
         json!({"scene_path": parent_scene, "instance_scene": child_scene, "node_name": "MyPlayer"}),

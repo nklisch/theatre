@@ -89,6 +89,10 @@ jobs:
           # Copy director addon (pure GDScript)
           cp -r addons/director/* "${ARCHIVE_NAME}/share/theatre/addons/director/"
 
+          # Support payload has no plugin lifecycle; either addon may load it.
+          cp -r addons/theatre_shared "${ARCHIVE_NAME}/share/theatre/addons/"
+          cp -r client-plugins "${ARCHIVE_NAME}/share/theatre/"
+
           # Include install script and README
           cp scripts/install-release.sh "${ARCHIVE_NAME}/install.sh" || true
           cp LICENSE "${ARCHIVE_NAME}/"
