@@ -26,6 +26,19 @@ or a concise newly-saved-evidence notice so old clips are not mistaken for the
 current reproduction. Do not silently enable expensive capture or imply that a
 still image is a video.
 
+## Maintainer direction
+
+The maintainer explicitly requested an easy way to start the dashcam and a
+marker hotkey whose existence and operation are obvious. The current experience
+does not make it clear what shortcut is available or whether pressing it worked.
+
+Preserve that direction when designing the interaction: a visible start/stop
+entry point, discoverable displayed marker binding, and immediate acknowledgement
+of a successful marker or an explanation when capture is disabled. A configurable
+binding is worth considering to avoid conflicts with consumer game controls;
+no particular key has been selected. These are backlog directions, not an
+implemented UI or a confirmed defect in any specific existing key binding.
+
 Related: [human-facing timelines](dock-visual-timelines.md). Reads currently
 repeat the full pending-feedback notice until globally handled; consider a
 less noisy acknowledgement/discovery flow without treating “read” as “fixed.”
