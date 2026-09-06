@@ -78,7 +78,16 @@ script regression, Workbench validation (version advisory only), and a successfu
 site build generating all 60 tool schemas. Corrected examples were checked against
 implementation; no new runtime or performance qualification is claimed. The
 research did not justify an engine/binding upgrade or speculative API wrappers.
-The authorized minor release remains pending publication.
+The corrections are committed in `19296a7`; the authorized minor release is
+`v0.5.0` (`6310541`). Both native client plugin manifests are 0.5.0 and their
+skill payloads pass synchronization checks. Release-commit CI and all three
+platform release builds passed; GitHub's release publication job succeeded.
+Downloaded Linux and macOS bundles contain byte-identical operating skills;
+the Windows bundle has identical text with CRLF line endings in six skill files.
+Both plugin versions were verified inside all three bundles. Temporary downloads
+were removed after inspection.
+This completes the bounded skill/plugin slice without closing the wider parent
+integration obligations.
 
 ## Standard review corrections and verification
 
