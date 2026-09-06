@@ -13,6 +13,8 @@ Theatre uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-09-06
+
 ### Added
 
 - Stage `project_select` switches the active Godot project inside a persistent MCP session without restarting the agent. It reports selected and actual runtime identity, clears watches/baselines/session overrides, and keeps unavailable targets selected instead of falling back.
@@ -211,7 +213,8 @@ Batch: `batch`
 - E2E journey tests in `tests/wire-tests/` and `tests/director-tests/`
 - E2E tests marked `#[ignore = "requires Godot binary"]`
 
-[Unreleased]: https://github.com/nklisch/theatre/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/nklisch/theatre/compare/v0.6.0...HEAD
+[0.6.0]: https://github.com/nklisch/theatre/releases/tag/v0.6.0
 [0.5.0]: https://github.com/nklisch/theatre/releases/tag/v0.5.0
 [0.4.0]: https://github.com/nklisch/theatre/releases/tag/v0.4.0
 [0.3.4]: https://github.com/nklisch/theatre/releases/tag/v0.3.4
