@@ -13,6 +13,8 @@ Theatre uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-09-05
+
 ### Agent skills and client plugins
 
 - Correct Director property and animation examples to use supported JSON values, and distinguish MCP diagnostics from CLI output.
@@ -201,7 +203,8 @@ Batch: `batch`
 - E2E journey tests in `tests/wire-tests/` and `tests/director-tests/`
 - E2E tests marked `#[ignore = "requires Godot binary"]`
 
-[Unreleased]: https://github.com/nklisch/theatre/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/nklisch/theatre/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/nklisch/theatre/releases/tag/v0.5.0
 [0.4.0]: https://github.com/nklisch/theatre/releases/tag/v0.4.0
 [0.3.4]: https://github.com/nklisch/theatre/releases/tag/v0.3.4
 [0.3.3]: https://github.com/nklisch/theatre/releases/tag/v0.3.3
