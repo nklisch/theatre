@@ -39,6 +39,7 @@ fn sanitize_schemas(router: &mut ToolRouter<StageServer>) {
 pub struct StageServer {
     pub state: Arc<Mutex<SessionState>>,
     pub tool_router: ToolRouter<Self>,
+    pub(crate) connection: Arc<crate::project::ProjectConnection>,
 }
 
 impl StageServer {
@@ -46,6 +47,10 @@ impl StageServer {
     /// Used by both `new()` and `docs_router()`.
     pub fn router_with_schemas() -> ToolRouter<Self> {
         let mut router = Self::tool_router();
+        attach_output_schema::<crate::mcp::project_select::ProjectSelectResponse>(
+            &mut router,
+            "project_select",
+        );
         attach_output_schema::<theatre_feedback::Response>(&mut router, "feedback");
         attach_output_schema::<SnapshotResponse>(&mut router, "spatial_snapshot");
         attach_output_schema::<DeltaResponse>(&mut router, "spatial_delta");
@@ -68,7 +73,18 @@ impl StageServer {
         Self {
             state,
             tool_router: Self::router_with_schemas(),
+            connection: Arc::new(crate::project::ProjectConnection::default()),
         }
+    }
+
+    /// Start the owned reconnect task. Selection later replaces this same task.
+    pub async fn start_connection(&self, port: u16) -> Result<(), tokio::task::JoinError> {
+        let exclusive = self.connection.operations.clone().write_owned().await;
+        let _exclusive = self
+            .connection
+            .connect(&self.state, port, None, exclusive)
+            .await?;
+        Ok(())
     }
 
     /// Push an activity log event to the addon (best-effort, non-blocking).
@@ -101,10 +117,21 @@ impl ServerHandler for StageServer {
         request: rmcp::model::CallToolRequestParams,
         context: rmcp::service::RequestContext<rmcp::RoleServer>,
     ) -> Result<rmcp::model::CallToolResult, rmcp::ErrorData> {
-        let project = self.state.lock().await.project_dir.clone();
+        // Keep the entire operation, including local post-processing and notices,
+        // on one target. project_select takes the exclusive lock itself.
+        let _operation = if request.name == "project_select" {
+            None
+        } else {
+            Some(self.connection.operations.read().await)
+        };
         let call = rmcp::handler::server::tool::ToolCallContext::new(self, request, context);
         let mut result = self.tool_router.call(call).await;
-        theatre_feedback::mcp::append_notice(&mut result, &project);
+        // Selection's response already includes its new project's notice while
+        // holding the exclusive lock; never attach the old queue to that result.
+        if _operation.is_some() {
+            let project = self.state.lock().await.project_dir.clone();
+            theatre_feedback::mcp::append_notice(&mut result, &project);
+        }
         result
     }
 

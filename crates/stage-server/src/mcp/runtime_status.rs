@@ -14,6 +14,10 @@ pub use stage_protocol::runtime::RuntimeStatusParams;
 
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct RuntimeStatusResponse {
+    /// Selected project directory, not proof of a connected game. Actual identity
+    /// is reported separately and is absent when disconnected.
+    pub project_path: String,
+    pub port: u16,
     pub connected: bool,
     /// True only when a fresh engine query confirms a ready current scene.
     pub ready: bool,
@@ -31,6 +35,13 @@ pub async fn handle_runtime_status(
     _params: RuntimeStatusParams,
     state: &Arc<Mutex<SessionState>>,
 ) -> Result<String, McpError> {
+    serialize_response(&runtime_status(_params, state).await?)
+}
+
+pub(crate) async fn runtime_status(
+    _params: RuntimeStatusParams,
+    state: &Arc<Mutex<SessionState>>,
+) -> Result<RuntimeStatusResponse, McpError> {
     let (session_id, connected) = {
         let s = state.lock().await;
         (s.session_id.clone(), s.connected)
@@ -52,6 +63,8 @@ pub async fn handle_runtime_status(
         None
     };
     let mut response = RuntimeStatusResponse {
+        project_path: s.project_dir.to_string_lossy().into_owned(),
+        port: s.port,
         connected: same_connection,
         ready: false,
         identity,
@@ -61,7 +74,9 @@ pub async fn handle_runtime_status(
             None
         },
         current_scene: None,
-        diagnostic: s.connection_error.clone(),
+        diagnostic: s.connection_error.clone().or_else(|| (!same_connection).then(||
+            "Not connected to the selected project. Start its game with Stage enabled, or use project_select to select another project and listener port.".into()
+        )),
         budget: BudgetBlock {
             used: 0,
             limit: 500.min(s.config.token_hard_cap),
@@ -87,5 +102,5 @@ pub async fn handle_runtime_status(
     }
     response.budget.used =
         stage_core::budget::estimate_tokens(serialize_response(&response)?.len());
-    serialize_response(&response)
+    Ok(response)
 }

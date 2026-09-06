@@ -22,6 +22,7 @@ pub const TOOLS: &[&str] = &[
     "runtime_diagnostics",
     "viewport",
     "feedback",
+    "project_select",
 ];
 
 /// Default TCP port for connecting to the Godot addon.
@@ -137,6 +138,7 @@ pub async fn run(tool: &str, json_arg: Option<&str>) -> Result<()> {
     // 6. Create session state
     let state = Arc::new(Mutex::new(tcp::SessionState {
         config: base_config,
+        port: resolved_port,
         project_dashcam_config: config::load_toml_dashcam(&project_dir),
         project_dir: project_dir.clone(),
         ..Default::default()
@@ -217,6 +219,9 @@ pub async fn run(tool: &str, json_arg: Option<&str>) -> Result<()> {
 /// Config reads and addon-owned clip operations remain useful without persistence.
 fn persistent_session_requirement(tool: &str, params: &Value) -> Option<&'static str> {
     match tool {
+        "project_select" => Some(
+            "project_select switches a persistent MCP session and discards its watches, baseline and overrides. For a one-shot CLI call, set THEATRE_PROJECT_DIR and THEATRE_PORT on the actual observation/action instead.",
+        ),
         "spatial_delta" => Some(
             "One-shot CLI calls have no delta baseline; a snapshot in a separate invocation cannot establish one.",
         ),

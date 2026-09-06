@@ -61,6 +61,12 @@ The default includes all categories except `"resources"`. You can pass a subset 
 }
 ```
 
+For Area2D and Area3D children, `monitoring: false` means
+`overlapping_bodies: null`: overlaps are unavailable, not observed to be empty.
+Enabled monitoring returns a list, including `[]` when no bodies overlap.
+Inspection never enables monitoring. The 3D containing-area scan uses only areas
+whose monitoring is enabled and still traverses children beneath disabled areas.
+
 ## Response format
 
 ```json

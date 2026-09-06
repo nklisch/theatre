@@ -853,6 +853,14 @@ impl StageCollector {
             }
             "Area3D" => {
                 if let Ok(area) = child.clone().try_cast::<godot::classes::Area3D>() {
+                    let monitoring = area.is_monitoring();
+                    props.insert("monitoring".into(), monitoring.into());
+                    // Godot errors when monitoring is off. Unavailable is not
+                    // an observed empty overlap list; never enable it to inspect.
+                    if !monitoring {
+                        props.insert("overlapping_bodies".into(), serde_json::Value::Null);
+                        return props;
+                    }
                     let bodies = area.get_overlapping_bodies();
                     let names: Vec<serde_json::Value> = (0..bodies.len())
                         .filter_map(|i| {
@@ -887,6 +895,14 @@ impl StageCollector {
             }
             "Area2D" => {
                 if let Ok(area) = child.clone().try_cast::<godot::classes::Area2D>() {
+                    let monitoring = area.is_monitoring();
+                    props.insert("monitoring".into(), monitoring.into());
+                    // Godot errors when monitoring is off. Unavailable is not
+                    // an observed empty overlap list; never enable it to inspect.
+                    if !monitoring {
+                        props.insert("overlapping_bodies".into(), serde_json::Value::Null);
+                        return props;
+                    }
                     let bodies = area.get_overlapping_bodies();
                     let names: Vec<serde_json::Value> = (0..bodies.len())
                         .filter_map(|i| {
@@ -1672,7 +1688,9 @@ impl StageCollector {
         target: &Gd<Node3D>,
         result: &mut Vec<String>,
     ) {
-        if let Ok(area) = node.clone().try_cast::<godot::classes::Area3D>() {
+        if let Ok(area) = node.clone().try_cast::<godot::classes::Area3D>()
+            && area.is_monitoring()
+        {
             let bodies = area.get_overlapping_bodies();
             for i in 0..bodies.len() {
                 if let Some(body) = bodies.get(i)

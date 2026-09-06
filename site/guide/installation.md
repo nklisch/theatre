@@ -203,13 +203,19 @@ needs Theatre's addons. If you start the agent from a repository root whose MCP
 configuration already points at a nested sandbox, keep that root configuration;
 do not also load the nested generated `.mcp.json` or duplicate generated rules.
 
-Stage selects a project from `THEATRE_PROJECT_DIR` when its server starts. Set
-that environment value in the Stage MCP entry, then restart the MCP connection
-or start a new agent session. Changing the file does not retarget an existing
-Stage process. That MCP `env` applies only to the Stage subprocess. To make the
-optional feedback hook select the same nested project from a repository-root
-session, launch the client with the absolute project environment too:
+Stage uses `THEATRE_PROJECT_DIR` for its startup selection. In persistent MCP,
+call `project_select` with the absolute `project_path` to switch without restarting.
+An optional `port` overrides the new project's `stage.toml` port; otherwise Stage
+uses that TOML port or 9077. Each selection clears watches, snapshot/delta baselines,
+spatial indexes, session overrides and the cached clip location—even when selecting
+the same project again. Take a fresh snapshot and recreate watches after switching.
+A target that is not running stays selected and disconnected while Stage retries;
+it never silently returns to the old game. Check the returned identity and readiness.
 
+The MCP startup `env` applies only to the Stage subprocess, and `project_select`
+does not change the optional client feedback hook's environment. To make that
+hook select a nested project from a repository-root session, launch the client
+with the absolute project environment too:
 ```bash
 THEATRE_PROJECT_DIR=/absolute/path/to/project claude --plugin-dir "$HOME/.local/share/theatre/client-plugins/claude"
 THEATRE_PROJECT_DIR=/absolute/path/to/project codex

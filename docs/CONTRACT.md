@@ -116,11 +116,12 @@ Stage serves the state of a running Godot project through MCP tools. The exact f
 - The Stage server connects to the addon's TCP listener. The addon sends the
   first handshake message; the server acknowledges a compatible protocol version.
   The current version is defined in [`handshake.rs`](../crates/stage-protocol/src/handshake.rs).
-- A Stage MCP session owns its live connection, effective configuration, spatial index, delta baseline, watches, and session identifier. The engine owns a separate run identifier, which survives client reconnects and changes on process restart.
+- A Stage MCP session owns one selected project, its live connection, effective configuration, spatial index, delta baseline, watches, and session identifier. The engine owns a separate run identifier, which survives client reconnects and changes on process restart.
 - When a selected Godot project is available, Stage checks the handshake project before connection publication or project configuration changes. `runtime_status` reports actual identity, current scene, and readiness; disconnected status does not claim last-known identity is current.
+- Explicit `project_select` waits for in-flight MCP operations, replaces the connection and reloads the selected project's defaults. Watches, baselines, indexes, overrides and cached clip location are discarded even when reselecting the same project; switching back restores nothing. Invalid selection parameters leave the old target intact. A valid but unavailable target stays selected and reconnecting, never falling back. Selection is distinct from verified runtime identity/readiness and does not stop games or delete recordings. Its explicit port overrides the new project's TOML port; absent both, it uses 9077 rather than the previous target's startup environment.
 - Each one-shot CLI invocation creates fresh session state. A snapshot from one
   invocation cannot establish the next invocation's delta baseline, and watches
-  do not persist across those invocations. The CLI rejects delta, watch operations,
+  do not persist across those invocations. The CLI rejects project selection, delta, watch operations,
   session configuration updates, and actions requesting a delta before connecting
   or changing the game. Use persistent MCP for these workflows. Empty configuration
   reads, ordinary observations/actions, and addon-owned clip operations remain available.
@@ -131,7 +132,7 @@ Stage serves the state of a running Godot project through MCP tools. The exact f
 ### Observation and query families
 
 - `spatial_snapshot` requests summary, standard, or full engine data from a camera, node, or point perspective. Radius and visibility/filter inputs narrow the returned set; the server computes relative position and response budgeting.
-- `spatial_inspect` focuses on one node and can select categories such as transform, physics, state, children, signals, script, spatial context, and resources.
+- `spatial_inspect` focuses on one node and can select categories such as transform, physics, state, children, signals, script, spatial context, and resources. Child areas expose monitoring state: disabled monitoring makes overlap data unavailable (null), not an observed empty list. Containing-area scans query only monitoring-enabled areas; observation never enables monitoring.
 - `scene_tree` reports hierarchy independently of spatial calculations. Discovery returns absolute Godot node paths, including the root and root-level siblings, that can be reused in node operations.
 - `spatial_query` uses `results` for nearest/radius/area collections and `result` for raycast, path-distance, and relationship answers. Nearest/radius/area depend on a current spatial index; engine raycast and navigation work are delegated to Godot.
 - `spatial_delta` reports applicable moved, state-changed, entered, exited, signal, and watch-trigger information. Empty categories may be omitted; omission means no entries were returned, not that the category is unsupported.

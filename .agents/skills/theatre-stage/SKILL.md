@@ -62,12 +62,20 @@ Respect the target repository's instructions and generators. If a generator owns
 `project.godot`, plugin registration, or another initialized file, change that
 owner and regenerate rather than treating the generated copy as authoritative.
 
-Stage selects its project when the `stage` process starts. For persistent MCP,
-set `THEATRE_PROJECT_DIR` to the absolute Godot project directory in the Stage
-server's startup environment, then restart that MCP server or begin a new agent
-session. An existing Stage process does not switch projects when an environment
-or config file is edited.
+Stage initially selects its project from `THEATRE_PROJECT_DIR` when the server
+starts. In persistent MCP, call `project_select` with an absolute `project_path`
+to switch without restarting. Its optional `port` overrides the new project's
+`stage.toml` port; absent both it uses 9077, not the old target's startup port.
 
+**Every selection discards watches, snapshot/delta baselines, spatial indexes,
+session overrides and cached clip location, even for the same project.** Nothing
+is restored when switching back. Take a fresh `spatial_snapshot` before deltas or
+indexed queries and recreate watches/overrides as needed. Read the switch result:
+selected path/port is not proof of a connected, ready game. An unavailable target
+stays selected and reconnecting, never falling back. Selection does not start or
+stop games, delete recordings, switch Director, or update client-hook environments.
+
+Startup configuration remains useful for the initial target:
 ```json
 {
   "mcpServers": {
@@ -84,8 +92,8 @@ or config file is edited.
 When an agent starts at a repository root whose MCP config already registers
 Stage and Director for a nested sandbox, keep using that root config. Do not also
 load the nested project's generated `.mcp.json` or duplicate its generated agent
-rules. Change the root Stage environment and restart the connection when switching
-sandboxes.
+rules. Use `project_select` when switching sandboxes. Editing the startup
+environment alone does not retarget an existing process.
 
 An MCP entry's `env` applies to the Stage server process only. If the optional
 native client plugin should surface feedback for a nested project while the
@@ -100,7 +108,8 @@ THEATRE_PROJECT_DIR=/absolute/path/to/project codex
 The hook
 honors that explicit selection and does not fall through to a different ancestor
 project. Without it, the hook uses the nearest `project.godot` above the tool
-event's working directory.
+event's working directory. A Stage `project_select` changes Stage's feedback
+queue, not that independent hook selection.
 
 For one Stage shell call, override selection without changing persistent configuration:
 

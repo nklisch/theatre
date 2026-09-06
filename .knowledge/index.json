@@ -452,6 +452,17 @@
       "relationships": []
     },
     {
+      "path": ".work/backlog/headless-editor-import-shutdown-abort.md",
+      "namespace": "work",
+      "kind": "backlog-item",
+      "id": "headless-editor-import-shutdown-abort",
+      "title": "Investigate headless editor abort after isolated project import",
+      "summary": null,
+      "updated": "2026-09-06",
+      "status": null,
+      "relationships": []
+    },
+    {
       "path": ".work/backlog/live-ring-visual-queries.md",
       "namespace": "work",
       "kind": "backlog-item",
@@ -535,7 +546,7 @@
       "id": "godot-agent-foundation-alignment",
       "title": "Accurate distributed guidance",
       "summary": null,
-      "updated": "2026-09-04",
+      "updated": "2026-09-06",
       "status": "active",
       "relationships": []
     },
@@ -611,6 +622,17 @@
       "kind": "release",
       "id": "releases/0.4.0",
       "title": "Theatre 0.4.0",
+      "summary": null,
+      "updated": null,
+      "status": null,
+      "relationships": []
+    },
+    {
+      "path": ".work/releases/0.6.0.md",
+      "namespace": "work",
+      "kind": "release",
+      "id": "releases/0.6.0",
+      "title": "Theatre 0.6.0",
       "summary": null,
       "updated": null,
       "status": null,

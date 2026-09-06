@@ -28,11 +28,16 @@ pub struct SessionState {
 ### Example 2: Background task spawned from main with Arc clone
 **File**: `crates/stage-server/src/main.rs:53-57`
 ```rust
-let tcp_state = Arc::clone(&state);
-tokio::spawn(async move {
-    tcp::tcp_client_loop(tcp_state, port).await;
-});
+let server = StageServer::new(state);
+server.start_connection(port).await?;
 ```
+
+The server owns the reconnect task so `project_select` can stop and join it.
+A separate operation lock drains whole MCP handlers before selection replaces
+session state; the short state mutex alone does not protect post-query work from
+a project switch. The server-owned transition completes even if its requesting
+MCP call is cancelled. Do not start an independent reconnect loop in MCP serve
+mode.
 
 ### Example 3: Fine-grained lock — acquire, mutate, release, then await
 **File**: `crates/stage-server/src/tcp.rs` (query_addon pattern)

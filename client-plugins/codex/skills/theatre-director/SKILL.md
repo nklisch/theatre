@@ -64,9 +64,11 @@ absolute Godot project directory as `project_path` on every MCP or CLI operation
 ```
 
 This allows consecutive Director calls to target different projects without
-restarting Director. Stage is different: its persistent server selects a project
-from `THEATRE_PROJECT_DIR` at startup and requires an MCP restart or new agent
-session after that startup environment changes. For a one-off Stage CLI call,
+restarting Director. Stage initially selects from `THEATRE_PROJECT_DIR`, then its
+persistent MCP `project_select` can switch explicitly. Stage selection discards
+watches, baselines and session overrides, including when switching back; take a
+fresh snapshot and recreate watches afterward. Director has no implicit active
+project to synchronize: continue supplying `project_path`. For a one-off Stage CLI call,
 use `THEATRE_PROJECT_DIR=/absolute/path/to/godot-project stage <tool> '<json>'`.
 If projects share the default Theatre ports, stop the old running game before
 starting another project so Director and Stage do not reach the old processes.

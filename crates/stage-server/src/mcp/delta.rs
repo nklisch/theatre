@@ -65,7 +65,7 @@ pub async fn handle_spatial_delta(
         let s = state.lock().await;
         if !s.delta_engine.has_baseline() {
             return Err(McpError::invalid_params(
-                "No baseline snapshot available. Call spatial_snapshot first, \
+                "No baseline snapshot available. Call spatial_snapshot first (project_select and reconnects clear the baseline), \
                  then spatial_delta to see what changed.",
                 None,
             ));

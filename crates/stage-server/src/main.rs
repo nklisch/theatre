@@ -79,14 +79,11 @@ async fn serve() -> Result<()> {
         ..Default::default()
     }));
 
-    // Spawn TCP client background task (reconnects automatically)
-    let tcp_state = state.clone();
-    tokio::spawn(async move {
-        tcp::tcp_client_loop(tcp_state, port).await;
-    });
+    // The server owns its reconnect task so project_select can replace it.
+    let server = StageServer::new(state);
+    server.start_connection(port).await?;
 
     // Start MCP server on stdio — blocks until AI client disconnects
-    let server = StageServer::new(state);
     let service = server.serve(stdio()).await?;
     service.waiting().await?;
 

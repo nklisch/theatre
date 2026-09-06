@@ -36,11 +36,8 @@ async fn main() -> Result<()> {
     }));
     let server = StageServer::new(state.clone());
 
-    // Spawn background TCP client task BEFORE blocking on MCP
-    let tcp_state = state.clone();
-    tokio::spawn(async move {
-        tcp::tcp_client_loop(tcp_state, port).await;
-    });
+    // Keep reconnect ownership on the server so project_select can replace it.
+    server.start_connection(port).await?;
 
     // Start MCP server on stdio — this blocks until client disconnects
     server.serve(stdio()).await?.waiting().await?;
@@ -49,7 +46,11 @@ async fn main() -> Result<()> {
 }
 ```
 
-**Key point:** `tokio::spawn` background tasks before calling `.waiting().await`. The MCP stdio handler blocks the current task — anything you need to run concurrently must be spawned first.
+**Key point:** Start the server-owned connection before serving MCP. Do not spawn
+an independent reconnect loop for a persistent MCP server: `project_select` must
+be able to stop and join that task before replacing session state. Ordinary MCP
+calls share the operation lock in `ServerHandler::call_tool`; selection holds it
+exclusively through teardown and its response.
 
 **stderr for logging:** stdout is MCP protocol only. Use `eprintln!` or a logger configured to write to stderr.
 
@@ -227,7 +228,10 @@ Use `std::sync::Mutex` only for synchronous ownership that does not require hold
 
 ## Background Task — TCP Client
 
-The TCP connection to the Godot addon runs as a background tokio task:
+The TCP connection runs as a background Tokio task owned by `ProjectConnection`
+(`crates/stage-server/src/project.rs`). Start it through `StageServer::start_connection`.
+The lower-level loop below is suitable for transport tests, not an independent
+persistent-MCP task:
 
 ```rust
 async fn tcp_client_loop(state: Arc<Mutex<SessionState>>, port: u16) {

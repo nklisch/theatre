@@ -67,6 +67,8 @@ pub struct SessionState {
     pub scene_dimensions: SceneDimensions,
     /// Project directory (for stage.toml, disk cache, etc.).
     pub project_dir: PathBuf,
+    /// Selected listener port, independent of verified runtime identity.
+    pub port: u16,
 }
 
 impl Default for SessionState {
@@ -86,6 +88,7 @@ impl Default for SessionState {
             clip_storage_path: None,
             scene_dimensions: SceneDimensions::Three,
             project_dir: PathBuf::new(),
+            port: 9077,
         }
     }
 }
@@ -117,6 +120,7 @@ pub struct HandshakeInfo {
 
 /// Background task: connect to addon, handle handshake, reconnect on disconnect.
 pub async fn tcp_client_loop(state: Arc<Mutex<SessionState>>, port: u16) {
+    state.lock().await.port = port;
     loop {
         tracing::info!("Connecting to Godot addon on 127.0.0.1:{}...", port);
 
@@ -149,7 +153,11 @@ pub async fn connect_once(state: &Arc<Mutex<SessionState>>, port: u16) -> Result
     let addr = format!("127.0.0.1:{port}");
     let timeout = tokio::time::Duration::from_secs(5);
 
-    state.lock().await.connection_error = None;
+    {
+        let mut session = state.lock().await;
+        session.connection_error = None;
+        session.port = port;
+    }
     let stream = tokio::time::timeout(timeout, tokio::net::TcpStream::connect(&addr))
         .await
         .map_err(|_| anyhow::anyhow!("Connection timed out after 5s"))?
@@ -257,7 +265,7 @@ async fn run_connection(stream: TcpStream, state: Arc<Mutex<SessionState>>) -> R
         })?;
         if actual != expected {
             anyhow::bail!(
-                "Stage project mismatch: selected {}, but process {} (run {}) serves {}. Set THEATRE_PROJECT_DIR to the intended project and THEATRE_PORT to its Stage listener, or stop the wrong running game.",
+                "Stage project mismatch: selected {}, but process {} (run {}) serves {}. Use project_select with the intended project_path and port in MCP, or set THEATRE_PROJECT_DIR and THEATRE_PORT for a new process. Stop the wrong game if it occupies the intended port.",
                 expected.display(),
                 handshake.identity.process_id,
                 handshake.identity.run_id,

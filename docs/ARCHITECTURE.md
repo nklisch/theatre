@@ -89,6 +89,14 @@ The engine run identifier survives client reconnects, while each connection has
 its own session identifier. Disconnected status does not present old identity as
 current.
 
+The MCP server owns the reconnect task. Explicit project selection drains current
+MCP operations before stopping and joining that task, then replacing all
+project-owned session state. Once teardown begins, server-owned execution finishes
+the switch even if the requesting MCP call is cancelled. This keeps a late observation or local configuration write from crossing
+into the next project. There is no retained per-project session cache. Selection
+also changes Stage's feedback and saved-clip lookup; client hooks remain outside
+that process and keep their own project selection.
+
 A snapshot refreshes the server's spatial index and establishes the baseline used by a later delta. Queries such as nearest and radius use that index; raycasts and navigation requests still require an engine query. A disconnected or restarted game invalidates the live delta baseline, while the MCP process can reconnect and retain its in-memory watch/config intent.
 
 Responses are shaped after the engine response: filters, detail tiers, budget limits, spatial calculations, and session metadata are applied before the MCP result is serialized. See [`crates/stage-server/src/mcp/`](../crates/stage-server/src/mcp/) and [`crates/stage-core/src/`](../crates/stage-core/src/).

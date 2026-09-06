@@ -19,6 +19,7 @@ fn run(tool: &str, params: Value) -> Output {
 #[test]
 fn stateful_workflows_fail_before_connecting_with_a_persistent_alternative() {
     let calls = [
+        ("project_select", json!({"project_path":"/unused"})),
         ("spatial_delta", json!({})),
         (
             "spatial_watch",

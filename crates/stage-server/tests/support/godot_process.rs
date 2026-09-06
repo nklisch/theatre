@@ -21,37 +21,35 @@ impl GodotProcess {
     /// Waits up to E2E_TIMEOUT_SECS seconds (default 15) for the TCP listener.
     /// Captures stderr to a temp file for debugging on failure.
     pub async fn start(scene: &str) -> anyhow::Result<Self> {
-        // Ephemeral port allocation: bind to :0, get the assigned port, close.
-        // Small TOCTOU window is acceptable in test environments.
-        let port = {
-            let listener = TcpListener::bind("127.0.0.1:0")?;
-            listener.local_addr()?.port()
-        };
+        let project_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../tests/godot-project")
+            .canonicalize()?;
+        Self::start_in_project(&project_dir, scene).await
+    }
 
-        let godot_bin = std::env::var("GODOT_BIN").unwrap_or_else(|_| "godot".to_string());
-
-        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let project_dir = manifest_dir
-            .join("..") // crates/
-            .join("..") // repo root
-            .join("tests")
-            .join("godot-project")
-            .canonicalize()
-            .map_err(|e| anyhow::anyhow!("Cannot find godot-project dir: {e}"))?;
+    /// Run a selected isolated project using the same engine lifecycle harness.
+    pub async fn start_in_project(
+        project_dir: &std::path::Path,
+        scene: &str,
+    ) -> anyhow::Result<Self> {
+        // Ephemeral port allocation has the same small test-only TOCTOU window.
+        let port = TcpListener::bind("127.0.0.1:0")?.local_addr()?.port();
+        let godot_bin = std::env::var("GODOT_BIN").unwrap_or_else(|_| "godot".into());
 
         // A fresh checkout has no .godot/imported state: the runtime loads
         // GDExtensions from .godot/extension_list.cfg, which only an editor
         // pass generates. Bootstrap it once so journeys can load the addon.
         if !project_dir.join(".godot/extension_list.cfg").exists() {
-            let status = Command::new(&godot_bin)
+            let output = Command::new(&godot_bin)
                 .args(["--headless", "--editor", "--quit", "--path"])
-                .arg(&project_dir)
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .status()?;
+                .arg(project_dir)
+                .output()?;
             anyhow::ensure!(
-                status.success(),
-                "editor bootstrap pass failed (needed to generate .godot/extension_list.cfg)"
+                output.status.success(),
+                "editor bootstrap pass failed ({}, needed to generate .godot/extension_list.cfg): {}\n{}",
+                output.status,
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
             );
         }
 
@@ -61,7 +59,7 @@ impl GodotProcess {
 
         let child = Command::new(&godot_bin)
             .args(["--headless", "--fixed-fps", "60", "--path"])
-            .arg(&project_dir)
+            .arg(project_dir)
             .arg(scene)
             .env("THEATRE_PORT", port.to_string())
             .stdout(Stdio::null())

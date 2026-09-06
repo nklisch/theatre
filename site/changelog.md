@@ -13,6 +13,14 @@ Theatre uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- Stage `project_select` switches the active Godot project inside a persistent MCP session without restarting the agent. It reports selected and actual runtime identity, clears watches/baselines/session overrides, and keeps unavailable targets selected instead of falling back.
+
+### Fixed
+
+- Inspecting Area2D/Area3D children or scanning containing areas no longer queries overlaps with monitoring disabled. Disabled overlap data is explicitly unavailable rather than falsely reported as an empty observation.
+
 ## [0.5.0] — 2026-09-05
 
 ### Agent skills and client plugins

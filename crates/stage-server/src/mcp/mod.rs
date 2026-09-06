@@ -6,6 +6,7 @@ pub mod defaults;
 pub mod delta;
 pub mod feedback;
 pub mod inspect;
+pub mod project_select;
 pub mod query;
 pub mod responses;
 pub mod runtime_diagnostics;
@@ -490,6 +491,16 @@ pub async fn handle_clips_cli(
 #[tool_router(vis = "pub")]
 impl StageServer {
     #[tool(
+        description = "Explicitly switch the active Godot project without restarting this MCP session. Requires absolute project_path; optional port overrides that project's stage.toml or default 9077. Waits for in-flight tools, disconnects the old target, and DISCARDS watches, snapshot/delta baseline, spatial index, session overrides and cached clip location, even when reselecting the same project. Nothing is restored on switching back. Load new project defaults; take a fresh spatial_snapshot and recreate watches afterward. Returns selected path/port separately from verified runtime identity/readiness. An unavailable target stays selected and reconnecting; never falls back. Does not launch/stop games, delete recordings, switch Director (project_path per call), or update client-hook environments. Persistent MCP only."
+    )]
+    pub async fn project_select(
+        &self,
+        Parameters(params): Parameters<project_select::ProjectSelectParams>,
+    ) -> Result<rmcp::model::CallToolResult, McpError> {
+        self.select_project(params).await
+    }
+
+    #[tool(
         description = "Read and manage persistent human feedback for this selected project, even when the game is stopped. Status lists pending evidence and incomplete storage; retrieve returns context, note and an image without consuming it. Handle suppresses notices for all readers; delete and cleanup are deliberate removal."
     )]
     pub async fn feedback(
@@ -526,7 +537,7 @@ impl StageServer {
     }
 
     #[tool(
-        description = "Identify the connected Godot project and game run, distinct from this client session. Queries current scene and readiness; disconnected status never presents retained identity as current and reports actionable connection failures."
+        description = "Report selected project_path/port separately from the connected Godot project and game run. Use project_select to switch targets without restarting MCP; it discards watches, baselines and session overrides. Queries current scene and readiness; disconnected status never presents retained identity as current and reports actionable connection failures."
     )]
     pub async fn runtime_status(
         &self,
@@ -560,7 +571,7 @@ impl StageServer {
     /// signals, script, and spatial context. The "tell me everything about this
     /// one thing" tool.
     #[tool(
-        description = "Deep inspection of a single node. Returns transform, physics, state, children, signals, script, spatial context, and resources. Use the 'include' parameter to select specific categories and reduce token usage. Default includes all categories except 'resources' (opt-in to save tokens)."
+        description = "Deep inspection of a single node. Returns transform, physics, state, children, signals, script, spatial context, and resources. Use the 'include' parameter to select specific categories and reduce token usage. Default includes all categories except 'resources' (opt-in to save tokens). Child areas report monitoring; overlapping_bodies is null when monitoring is disabled, not an observed empty list. Inspection never enables monitoring."
     )]
     pub async fn spatial_inspect(
         &self,
@@ -627,7 +638,7 @@ impl StageServer {
     /// See what changed since the last query. Returns moved entities, state
     /// changes, new/removed nodes, emitted signals, and watch triggers.
     #[tool(
-        description = "See what changed since the last query. Returns moved entities, state changes, new/removed nodes, and watch triggers. Use after spatial_snapshot or spatial_action to see effects."
+        description = "See what changed since the last query. Returns moved entities, state changes, new/removed nodes, and watch triggers. Requires a spatial_snapshot baseline in this target session. Project selection and reconnects clear that baseline; take a fresh snapshot first."
     )]
     pub async fn spatial_delta(
         &self,
@@ -642,7 +653,7 @@ impl StageServer {
     /// Subscribe to changes on nodes or groups with optional conditions.
     /// Watch triggers appear in spatial_delta responses.
     #[tool(
-        description = "Subscribe to changes on nodes or groups. Actions:\n- 'add' — subscribe. Requires: watch.node (path or \"group:name\"). Optional: watch.conditions (array of {property, operator, value}; operators: lt, gt, eq, changed), watch.track (array: position, state, signals, physics, all).\n- 'remove' — unsubscribe. Requires: watch_id.\n- 'list' — show active watches.\n- 'clear' — remove all watches.\nWatch triggers appear in spatial_delta responses under 'watch_triggers'."
+        description = "Subscribe to changes on nodes or groups. Actions:\n- 'add' — subscribe. Requires: watch.node (path or \"group:name\"). Optional: watch.conditions (array of {property, operator, value}; operators: lt, gt, eq, changed), watch.track (array: position, state, signals, physics, all).\n- 'remove' — unsubscribe. Requires: watch_id.\n- 'list' — show active watches.\n- 'clear' — remove all watches.\nWatch triggers appear in spatial_delta responses under 'watch_triggers'. project_select discards all watches; recreate them after switching."
     )]
     pub async fn spatial_watch(
         &self,
@@ -665,7 +676,7 @@ impl StageServer {
     /// clustering, bearing format, and token limits. Changes apply for the
     /// current session. Call with no parameters to see current config.
     #[tool(
-        description = "Configure tracking behavior. Set static_patterns (glob patterns for static nodes like [\"walls/*\"]), state_properties (per-group/class property tracking like {\"enemies\": [\"health\"]}), cluster_by (group/class/proximity/none), bearing_format (cardinal/degrees/both), expose_internals (include non-exported vars), poll_interval (collection frequency), token_hard_cap (max tokens per response). Changes apply for the current session."
+        description = "Configure tracking behavior. Set static_patterns (glob patterns for static nodes like [\"walls/*\"]), state_properties (per-group/class property tracking like {\"enemies\": [\"health\"]}), cluster_by (group/class/proximity/none), bearing_format (cardinal/degrees/both), expose_internals (include non-exported vars), poll_interval (collection frequency), token_hard_cap (max tokens per response). Changes apply for the current target session; project_select discards overrides and loads the selected project defaults."
     )]
     pub async fn spatial_config(
         &self,

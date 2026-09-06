@@ -2,9 +2,32 @@
 description: "Complete API reference for Theatre's Stage MCP tools — input schemas, response formats, and parameter documentation."
 ---
 
+<script setup>
+import { data } from '../.vitepress/data/tools.data'
+const projectSelectParams = data.params['project_select'] ?? []
+</script>
+
 # Stage API Reference
 
-Complete parameter schemas for all 9 Stage MCP tools.
+Stage tool parameters and response examples. The MCP tool schemas are the current
+parameter authority.
+
+## `project_select`
+
+Switch the active project within a persistent MCP session. It discards watches,
+baselines, spatial indexes, session overrides and the cached clip location; nothing
+is restored on switching back or reselecting the same project. Take a fresh
+`spatial_snapshot` before deltas and recreate watches afterward.
+
+<ParamTable :params="projectSelectParams" />
+
+The response distinguishes selected `project_path`/`port` from verified runtime
+`identity`, `connected` and `ready`. An unavailable target stays selected while
+Stage retries it. Invalid parameters leave the previous selection intact. Selection
+does not stop games or delete recordings. Director still uses `project_path` per
+call, and client feedback-hook environments remain independent.
+
+---
 
 ## `spatial_snapshot`
 
