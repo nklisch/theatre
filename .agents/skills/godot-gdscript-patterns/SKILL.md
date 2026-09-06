@@ -277,7 +277,7 @@ extends Resource
 @export var name: StringName
 @export var damage: int
 @export var attack_speed: float
-@export var range: float
+@export var attack_range: float
 @export_multiline var description: String
 @export var icon: Texture2D
 @export var projectile_scene: PackedScene
@@ -560,6 +560,9 @@ func receive_hit(hitbox: HitboxComponent) -> void:
 
 ```gdscript
 # scene_manager.gd (Autoload)
+# NOTE: @export fields are configurable in the editor only when the autoload is
+# registered as a scene (.tscn) with this script on its root; a plain script
+# autoload cannot have its exports set.
 extends Node
 
 signal scene_loading_started(scene_path: String)
@@ -573,7 +576,6 @@ signal transition_finished
 
 var _current_scene: Node
 var _transition: CanvasLayer
-var _loader: ResourceLoader
 
 func _ready() -> void:
     _current_scene = get_tree().current_scene

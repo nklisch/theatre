@@ -5,7 +5,9 @@ use the "API field name" column. Prefer Godot's exact property name when it
 exists; use descriptive snake_case when Godot uses a method (`get_X`) with no
 corresponding property name.
 
-Sourced from Godot 4.3 class reference and the godot-rust/gdext bindings.
+Sourced from the Godot 4 class reference (spot-checked against Godot 4.7.1)
+and the godot-rust/gdext bindings. Verify a name against the engine or the
+gdext bindings when adding a row the tables do not already cover.
 
 ---
 
@@ -216,6 +218,9 @@ correctly reflects inherited visibility from parent nodes.
 ---
 
 ## Camera2D
+
+Unlike Camera3D, Camera2D has no `current` property. Query `is_current()` and
+use `make_current()` to select it.
 
 | Concept | Godot property/method | API field name | Notes |
 |---|---|---|---|

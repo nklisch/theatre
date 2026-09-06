@@ -22,7 +22,10 @@ addons/stage/
 ├── runtime.gd            # Autoload singleton script
 ├── dock.tscn             # Dock panel scene
 ├── dock.gd               # Dock panel script
+├── capture_controls.gd   # On-screen dashcam capture controls
+├── debugger_plugin.gd    # Editor debugger bridge (status/activity messages)
 ├── runtime_logger.gd     # Bounded native Logger
+├── spatial_collection.gd # In-Godot live property-list filtering helper
 ├── stage.gdextension     # GDExtension manifest
 └── bin/                  # Compiled Rust libraries
     ├── linux/libstage_godot.so
@@ -91,21 +94,36 @@ var collector
 var tcp_server
 var recorder
 
+# Shortcut keys are project settings, not hard-coded
+# (theatre/stage/shortcuts/marker_key and pause_key, defaults F9/F11).
+var _marker_keycode: int = KEY_F9
+var _pause_keycode: int = KEY_F11
+
 func _ready() -> void:
-    if not ClassDB.class_exists(&"StageTCPServer"):
-        push_error("Stage GDExtension is unavailable")
-        return
+    _marker_keycode = ProjectSettings.get_setting("theatre/stage/shortcuts/marker_key", KEY_F9)
+    _pause_keycode = ProjectSettings.get_setting("theatre/stage/shortcuts/pause_key", KEY_F11)
+    # Check every required extension class before instantiation
+    for extension_class in [&"StageTCPServer", &"StageCollector", &"StageRecorder"]:
+        if not ClassDB.class_exists(extension_class):
+            push_error("Stage GDExtension is unavailable — %s missing" % extension_class)
+            set_physics_process(false)
+            set_process_shortcut_input(false)
+            return
 
     collector = ClassDB.instantiate(&"StageCollector")
     add_child(collector)
 
     tcp_server = ClassDB.instantiate(&"StageTCPServer")
     add_child(tcp_server)
+    tcp_server.set_collector(collector)
     tcp_server.start(ProjectSettings.get_setting(
         "theatre/stage/connection/port", 9077
     ))
 
     recorder = ClassDB.instantiate(&"StageRecorder")
+    recorder.set_dashcam_enabled(ProjectSettings.get_setting(
+        "theatre/stage/dashcam/enabled", true
+    ))
     add_child(recorder)
 
 func _physics_process(_delta: float) -> void:
@@ -115,17 +133,22 @@ func _physics_process(_delta: float) -> void:
 func _shortcut_input(event: InputEvent) -> void:
     if not event is InputEventKey or not event.pressed:
         return
-    match event.keycode:
-        KEY_F9: _drop_marker()
-        KEY_F11: _toggle_pause()
+    var code: int = event.keycode
+    if code == _marker_keycode:
+        _drop_marker()
+    elif code == _pause_keycode:
+        _toggle_pause()
 
 func _drop_marker() -> void:
-    # Flush dashcam clip — captures the ring buffer around this moment
-    recorder.flush_dashcam_clip("human")
+    # Mark — starts collecting the configured post-window. It does not save
+    # immediately; the separate Save now action calls flush_dashcam_clip.
+    recorder.add_marker("human", "Human marker")
 
 func _toggle_pause() -> void:
     get_tree().paused = not get_tree().paused
 ```
+
+The real `runtime.gd` additionally honors `theatre/stage/connection/auto_start`, registers the runtime logger in `_init`, wires recorder and activity signals, and pushes dock status over the debugger bridge. Treat `runtime.gd` as the source of truth for lifecycle order.
 
 ### Runtime diagnostics
 
@@ -171,16 +194,16 @@ GDExtension classes defined in `stage-godot` (Rust) appear as regular GDScript c
 ```gdscript
 # These are Rust classes, used just like built-in Godot classes
 var collector = StageCollector.new()
-var result: Array = collector.get_visible_nodes()
-var state: Dictionary = collector.get_node_state("enemies/scout_02")
+var tracked: int = collector.get_tracked_count()
+var groups: int = collector.get_group_count()
 ```
 
 **GDExtension loads automatically** from the `.gdextension` manifest file. Unlike regular plugins (which need Project Settings → Plugins → Enable), GDExtension libraries load whenever the `.gdextension` file is present in the project. There is no separate enable step.
 
-**The hybrid limitation (godot#85268):** GDScript cannot `extends` a GDExtension-derived class that itself extends `EditorPlugin`. This is why `plugin.gd` is a pure GDScript EditorPlugin that *uses* GDExtension classes, rather than extending a Rust EditorPlugin. Never attempt:
+**The hybrid pattern (deliberate architecture):** `plugin.gd` is a pure GDScript EditorPlugin that *uses* GDExtension classes, rather than extending a Rust EditorPlugin. This is Theatre's designed boundary — GDScript owns the editor-plugin lifecycle and the Rust classes are plain `Node` subclasses behind that glue — not a workaround for a live engine bug. (The historically cited upstream limitation, godot#85268, was fixed in Godot 4.3 via godot#85271; broader EditorPlugin inheritance behavior is not proven in this repository.) Keep the boundary regardless:
 ```gdscript
-# WRONG — will fail to load as editor plugin
-extends StageRustEditorPlugin  # if StageRustEditorPlugin extends EditorPlugin via GDExtension
+# Not the Theatre pattern — the EditorPlugin stays in GDScript
+extends StageRustEditorPlugin  # if StageRustEditorPlugin extended EditorPlugin
 ```
 
 ## Input Handling
@@ -200,13 +223,16 @@ func _shortcut_input(event: InputEvent) -> void:
             get_viewport().set_input_as_handled()  # consume event
 ```
 
-**Input method priority (earliest to latest):**
-1. `_input` — catches everything first
-2. `_shortcut_input` — for keyboard shortcuts, after `_input`
-3. `_gui_input` — for UI nodes
-4. `_unhandled_input` — what's left after UI
+**Input method order (earliest to latest, Godot 4 input flow):**
+1. `_input` — sees every event first
+2. `_gui_input` — Controls/GUI handle and may consume the event
+3. `_shortcut_input` — key/shortcut events that survived `_input` and the GUI
+4. `_unhandled_key_input` — remaining key events only
+5. `_unhandled_input` — what's left (typical gameplay input)
 
-Use `_shortcut_input` for Stage's hotkeys to intercept before the game does.
+Use `_shortcut_input` for Stage's hotkeys: it runs before gameplay
+`_unhandled_input`, so plain keys reach the tooling without competing with game
+code, while GUI Controls still get first refusal.
 
 **Consuming input:** Call `get_viewport().set_input_as_handled()` if you don't want the game to also respond to the key.
 
@@ -286,7 +312,7 @@ For pause state, dashcam status, markers, feedback, and agent activity notificat
 ```gdscript
 # In runtime.gd _ready()
 var overlay = CanvasLayer.new()
-overlay.layer = 100  # Draw above everything
+overlay.layer = 128  # Draw above everything (runtime.gd uses 128)
 add_child(overlay)
 
 var notification_label = Label.new()

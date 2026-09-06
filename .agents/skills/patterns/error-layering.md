@@ -31,7 +31,7 @@ impl std::error::Error for CodecError {
 ```
 
 ### Example 2: Background task layer — anyhow::Result for ergonomic propagation
-**File**: `crates/stage-server/src/tcp.rs:123` and `crates/stage-server/src/main.rs:19`
+**File**: `crates/stage-server/src/tcp.rs:189` and `crates/stage-server/src/main.rs:13`
 ```rust
 // main.rs
 #[tokio::main]
@@ -47,7 +47,7 @@ async fn handle_connection(stream: TcpStream, state: Arc<Mutex<SessionState>>) -
 ```
 
 ### Example 3: MCP handler layer — McpError with inline construction
-**File**: `crates/stage-server/src/mcp/mod.rs:32-44`
+**File**: `crates/stage-protocol/src/mcp_helpers.rs:23-31` (imported by handlers in `crates/stage-server/src/mcp/mod.rs`)
 ```rust
 fn serialize_params<T: Serialize>(params: &T) -> Result<serde_json::Value, McpError> {
     serde_json::to_value(params).map_err(|e| {
@@ -68,7 +68,7 @@ fn deserialize_response<T: for<'de> Deserialize<'de>>(data: serde_json::Value) -
 ## When to Use
 - New library crate error type: implement `Display` + `std::error::Error` manually (use `thiserror` is acceptable too)
 - Background task or `main()`: use `anyhow::Result`
-- MCP tool handler: return `Result<String, McpError>`; convert using `McpError::internal_error` or `McpError::invalid_params`
+- MCP tool handler: return `Result<CallToolResult, McpError>`; shared JSON handlers keep `Result<String, McpError>` for CLI reuse and the MCP wrapper converts via `structured_json` (see the MCP tool handler pattern). Convert errors using `McpError::internal_error` or `McpError::invalid_params`
 
 ## When NOT to Use
 - `.unwrap()` in library code — only acceptable in tests and `main.rs` setup

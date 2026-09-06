@@ -16,7 +16,11 @@ description: >
 
 Director is part of the **Theatre** toolkit (alongside Stage). It creates and modifies Godot project files, queries the installed engine API, controls saved-scene runs through an open editor, and reads project-local human feedback.
 
-**Two interfaces, identical capabilities:**
+**Two interfaces, one tool catalog.** MCP and CLI expose the same operations and
+parameter vocabulary, but response handling differs: `project_reload` and `editor_status` parse Godot's log
+into `errors`/`warnings` arrays over MCP only; CLI responses carry the raw
+operation envelope instead (raw `recent_log` for `editor_status`, no diagnostics
+for `project_reload`).
 
 | Interface | When to use | Example |
 |---|---|---|
@@ -28,7 +32,7 @@ Director is part of the **Theatre** toolkit (alongside Stage). It creates and mo
 director <tool> '<json-params>'            # direct invocation
 echo '<json>' | director scene_create      # stdin pipe
 director --help                            # list all tools (categorized)
-director --version                         # {"version": "0.1.0"}
+director --version                         # {"version": "<installed version>"}
 ```
 
 All CLI output is JSON to stdout. Exit codes 1 and 2 report runtime and usage
@@ -183,9 +187,9 @@ and resource operations persist their target files.
 | `autoload_add` | Register an autoload singleton in project.godot |
 | `autoload_remove` | Remove an autoload singleton |
 | `project_settings_set` | Set project.godot settings (main scene, window size, etc.) |
-| `project_reload` | Restart daemon + validate scripts — returns parse errors |
+| `project_reload` | Restart daemon + validate scripts — parsed errors over MCP |
 | `engine_api` | Query one installed-engine class and focused members/defaults |
-| `editor_run` | Start, stop, restart, or inspect a saved-scene run through a verified editor |
+| `editor_run` | Start, stop, restart, or report status (action: `status`) on a saved-scene run through a verified editor |
 | `editor_status` | Editor project/process identity, open scenes, play state, and recent editor log |
 | `feedback` | Status, retrieve, handle, delete, or clean up project-local human feedback without Godot |
 | `uid_get` | Resolve a file's Godot UID |
@@ -209,7 +213,7 @@ and resource operations persist their target files.
 // 2. Add nodes
 { "project_path": "/home/user/game", "scene_path": "res://levels/level_01.tscn",
   "parent_path": ".", "node_type": "DirectionalLight3D", "node_name": "Sun",
-  "properties": { "rotation_degrees": "Vector3(-45, 30, 0)" } }
+  "properties": { "rotation_degrees": {"x": -45, "y": 30, "z": 0} } }
 
 // 3. Instance a sub-scene
 { "project_path": "/home/user/game", "scene_path": "res://levels/level_01.tscn",
@@ -228,7 +232,7 @@ and resource operations persist their target files.
         "node_type": "Label", "node_name": "ScoreLabel" }},
     { "operation": "node_set_properties", "params": {
         "scene_path": "res://ui/hud.tscn", "node_path": "ScoreLabel",
-        "properties": { "text": "Score: 0", "position": "Vector2(10, 10)" }}}
+        "properties": { "text": "Score: 0", "position": {"x": 10, "y": 10} }}}
   ]
 }
 ```
@@ -243,7 +247,7 @@ and resource operations persist their target files.
   "properties": {
     "metallic": 0.9,
     "roughness": 0.2,
-    "albedo_color": "Color(0.8, 0.8, 0.85, 1.0)"
+    "albedo_color": {"r": 0.8, "g": 0.8, "b": 0.85, "a": 1.0}
   }
 }
 ```
@@ -275,9 +279,9 @@ and resource operations persist their target files.
 { "project_path": "/home/user/game", "resource_path": "res://anims/walk.tres",
   "track_type": "position_3d", "node_path": "Skeleton3D:LeftFoot",
   "keyframes": [
-    { "time": 0.0, "value": [0, 0, 0] },
-    { "time": 0.5, "value": [0, 0.3, 0.5] },
-    { "time": 1.0, "value": [0, 0, 1.0] }
+    { "time": 0.0, "value": {"x": 0, "y": 0, "z": 0} },
+    { "time": 0.5, "value": {"x": 0, "y": 0.3, "z": 0.5} },
+    { "time": 1.0, "value": {"x": 0, "y": 0, "z": 1.0} }
   ] }
 ```
 
@@ -296,7 +300,8 @@ and resource operations persist their target files.
 
 // 2. Reload project to validate scripts and restart daemon
 { "project_path": "/home/user/game" }
-// → returns { errors: [...], warnings: [...], scripts_checked: 14, autoloads: {...} }
+// → MCP returns { errors: [...], warnings: [...], scripts_checked, autoloads };
+//   the CLI returns { scripts_checked, autoloads } without parsed diagnostics
 // Fix any errors before proceeding!
 
 // 3. Register autoload
@@ -352,7 +357,9 @@ evidence; deletion is separate.
 { "project_path": "/home/user/game" }
 // → { editor_connected: true, active_scene: "scenes/player.tscn",
 //     open_scenes: [...], game_running: false, autoloads: {...},
-//     recent_log: [...], errors: [...], warnings: [...] }
+//     recent_log: [...] }
+// MCP additionally parses recent_log into errors: [...] and warnings: [...];
+// the CLI returns the raw recent_log lines only.
 ```
 
 ### Set Project Settings
@@ -382,17 +389,22 @@ evidence; deletion is separate.
 
 ## Property Type Conversion
 
-Director auto-converts string property values to Godot types:
+Director converts each JSON property value to the type Godot reports for that
+property. Use JSON objects for vectors and rects; colors also accept HTML hex
+strings. Do not use constructor-style strings:
 
-| Write as | Godot type |
+| Godot property type | Write as |
 |---|---|
-| `"Vector2(10, 20)"` | Vector2 |
-| `"Vector3(1, 2, 3)"` | Vector3 |
-| `"Color(1, 0, 0, 1)"` | Color |
-| `"res://path/to/resource.tres"` | Resource path |
-| `"NodePath(../Sibling)"` | NodePath |
-| `0.5` (number) | float |
-| `true` / `false` | bool |
+| Vector2 | `{"x": 10, "y": 20}` |
+| Vector3 | `{"x": 1, "y": 2, "z": 3}` |
+| Color | `{"r": 0.8, "g": 0.8, "b": 0.85, "a": 1.0}`; HTML hex such as `"#ff0000"` is also supported |
+| Resource | `"res://path/to/resource.tres"` (loads the resource) |
+| NodePath | `"../Sibling"` (plain string) |
+| float / bool | `0.5`, `true` / `false` |
+
+For a Vector2 property, `"Vector2(10, 20)"` is not converted and fails with
+`Invalid value type for property`. Pass a plain path for NodePath properties,
+not a `"NodePath(...)"` wrapper.
 
 ## Error Reference
 

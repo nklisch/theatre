@@ -13,6 +13,13 @@ Theatre uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Agent skills and client plugins
+
+- Correct Director property and animation examples to use supported JSON values, and distinguish MCP diagnostics from CLI output.
+- Update Stage guidance for clip configuration, visual artifacts, and observable error responses.
+- Align contributor skills with current MCP handlers, recorder-owned settings, marker behavior, and Godot input ordering. Clarify the existing GDScript lifecycle and render-thread capture boundaries.
+- Synchronize the corrected operating skills in the Claude and Codex plugin packages. Runtime behavior and the Godot 4.7 minimum are unchanged.
+
 ## [0.4.0] — 2026-09-05
 
 ### Compatibility

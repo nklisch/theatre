@@ -202,7 +202,7 @@ When `expect`/`expect_err` panics, the error message includes all prior steps wi
 
 Spawns a fresh Godot process per operation; parses JSON result from stdout.
 
-**File**: `tests/director-tests/src/harness.rs:10`
+**File**: `tests/director-tests/src/harness.rs:43`
 
 ### Usage
 ```rust
@@ -256,7 +256,7 @@ result.unwrap_err() -> String
 
 Persistent daemon across multiple operations; TCP connection shared.
 
-**File**: `tests/director-tests/src/harness.rs:128`
+**File**: `tests/director-tests/src/harness.rs:270`
 
 ### Usage
 ```rust

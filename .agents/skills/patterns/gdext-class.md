@@ -8,7 +8,7 @@ GDExtension registers classes at library load time through gdext's macro system.
 ## Examples
 
 ### Example 1: StageTCPServer — full class with signal and multiple funcs
-**File**: `crates/stage-godot/src/tcp_server.rs:10-65`
+**File**: `crates/stage-godot/src/tcp_server.rs:62-113`
 ```rust
 #[derive(GodotClass)]
 #[class(base = Node)]
@@ -18,23 +18,24 @@ pub struct StageTCPServer {
     clients: Vec<Option<ClientSlot>>,
     port: i32,
     conn_state: ConnectionState,
-    pending_advance: Option<PendingAdvance>,
+    pending_action: Option<PendingAction>,
     collector: Option<Gd<StageCollector>>,
     recorder: Option<Gd<StageRecorder>>,
+    runtime_logger: Option<Gd<Object>>,
     client_idle_timeout_secs: u64,
 }
 
 #[godot_api]
 impl INode for StageTCPServer {
     fn init(base: Base<Node>) -> Self {
-        Self { base, listener: None, clients: Vec::new(), port: 9077, conn_state: ConnectionState::Idle, pending_advance: None, collector: None, recorder: None, client_idle_timeout_secs: 30, ... }
+        Self { base, listener: None, clients: Vec::new(), port: 9077, conn_state: ConnectionState::default(), pending_action: None, collector: None, recorder: None, runtime_logger: None, client_idle_timeout_secs: 10, ... }
     }
 }
 
 #[godot_api]
 impl StageTCPServer {
     #[signal]
-    fn activity_received(entry_type: GString, summary: GString, tool_name: GString);
+    fn activity_received(entry_type: GString, summary: GString, tool_name: GString, active_watches: i64);
 
     #[func]
     pub fn set_collector(&mut self, collector: Gd<StageCollector>) {
@@ -72,7 +73,7 @@ impl StageCollector {
 ```
 
 ### Example 3: Library entry point — ExtensionLibrary registration
-**File**: `crates/stage-godot/src/lib.rs:8-11`
+**File**: `crates/stage-godot/src/lib.rs:16-19`
 ```rust
 struct StageExtension;
 
@@ -87,9 +88,9 @@ unsafe impl ExtensionLibrary for StageExtension {}
 
 ## When NOT to Use
 - Classes that don't need Godot lifecycle — plain Rust structs are fine for internal logic
-- EditorPlugin as a GDExtension base — use GDScript for EditorPlugin (godot#85268 limitation)
+- EditorPlugin as a GDExtension base — GDScript owns the editor-plugin lifecycle in Theatre; GDExtension classes are plain `Node` subclasses behind GDScript glue
 
 ## Common Violations
 - Storing `Gd<T>` across thread boundaries — not safe; all Godot object access must stay on the main thread
 - Using `base` field for logic — `base` is only for Godot engine calls (e.g., `self.base().emit_signal(...)`)
-- Forgetting `pub` on `#[func]` methods — they must be `pub` to be visible from GDScript
+- Forgetting `pub` on `#[func]` methods — registration does not strictly require `pub`, but this codebase keeps them `pub` by convention

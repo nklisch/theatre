@@ -53,7 +53,7 @@ pub mod async_io {
 ```
 
 ### Example 3: Codec used in server TCP connection handshake
-**File**: `crates/stage-server/src/tcp.rs:127-130`
+**File**: `crates/stage-server/src/tcp.rs:202-215` (simplified — the real read adds a handshake timeout and decode-specific error context)
 ```rust
 let msg: Message = async_io::read_message(&mut reader)
     .await

@@ -25,7 +25,7 @@ in one step.
 ## Examples
 
 ### Example 1: ClipSession definition
-**File**: `crates/stage-server/src/clip_analysis.rs:161`
+**File**: `crates/stage-server/src/clip_analysis.rs:468`
 ```rust
 pub struct ClipSession {
     pub db: Connection,
@@ -116,7 +116,7 @@ fn resolve_frame_range(
 
 `resolve_clip_storage_path` queries the addon once, then caches in `SessionState.clip_storage_path`.
 
-**File**: `crates/stage-server/src/clip_analysis.rs:20`
+**File**: `crates/stage-server/src/clip_analysis.rs:23`
 
 ## When to Use
 

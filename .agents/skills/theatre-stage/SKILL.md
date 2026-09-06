@@ -28,7 +28,7 @@ Stage is part of the **Theatre** toolkit (alongside Director). It observes and i
 stage <tool> '<json-params>'           # direct invocation
 echo '{"detail":"summary"}' | stage spatial_snapshot  # stdin pipe
 stage --help                           # list all tools
-stage --version                        # {"version": "0.1.0"}
+stage --version                        # {"version": "<installed version>"}
 ```
 
 CLI tool results are JSON to stdout. Errors are JSON to stdout with exit code 1 (runtime) or 2 (usage). Logs go to stderr.
@@ -47,7 +47,7 @@ that same MCP session. `stage serve` speaks MCP over stdio; it is not a shell
 session command for passing subsequent CLI calls into. In shell-only workflows,
 act without `return_delta`, then inspect or snapshot the result explicitly.
 
-**Prerequisite for live tools:** The Stage addon must be enabled and the game must be running. If live tools return `not_connected` or `connection_failed`, use `runtime_status` and start the selected saved scene through Director `editor_run` or Godot. Project-local `feedback` remains available without a running game.
+**Prerequisite for live tools:** The Stage addon must be enabled and the game must be running. If live tools report a failed or absent connection (the CLI emits `connection_failed` with exit 1; MCP tools return a "not connected" error), use `runtime_status` and start the selected saved scene through Director `editor_run` or Godot. Project-local `feedback` remains available without a running game.
 
 ## Set Up and Select a Godot Project
 
@@ -492,6 +492,13 @@ Clips are captured by the dashcam ring buffer. Mark a moment to save; analyze sa
 
 // List available screenshots
 { "action": "screenshots", "clip_id": "clip_001a2b3c" }
+
+// Build a temporal visual artifact from saved clip screenshots
+// artifact: "storyboard", "motion_history", "difference_map", or "node_filmstrip"
+{ "action": "visual_artifact", "artifact": "storyboard", "at_frame": 4582 }
+
+// Push dashcam configuration to the recorder (e.g. enable recording)
+{ "action": "config", "config": { "enabled": true } }
 ```
 
 ## Common Debugging Workflows
@@ -549,12 +556,12 @@ Clips are captured by the dashcam ring buffer. Mark a moment to save; analyze sa
 
 | Error | Meaning | Fix |
 |---|---|---|
-| `not_connected` / `connection_failed` | Game not running or addon not enabled | Check `runtime_status`; start the selected scene through Director or Godot |
+| `connection_failed` (CLI) / "not connected" connection error (MCP) | Game not running or addon not enabled | Check `runtime_status`; start the selected scene through Director or Godot |
 | `unknown_tool` | Invalid tool name (CLI only) | Check `stage --help` |
 | `invalid_json` | Bad JSON params (CLI only) | Fix JSON syntax |
 | `persistent_session_required` | One-shot call needs retained server state (CLI only) | Use the same `stage serve` MCP session; for one-shot actions omit `return_delta` |
 | `scene_not_loaded` | Between scene transitions | Wait for scene to load |
 | `node_not_found` | Path doesn't exist | Use `scene_tree(action: "find")` |
-| `timeout` | Game frozen or at breakpoint | Check if game is paused |
-| `dashcam_disabled` | Dashcam not active | Check spatial_config |
-| `budget_exceeded` | Too many nodes | Reduce radius, add filters, use summary |
+| Query timeout — "Addon did not respond within …" | Game frozen or at a breakpoint | Check if the game is paused |
+| `dashcam_disabled` | Dashcam recording is off (recorder state, not `spatial_config`) | Enable it with clips `config` (`{"enabled": true}`), the native capture controls, or the project's `theatre/stage/dashcam/enabled` setting |
+| Truncated snapshot (success response with `pagination.truncated: true`) | Snapshot hit its token budget; entities omitted | Read `pagination.showing`/`total`, reduce radius, add filters, use `summary`, or raise `token_budget` |

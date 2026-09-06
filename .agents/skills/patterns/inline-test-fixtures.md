@@ -3,12 +3,12 @@
 Tests live in `#[cfg(test)] mod tests` blocks alongside source code. Reusable test data is constructed by small builder functions (not structs or frameworks) that take just the fields that vary per test.
 
 ## Rationale
-Keeps test logic co-located with the code under test. Builder fixture functions minimize boilerplate without introducing a test framework dependency. All 17 test files in the codebase follow this pattern; 71 total test functions.
+Keeps test logic co-located with the code under test. Builder fixture functions minimize boilerplate without introducing a test framework dependency. Test modules across the codebase follow this pattern.
 
 ## Examples
 
 ### Example 1: Index tests — entity builder with optional group
-**File**: `crates/stage-core/src/index.rs:143-160`
+**File**: `crates/stage-core/src/index.rs:328-371`
 ```rust
 #[cfg(test)]
 mod tests {

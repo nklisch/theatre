@@ -67,13 +67,8 @@ impl INode for StageCollector {   // I{BaseName} = virtual method interface
 #[godot_api]
 impl StageCollector {             // Custom methods — second impl block
     #[func]                           // GDScript-callable
-    pub fn get_visible_nodes(&self) -> Array<Dictionary> {
+    pub fn get_tracked_count(&self) -> u32 {
         // ...
-    }
-
-    #[func]
-    pub fn poll(&mut self) {
-        // Called by GDScript autoload or physics_process
     }
 }
 ```
@@ -198,10 +193,14 @@ impl IEditorPlugin for MyEditorPlugin {
 }
 ```
 
-**CRITICAL GODOT LIMITATION:** GDScript cannot inherit from a GDExtension-derived EditorPlugin (godot#85268). In Stage, we solve this with the hybrid pattern:
-- GDExtension provides `StageCollector`, `StageTCPServer`, `StageRecorder` as plain `Node` subclasses
-- GDScript `plugin.gd` is the actual `EditorPlugin` and instantiates those Rust classes
-- Do NOT make GDExtension classes inherit `EditorPlugin`
+**Theatre design — GDScript owns the plugin lifecycle:** GDScript `plugin.gd` is
+the actual `EditorPlugin` and instantiates those Rust classes through glue; the
+GDExtension classes stay plain `Node` subclasses. This is a deliberate
+architecture boundary (see `AGENTS.md` and `docs/ARCHITECTURE.md`), not a
+workaround for a live engine bug — the historically cited upstream limitation
+(godot#85268) was fixed in Godot 4.3 via godot#85271, and broader
+EditorPlugin inheritance behavior is not proven in this repository. Keep the
+boundary: do not base GDExtension classes on `EditorPlugin` in this project.
 
 ## StringName — Cache for Performance
 
@@ -246,6 +245,38 @@ fn physics_process(&mut self, _delta: f64) {
 }
 ```
 
+## Render-Thread Work (Capture)
+
+Some capture work must run on Godot's render thread. Theatre's pattern keeps
+`Gd<T>` scene objects strictly main-thread and sends only owned plain data:
+
+```rust
+// Main thread: build a callable from an owned closure, then hand it to the
+// render thread (see capture_readback.rs::submit / poll / Drop).
+let callback = render_call("stage_readback_submit", move || {
+    // owned native work only: GL pixel-pack buffer + fence, no scene access
+});
+RenderingServer::singleton().call_on_render_thread(&callback);
+```
+
+Rules, from `crates/stage-godot/src/capture_readback.rs` and
+`crates/stage-godot/src/capture_render_call.rs`:
+
+- Cache the callable and its nil return initializer on the main thread; render
+  callbacks execute owned native work and write local return storage only.
+- Schedule zero-timeout fence polling from the main thread, but execute the
+  native poll inside the context-correct render callback. Automatic capture
+  never intentionally waits for GPU completion; synchronous readback is an
+  explicit recovery path.
+- Bound pending transfers and retire owned resources via a final render
+  callback from `Drop`.
+
+The `render_call` adapter is a deliberate constraint, not a pattern to
+generalize: gdext 0.5.5 high-level callable return conversion is not safe from
+the render thread under `lazy-function-tables` (reproduced binding panic).
+Revisit [.work/backlog/gdext-render-callables-with-lazy-tables.md](../../../.work/backlog/gdext-render-callables-with-lazy-tables.md)
+before changing or extending it.
+
 ## Calling Methods on Nodes
 
 ```rust
@@ -286,7 +317,7 @@ let arr = [pos.x, pos.y, pos.z];   // just destructure
 ```rust
 let collector: Gd<StageCollector> = ...;
 let count = collector.bind().get_node_count();   // calls &self method
-collector.bind_mut().poll();                      // calls &mut self method
+// Use bind_mut() only when calling an actual &mut self method on this class.
 ```
 
 **`init` vs manual `init`:** `#[class(init)]` generates a default `init()`. Without it, you must implement `fn init(base: Base<T>) -> Self` in the `I{Base}` trait impl.
@@ -297,14 +328,14 @@ collector.bind_mut().poll();                      // calls &mut self method
 
 **Godot integers are signed:** gdext 0.5 no longer permits `u64` in `#[func]` or `#[signal]` boundaries because Godot `Variant` integers are `i64`. Keep unsigned counters internal and convert at the exported boundary.
 
-**Variant dictionaries borrow reference-passed values:** `VarDictionary` is the untyped `Dictionary<Variant, Variant>` alias in gdext 0.5. Borrow `Variant`, `GString`, object, and callable keys or values when `AsArg` requires reference passing (for example, `dict.set(&key, &value)`).
+**Variant dictionaries and borrowed arguments:** `VarDictionary` is the untyped `Dictionary<Variant, Variant>` alias in gdext 0.5. `AsArg` parameters accept an owned or a borrowed value; pass `&key`/`&value` when you already have the value and want to avoid a copy (for example, `dict.set(&key, &value)`).
 
 **`.gdextension` file must match entry symbol:**
 ```ini
 [configuration]
 entry_symbol = "gdext_rust_init"
 compatibility_minimum = "4.7"
-reloadable = true          # enables hot-reload in Godot 4.7+
+reloadable = true          # permits the extension to be reloaded (hot reload)
 
 [libraries]
 linux.debug.x86_64 = "res://addons/stage/bin/linux/libstage_godot.so"

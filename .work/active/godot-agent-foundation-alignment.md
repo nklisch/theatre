@@ -9,7 +9,7 @@ related_to: []
 research_refs: []
 mock_refs: []
 created: 2026-09-04
-updated: 2026-09-04
+updated: 2026-09-06
 ---
 
 # Accurate distributed guidance
@@ -50,6 +50,35 @@ for a wholesale rewrite or make unmeasured performance claims.
 Related: [authoring consistency](director-consistent-authoring.md),
 [CLI session guarantees](stage-cli-session-semantics.md), and
 [file-access guidance](agent-godot-file-access-guidance.md).
+
+## Skill audit correction and plugin release
+
+The current bounded continuation corrects verified drift in repository-owned
+contributor and operating skills, synchronizes the Claude and Codex skill
+payloads, and publishes the authorized minor release through `scripts/release.sh`.
+It preserves runtime behavior and existing Godot/gdext version targets; speculative
+engine adoption and unrelated active development-loop work are excluded.
+
+Verify corrected examples against their owning schemas and implementation, check
+local references and packaged-copy parity, and perform one integrated review of
+the correction diff. Documentation-only verification does not establish new
+runtime evidence. The wider feature's existing integration obligations remain
+with its parent; completing this slice does not close unverified parent work.
+
+The skill correction slice is implemented. Director examples now use supported
+property/keyframe values; Stage documents observable errors and clip configuration
+and visual artifacts. Contributor guidance reflects structured MCP results,
+recorder ownership, Mark versus Save now, input ordering, and the existing native
+render-callback boundary. Claude and Codex payloads are synchronized.
+
+One integrated source/diff review corrected nested MCP results, session-lock
+usage, router delegation, render-thread fence polling, and a camera-class mix-up
+in the proposed edits. Verification includes packaged-copy/link checks, release
+script regression, Workbench validation (version advisory only), and a successful
+site build generating all 60 tool schemas. Corrected examples were checked against
+implementation; no new runtime or performance qualification is claimed. The
+research did not justify an engine/binding upgrade or speculative API wrappers.
+The authorized minor release remains pending publication.
 
 ## Standard review corrections and verification
 

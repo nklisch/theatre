@@ -21,36 +21,36 @@ silently dropped — a dead TCP writer must never crash a handler.
 ## Examples
 
 ### Example 1: spatial_snapshot (standard case)
-**File**: `crates/stage-server/src/mcp/mod.rs:154`
+**File**: `crates/stage-server/src/mcp/mod.rs:548`
 ```rust
 pub async fn spatial_snapshot(
     &self,
     Parameters(params): Parameters<SpatialSnapshotParams>,
-) -> Result<String, McpError> {
+) -> Result<rmcp::model::CallToolResult, McpError> {
     let activity_summary = crate::activity::snapshot_summary(&params);  // ← up front
 
-    // ... main logic ...
+    // main logic (shared JSON handler keeps Result<String, McpError> for CLI reuse)
+    let result = handle_snapshot(params, &self.state).await;
 
-    let result = serialize_response(&response);
     self.log_activity("query", &activity_summary, "spatial_snapshot").await;  // ← tail
-    result
+    result.and_then(stage_protocol::mcp_helpers::structured_json)
 }
 ```
 
 ### Example 2: spatial_inspect (same shape)
-**File**: `crates/stage-server/src/mcp/mod.rs:330`
+**File**: `crates/stage-server/src/mcp/mod.rs:565`
 ```rust
 pub async fn spatial_inspect(
     &self,
     Parameters(params): Parameters<SpatialInspectParams>,
-) -> Result<String, McpError> {
+) -> Result<rmcp::model::CallToolResult, McpError> {
     let activity_summary = crate::activity::inspect_summary(&params.node);
 
-    // ... query + finalize ...
+    // ... query + budget finalization happen inside the shared handler ...
 
-    let result = finalize_response(&mut response, budget_limit, config.token_hard_cap);
+    let result = handle_inspect(params, &self.state).await;
     self.log_activity("query", &activity_summary, "spatial_inspect").await;
-    result
+    result.and_then(stage_protocol::mcp_helpers::structured_json)
 }
 ```
 
@@ -88,7 +88,7 @@ Each tool has a dedicated summary function in `activity.rs`:
 
 ## log_activity implementation
 
-**File**: `crates/stage-server/src/server.rs:25`
+**File**: `crates/stage-server/src/server.rs:75`
 ```rust
 pub(crate) async fn log_activity(&self, entry_type: &str, summary: &str, tool: &str) {
     self.log_activity_with_meta(entry_type, summary, tool, None).await;
