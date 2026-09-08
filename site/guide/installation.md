@@ -110,16 +110,19 @@ This walks you through:
 3. **Plugin enabling** — updates `project.godot` to enable plugins and autoloads
 4. **Agent rules** — optionally generates a rules file to guide native authoring of `.tscn`/`.tres` files
 
-For non-interactive setup (CI, scripting), use `--yes` to accept all defaults:
+Ask the user before installing or enabling Theatre in a project. Machine installation,
+project wiring and per-run activation are separate decisions. After project-install
+approval, unattended setup requires both flags; existing addons and MCP config
+are preserved unless `--overwrite-existing` is also explicitly requested:
 
 ```bash
-theatre init ~/path/to/your-godot-project --yes
+theatre init path/to/your-godot-project --yes --accept-project-install
 ```
 
 If Godot is not on `PATH`, provide it for the bounded initial import:
 
 ```powershell
-theatre init .\path\to\your-godot-project --yes --godot-bin 'C:\path\to\Godot_console.exe'
+theatre init .\path\to\your-godot-project --yes --accept-project-install --godot-bin 'C:\path\to\Godot_console.exe'
 ```
 
 This argument is used only for initialization. If Director also needs that
@@ -444,3 +447,13 @@ On Linux, install `gcc` or `clang`: `sudo apt install build-essential` (Ubuntu) 
 ### Build fails on macOS: "xcrun: error"
 
 Run `xcode-select --install` to install the command-line developer tools.
+
+## Runtime activation and readiness
+
+Installed does not mean active: ordinary launches create no Stage listener,
+logger, sampling or capture controls. Use explicit launch options only when the
+user or investigation needs evidence. See [Getting Started](/guide/getting-started)
+for observation and the required asynchronous-ready integration checklist, then
+[Recording](/stage/recording) for presets and private preferences. Before creating
+`stage.local.toml`, obtain approval for its narrow project ignore rule and ensure
+that rule is present. Do not silently infer always-on consent from legacy settings.

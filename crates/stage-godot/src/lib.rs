@@ -2,6 +2,7 @@ use godot::prelude::*;
 
 mod action_handler;
 mod capture_native;
+mod capture_policy;
 mod capture_readback;
 mod capture_render_call;
 mod collector;

@@ -11,6 +11,7 @@ mod mcp;
 mod paths;
 mod project;
 mod rules;
+mod run;
 mod telemetry;
 
 #[derive(Parser)]
@@ -22,6 +23,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
+    /// Launch a saved scene through its existing Godot editor, with explicit capture options
+    Run(Box<run::RunArgs>),
     /// Inspect, retrieve, handle or delete retained human feedback
     Feedback(feedback::FeedbackArgs),
     /// Native client PostToolUse helper: reads event JSON on stdin
@@ -43,6 +46,7 @@ enum Command {
 fn main() -> Result<()> {
     let cli = Cli::parse();
     match cli.command {
+        Command::Run(args) => run::run(*args),
         Command::Feedback(args) => feedback::run(args),
         Command::FeedbackHook => feedback::hook(),
         Command::Install(args) => install::run(args),

@@ -307,10 +307,11 @@ impl DaemonHandle {
 
 /// Resolve the daemon port from env var or default.
 pub fn resolve_daemon_port() -> u16 {
-    std::env::var("DIRECTOR_DAEMON_PORT")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(DEFAULT_PORT)
+    resolve_daemon_port_with_env(std::env::var("DIRECTOR_DAEMON_PORT").ok().as_deref())
+}
+
+fn resolve_daemon_port_with_env(value: Option<&str>) -> u16 {
+    value.and_then(|s| s.parse().ok()).unwrap_or(DEFAULT_PORT)
 }
 
 /// Map a `CodecError` to `DaemonError`.
@@ -340,23 +341,14 @@ fn codec_error_to_daemon(e: stage_protocol::codec::CodecError) -> DaemonError {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
-
-    /// Serializes env-var-mutating tests (they race under parallel test threads).
-    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn test_resolve_daemon_port_default() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        unsafe { std::env::remove_var("DIRECTOR_DAEMON_PORT") };
-        assert_eq!(resolve_daemon_port(), 6550);
+        assert_eq!(resolve_daemon_port_with_env(None), 6550);
     }
 
     #[test]
     fn test_resolve_daemon_port_from_env() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        unsafe { std::env::set_var("DIRECTOR_DAEMON_PORT", "7777") };
-        assert_eq!(resolve_daemon_port(), 7777);
-        unsafe { std::env::remove_var("DIRECTOR_DAEMON_PORT") };
+        assert_eq!(resolve_daemon_port_with_env(Some("7777")), 7777);
     }
 }

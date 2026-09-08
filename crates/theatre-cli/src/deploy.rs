@@ -32,6 +32,7 @@ pub fn run(args: DeployArgs) -> Result<()> {
     for project in &args.projects {
         validate_project(project)
             .with_context(|| format!("Invalid project path: {}", project.display()))?;
+        validate_addon_destinations(project)?;
     }
 
     // Step 4: Build from source or use installed share dir
@@ -71,6 +72,21 @@ pub fn run(args: DeployArgs) -> Result<()> {
 struct SourceDeployment {
     stage_addon: PathBuf,
     gdext_artifact: PathBuf,
+}
+
+/// A Windows Git checkout with core.symlinks=false materializes tracked links
+/// as plain text. Fail before building/updating the installation, not halfway
+/// through deployment, and never replace that tracked file with a directory.
+fn validate_addon_destinations(project: &Path) -> Result<()> {
+    for addon in ["stage", "director", "theatre_shared"] {
+        let path = project.join("addons").join(addon);
+        if path.is_file() {
+            anyhow::bail!(
+                "addons/{addon} is a file, not an addon directory. If this is a Windows Git checkout, enable symlink support and restore its tracked links (Developer Mode or equivalent permission is required). No deployment changes were made."
+            );
+        }
+    }
+    Ok(())
 }
 
 /// Build from source and update the share dir.

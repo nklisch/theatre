@@ -15,7 +15,24 @@ pub const STDERR_TAIL_LIMIT: usize = 64 * 1024;
 pub fn godot_command(godot_bin: &Path) -> io::Result<Command> {
     #[cfg(windows)]
     let mut command = {
-        let mut command = Command::new(std::env::current_exe()?);
+        let current = std::env::current_exe()?;
+        // The library can be called from tests or another embedding executable.
+        // Only Director's binary implements the supervisor entry point.
+        let supervisor = if current
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.eq_ignore_ascii_case("director.exe"))
+        {
+            current
+        } else {
+            which::which("director").map_err(|error| {
+                io::Error::new(
+                    io::ErrorKind::NotFound,
+                    format!("Director's Windows supervisor is not on PATH: {error}"),
+                )
+            })?
+        };
+        let mut command = Command::new(supervisor);
         command.arg("__process-supervisor").arg(godot_bin);
         command
     };

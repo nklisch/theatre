@@ -31,6 +31,11 @@ Director owns durable Godot authoring. Stage owns live-game observation and expl
 
 ### Install once
 
+Ask the user before installing or enabling missing Theatre components in a
+project. Machine installation, project wiring and per-run activation are distinct.
+Unattended init requires `--yes --accept-project-install`; existing addons and
+MCP configuration require separate `--overwrite-existing` intent to replace.
+
 1. Install Theatre so the `theatre`, `stage`, and `director` executables and addon templates are available in the user-level share location.
 2. In a Godot project, run project setup or deploy the addon payload.
 3. Enable the plugins selected for the project. Stage also needs its `StageRuntime` autoload when runtime observation is wanted.
@@ -48,6 +53,8 @@ that completed its ready notification; an editor connection alone does not prove
 this. Compare engine run identifiers across restarts, not client session identifiers.
 
 - **Stage** connects to the running project's Stage listener on `127.0.0.1:9077` by default. The game must be running before a useful Stage query can complete.
+- Ordinary launches leave that listener and capture off. Enable observation
+  explicitly for live access; configure capture phases independently.
 - **Director** requires a `project_path` in every operation. It can use the editor plugin, a headless daemon, or a one-shot Godot process; the agent does not need to select the backend. The standalone Godot executable is resolved from `GODOT_BIN`, then `GODOT_PATH`, then `godot` on `PATH`.
 - **Nested projects and switching:** initialize each Godot project once. Keep one root MCP configuration rather than loading duplicate nested configurations. `THEATRE_PROJECT_DIR` selects Stage's startup project; `project_select` switches the running MCP server explicitly without a restart. Selection discards watches, baselines, spatial indexes, session overrides and the cached clip location, even for the same project. Take a fresh snapshot and recreate watches afterward. A stopped or unreachable target remains selected and reconnecting; Stage never returns to the previous project automatically. Director continues to select its absolute `project_path` per call. Separate live games/editors need distinct listener ports, or stop the old process before reusing its port.
 - **Feedback after switching:** Stage's tool results and feedback calls use the selected project's queue. A client feedback hook runs outside the MCP server and keeps its own environment/working-directory selection; `project_select` does not change that. Launch the client with the intended absolute `THEATRE_PROJECT_DIR` when its hook should select a nested queue. One-off Stage CLI calls still use explicit environment selection; `project_select` requires persistent MCP.
@@ -92,51 +99,54 @@ Actions are debugging controls, not persistence. They can invoke arbitrary node 
 
 ## Record and analyze
 
-Stage's dashcam keeps a rolling history while enabled and can also retain
-rendered screenshots. Start/Stop controls whether that history is collected;
-Mark and Save now decide when to retain a clip.
+Ordinary runs record nothing. Ask before installing or enabling missing project
+components; an installation is not permission for every launch.
 
-1. Check the native capture controls or `clips` status. Confirm recording is
-   enabled and inspect actual buffered coverage, not only the configured window.
-   Current image capability is separate from images already retained.
-2. Choose sampling settings if needed, then explicitly Start recording if it is
-   stopped. Presets do not enable it. Spatial only disables new images while
-   preserving spatial cadence, movement settings and retained images.
-   Mark retains the configured post-window—the time collected
-   after the marker. Save now closes the available window immediately. Stopping
-   a pending capture saves the available portion rather than waiting for the
-   rest of its post-window. Saving does not wait for unfinished image work;
-   those images appear as gaps in the saved window.
-3. Wait for the saved acknowledgement and copy the clip reference from the
-   controls. Match its run and note the scene at save when several clips exist; do not assume an
-   old clip belongs to the current game merely because it is listed.
-4. Use markers to locate the investigation window.
-5. Use `snapshot_at` for state at a frame, `trajectory` for a node's time series, `query_range` for conditions, `diff_frames` for before/after comparison, and `find_event` for recorded events.
-6. Use `screenshot_at` or a deterministic `visual_artifact` when visual evidence is useful and screenshots were captured.
-7. Treat gaps, unavailable screenshots, and degraded artifact responses as evidence limits, not as proof that nothing happened.
+1. Choose the evidence needed. Use `theatre run` or Director `editor_run.launch`
+   with independent observation, startup and play options. Minimal records
+   explicit metrics only; Light/Standard require spatial scope; Heavy permits
+   broad coverage. Review effective sources and channel availability.
+2. For asynchronous loading, add `StageRuntime.notify_ready()` at the project's
+   actual successful initial-ready transition. Do not guess from elapsed time or
+   one completed background task. Use the explicit scene fallback only for
+   synchronous scenes.
+3. Startup capture precedes target loading and normally saves at readiness.
+   Human play then waits without capture; agent play starts at readiness unless
+   an explicit preference overrides it. Missing readiness and capture bounds
+   never manufacture a ready event.
+4. Use Continue for a separate segment in the same recording or Start new for
+   an independent recording. The gap remains uncaptured. Preset selection and
+   `clips(config)` only stage next-play settings.
+5. Mark moments while recording. Stop freezes a draft; Keep persists it and
+   Discard removes only that draft. A failed Keep retains it for retry.
+   Unkept drafts can be lost when the game exits.
+6. Select rolling retention when recent history is needed. Automatic marker
+   saves require separate on-trigger opt-in; they use a five-second post-window.
+   Stop shortens pending coverage. Failed saving prevents automatic resumption.
+7. Inspect saved segment metadata and markers, then `clips(metrics)` for
+   counters/timing, spatial tools for recorded state, and images/artifacts only
+   when captured. Do not infer historical properties from live inspect calls.
 
-The addon owns capture buffers and writes clip SQLite files under its configured user storage. The server reads those files for analysis. Spatial clip data can exist in headless runs; rendered screenshots require a usable graphical display and capture path.
+Provider callbacks are explicit and run only during active metric capture.
+Use cheap already-computed values and unit-bearing names. Callback timing,
+native probe timing and persistence cost are different measurements; presets
+are not a promise about frame-time overhead.
 
-Markers have different origins and trigger tiers. Code markers can be deliberate, system, or silent; silent markers annotate without triggering a clip. System anomaly capture is rate-limited. The relevant capture configuration and status are part of the `clips` contract rather than this workflow overview.
+Native controls support keyboard access without taking gameplay focus.
+Drag their header to avoid game UI, or minimize to the single restore button.
+Neither changes capture state; dragged placement and minimization last for the
+run, with viewport changes keeping controls reachable. Release the game's mouse
+before interacting: the non-modal child window isolates clicks from gameplay
+event handlers, while captured input passes through. Global input polling still
+belongs to the game's own UI policy. Marker/pause bindings and initial corner
+placement remain configurable. Mark, Keep and Share note + still are separate
+actions. Hiding controls does not disable their
+shortcuts; an ordinary off launch creates neither controls nor shortcuts.
 
-The native controls show the configured marker shortcut. Their corner or hidden
-placement is set by `theatre/stage/display/capture_controls`; hiding them does
-not disable shortcuts. Human marker confirmations remain available when agent
-notifications are disabled. Share note + still opens the separate feedback
-composer; it does not mark or save a dashcam clip.
-
-After a successful save, Godot leaves a project-local hint to its resolved clip
-storage. A fresh CLI or MCP process can use that hint for saved analysis after
-the game closes. If storage has moved, restore or update the hint to its known location, or
-reconnect to resolve it. Live capture controls still need the game.
-
-Lightweight and Detailed are relative sampling choices, not frame-time promises.
-Inspect pacing, readback cost and gaps in `clips` status on the actual project.
-Lower image frequency or dimensions, choose Spatial only, or stop recording if
-capture disrupts the behavior being investigated. Spatial collection also has a
-cost. A full encoding queue is only one possible cause of capture overhead;
-zero queue drops do not prove smooth playback. Delayed image completion retains
-the capture-request frame and timestamp, not an atomic image-and-physics state.
+Saved segments remain available after the game exits using the project-local
+storage hint. Each has its own settings, time range, run and requested target.
+Use actual channel coverage; absent images, gaps and uncaptured intervals do not
+prove that nothing happened. Old clips remain readable with unknown new metadata.
 
 ## Author with Director
 
@@ -226,7 +236,9 @@ Stage configuration has three practical scopes:
 
 1. Project defaults loaded from `stage.toml` and Godot project settings where supported.
 2. The current Stage MCP session's `spatial_config` overrides for tracking, state properties, clustering, bearings, internal variables, polling, and token hard cap.
-3. Dashcam-specific runtime configuration through the clips config action; an explicit project `[dashcam]` section is pushed after handshake.
+3. Capture launch policy resolved before runtime activation, with `clips(config)`
+   staging settings for the next play segment in that run. Legacy `[dashcam]`
+   handshake settings do not override this policy.
 
 The effective config is session state. It is not a replacement for the project's source-controlled configuration. Keep frequently reused defaults in project configuration and use session changes for focused investigations.
 
@@ -240,7 +252,12 @@ client port settings aligned.
 
 ### Stage cannot connect
 
-Confirm the project is running, the Stage plugin/autoload is enabled, the extension binary matches the host platform and Godot version, and the listener port is consistent. If the extension is missing, the GDScript layer intentionally degrades rather than crashing, but no runtime data will be available. A stopped game or dropped connection returns an unavailable-session error; retry after the game is running.
+Confirm the launch explicitly enables observation; an ordinary off launch is
+not a broken installation. Then check the running project, Stage plugin/autoload,
+matching extension and Godot versions, and listener port. If the extension is
+missing, the GDScript layer degrades with a deployment error rather than providing
+runtime data. A stopped game or dropped connection returns an unavailable-session
+error; retry after the selected observation-enabled run is available.
 
 ### Stage returns no useful delta
 
@@ -249,6 +266,9 @@ A delta requires a live baseline. Take a fresh snapshot first. After a game rest
 ### Director cannot use the editor
 
 This is not necessarily a failure. Director next tries the headless daemon and then one-shot Godot. Inspect the structured operation error and Godot stderr when all paths fail. Confirm `project_path`, the Godot executable resolution, and that the project contains `project.godot`.
+
+The native `editor_run` workflow is different: it requires the selected editor
+and never substitutes a headless authoring backend or a second game launcher.
 
 ### Godot rejects a resource operation
 

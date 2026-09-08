@@ -261,6 +261,11 @@ impl Fixture {
                 project_path: self.project.path().to_string_lossy().into_owned(),
                 action,
                 scene_path: scene_path.map(str::to_owned),
+                launch: matches!(action, EditorRunAction::Start | EditorRunAction::Restart)
+                    .then_some(stage_protocol::capture::LaunchOptions {
+                        observe: Some(true),
+                        ..Default::default()
+                    }),
             }))
             .await
             .unwrap_or_else(|e| panic!("{}: {}", e.message, self.log()));
@@ -366,6 +371,84 @@ async fn native_only_undo_comparison() {
     }
     assert!(!f.log().contains("[Director] Editor plugin listening"));
     assert!(!f.log().contains("SCRIPT ERROR"), "{}", f.log());
+}
+
+#[tokio::test]
+#[ignore = "requires graphical Godot 4.7 editor and deployed Stage GDExtension"]
+async fn editor_launch_delivers_startup_policy_before_target_initialization() {
+    let f = Fixture::start_with_stage(true).await;
+    std::fs::write(
+        f.project.path().join("phase_target.gd"),
+        r#"extends Node
+var startup: Dictionary = {}
+func _init() -> void:
+    var runtime = Engine.get_main_loop().root.get_node("StageRuntime")
+    startup = runtime.capture_status()
+func _ready() -> void:
+    await get_tree().create_timer(0.1).timeout
+    var runtime = get_node("/root/StageRuntime")
+    runtime.notify_ready()
+    var file := FileAccess.open("res://phase_evidence.json", FileAccess.WRITE)
+    file.store_string(JSON.stringify({"initial":startup,"ready":runtime.capture_status()}))
+    file.close()
+"#,
+    )
+    .unwrap();
+    std::fs::write(f.project.path().join("phase_target.tscn"), "[gd_scene load_steps=2 format=3]\n[ext_resource type=\"Script\" path=\"res://phase_target.gd\" id=\"1\"]\n[node name=\"PhaseTarget\" type=\"Node\"]\nscript = ExtResource(\"1\")\n").unwrap();
+    let project_before = std::fs::read(f.project.path().join("project.godot")).unwrap();
+    let launch = f.raw("editor_run", json!({"action":"start","scene_path":"phase_target.tscn","launch":{
+        "startup":{"preset":"minimal"},"play":{"preset":"heavy","images":false},"readiness":"project","operator":"human"
+    }})).await;
+    assert!(launch.success, "{:?}: {}", launch.error, f.log());
+    let evidence_path = f.project.path().join("phase_evidence.json");
+    let evidence: Value = tokio::time::timeout(Duration::from_secs(20), async {
+        loop {
+            if let Ok(contents) = std::fs::read(&evidence_path)
+                && let Ok(value) = serde_json::from_slice::<Value>(&contents)
+            {
+                break value;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("Target did not report phase evidence: {}", f.log()));
+    assert_eq!(evidence["initial"]["state"], "recording", "{evidence}");
+    assert_eq!(evidence["initial"]["phase"], "startup");
+    assert_eq!(evidence["initial"]["config"]["spatial"], false);
+    assert_eq!(evidence["ready"]["state"], "idle", "{evidence}");
+    assert_eq!(evidence["ready"]["last_saved_clip"]["phase"], "startup");
+    assert_eq!(evidence["ready"]["target_scene"], "res://phase_target.tscn");
+    f.editor_run(EditorRunAction::Stop, None).await;
+    std::fs::remove_file(&evidence_path).unwrap();
+    let off = f
+        .raw(
+            "editor_run",
+            json!({"action":"start","scene_path":"phase_target.tscn"}),
+        )
+        .await;
+    assert!(off.success, "{:?}", off.error);
+    let evidence: Value = tokio::time::timeout(Duration::from_secs(20), async {
+        loop {
+            if let Ok(contents) = std::fs::read(&evidence_path)
+                && let Ok(value) = serde_json::from_slice::<Value>(&contents)
+            {
+                break value;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("Ordinary target did not report: {}", f.log()));
+    assert_eq!(
+        evidence["initial"]["state"], "off",
+        "launch envelope leaked: {evidence}"
+    );
+    assert_eq!(
+        std::fs::read(f.project.path().join("project.godot")).unwrap(),
+        project_before
+    );
+    f.editor_run(EditorRunAction::Stop, None).await;
 }
 
 #[tokio::test]

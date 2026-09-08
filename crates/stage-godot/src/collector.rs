@@ -76,6 +76,55 @@ impl StageCollector {
 }
 
 impl StageCollector {
+    /// Resolve only the requested nodes. Group lookup uses Godot's group index;
+    /// a scoped capture does not recursively scan the scene to discard most nodes.
+    pub fn collect_scoped_snapshot(
+        &self,
+        params: &GetSnapshotDataParams,
+        scope: &[String],
+    ) -> SnapshotResponse {
+        let Some(tree) = self.base().get_tree_or_null() else {
+            return snapshot_empty();
+        };
+        let Some(root) = tree.get_current_scene() else {
+            return snapshot_empty();
+        };
+        let mut selected = std::collections::BTreeMap::new();
+        for selector in scope {
+            if let Some(group) = selector.strip_prefix("group:") {
+                for node in tree.get_nodes_in_group(group).iter_shared() {
+                    if root == node || root.is_ancestor_of(&node) {
+                        selected.insert(node.instance_id(), node);
+                    }
+                }
+            } else if let Some(node) = root.get_node_or_null(selector.as_str()) {
+                selected.insert(node.instance_id(), node);
+            }
+        }
+        let mut entities = Vec::new();
+        for node in selected.into_values() {
+            if self.is_stage_node(&node) {
+                continue;
+            }
+            if let Ok(node) = node.clone().try_cast::<Node3D>() {
+                if self.should_collect_3d(&node, params) {
+                    entities.push(self.collect_single_entity_3d(&node, params));
+                }
+            } else if let Ok(node) = node.try_cast::<Node2D>()
+                && self.should_collect_2d(&node, params)
+            {
+                entities.push(self.collect_single_entity_2d(&node, params));
+            }
+        }
+        let info = self.get_frame_info();
+        SnapshotResponse {
+            frame: info.frame,
+            timestamp_ms: info.timestamp_ms,
+            perspective: self.resolve_perspective(&params.perspective),
+            entities,
+        }
+    }
+
     /// Collect scene snapshot data based on the provided parameters.
     pub fn collect_snapshot(&self, params: &GetSnapshotDataParams) -> SnapshotResponse {
         let tree = match self.base().get_tree_or_null() {

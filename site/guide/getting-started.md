@@ -1,126 +1,98 @@
 ---
-description: "Get your first spatial snapshot in under 10 minutes. Connect your AI agent to a running Godot game with Theatre."
+description: "Enable only the Theatre observation or capture needed for your current Godot investigation."
 ---
 
 # Getting Started
 
-[Theatre](/guide/what-is-theatre) gives AI agents spatial awareness of running Godot games via MCP tools. This guide walks you through getting your first `spatial_snapshot` in under 10 minutes. We assume you have completed [Installation](/guide/installation).
+Theatre installs tools for authoring and inspecting Godot projects. Installation,
+project wiring and runtime activation are separate choices. Ask before adding
+missing Theatre components to a project. After [Installation](/guide/installation),
+ordinary game launches leave Stage observation and recording off.
 
-## The goal
+## Observe a selected scene
 
-By the end of this guide, your AI agent will be able to call `spatial_snapshot` and receive real position data from your running Godot game. We will not cover all tools or workflows — just the minimum viable setup.
+With the project's Godot editor open and Director enabled, request live access:
 
-## Step 1: Run your game
-
-Theatre's Stage tool only works while a Godot game is running. The GDExtension starts its TCP listener when the scene tree initializes, and shuts it down on exit.
-
-Press **F5** in Godot, or ask Director `editor_run` to start a selected saved
-scene through a verified open editor. Director reports the launch request; Stage
-`runtime_status` separately reports the actual project, scene, run, and readiness.
-
-In the Godot output panel, you should see something like:
-
-```
-[Stage] TCP server started on port 9077
-[Stage] Collecting 3 nodes (physics tick 0)
+```sh
+theatre run scenes/review.tscn --observe on
 ```
 
-If you do not see this, confirm the Stage addon is enabled in **Project → Project Settings → Plugins**.
+Use your actual saved scene path relative to the project. The CLI delegates to
+Director's existing editor-owned launch. It does not modify the main scene or
+save unrelated editor work. Equivalent Director calls use
+`editor_run.launch: {"observe": true}`.
 
-## Step 2: Check the runtime
+1. Call `runtime_status` and verify the actual project, run and current scene.
+2. Use `scene_tree` to find a node path.
+3. Request `spatial_snapshot` at summary detail.
+4. Narrow the investigation with `spatial_inspect`, `spatial_query`, a group or
+   a smaller token budget.
+5. Treat each observation as current engine evidence, not a frozen world snapshot.
 
-Ask the agent to call `runtime_status`. Continue when it reports the expected
-project and a ready current scene. This avoids treating a stale connection or an
-accepted editor launch request as the run you intended.
+Observation does not implicitly retain history. Director's scene authoring tools
+and already saved clips remain usable without an active Stage listener.
 
-## Step 3: Ask for a snapshot
+## Integrate readiness before phased capture
 
-In your AI agent (Claude Code, Cursor, etc.), type:
+Projects with asynchronous loading must explicitly tell Stage when the intended
+activity is ready:
 
-```
-Take a spatial snapshot of my scene.
-```
-
-The agent will call the `spatial_snapshot` MCP tool. After a moment, you will see a response like:
-
-```json
-{
-  "frame": 47,
-  "timestamp_ms": 1847,
-  "node_count": 8,
-  "summary": {
-    "player": {
-      "class": "CharacterBody3D",
-      "global_position": [2.3, 0.0, -1.7],
-      "velocity": [0.0, 0.0, 0.0]
-    },
-    "camera": {
-      "class": "Camera3D",
-      "global_position": [2.3, 1.8, 0.3]
-    },
-    "ground": {
-      "class": "StaticBody3D",
-      "global_position": [0.0, -0.5, 0.0]
-    }
-  }
-}
+```gdscript
+# At the actual successful initial-loading completion transition:
+var stage := get_node_or_null("/root/StageRuntime")
+if stage != null:
+    stage.notify_ready()
 ```
 
-The exact content depends on your scene. The response identifies the collected
-physics frame; it is not a frozen or atomic world snapshot.
+Use this checklist:
 
-## Step 4: Ask a follow-up question
+1. Identify all work required before the intended review activity is usable.
+2. Add the call at the existing transition after that work succeeds.
+3. Do not notify on failure, cancellation, an arbitrary delay, or the first
+   completed task. A scene's `_ready()` is not proof that async work finished.
+4. Test success, failure, cancellation and repeated notification. Duplicate
+   calls are safe; later background tasks must not reopen startup capture.
+5. For truly synchronous scenes only, explicitly choose `--readiness scene`
+   instead of implementing a project signal.
 
-Now that the agent has observed your scene, you can ask questions that depend on spatial context:
+The default is project-provided readiness. A missing notification leaves capture
+waiting or stopped at its bound, never silently ready. `runtime_status.ready`
+reports Godot node readiness; `clips(status).ready` reports the capture boundary.
 
-```
-Where is the player relative to the ground? Is the player grounded?
-```
+## Request evidence for human review
 
-The agent will use the snapshot data (or call `spatial_inspect` on the player node) to answer:
-
-```
-The player's global_position.y is 0.0. The ground's global_position.y is -0.5
-with a StaticBody3D, so the player is resting on the ground surface. The
-CharacterBody3D.is_on_floor() property would confirm this at runtime.
-```
-
-## Step 5: Try a spatial query
-
-The `spatial_query` tool lets you ask geometric questions. Try:
-
-```
-What nodes are within 5 meters of the player?
+```sh
+theatre run scenes/review.tscn --startup minimal --play standard --play-scope group:review --operator human
 ```
 
-The agent will call:
+Use a real group or selected node paths. Startup records before the target scene
+loads and saves at readiness. Human play then waits without recording until the
+person clicks Start new or Continue. Continue adds a separate segment to the
+same recording; the waiting gap remains uncaptured. The game itself is not
+automatically paused.
 
-```json
-{
-  "query_type": "radius",
-  "from": "player",
-  "radius": 5.0
-}
-```
+If only timing and counters are needed, use `--play minimal`.
+Select `--observe on` separately if the agent also needs live access.
+See [Recording](/stage/recording) for bounds, providers, saving policies and
+private local overrides.
 
-And return a list of nearby nodes with their distances — useful for debugging enemy detection ranges, item pickup areas, or trigger zones.
+## Common issues
 
-## What's next?
+**Connection error:** first check whether observation was deliberately enabled.
+An ordinary off launch is not a broken installation. Then check the running
+project, port and firewall.
 
-You now have a working Theatre setup. Here are the natural next steps:
+**Waiting for readiness:** locate the project's completion transition and add
+the notification. Do not hide an async loading problem with the scene fallback.
 
-- **[Your first debugging session](/guide/first-session)** — A complete worked example of finding and fixing a real bug.
-- **[Recording workflow](/stage/dashcam)** — Record gameplay, mark the bug moment, and have the agent analyze the clip.
-- **[Watch & React](/stage/watch-workflow)** — Set up watches on specific nodes to monitor changes over time.
-- **[spatial_snapshot reference](/stage/snapshot)** — Snapshot usage and parameters.
-- **[Human feedback](/guide/human-feedback)** — Share an editor or runtime observation with viewport and context.
+**Light or Standard rejects missing scope:** supply scene-relative node paths
+or `group:name`; use Heavy only when broad capture is genuinely needed.
 
-## Common first-time issues
+**Images unavailable:** inspect capture capability. Auto never silently switches
+to blocking readback; metrics and spatial evidence can still be usable.
 
-**Agent says "no tools available"** — The MCP server is not configured or not running. Check your `.mcp.json` and make sure the path to `stage` is correct and the binary exists. Alternatively, use the CLI directly: `stage spatial_snapshot '{}'`.
+**Missing tools:** verify the project configuration and that `stage` and
+`director` resolve through PATH (`.exe` on Windows). Ask before installation.
 
-**Agent calls the tool but gets a connection error** — The game is not running, or port 9077 is blocked. Start the game first (F5), then retry.
-
-**Snapshot returns 0 nodes** — The Stage addon is not collecting any nodes. Check that your nodes are in the scene tree (not orphaned), and that the Stage plugin is enabled.
-
-**Response is very large** — Add `"detail": "summary"` or `"token_budget": 500` to limit response size. See [Token Budgets](/guide/token-budgets).
+Next: [First debugging session](/guide/first-session),
+[Dashcam workflow](/stage/dashcam), [Human feedback](/guide/human-feedback).

@@ -6,6 +6,11 @@ func _enter_tree() -> void:
 	call_deferred("run")
 
 func run() -> void:
+	# Plugin entry happens during initial import. Complete that editor lifecycle
+	# before editing and quitting; quitting inside it cancels live progress tasks.
+	await get_tree().process_frame
+	while EditorInterface.get_resource_filesystem().is_scanning():
+		await get_tree().process_frame
 	var is_3d := OS.get_environment("FEEDBACK_EDITOR_MODE") == "3D"
 	var node: Node = Node3D.new() if is_3d else Node2D.new()
 	node.name = "SelectedForFeedback"
@@ -39,5 +44,7 @@ func run() -> void:
 	assert(EditorInterface.get_unsaved_scenes() == dirty_before)
 	assert(EditorInterface.get_selection().get_selected_nodes() == selected_before)
 	assert(root.get("position") == position)
+	while EditorInterface.get_resource_filesystem().is_scanning():
+		await get_tree().process_frame
 	print("FEEDBACK_EDITOR_OK")
 	get_tree().quit()

@@ -407,7 +407,7 @@ async fn cli_journey_2d_scene() {
 ///
 /// Steps:
 ///   1. wait_frames(60) → let buffer accumulate
-///   2. clips {status} → dashcam_enabled=true, state="buffering"
+///   2. clips {status} → explicit fixture play capture enabled, state="recording"
 ///   3. clips {save, marker_label:"cli_test"} → clip_id starts with "clip_"
 ///   4. clips {list} → saved clip present in clips array
 ///   5. clips {delete, clip_id} → result="ok", echoes clip_id
@@ -428,14 +428,14 @@ async fn cli_journey_clips_lifecycle() {
         .expect("Failed to invoke clips status")
         .unwrap_data();
     assert_eq!(
-        status["dashcam_enabled"],
+        status["config"]["enabled"],
         json!(true),
-        "Dashcam should be enabled by default"
+        "Fixture explicitly requests play capture"
     );
     assert_eq!(
         status["state"],
-        json!("buffering"),
-        "Dashcam should be in buffering state"
+        json!("recording"),
+        "Explicit rolling capture should be recording"
     );
 
     // Step 3: save clip
@@ -446,7 +446,7 @@ async fn cli_journey_clips_lifecycle() {
         )
         .expect("Failed to invoke clips save")
         .unwrap_data();
-    let clip_id = save["clip_id"]
+    let clip_id = save["last_saved_clip"]["clip_id"]
         .as_str()
         .expect("save should return clip_id")
         .to_string();

@@ -17,7 +17,7 @@ fn copy_scripts(source: &Path, target: &Path) {
             copy_scripts(&entry.path(), &dest);
         } else if matches!(
             entry.path().extension().and_then(|value| value.to_str()),
-            Some("gd" | "gdextension")
+            Some("gd" | "gdextension" | "tscn")
         ) {
             std::fs::copy(entry.path(), dest).unwrap();
         }
@@ -96,6 +96,23 @@ fn run_journey(script: &str, headless: bool, environment: &[(&str, &str)]) -> St
 }
 
 #[test]
+#[ignore = "requires Godot and built GDExtension"]
+fn capture_policy_resolves_without_runtime_services() {
+    let output = run_journey("capture_policy_journey.gd", true, &[]);
+    assert!(output.contains("CAPTURE_POLICY_JOURNEY PASS"), "{output}");
+}
+
+#[test]
+#[ignore = "requires Godot and built GDExtension"]
+fn capture_lifecycle_keeps_idle_and_metrics_paths_separate() {
+    let output = run_journey("capture_lifecycle_journey.gd", true, &[]);
+    assert!(
+        output.contains("CAPTURE_LIFECYCLE_JOURNEY PASS"),
+        "{output}"
+    );
+}
+
+#[test]
 #[ignore = "requires graphical Godot and built GDExtension"]
 fn human_capture_controls_preserve_intent_and_fit_small_viewports() {
     let output = run_journey("capture_controls_journey.gd", false, &[]);
@@ -106,15 +123,19 @@ fn human_capture_controls_preserve_intent_and_fit_small_viewports() {
 }
 
 #[test]
+#[ignore = "requires graphical Godot and built GDExtension"]
+fn capture_pointer_controls_isolate_game_input() {
+    let output = run_journey("capture_pointer_journey.gd", false, &[]);
+    assert!(
+        output.contains("CAPTURE_POINTER_REPORT:{\"failures\":[]}"),
+        "{output}"
+    );
+}
+
+#[test]
 #[ignore = "requires graphical Godot and built GDExtension; measures representative capture cost"]
 fn measure_recording_presets_on_a_moving_scene() {
-    let profiles = [
-        "disabled",
-        "lightweight",
-        "lightweight_no_images",
-        "spatial_only",
-        "detailed",
-    ];
+    let profiles = ["off", "baseline", "minimal", "light", "standard", "heavy"];
     // Reuse the fixture's profile selector for bounded attribution runs.
     let selected = std::env::var("CAPTURE_PROFILE").ok();
     if let Some(selected) = &selected {
@@ -147,44 +168,31 @@ fn measure_recording_presets_on_a_moving_scene() {
         });
         assert!(report["physics_ticks"].as_u64().unwrap() >= 60, "{report}");
         assert!(report["physics_ms_p95"].as_f64().unwrap().is_finite());
-        if profile == "disabled" {
-            assert_eq!(report["status"]["buffer_frames"].as_f64(), Some(0.0));
+        assert_eq!(report["listener_created"], false, "{report}");
+        if matches!(profile, "off" | "baseline") {
+            assert_eq!(report["status"]["state"], "off");
+            assert_eq!(report["collector_created"], false);
         } else {
-            assert!(report["status"]["buffer_frames"].as_f64().unwrap() > 0.0);
-        }
-        if matches!(
-            profile,
-            "lightweight" | "lightweight_no_images" | "spatial_only"
-        ) {
-            assert_eq!(report["status"]["config"]["capture_interval"], 6.0);
-        }
-        if matches!(profile, "lightweight_no_images" | "spatial_only") {
-            assert_eq!(report["status"]["config"]["enabled"], true);
-            assert_eq!(report["status"]["config"]["screenshot_enabled"], false);
-            assert_eq!(report["status"]["screenshot_buffer_count"], 0.0);
-            for field in ["dispatched", "readback_ms_ema", "readback_ms_max"] {
-                assert_eq!(report["status"]["capture_probe"][field], 0.0, "{report}");
+            assert!(report["status"]["metric_samples"].as_f64().unwrap() > 0.0);
+            if profile == "minimal" {
+                assert_eq!(report["collector_created"], false);
+                assert_eq!(report["status"]["spatial_samples"], 0.0);
+            } else {
+                assert!(report["status"]["spatial_samples"].as_f64().unwrap() > 0.0);
             }
-            assert_eq!(
-                report["status"]["screenshot_capture"]["backend"],
-                "disabled"
-            );
-            assert_eq!(report["status"]["screenshot_capture"]["available"], false);
-            assert_eq!(report["status"]["preset"], "spatial_only");
-        } else if profile != "disabled" {
-            // This graphical qualification requires actual visual capture.
-            // An unsupported automatic backend is a verification limitation,
-            // not a successful visual-performance measurement.
-            assert_eq!(
-                report["status"]["screenshot_capture"]["available"], true,
-                "{report}"
-            );
-            assert!(
-                report["status"]["screenshot_buffer_count"]
-                    .as_f64()
-                    .unwrap()
-                    > 0.0
-            );
+            if matches!(profile, "minimal" | "light") {
+                assert_eq!(report["status"]["image_samples"], 0.0);
+                assert_eq!(report["status"]["capture_probe"]["dispatched"], 0.0);
+            } else {
+                assert_eq!(
+                    report["status"]["screenshot_capture"]["available"], true,
+                    "{report}"
+                );
+                assert!(
+                    report["status"]["image_samples"].as_f64().unwrap() > 0.0,
+                    "{report}"
+                );
+            }
         }
         eprintln!("CAPTURE_BENCHMARK:{report}");
     }

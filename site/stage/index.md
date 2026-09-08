@@ -14,10 +14,14 @@ interaction sequences. These changes are temporary and do not save project files
 
 ## Start with identity
 
+Ordinary launches leave Stage off. Request live access with `--observe on`,
+and select startup/play capture separately when retained evidence is needed.
+
 Call `runtime_status` before a run-sensitive workflow. It identifies the actual
 Godot project, process, run, current scene, and readiness. A TCP connection or a
 Director launch request alone does not establish that the scene completed its
-ready notification.
+Godot-ready notification. For asynchronous capture readiness, integrate the
+project's explicit `StageRuntime.notify_ready()` call and inspect `clips(status).ready`.
 
 Then use a summary `spatial_snapshot` and narrow the question with inspection,
 queries, filters, or a smaller radius. Use persistent MCP when a workflow needs

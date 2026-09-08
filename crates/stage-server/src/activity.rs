@@ -278,7 +278,13 @@ pub fn clips_summary(params: &ClipsParams) -> String {
             "Visual artifact: {}",
             params.artifact.as_deref().unwrap_or("?")
         ),
-        ClipAction::Config => "Dashcam config".into(),
+        ClipAction::Config => "Next-segment capture config".into(),
+        ClipAction::Start => "Start capture".into(),
+        ClipAction::Continue => "Continue recording".into(),
+        ClipAction::Stop => "Stop capture".into(),
+        ClipAction::Keep => "Keep capture draft".into(),
+        ClipAction::Discard => "Discard capture draft".into(),
+        ClipAction::Metrics => "Inspect retained metrics".into(),
     }
 }
 

@@ -69,7 +69,10 @@ async fn wrong_project_fails_before_ack_or_config_and_preserves_diagnostic() {
         .unwrap_err()
         .to_string();
     assert!(error.contains("project mismatch"), "{error}");
-    assert!(error.contains(&actual.path().display().to_string()));
+    assert!(
+        error.contains(&actual.path().canonicalize().unwrap().display().to_string()),
+        "{error}"
+    );
     assert!(error.contains("THEATRE_PROJECT_DIR"));
     peer.await.unwrap();
     let result = status(&state).await;

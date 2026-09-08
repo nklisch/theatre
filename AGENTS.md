@@ -53,6 +53,19 @@ change.
   workspace tests do not include every ignored environment-dependent test.
   Use the complete commands in `.work/CONVENTIONS.md` and report missing evidence.
 
+## Consumer independence
+
+Keep Theatre independent of individual consuming projects. Project-specific
+readiness conditions, metric providers, scene conventions, and input bindings
+belong in the consuming project, not Theatre's runtime or shared defaults.
+Do not identify a consumer by name or path to select behavior: that makes the
+same Theatre contract behave differently across projects.
+
+When adding integration contracts, test them with self-contained Godot fixtures.
+Consumer projects can supply additional evidence, but must not become required
+dependencies for Theatre's tests or releases. Treat reference implementations
+and their measurements as evidence, not automatic product requirements.
+
 ## Installation and deployment
 
 `theatre install` builds and installs binaries and addon templates.

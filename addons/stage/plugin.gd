@@ -36,13 +36,11 @@ func _disable_plugin() -> void:
 func _register_settings() -> void:
 	_add_setting("theatre/stage/connection/port", TYPE_INT, 9077,
 		PROPERTY_HINT_RANGE, "1024,65535")
-	_add_setting("theatre/stage/connection/auto_start", TYPE_BOOL, true)
 	_add_setting("theatre/stage/connection/client_idle_timeout_secs", TYPE_INT, 10,
 		PROPERTY_HINT_RANGE, "0,3600")
 	_add_setting("theatre/stage/display/show_agent_notifications", TYPE_BOOL, true)
 	_add_setting("theatre/stage/display/capture_controls", TYPE_STRING, "bottom_right",
 		PROPERTY_HINT_ENUM, "bottom_right,top_right,bottom_left,top_left,hidden")
-	_add_setting("theatre/stage/dashcam/enabled", TYPE_BOOL, true)
 	_add_setting("theatre/stage/shortcuts/marker_key", TYPE_STRING, "F9",
 		PROPERTY_HINT_NONE, "Key name for marker/dashcam clip (e.g. F9). Avoid F5-F11 (Godot editor shortcuts).")
 	_add_setting("theatre/stage/shortcuts/pause_key", TYPE_STRING, "F11",

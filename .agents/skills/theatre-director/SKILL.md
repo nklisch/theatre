@@ -45,11 +45,17 @@ should be retried.
 
 ## Set Up and Select a Godot Project
 
-Install Theatre once, then initialize each Godot project once so it has the
+Ask the user before installing missing Theatre components or wiring them into a
+project. Machine installation, project wiring, and launch activation are distinct.
+`--yes` selects setup defaults, not permission; approved noninteractive wiring
+uses `theatre init . --yes --accept-project-install`. Preserve existing files unless
+replacement was explicitly approved.
+
+After approval, install Theatre once, then initialize each Godot project so it has the
 addons and plugin registration:
 
 ```bash
-theatre init /absolute/path/to/godot-project
+theatre init .
 ```
 
 Respect the target repository's instructions and generators. If a generator owns
@@ -210,15 +216,15 @@ and resource operations persist their target files.
 
 ```jsonc
 // 1. Create the scene
-{ "project_path": "/home/user/game", "scene_path": "res://levels/level_01.tscn", "root_type": "Node3D" }
+{ "project_path": ".", "scene_path": "res://levels/level_01.tscn", "root_type": "Node3D" }
 
 // 2. Add nodes
-{ "project_path": "/home/user/game", "scene_path": "res://levels/level_01.tscn",
+{ "project_path": ".", "scene_path": "res://levels/level_01.tscn",
   "parent_path": ".", "node_type": "DirectionalLight3D", "node_name": "Sun",
   "properties": { "rotation_degrees": {"x": -45, "y": 30, "z": 0} } }
 
 // 3. Instance a sub-scene
-{ "project_path": "/home/user/game", "scene_path": "res://levels/level_01.tscn",
+{ "project_path": ".", "scene_path": "res://levels/level_01.tscn",
   "instance_scene": "res://characters/player.tscn", "parent_path": ".",
   "node_name": "Player" }
 ```
@@ -227,7 +233,7 @@ and resource operations persist their target files.
 
 ```jsonc
 {
-  "project_path": "/home/user/game",
+  "project_path": ".",
   "operations": [
     { "operation": "node_add", "params": {
         "scene_path": "res://ui/hud.tscn", "parent_path": ".",
@@ -243,7 +249,7 @@ and resource operations persist their target files.
 
 ```jsonc
 {
-  "project_path": "/home/user/game",
+  "project_path": ".",
   "resource_path": "res://materials/metal.tres",
   "material_type": "StandardMaterial3D",
   "properties": {
@@ -259,7 +265,7 @@ and resource operations persist their target files.
 ```jsonc
 // Set cells on a TileMapLayer
 {
-  "project_path": "/home/user/game",
+  "project_path": ".",
   "scene_path": "res://levels/level_01.tscn",
   "node_path": "Ground",
   "cells": [
@@ -274,11 +280,11 @@ and resource operations persist their target files.
 
 ```jsonc
 // 1. Create animation
-{ "project_path": "/home/user/game", "resource_path": "res://anims/walk.tres",
+{ "project_path": ".", "resource_path": "res://anims/walk.tres",
   "length": 1.0, "loop_mode": "linear" }
 
 // 2. Add position track
-{ "project_path": "/home/user/game", "resource_path": "res://anims/walk.tres",
+{ "project_path": ".", "resource_path": "res://anims/walk.tres",
   "track_type": "position_3d", "node_path": "Skeleton3D:LeftFoot",
   "keyframes": [
     { "time": 0.0, "value": {"x": 0, "y": 0, "z": 0} },
@@ -290,7 +296,7 @@ and resource operations persist their target files.
 ### Connect Signals
 
 ```jsonc
-{ "project_path": "/home/user/game", "scene_path": "res://ui/button.tscn",
+{ "project_path": ".", "scene_path": "res://ui/button.tscn",
   "source_path": "StartButton", "signal_name": "pressed",
   "target_path": ".", "method_name": "_on_start_pressed" }
 ```
@@ -301,36 +307,48 @@ and resource operations persist their target files.
 // 1. Write scripts with the Write tool (not Director)
 
 // 2. Reload project to validate scripts and restart daemon
-{ "project_path": "/home/user/game" }
+{ "project_path": "." }
 // → MCP returns { errors: [...], warnings: [...], scripts_checked, autoloads };
 //   the CLI returns { scripts_checked, autoloads } without parsed diagnostics
 // Fix any errors before proceeding!
 
 // 3. Register autoload
-{ "project_path": "/home/user/game", "name": "EventBus", "script_path": "autoload/event_bus.gd" }
+{ "project_path": ".", "name": "EventBus", "script_path": "autoload/event_bus.gd" }
 
 // 4. Now safe to build scenes that reference the script
-{ "project_path": "/home/user/game", "scene_path": "scenes/main.tscn", ... }
+{ "project_path": ".", "scene_path": "scenes/main.tscn", ... }
 ```
 
 ### Run and Verify a Saved Scene
 
 ```jsonc
 // Start without implicitly saving open editor work
-{ "project_path": "/home/user/game", "action": "start",
+{ "project_path": ".", "action": "start",
   "scene_path": "res://scenes/main.tscn" }
 ```
 
 A successful `editor_run` start or restart reports that Godot accepted the native
-play request. It does not prove that Stage attached or that the scene completed
-`_ready`. Call Stage `runtime_status` separately and compare project, scene, and
+play request. Ordinary launches enable neither Stage observation nor recording.
+Add `launch: {"observe":true}` only when live evidence is needed, then call Stage
+`runtime_status` separately and compare project, scene, and
 `run_id`. Stop is idempotent. Run control requires a verified open editor and does
 not fall back to a headless backend.
+
+The same `launch` object independently selects `startup` and `play` presets
+(`minimal`, `light`, `standard`, `heavy`, or `off`) and channel overrides.
+For human review use `operator: "human"` and the default manual play start so
+absence does not produce hours of capture. Requested startup stops and saves
+at readiness. A preset does not authorize installation or persistent changes.
+Honor user/local preferences and explicit per-run off. Read the Stage skill for
+phased capture: asynchronous projects must explicitly call
+`StageRuntime.notify_ready()` at their successful readiness transition; the
+default `readiness: "project"` must not silently become scene-ready or a timeout.
+Simple synchronous scenes can explicitly select `readiness: "scene"`.
 
 ### Discover an Engine Type
 
 ```jsonc
-{ "project_path": "/home/user/game", "class_name": "CharacterBody3D",
+{ "project_path": ".", "class_name": "CharacterBody3D",
   "category": "properties", "member": "floor_snap_length" }
 ```
 
@@ -341,10 +359,10 @@ unavailable. Do not treat every returned default as an authoring-ready value.
 ### Read Human Feedback
 
 ```jsonc
-{ "project_path": "/home/user/game", "action": "status" }
-{ "project_path": "/home/user/game", "action": "retrieve",
+{ "project_path": ".", "action": "status" }
+{ "project_path": ".", "action": "retrieve",
   "feedback_id": "feedback_..." }
-{ "project_path": "/home/user/game", "action": "handle",
+{ "project_path": ".", "action": "handle",
   "feedback_id": "feedback_..." }
 ```
 
@@ -356,7 +374,7 @@ evidence; deletion is separate.
 
 ```jsonc
 // See what's happening in the editor right now
-{ "project_path": "/home/user/game" }
+{ "project_path": "." }
 // → { editor_connected: true, active_scene: "scenes/player.tscn",
 //     open_scenes: [...], game_running: false, autoloads: {...},
 //     recent_log: [...] }
@@ -368,7 +386,7 @@ evidence; deletion is separate.
 
 ```jsonc
 {
-  "project_path": "/home/user/game",
+  "project_path": ".",
   "settings": {
     "application/run/main_scene": "res://scenes/main/main.tscn",
     "application/config/name": "My Game",
@@ -383,7 +401,7 @@ evidence; deletion is separate.
 ```jsonc
 // Compare current vs git commit
 {
-  "project_path": "/home/user/game",
+  "project_path": ".",
   "scene_a": "HEAD:res://levels/level_01.tscn",
   "scene_b": "res://levels/level_01.tscn"
 }

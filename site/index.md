@@ -59,8 +59,9 @@ The killer workflow: **human plays, AI analyzes**.
 
 <AgentConversation :messages="messages0" />
 
-You press **F9** to mark the bug moment, and the dashcam saves retained spatial
-and optional visual evidence around it. For a deliberate observation, **Share
+After explicitly starting capture, press **F9** to mark the bug moment, then
+Stop and Keep the segment. Automatic rolling marker saves require separate
+on-trigger opt-in. For a deliberate observation, **Share
 feedback** queues the current viewport, pointer or selection context, and a note
 for later agent retrieval.
 

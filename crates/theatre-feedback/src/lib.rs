@@ -133,7 +133,7 @@ pub enum Operation {
 pub enum Response {
     Status(Status),
     Retrieve {
-        item: FeedbackItem,
+        item: Box<FeedbackItem>,
         handled: bool,
         image_path: Option<PathBuf>,
     },
@@ -288,7 +288,7 @@ impl Queue {
                     .then(|| self.root.join(&feedback_id).join("image.jpg"));
                 Ok(Response::Retrieve {
                     handled: self.is_handled(&feedback_id),
-                    item,
+                    item: Box::new(item),
                     image_path,
                 })
             }

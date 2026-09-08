@@ -14,6 +14,8 @@ use stage_protocol::recording::FrameEntityData;
 
 use crate::collector::StageCollector;
 
+mod capture_segment;
+
 // ---------------------------------------------------------------------------
 // In-memory buffer types
 // ---------------------------------------------------------------------------
@@ -24,6 +26,18 @@ struct CapturedFrame {
     timestamp_ms: u64,
     data: Vec<u8>, // MessagePack-encoded Vec<FrameEntityData>
     camera: Option<stage_protocol::recording::CameraFrameData>,
+}
+
+impl CapturedFrame {
+    fn encoded_bytes(&self) -> usize {
+        self.data.len()
+            + 16
+            + self
+                .camera
+                .as_ref()
+                .and_then(|c| rmp_serde::to_vec(c).ok())
+                .map_or(0, |bytes| bytes.len())
+    }
 }
 
 /// A captured viewport screenshot.
@@ -489,6 +503,9 @@ enum DashcamState {
 pub struct StageRecorder {
     base: Base<Node>,
 
+    segment: Option<capture_segment::Segment>,
+    managed_capture: bool,
+
     // Physics frame counter (for dashcam capture interval)
     frame_counter: u32,
 
@@ -568,6 +585,8 @@ impl INode for StageRecorder {
     fn init(base: Base<Node>) -> Self {
         Self {
             base,
+            segment: None,
+            managed_capture: false,
             frame_counter: 0,
             collector: None,
             dashcam_config: DashcamConfig::default(),
@@ -604,6 +623,13 @@ impl INode for StageRecorder {
     }
 
     fn physics_process(&mut self, _delta: f64) {
+        if matches!(self.dashcam_state, DashcamState::Disabled) {
+            return;
+        }
+        self.check_segment_bounds();
+        if matches!(self.dashcam_state, DashcamState::Disabled) {
+            return;
+        }
         self.physics_tick_count = self.physics_tick_count.saturating_add(1);
         // Wall-clock pacing between ticks (engine `delta` is the fixed
         // timestep and would hide real hitches).
@@ -641,9 +667,10 @@ impl INode for StageRecorder {
             );
         }
 
-        if !self
-            .frame_counter
-            .is_multiple_of(self.dashcam_config.capture_interval)
+        if !self.segment_spatial_enabled()
+            || !self
+                .frame_counter
+                .is_multiple_of(self.dashcam_config.capture_interval)
         {
             return;
         }
@@ -664,11 +691,77 @@ impl INode for StageRecorder {
         };
 
         self.dashcam_ingest(captured);
+        self.check_segment_bounds();
     }
 }
 
 #[godot_api]
 impl StageRecorder {
+    /// Reserve this recorder for launch/segment policy before any client connects.
+    #[func]
+    pub fn capture_manage(&mut self) {
+        self.set_dashcam_enabled(false);
+        self.managed_capture = true;
+    }
+
+    #[func]
+    pub fn capture_begin(
+        &mut self,
+        config: GString,
+        phase: GString,
+        recording_id: GString,
+        context: GString,
+    ) -> GString {
+        let result = stage_protocol::capture::from_godot_json(&config.to_string())
+            .map_err(|e| format!("Invalid phase configuration: {e}"))
+            .and_then(|config| {
+                let context = stage_protocol::capture::from_godot_json(&context.to_string())
+                    .map_err(|e| format!("Invalid segment context: {e}"))?;
+                self.begin_segment(
+                    config,
+                    &phase.to_string(),
+                    &recording_id.to_string(),
+                    context,
+                )
+            });
+        capture_segment::reply(result)
+    }
+
+    #[func]
+    pub fn capture_stop(&mut self, reason: GString) -> GString {
+        let result = self.finish_segment(&reason.to_string());
+        capture_segment::reply(result)
+    }
+
+    #[func]
+    pub fn capture_keep(&mut self, note: GString) -> GString {
+        let result = self.keep_segment(&note.to_string());
+        capture_segment::reply(result)
+    }
+
+    #[func]
+    pub fn capture_discard(&mut self) -> GString {
+        let result = self.discard_segment();
+        capture_segment::reply(result)
+    }
+
+    #[func]
+    pub fn capture_status(&self) -> GString {
+        capture_segment::reply(Ok(self.segment_status()))
+    }
+
+    #[func]
+    pub fn capture_is_active(&self) -> bool {
+        self.segment_active()
+    }
+
+    #[func]
+    pub fn capture_metrics(&mut self, data: GString, callback_usec: i64) -> GString {
+        let result = self.sample_segment_metrics(&data.to_string(), callback_usec.max(0) as u64);
+        self.check_segment_bounds();
+        capture_segment::reply(result.map(|()| serde_json::json!({"ok": true})))
+    }
+
     #[signal]
     fn marker_added(frame: i64, source: GString, label: GString);
 
@@ -691,6 +784,13 @@ impl StageRecorder {
     /// Enable or disable dashcam mode at runtime.
     #[func]
     pub fn set_dashcam_enabled(&mut self, enabled: bool) {
+        if self.managed_capture {
+            return;
+        }
+        self.set_capture_enabled_internal(enabled);
+    }
+
+    fn set_capture_enabled_internal(&mut self, enabled: bool) {
         if !enabled && matches!(self.dashcam_state, DashcamState::PostCapture { .. }) {
             self.flush_dashcam_clip_from(
                 "Stopped recording before the post-window completed",
@@ -866,6 +966,9 @@ impl StageRecorder {
     }
 
     pub fn flush_dashcam_clip_from(&mut self, label: &str, source: &str) -> GString {
+        if self.managed_capture {
+            return GString::new();
+        }
         if matches!(self.dashcam_state, DashcamState::Disabled) {
             return GString::new();
         }
@@ -919,6 +1022,9 @@ impl StageRecorder {
         &mut self,
         patch: &DashcamConfigPatch,
     ) -> Result<DashcamConfig, String> {
+        if self.managed_capture {
+            return Err("Launch-managed capture uses clips(config) for the next segment; legacy dashcam settings cannot change it".into());
+        }
         let mut next = patch.apply_to(&self.dashcam_config)?;
         if patch.movement_nodes.is_some() || patch.input_actions.is_some() {
             crate::movement_capture::validate_targets(&self.base().clone(), &mut next)?;
@@ -1020,6 +1126,10 @@ impl StageRecorder {
     /// Add a marker at the current frame. Triggers a dashcam clip.
     #[func]
     pub fn add_marker(&mut self, source: GString, label: GString) {
+        if self.segment.is_some() {
+            self.segment_marker(&source.to_string(), &label.to_string(), "deliberate");
+            return;
+        }
         let frame = current_physics_frame();
         let timestamp_ms = current_time_ms();
         let source_str = source.to_string();
@@ -1042,6 +1152,10 @@ impl StageRecorder {
     /// "silent" (annotate-only, no clip trigger).
     #[func]
     pub fn add_code_marker(&mut self, label: GString, tier: GString) {
+        if self.segment.is_some() {
+            self.segment_marker("code", &label.to_string(), &tier.to_string());
+            return;
+        }
         let frame = current_physics_frame();
         let timestamp_ms = current_time_ms();
         let label_str = label.to_string();
@@ -1641,6 +1755,9 @@ impl StageRecorder {
 
     /// Ingest a screenshot into the ring buffer and post-capture state.
     fn screenshot_ingest(&mut self, screenshot: CapturedScreenshot) {
+        if !self.segment_admit(screenshot.jpeg_data.len()) {
+            return;
+        }
         self.screenshot_ring_bytes += screenshot.jpeg_data.len();
         self.screenshot_ring.push_back(screenshot.clone());
         self.enforce_screenshot_byte_cap();
@@ -1655,6 +1772,9 @@ impl StageRecorder {
 
     /// Evict oldest screenshot ring buffer entries until within byte_cap.
     fn enforce_screenshot_byte_cap(&mut self) {
+        if self.segment.is_some() {
+            return;
+        }
         let byte_cap = self.dashcam_config.screenshot_byte_cap_mb as usize * 1024 * 1024;
         while self.screenshot_ring_bytes > byte_cap && !self.screenshot_ring.is_empty() {
             if let Some(evicted) = self.screenshot_ring.pop_front() {
@@ -1681,7 +1801,15 @@ impl StageRecorder {
             expose_internals: false,
         };
 
-        let snapshot = collector.bind().collect_snapshot(&params);
+        let snapshot = match self.segment_scope() {
+            Some(scope) if !scope.is_empty() => {
+                collector.bind().collect_scoped_snapshot(&params, scope)
+            }
+            _ => collector.bind().collect_snapshot(&params),
+        };
+        if let Some(entity) = snapshot.entities.first() {
+            self.segment_set_dimensions(entity.position.len() as u32);
+        }
 
         let mut movement =
             crate::movement_capture::capture(&self.base().clone(), &self.dashcam_config);
@@ -1735,7 +1863,14 @@ impl StageRecorder {
 
         Some(CapturedFrame {
             frame: snapshot.frame,
-            timestamp_ms: snapshot.timestamp_ms,
+            // Live snapshots use simulation-relative time. Segment channels
+            // share wall time for retention and persisted temporal coverage;
+            // mixing those clocks would immediately evict every spatial frame.
+            timestamp_ms: if self.segment.is_some() {
+                current_time_ms()
+            } else {
+                snapshot.timestamp_ms
+            },
             data,
             camera,
         })
@@ -1760,6 +1895,9 @@ impl StageRecorder {
 
     /// Ingest a captured frame into the dashcam ring buffer and post-capture state.
     fn dashcam_ingest(&mut self, captured: CapturedFrame) {
+        if !self.segment_admit(captured.encoded_bytes()) {
+            return;
+        }
         // Update byte size estimate (exponential moving average, α≈0.05).
         if self.avg_frame_bytes == 0 {
             self.avg_frame_bytes = captured.data.len();
@@ -1768,9 +1906,11 @@ impl StageRecorder {
         }
 
         // Add to ring buffer (clone needed if PostCapture also wants the original).
-        self.ring_buffer_bytes += captured.data.len();
+        self.ring_buffer_bytes += captured.encoded_bytes();
         self.ring_buffer.push_back(captured.clone());
-        self.enforce_ring_byte_cap();
+        if self.segment.is_none() {
+            self.enforce_ring_byte_cap();
+        }
 
         // If in PostCapture: add to post_buffer and count down.
         let should_flush = if let DashcamState::PostCapture {
@@ -1802,7 +1942,9 @@ impl StageRecorder {
             || (self.ring_buffer_bytes > byte_cap && !self.ring_buffer.is_empty())
         {
             if let Some(evicted) = self.ring_buffer.pop_front() {
-                self.ring_buffer_bytes = self.ring_buffer_bytes.saturating_sub(evicted.data.len());
+                self.ring_buffer_bytes = self
+                    .ring_buffer_bytes
+                    .saturating_sub(evicted.encoded_bytes());
             } else {
                 break;
             }
@@ -1858,6 +2000,10 @@ impl StageRecorder {
         timestamp_ms: u64,
         tier: DashcamTier,
     ) {
+        if self.segment.is_some() {
+            self.segment_marker(source, label, tier.as_str());
+            return;
+        }
         // Determine action without borrowing dashcam_state.
         let is_buffering = matches!(self.dashcam_state, DashcamState::Buffering);
         let is_post_capture = matches!(self.dashcam_state, DashcamState::PostCapture { .. });
@@ -2277,6 +2423,16 @@ CREATE TABLE IF NOT EXISTS frames (
     data BLOB
 );
 
+CREATE TABLE IF NOT EXISTS metrics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    render_frame INTEGER,
+    physics_frame INTEGER,
+    timestamp_ms INTEGER,
+    elapsed_usec INTEGER,
+    interval_usec INTEGER,
+    data TEXT
+);
+
 CREATE TABLE IF NOT EXISTS camera_frames (
     frame INTEGER PRIMARY KEY,
     timestamp_ms INTEGER,
@@ -2529,7 +2685,7 @@ mod tests {
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(count, 8); // recording, frames, camera_frames, events, markers, screenshots, gaps, artifacts
+        assert_eq!(count, 9); // recording, frames, metrics, camera_frames, events, markers, screenshots, gaps, artifacts
     }
 
     #[test]
