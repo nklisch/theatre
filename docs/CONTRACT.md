@@ -141,33 +141,77 @@ Stage serves the state of a running Godot project through MCP tools. The exact f
 - `spatial_action` validates fields by action type. In addition to pause, frame/time advance, teleport, property/method/signal operations, spawn/remove, it supports named input actions, key/mouse injection, and bounded interaction sequences. A sequence requires an already paused game, advances a bounded number of physics frames, releases its held actions on normal completion or supported cleanup paths, and leaves the game paused. It does not promise deterministic gameplay. `return_delta` only produces a useful delta when a baseline exists.
 - `runtime_diagnostics` reads bounded errors, warnings, script errors and shader errors captured by the running game's native logger. Results identify the actual run and distinguish retained, evicted and response-omitted entries. Reads do not consume diagnostics. Capture starts at logger registration; engine initialization, disabled log streams and unavailable release backtraces are not recovered. A disconnected call does not return stale current-run evidence.
 - `viewport` returns a bounded, aspect-preserving JPEG of the latest completed root-viewport render, with actual run identity and readback counters. It is independent of recording. Headless, missing-viewport and empty-pixel outcomes explicitly report unavailability; spatial observation remains available. A physics counter at readback is not the simulation frame represented by the pixels.
-- `clips` manages the dashcam buffer and analyzes saved clips. Capture runs
-  continuously while enabled; projects can disable dashcam startup. It covers markers, saves, status, list/delete, frame snapshots, trajectories, range conditions, frame diffs, events, screenshots, visual artifacts, and validated partial dashcam configuration. Visual results may contain a text manifest and an image content block; unavailable screenshots and generation degradation are content-level outcomes, not proof that spatial capture failed.
+- `clips` controls explicit capture and analyzes saved segments. Capture and live
+  observation are independent launch choices, both off by default. Controls
+  support Start/Continue, Stop, Keep/Discard, markers, status and staged next-play
+  settings. Saved metric, spatial and visual operations only use channels
+  actually retained; absent channels are unavailable, not empty observations.
 
 Stage's response budget is approximate, is derived from serialized JSON size, and is capped by the session hard cap. Detail tiers and filtering are response-shaping semantics, not guarantees that every engine property is available. Engine state that is not exposed by the collector remains unavailable.
 
-### Configuration precedence
+### Launch, readiness and configuration
 
-For Stage's effective server configuration, session `spatial_config` overrides project defaults loaded from `stage.toml`; Godot project settings provide addon-side defaults where defined. Dashcam configuration is a separate recorder-owned runtime surface: `clips`
-config applies a validated partial patch and returns effective settings. Unknown
-fields and invalid values are rejected before mutation. The same flat vocabulary
-is used by TOML, native controls and the agent API. Presets change their defined
-sampling/image settings, not whether recording is enabled. Explicit project
-`[dashcam]` fields are pushed after handshake; omitted fields are not replaced
-with defaults on one-shot connections. Invalid recorder TOML is reported without
-discarding valid connection settings or preventing other local tools from
-starting.
+Resolve launch policy before registering a logger, opening a listener or creating
+capture services. Built-in defaults are off. Precedence is built-in defaults,
+project `stage.toml`, private `theatre/settings.toml` under Godot's configuration
+directory, private project `stage.local.toml`, then explicit launch options.
+Each file uses `[launch]`; status exposes effective values and source labels,
+not private machine paths. Creating a local override requires its approved
+narrow ignore rule. Explicit off overrides an always-on preference.
 
-The `spatial_only` preset disables new screenshots while preserving spatial
-cadence, movement selection, recording enabled/disabled intent and already
-retained images. Recording is enabled by default; explicit project startup
-settings can disable it and are preserved by preset selection.
+Observation enables live queries and diagnostics, not history. Startup and play
+have independent channel bundles and overrides. Minimal records metrics only;
+Light adds scoped spatial state without images; Standard adds scoped images;
+Heavy explicitly permits broad scene capture. Scope selects named nodes or
+groups, not a recursive descendant scan. Expensive readback and named input
+capture remain separate explicit choices. Preset names are not performance
+guarantees. The protocol's typed model owns rates, limits and validation.
 
-Automatic screenshot readback selects an available native asynchronous OpenGL
-path or reports visual capture unavailable while spatial recording continues.
-It never silently substitutes synchronous readback. Explicit synchronous
-recovery can wait for the GPU and stall gameplay. Neither mode changes the
-project's renderer.
+Startup begins through the Theatre bootstrap before the selected scene's resource
+load. It excludes engine startup and earlier autoloads. A blocking load may prevent
+periodic samples; boundary intervals are not an internal profiler.
+The default project readiness contract requires `StageRuntime.notify_ready()`
+at the consumer's actual successful initial-loading completion. Failure,
+cancellation and later background work do not emit readiness. Repeated calls
+are idempotent. Explicit `readiness=scene` is only a synchronous-scene fallback.
+Stage's existing runtime identity `ready` describes Godot node readiness;
+`clips(status).ready` describes this application capture boundary.
+
+At readiness, startup stops and saves by default before play can begin. Failed
+saving preserves the draft and blocks automatic transition. Human play defaults
+to manual Start; agent play defaults to ready-triggered Start. A configured
+`play_start` overrides either derived default. Waiting disables provider sampling,
+spatial collection and image requests, but does not pause the game.
+A missing signal leaves waiting/limit status, never invented readiness.
+
+A recording groups immutable contiguous segments. Continue uses the same recording
+ID with a new segment ID; Start new uses a new recording ID. Each segment owns
+its effective settings, run identity, target/readiness context, start/end times,
+stop reason and retained channel counts. The uncaptured gap is not active time.
+Next-play configuration changes validate against the current run and do not
+change an active segment or write preferences.
+
+Metric providers are explicit synchronous callbacks, sampled only while the
+metrics channel is active. Separate metadata providers snapshot small project
+context at explicit phase/Start boundaries; automatic rolling resumes reuse it.
+Neither provider family is discovered by scanning a scene. Provider values stay
+namespaced and are not treated as engine counters or inferred missing evidence.
+
+Session retention stops at its first duration, record or encoded-payload bound.
+Stop freezes a draft; Keep commits it; Discard only removes that unkept draft.
+On-stop saving is explicit (the startup default). Rolling retention evicts old
+samples within shared bounds. On-trigger saving is separately explicit:
+deliberate/system markers open one non-extending five-second post-window,
+then save and resume a new segment. Stop shortens and saves a pending window.
+Silent markers only annotate. A failed save never discards the draft.
+Unkept drafts and unfinalized tails can be lost on process termination.
+
+Server `spatial_config` still overrides server-side `stage.toml` defaults.
+Legacy recorder handshake patches and Godot auto-start settings cannot overwrite
+launch-managed capture. Intentional always-on users must opt into `[launch]`.
+Automatic screenshot readback uses a native asynchronous OpenGL path or reports
+unavailability; synchronous recovery is explicit and may stall gameplay.
+Neither path changes the renderer.
 
 ### Visual capture and coverage
 

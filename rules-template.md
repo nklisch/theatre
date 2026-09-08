@@ -1,5 +1,60 @@
 # Godot Project File Guidance
 
+## Installation and launch intent
+
+Machine installation, project wiring, and per-run observation/capture are separate
+decisions. If Theatre is missing and would help, explain the needed scope and ask
+the user before installing or enabling it in this project. Do not treat a failed
+connection or `--yes` as installation consent. Once approved, noninteractive
+project setup uses `theatre init . --yes --accept-project-install`; existing addons
+and MCP configuration are preserved unless replacement is explicitly authorized.
+
+Ordinary launches need neither Stage observation nor recording. Enable only the
+evidence needed for an autonomous task, expressly requested by the user, or needed
+for a specific human capture request. Do not change persistent preferences to
+satisfy one run. Respect explicit local preferences and explicit per-run off.
+
+Use Director `editor_run.launch` or `theatre run` to select observation independently
+from startup/play capture. Human review normally uses `operator=human` and
+`play_start=manual`: startup can finish and save, but play does not collect hours
+of idle data while the person is away. This does not pause the game's simulation.
+Minimal captures explicit metrics only; Light adds scoped spatial samples;
+Standard adds images; Heavy allows whole-scene, higher-frequency capture.
+Light and Standard require scene-relative node paths or explicit `group:name`
+selectors. Images, sampling intervals, bounds, retention, and saving are separate
+options, not hidden side effects of operator choice.
+
+For asynchronous loading, locate the project's actual readiness transition and
+explicitly add the following call there, only after all prerequisites succeed:
+
+```gdscript
+var stage := get_node_or_null("/root/StageRuntime")
+if stage != null:
+    stage.notify_ready()
+```
+
+Use `readiness=project` (the default). Do not use a scene's `_ready()` callback,
+frame rate, or a quiet timeout as a substitute for application readiness. Do not
+notify after canceled/failed loading. Duplicate notifications are safe. Only
+simple synchronous scenes should explicitly select `readiness=scene`, whose
+weaker boundary is scene initialization, not completion of background work.
+Missing readiness stops startup at its capture bound and never starts play.
+
+Human controls and `clips` support Start new, Continue, Stop, Keep, and Discard.
+Continue starts a separate immutable segment with the same recording identity;
+it never fills the uncaptured gap or retroactively increases evidence detail.
+Unkept play drafts live in memory and are lost on exit. Keep before closing.
+Metrics, saved clips, and their markers can be inspected after the game stops.
+
+Shared defaults belong in `[launch]` in `stage.toml`. Private preferences can use
+the OS application-config directory's `theatre/settings.toml`, or per-project
+`stage.local.toml`. Before creating that local project file, request approval for
+the narrow `stage.local.toml` ignore entry and verify the project ignores it.
+Never commit private configuration or machine paths. Keep repository-owned paths
+relative and use installed executable names through PATH. On Windows these names
+resolve to `theatre.exe`, `director.exe`, and `stage.exe`; do not replace Unix
+instructions with Windows-only paths or suffixes.
+
 ## Inspect project files freely
 
 Read Godot project files and inspect their diffs whenever that helps you understand the
@@ -43,7 +98,8 @@ authoring that typed operations express poorly. Theatre does not provide a gener
 arbitrary-code execution operation.
 
 Use **Director** `editor_run` with a verified open editor to start, stop, or restart a
-selected saved scene. A launch request does not establish Stage readiness. Check
+selected saved scene. Live Stage tools require explicit `launch.observe=true`.
+A launch request does not establish Stage readiness. Check
 `runtime_status` for the actual project, run, current scene, and readiness.
 
 Use **Stage** MCP tools to observe and interact with the running game:

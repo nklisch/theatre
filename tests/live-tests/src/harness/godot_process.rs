@@ -72,6 +72,7 @@ impl LiveGodotProcess {
             .arg(&project_dir)
             .arg(scene)
             .env("THEATRE_PORT", port.to_string())
+            .env("THEATRE_LAUNCH_JSON", r#"{"options":{"observe":true,"operator":"agent","readiness":"scene","play":{"preset":"heavy","retention":"rolling"}}}"#)
             .stdout(Stdio::null())
             .stderr(stderr_file)
             .spawn()

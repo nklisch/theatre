@@ -28,6 +28,14 @@ pub struct InitArgs {
     #[arg(long, short = 'y')]
     yes: bool,
 
+    /// Confirm the user's approval to wire Theatre into this project (required with --yes)
+    #[arg(long)]
+    accept_project_install: bool,
+
+    /// Deliberately replace existing addon files and MCP configuration
+    #[arg(long)]
+    overwrite_existing: bool,
+
     /// Godot executable used for the initial editor import
     #[arg(long, value_name = "PATH")]
     godot_bin: Option<PathBuf>,
@@ -45,6 +53,18 @@ pub fn run(args: InitArgs) -> Result<()> {
 
     // Step 2: Validate project path
     validate_project(&args.project)?;
+    if !args.accept_project_install {
+        if args.yes {
+            anyhow::bail!(
+                "--yes selects setup defaults; it does not confirm project installation. Ask the user first, then pass --accept-project-install. No project files were changed."
+            );
+        }
+        if !Confirm::new().with_prompt("Install and enable Theatre addons, project-local feedback ignore rule, and selected agent configuration in this project? Ordinary launches remain capture-off.")
+            .default(false).interact().context("Project installation confirmation required")? {
+            eprintln!("Project installation not approved; no files changed.");
+            return Ok(());
+        }
+    }
 
     // Step 3: Check current state
     let stage_exists = args.project.join("addons").join("stage").exists();
@@ -53,7 +73,14 @@ pub fn run(args: InitArgs) -> Result<()> {
 
     // Step 4 & 5: Determine selections
     let (do_stage, do_director, do_mcp, port, enable_stage, enable_director) = if args.yes {
-        (true, true, true, 9077u16, true, true)
+        (
+            !stage_exists || args.overwrite_existing,
+            !director_exists || args.overwrite_existing,
+            !mcp_json_exists || args.overwrite_existing,
+            9077u16,
+            true,
+            true,
+        )
     } else {
         gather_interactive_selections(stage_exists, director_exists, mcp_json_exists)?
     };
@@ -135,14 +162,19 @@ pub fn run(args: InitArgs) -> Result<()> {
         }
 
         let port_opt = if port == 9077 { Some(9077) } else { Some(port) };
-        let mcp = generate_mcp_json(do_stage, do_director, port_opt);
-        let overwrite = args.yes || !mcp_json_exists;
+        let mcp = generate_mcp_json(
+            do_stage || enable_stage,
+            do_director || enable_director,
+            port_opt,
+        );
+        // An interactive selection has already confirmed replacement above.
+        let overwrite = !args.yes || args.overwrite_existing || !mcp_json_exists;
         let written = write_mcp_json(&args.project, &mcp, overwrite)?;
         if written {
             eprintln!("  {} Generated .mcp.json", style("✓").green());
         } else {
             eprintln!(
-                "  {} .mcp.json already exists — skipped (use --yes to overwrite)",
+                "  {} .mcp.json already exists — skipped (use --overwrite-existing for deliberate replacement)",
                 style("⚠").yellow()
             );
         }
@@ -160,7 +192,7 @@ pub fn run(args: InitArgs) -> Result<()> {
         eprintln!("  {} Enabled Stage in project.godot", style("✓").green());
         set_autoload(&args.project, STAGE_RUNTIME_NAME, STAGE_RUNTIME_SCRIPT)?;
         eprintln!("  {} StageRuntime autoload added", style("✓").green());
-    } else {
+    } else if do_stage {
         // If not enabling, ensure it's disabled
         remove_autoload(&args.project, STAGE_RUNTIME_NAME)?;
     }

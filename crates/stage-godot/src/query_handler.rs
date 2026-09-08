@@ -22,6 +22,10 @@ pub fn handle_query(
     runtime_logger: Option<&Gd<Object>>,
 ) -> Option<Message> {
     match method {
+        "capture_control" => Some(simple_query(
+            request_id,
+            handle_capture_control(collector, params),
+        )),
         "get_viewport" => Some(simple_query(
             request_id,
             parse_params::<stage_protocol::viewport::ViewportParams>(params).and_then(|params| {
@@ -82,6 +86,57 @@ pub fn handle_query(
 struct QueryError {
     code: String,
     message: String,
+}
+
+fn handle_capture_control(
+    collector: &StageCollector,
+    params: serde_json::Value,
+) -> Result<serde_json::Value, QueryError> {
+    use godot::prelude::*;
+    let invalid = |message: &str| QueryError {
+        code: "invalid_params".into(),
+        message: message.into(),
+    };
+    let Some(tree) = collector.base().get_tree_or_null() else {
+        return Err(invalid("Scene tree unavailable"));
+    };
+    let Some(mut runtime) = tree.get_root().get_node_or_null("StageRuntime") else {
+        return Err(invalid("StageRuntime is unavailable"));
+    };
+    let action = params["action"]
+        .as_str()
+        .ok_or_else(|| invalid("capture action is required"))?;
+    let result = match action {
+        "start" => runtime.call("capture_start", &[false.to_variant()]),
+        "continue" => runtime.call("capture_start", &[true.to_variant()]),
+        "stop" => runtime.call("capture_stop", &[]),
+        "keep" => runtime.call(
+            "capture_keep",
+            &[GString::from(params["note"].as_str().unwrap_or("")).to_variant()],
+        ),
+        "save" => runtime.call(
+            "capture_save",
+            &[GString::from(params["note"].as_str().unwrap_or("")).to_variant()],
+        ),
+        "discard" => runtime.call("capture_discard", &[]),
+        "status" => runtime.call("capture_status", &[]),
+        "config" => {
+            let patch: stage_protocol::capture::PhaseOptions =
+                serde_json::from_value(params["config"].clone())
+                    .map_err(|e| invalid(&format!("Invalid capture config: {e}")))?;
+            let encoded = serde_json::to_string(&patch).map_err(|e| invalid(&e.to_string()))?;
+            let value = godot::classes::Json::parse_string(&encoded);
+            runtime.call("capture_configure", &[value])
+        }
+        _ => return Err(invalid("Unknown capture action")),
+    };
+    let mut result = crate::collector::variant_to_json(&result)
+        .ok_or_else(|| invalid("Invalid capture response"))?;
+    stage_protocol::capture::normalize_godot_integers(&mut result);
+    if let Some(error) = result["error"].as_str() {
+        return Err(invalid(error));
+    }
+    Ok(result)
 }
 
 fn simple_query(request_id: String, result: Result<serde_json::Value, QueryError>) -> Message {

@@ -27,6 +27,9 @@ pub struct EditorRunParams {
     /// Saved scene path relative to the project. Valid only for start and restart.
     #[serde(default)]
     pub scene_path: Option<String>,
+    /// Per-run Theatre options. Omitted launches stay off unless explicit local preferences enable them.
+    #[serde(default)]
+    pub launch: Option<stage_protocol::capture::LaunchOptions>,
 }
 
 #[derive(Debug, Serialize, Deserialize, JsonSchema)]
@@ -40,6 +43,12 @@ pub struct EditorRunResponse {
     pub game_running: bool,
     /// Native EditorInterface playing scene after the action; empty when stopped.
     pub playing_scene: String,
+    /// Requested scene, distinct from the native bootstrap playing_scene. Empty when stopped or unknown.
+    #[serde(default)]
+    pub target_scene: String,
+    /// Resolved channels, readiness, triggers and preference provenance for this launch.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub launch: Option<stage_protocol::capture::LaunchConfig>,
 }
 
 pub async fn run_editor(
@@ -54,11 +63,25 @@ pub async fn run_editor(
         .run_editor_operation(project, "editor_run", &op_params)
         .await
         .map_err(McpError::from)?;
-    let data = result.into_data().map_err(McpError::from)?;
+    let mut data = result.into_data().map_err(McpError::from)?;
+    if let Some(launch) = data.get_mut("launch") {
+        stage_protocol::capture::normalize_godot_integers(launch);
+    }
     deserialize_response(data)
 }
 
 fn validate_action(params: &EditorRunParams) -> Result<(), McpError> {
+    if params.launch.is_some()
+        && matches!(
+            params.action,
+            EditorRunAction::Stop | EditorRunAction::Status
+        )
+    {
+        return Err(McpError::invalid_params(
+            "launch is only valid for start and restart",
+            None,
+        ));
+    }
     match (params.action, params.scene_path.as_deref()) {
         (EditorRunAction::Start | EditorRunAction::Restart, None | Some("")) => Err(
             McpError::invalid_params("scene_path is required for start and restart", None),
@@ -79,6 +102,7 @@ mod tests {
             project_path: "/project".into(),
             action,
             scene_path: scene_path.map(str::to_owned),
+            launch: None,
         }
     }
 

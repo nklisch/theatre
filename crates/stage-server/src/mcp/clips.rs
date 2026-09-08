@@ -22,11 +22,23 @@ use super::{finalize_response, require_param};
 #[derive(Debug, Clone, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum ClipAction {
-    /// Mark the current moment, triggers clip capture.
+    /// Start a new recording using the staged play settings; requires readiness.
+    Start,
+    /// Start a new segment in the same recording, preserving the uncaptured gap.
+    Continue,
+    /// Stop capture and retain a reviewable draft unless on_stop saving is configured.
+    Stop,
+    /// Persist the stopped draft. A failed save retains it for retry.
+    Keep,
+    /// Discard the stopped draft, never previously saved evidence.
+    Discard,
+    /// Inspect retained metric samples and numerical summaries offline.
+    Metrics,
+    /// Annotate the current moment. Saves after a bounded post-window only with on_trigger policy.
     AddMarker,
-    /// Force-save the dashcam buffer as a clip.
+    /// Stop and keep available capture immediately.
     Save,
-    /// Dashcam buffer state and config.
+    /// Capture state, effective launch policy, channels, bounds, and next-segment settings.
     Status,
     /// List saved clips.
     List,
@@ -50,7 +62,7 @@ pub enum ClipAction {
     Screenshots,
     /// Generate a deterministic visual artifact from clip screenshots.
     VisualArtifact,
-    /// Apply validated partial recorder settings.
+    /// Stage validated partial play settings without changing or starting the active segment.
     Config,
 }
 
@@ -59,7 +71,15 @@ impl ClipAction {
     pub fn requires_live_runtime(&self) -> bool {
         matches!(
             self,
-            Self::AddMarker | Self::Save | Self::Status | Self::Config
+            Self::AddMarker
+                | Self::Save
+                | Self::Status
+                | Self::Config
+                | Self::Start
+                | Self::Continue
+                | Self::Stop
+                | Self::Keep
+                | Self::Discard
         )
     }
 }
@@ -144,7 +164,7 @@ pub struct ClipsParams {
     #[serde(default = "default_inline_image")]
     pub inline_image: bool,
     /// Partial recorder settings. Unknown fields are rejected. Presets do not start recording.
-    pub config: Option<stage_protocol::dashcam::DashcamConfigPatch>,
+    pub config: Option<stage_protocol::capture::PhaseOptions>,
 }
 
 fn default_inline_image() -> bool {
@@ -164,6 +184,39 @@ pub async fn handle_clips(
     let budget_limit = resolve_budget(params.token_budget, 1500, hard_cap);
 
     match params.action {
+        ClipAction::Start
+        | ClipAction::Continue
+        | ClipAction::Stop
+        | ClipAction::Keep
+        | ClipAction::Discard => {
+            let action = match params.action {
+                ClipAction::Start => "start",
+                ClipAction::Continue => "continue",
+                ClipAction::Stop => "stop",
+                ClipAction::Keep => "keep",
+                _ => "discard",
+            };
+            let response = query_and_finalize(
+                state,
+                "capture_control",
+                json!({"action":action,"note":params.marker_label}),
+                budget_limit,
+                hard_cap,
+            )
+            .await?;
+            Ok(text_result(response))
+        }
+        ClipAction::Metrics => {
+            let session =
+                clip_analysis::ClipSession::open(state, params.clip_id.as_deref()).await?;
+            let mut response =
+                clip_analysis::metrics(&session.db, params.from_frame, params.to_frame)?;
+            Ok(text_result(session.finalize(
+                &mut response,
+                budget_limit,
+                hard_cap,
+            )?))
+        }
         ClipAction::AddMarker => {
             let s = handle_add_marker(&params, state, budget_limit, hard_cap).await?;
             Ok(text_result(s))
@@ -173,8 +226,14 @@ pub async fn handle_clips(
             Ok(text_result(s))
         }
         ClipAction::Status => {
-            let s = query_and_finalize(state, "dashcam_status", json!({}), budget_limit, hard_cap)
-                .await?;
+            let s = query_and_finalize(
+                state,
+                "capture_control",
+                json!({"action":"status"}),
+                budget_limit,
+                hard_cap,
+            )
+            .await?;
             Ok(text_result(s))
         }
         ClipAction::List => {
@@ -221,8 +280,8 @@ pub async fn handle_clips(
             })?;
             let response = query_and_finalize(
                 state,
-                "dashcam_config",
-                json!(patch),
+                "capture_control",
+                json!({"action":"config","config":patch}),
                 budget_limit,
                 hard_cap,
             )
@@ -270,6 +329,7 @@ async fn handle_list(
     {
         clip_analysis::sort_clip_entries(clips);
     }
+    clip_analysis::group_segments(&mut data);
     finalize_response(&mut data, budget_limit, hard_cap)
 }
 
@@ -299,9 +359,9 @@ async fn handle_save(
     hard_cap: u32,
 ) -> Result<String, McpError> {
     let query = json!({
-        "marker_label": params.marker_label.as_deref().unwrap_or("agent save"),
+        "action":"save", "note": params.marker_label.as_deref().unwrap_or("agent save"),
     });
-    query_and_finalize(state, "dashcam_flush", query, budget_limit, hard_cap).await
+    query_and_finalize(state, "capture_control", query, budget_limit, hard_cap).await
 }
 
 async fn handle_delete(
@@ -383,6 +443,7 @@ async fn handle_snapshot_at(
 ) -> Result<String, McpError> {
     let session = clip_analysis::ClipSession::open(state, params.clip_id.as_deref()).await?;
 
+    clip_analysis::require_channel(&session.db, "spatial")?;
     let frame = resolve_frame(&session, params.at_frame, params.at_time_ms, "snapshot_at")?;
 
     let detail = params.detail.as_deref().unwrap_or("standard");
@@ -399,6 +460,7 @@ async fn handle_trajectory(
 ) -> Result<String, McpError> {
     let session = clip_analysis::ClipSession::open(state, params.clip_id.as_deref()).await?;
 
+    clip_analysis::require_channel(&session.db, "spatial")?;
     let node = require_param!(
         params.node.as_deref(),
         "trajectory requires 'node' parameter"
@@ -429,6 +491,7 @@ async fn handle_query_range(
 ) -> Result<String, McpError> {
     let session = clip_analysis::ClipSession::open(state, params.clip_id.as_deref()).await?;
 
+    clip_analysis::require_channel(&session.db, "spatial")?;
     let node = require_param!(
         params.node.as_deref(),
         "query_range requires 'node' parameter"
@@ -467,6 +530,7 @@ async fn handle_diff_frames(
 ) -> Result<String, McpError> {
     let session = clip_analysis::ClipSession::open(state, params.clip_id.as_deref()).await?;
 
+    clip_analysis::require_channel(&session.db, "spatial")?;
     let frame_a = require_param!(params.frame_a, "diff_frames requires 'frame_a'");
     let frame_b = require_param!(params.frame_b, "diff_frames requires 'frame_b'");
     session.meta.validate_frame(frame_a)?;
@@ -515,6 +579,7 @@ async fn handle_screenshot_at(
 ) -> Result<CallToolResult, McpError> {
     let session = clip_analysis::ClipSession::open(state, params.clip_id.as_deref()).await?;
 
+    clip_analysis::require_channel(&session.db, "images")?;
     let screenshot = if let Some(frame) = params.at_frame {
         clip_analysis::read_screenshot_near_frame(&session.db, frame)?
     } else if let Some(time_ms) = params.at_time_ms {
@@ -586,6 +651,11 @@ async fn handle_visual_artifact(
     }
     let hard_cap = 5000;
     let budget_limit = resolve_budget(params.token_budget, 1500, hard_cap);
+    let session = clip_analysis::ClipSession::open(state, params.clip_id.as_deref()).await?;
+    clip_analysis::require_channel(&session.db, "images")?;
+    if artifact == "node_filmstrip" {
+        clip_analysis::require_channel(&session.db, "spatial")?;
+    }
     let output = match clip_artifacts::generate_artifact(
         state,
         params.clip_id.as_deref(),
@@ -644,6 +714,7 @@ async fn handle_screenshots(
     state: &Arc<Mutex<SessionState>>,
 ) -> Result<String, McpError> {
     let session = clip_analysis::ClipSession::open(state, params.clip_id.as_deref()).await?;
+    clip_analysis::require_channel(&session.db, "images")?;
     let list = clip_analysis::list_screenshots(&session.db)?;
 
     let result = json!({

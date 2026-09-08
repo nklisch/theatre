@@ -49,6 +49,7 @@ impl GodotFixture {
         let mut child = command
             .arg(scene)
             .env("THEATRE_PORT", port.to_string())
+            .env("THEATRE_LAUNCH_JSON", r#"{"options":{"observe":true,"operator":"agent","readiness":"scene","play":{"preset":"heavy","images":false,"retention":"rolling"}}}"#)
             .stdout(Stdio::null())
             .stderr(Stdio::null())
             .spawn()

@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "generate": "cd .. && ./site/scripts/generate-schema.sh",
+    "generate": "node scripts/generate-schema.mjs",
     "dev": "npm run generate && vitepress dev",
     "build": "npm run generate && vitepress build",
     "preview": "vitepress preview"

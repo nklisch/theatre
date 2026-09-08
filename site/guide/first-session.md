@@ -1,107 +1,63 @@
 ---
-description: "Walk through your first Theatre debugging session — observe game state, test hypotheses, and fix bugs with AI assistance."
+description: "A deliberate observe, capture, diagnose and verify workflow for a Godot gameplay issue."
 ---
-
-<script setup>
-const messages0 = [
-  { role: 'human', text: `I just recorded a clip where the enemy fails to detect the player. Bug was marked around frame 312. Can you investigate?` },
-  { role: 'agent', text: `Let me look at the clip list and then examine what was happening around that frame.` },
-  { role: 'agent', text: `Found clip_01 (412 frames, 14 seconds). Now checking the spatial data around frame 312.` },
-  { role: 'agent', text: `Interesting. I can see the player position and the detection zone. Let me check the distance between them at frame 312.` },
-]
-const messages1 = [
-  { role: 'agent', text: `At frame 312, the player is at global_position [4.1, 0.0, 2.8] and the EnemyDetectionZone center is at [4.0, 1.2, 2.9]. Distance: ~1.2 units — well within the detection radius. But the zone shows body_entered signal was NOT emitted. Let me inspect the detection zone more closely.` },
-  { role: 'agent', text: `Found it. The EnemyDetectionZone has collision_layer=2 and collision_mask=2. But the Player CharacterBody3D has collision_layer=1. The Area3D can only detect bodies that are on its mask layers. Since the player is on layer 1 and the zone is masking layer 2, the overlap is never registered by the physics engine.` },
-]
-const messages2 = [
-  { role: 'human', text: `So the zone is set up wrong? Can you check what the player collision layers are?` },
-  { role: 'agent', text: `Confirmed. Player.collision_layer = 1 (binary: 00000001). EnemyDetectionZone.collision_mask = 2 (binary: 00000010). The mask does not include layer 1, so the physics engine never reports the overlap. The detection code itself is fine — it is never called because the signal is never emitted.` },
-]
-const messages3 = [
-  { role: 'human', text: `Fix the collision mask on the detection zone. The player should be on layer 1 and the zone should detect layer 1.` },
-  { role: 'agent', text: `Done. The open scene now has collision_mask=1 with a native undo entry. I will save only this scene, then run it and verify Stage readiness.` },
-]
-const messages4 = [
-  { role: 'human', text: `Looks fixed. Can you confirm the layers are set correctly now in the running game?` },
-  { role: 'agent', text: `Confirmed. collision_mask is now 1, which matches the player collision_layer of 1. The detection zone is correctly configured.` },
-]
-</script>
 
 # Your First Debugging Session
 
-This is a worked example of a complete Theatre debugging session. We will find and fix a real bug — an enemy that sometimes fails to detect the player — using Stage's spatial tools with Claude Code.
+Suppose an enemy sometimes fails to notice a nearby player. You need to distinguish
+a positioning problem from detection logic or collision configuration.
 
-## The setup
+## Choose the evidence
 
-You have a 3D game with:
-- A `CharacterBody3D` named `Player` with a movement script
-- An `Area3D` named `EnemyDetectionZone` attached to an enemy, set to trigger enemy alert
-- The bug: enemy sometimes does not alert when the player walks directly in front of it
+If code inspection is insufficient, enable only the runtime tools needed.
+With the project's editor open:
 
-You have already tried reading the detection script and the collision layer settings. The code looks correct. You need to see what is actually happening at runtime.
+```sh
+theatre run scenes/review.tscn --observe on --play light --play-scope group:review --operator human
+```
 
-## Step 1: Reproduce the bug and save a clip
+Use a real review group containing the relevant player, enemy and detection
+nodes. Integrate [project readiness](/guide/getting-started#integrate-readiness-before-phased-capture)
+before using this default phased workflow. Ordinary launches do not record.
 
-Stage's dashcam starts buffering automatically when its project setting is enabled.
-Check `clips` status before relying on retained history; projects can disable
-dashcam startup independently of live observation.
+## Reproduce and keep a segment
 
-Walk the player in front of the enemy a few times. On the third or fourth pass, the enemy fails to detect you — you see the player enters the zone visually but the alert animation does not play.
+1. After readiness, click **Start new** when ready to test.
+2. Reproduce the failure and click **Mark**, or use the configured marker key.
+3. Click **Stop**, then **Keep**. A failed save preserves the draft for retry.
+4. Copy the saved reference and give the agent the symptom and relevant marker.
 
-Press **F9** (or click the **⚑** flag button in the top-left corner of the game viewport) to save a clip of the bug moment. A toast notification confirms "Dashcam clip saved" in the top-right corner. The clip contains approximately 60 seconds of data before the trigger plus ~30 seconds of post-capture.
+Manual Mark annotates; it does not silently save. If recent-history rolling
+capture and automatic marker clips are preferred, opt into those policies
+separately as described in [Dashcam](/stage/dashcam).
 
-## Step 2: Ask the agent to analyze the clip
+## Inspect what was actually retained
 
-<AgentConversation :messages="messages0" />
+Ask the agent to inspect the clip's metadata and markers, then spatial snapshots
+or trajectories near the marked time. Compare the player's recorded position
+with the enemy's detection region. Use metrics for timing or explicitly supplied
+counters. Light does not include images.
 
-## Step 3: The agent finds the anomaly
+Do not conclude that a signal never fired merely because a channel lacks that
+event. Do not treat a live `spatial_inspect` as historical evidence. If collision
+layers or masks were not retained, reproduce the problem and inspect them live
+or inspect the saved scene configuration. State which evidence supports each
+part of the diagnosis.
 
-<AgentConversation :messages="messages1" />
+For example, if a live reproduction confirms that the player is on collision
+layer 1 while the detection area's mask only includes layer 2, the mismatch
+explains why that area cannot detect the player.
 
-## Step 4: Verify the diagnosis
+## Fix and verify
 
-<AgentConversation :messages="messages2" />
+After the user authorizes the fix, use Director for serialized scene/resource
+changes. Verify its persistence result, then explicitly save only the intended
+scene; preserve unrelated unsaved editor work.
 
-## Step 5: Fix it with Director
+Restart the selected saved scene with observation enabled. Verify the new run
+identity and scene before checking the corrected mask and reproducing the same
+interaction. Capture another segment only if comparison evidence is needed.
 
-<AgentConversation :messages="messages3" />
-
-## Step 6: Verify the fix
-
-Save the selected scene through Director. With the Director editor plugin connected,
-use `editor_run` to start or restart that saved scene, then check Stage
-`runtime_status` for the actual run and readiness. A manual editor launch remains
-valid. Walk the player in front of the enemy and observe the result.
-
-To confirm with the agent:
-
-<AgentConversation :messages="messages4" />
-
-## What made this work
-
-Without Theatre, this bug would have required:
-
-1. Adding `print()` statements to the detection script
-2. Re-running the game
-3. Staring at console output and manually correlating frame numbers
-4. Guessing that the issue was collision layers rather than the detection logic
-5. Checking the collision layer settings manually in the inspector
-
-With Theatre:
-
-1. Mark the bug moment with F9 — the dashcam saves the clip automatically
-2. Agent queries the spatial recording around the marked frame
-3. Agent compares positions and inspects properties — finds the mismatch in < 60 seconds
-4. Agent fixes it via Director, saves only the selected scene, and verifies a fresh run
-
-The key insight — that the `collision_mask` was wrong — came from the agent reading the **actual runtime property values**, not from reading the code. The code was correct; the configuration was wrong.
-
-## Patterns to take away
-
-**Mark bug moments with F9.** Pressing F9 (or clicking the in-game ⚑ flag button) saves a dashcam clip — not just a frame marker, but the full buffer including ~60 seconds of history before the trigger. This gives the agent data from before the bug began, not just the moment you noticed it.
-
-**Use `spatial_inspect` after `clips`** to get property values at a specific moment. The clip recording captures position and velocity; inspect gives you the full property set.
-
-**Let the agent compare two nodes.** Most spatial bugs are relational — wrong distance, wrong layer, wrong parent. Give the agent both nodes and ask it to compare.
-
-**Use Director to fix without leaving the agent.** The full loop — observe, diagnose, fix, verify — happens inside your AI agent session without manually touching the editor.
+The useful pattern is: select evidence, capture deliberately, distinguish
+missing data from negative evidence, make an authorized change, and verify a
+fresh run. No continuous recorder is needed for every ordinary launch.

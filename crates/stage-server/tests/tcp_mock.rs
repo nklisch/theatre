@@ -839,7 +839,7 @@ async fn test_config_set_static_patterns() {
 #[tokio::test]
 async fn test_recording_status() {
     let handler: QueryHandler = Arc::new(|method, _| {
-        if method == "dashcam_status" {
+        if method == "capture_control" {
             Ok(json!({
                 "dashcam_enabled": true,
                 "state": "buffering",
@@ -959,235 +959,132 @@ async fn test_recording_delete() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
-async fn test_dashcam_status() {
-    let handler: QueryHandler = Arc::new(|method, _| match method {
-        "dashcam_status" => Ok(json!({
-            "dashcam_enabled": true,
-            "state": "buffering",
-            "buffer_frames": 1800,
-            "buffer_kb": 14400,
-            "config": {
-                "capture_interval": 1,
-                "pre_window_sec": { "system": 30, "deliberate": 60 },
-                "post_window_sec": { "system": 10, "deliberate": 30 },
-                "max_window_sec": 120,
-                "min_after_sec": 5,
-                "system_min_interval_sec": 2,
-                "byte_cap_mb": 1024
-            }
-        })),
-        _ => Err(("unknown_method".into(), method.to_string())),
-    });
-
-    let harness = TestHarness::new(handler).await;
-    let result = harness
-        .call_tool("clips", json!({ "action": "status" }))
-        .await
-        .unwrap();
-
-    assert_eq!(result["dashcam_enabled"], json!(true));
-    assert_eq!(result["state"], json!("buffering"));
-    assert!(result["buffer_frames"].as_u64().is_some());
-    assert!(result["config"].is_object());
-}
-
-#[tokio::test]
-async fn test_dashcam_config_forwards_anomaly_keys_and_status_exposes_block() {
+async fn capture_status_preserves_channels_and_pending_window() {
     let handler: QueryHandler = Arc::new(|method, params| match method {
-        "dashcam_config" => {
-            assert_eq!(params["anomaly_min_proportion"], json!(0.0));
-            assert_eq!(params["anomaly_relative_factor"], json!(1.0));
-            assert_eq!(params["anomaly_sustained_frames"], json!(1));
-            assert_eq!(params["anomaly_cooldown_sec"], json!(0));
-            Ok(json!({"result":"ok", "config":params}))
-        }
-        "dashcam_status" => Ok(json!({
-            "dashcam_enabled": true,
-            "state": "buffering",
-            "anomaly": {
-                "active": true,
-                "reason": "capturing",
-                "frames_analyzed": 12,
-                "triggers_total": 1
-            },
-            "capture_probe": {"analysis_ms_ema": 0.17},
-            "config": {}
+        "capture_control" if params["action"] == "status" => Ok(json!({
+            "state":"recording", "pending_post_window":true,
+            "metric_samples":12, "spatial_samples":6, "image_samples":0,
+            "config":{"preset":"light","images":false},
+            "anomaly":{"triggers_total":0},
+            "capture_probe":{"analysis_ms_ema":0.0}
         })),
-        _ => Err(("unknown_method".into(), method.to_string())),
+        _ => Err(("unknown_method".into(), method.to_owned())),
     });
-
     let harness = TestHarness::new(handler).await;
-    let config = harness
-        .call_tool(
-            "clips",
-            json!({
-                "action": "config",
-                "config": {
-                    "anomaly_min_proportion": 0.0,
-                    "anomaly_relative_factor": 1.0,
-                    "anomaly_sustained_frames": 1,
-                    "anomaly_cooldown_sec": 0
-                }
-            }),
-        )
-        .await
-        .unwrap();
-    assert_eq!(config["result"], json!("ok"));
-    assert_eq!(config["config"]["anomaly_min_proportion"], 0.0);
-
     let status = harness
         .call_tool("clips", json!({"action":"status"}))
         .await
         .unwrap();
-    assert_eq!(status["anomaly"]["triggers_total"], json!(1));
-    assert!(status["capture_probe"]["analysis_ms_ema"].as_f64().unwrap() >= 0.0);
+    assert_eq!(status["state"], "recording");
+    assert_eq!(status["pending_post_window"], true);
+    assert_eq!(status["config"]["images"], false);
+    assert_eq!(status["image_samples"], 0);
 }
 
 #[tokio::test]
-async fn test_dashcam_status_post_capture() {
-    let handler: QueryHandler = Arc::new(|method, _| match method {
-        "dashcam_status" => Ok(json!({
-            "dashcam_enabled": true,
-            "state": "post_capture",
-            "buffer_frames": 1800,
-            "buffer_kb": 14400,
-            "open_clip": {
-                "tier": "system",
-                "frames_remaining": 300,
-                "markers": 2
-            },
-            "config": {
-                "capture_interval": 1,
-                "pre_window_sec": { "system": 30, "deliberate": 60 },
-                "post_window_sec": { "system": 10, "deliberate": 30 },
-                "max_window_sec": 120,
-                "min_after_sec": 5,
-                "system_min_interval_sec": 2,
-                "byte_cap_mb": 1024
-            }
-        })),
-        _ => Err(("unknown_method".into(), method.to_string())),
-    });
-
-    let harness = TestHarness::new(handler).await;
-    let result = harness
-        .call_tool("clips", json!({ "action": "status" }))
-        .await
-        .unwrap();
-
-    assert_eq!(result["state"], json!("post_capture"));
-    assert!(result["open_clip"].is_object());
-    assert_eq!(result["open_clip"]["tier"], json!("system"));
-}
-
-#[tokio::test]
-async fn test_dashcam_flush() {
+async fn capture_config_forwards_typed_next_segment_options() {
     let handler: QueryHandler = Arc::new(|method, params| match method {
-        "dashcam_flush" => {
-            let label = params
-                .get("marker_label")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            Ok(json!({
-                "clip_id": "clip_abc12345",
-                "tier": "deliberate",
-                "frames": 1800,
-                "marker_label": label
-            }))
+        "capture_control" if params["action"] == "config" => {
+            assert_eq!(params["config"]["anomaly_min_proportion"], 0.0);
+            assert_eq!(params["config"]["anomaly_enabled"], true);
+            Ok(
+                json!({"state":"recording","config":{"preset":"minimal"},"next_config":params["config"]}),
+            )
         }
-        _ => Err(("unknown_method".into(), method.to_string())),
+        _ => Err(("unknown_method".into(), method.to_owned())),
     });
-
     let harness = TestHarness::new(handler).await;
     let result = harness
         .call_tool(
             "clips",
-            json!({ "action": "save", "marker_label": "suspected bug" }),
+            json!({"action":"config","config":{
+                "preset":"heavy","anomaly_enabled":true,"anomaly_min_proportion":0.0
+            }}),
         )
         .await
         .unwrap();
-
-    assert!(
-        result["clip_id"].as_str().unwrap().starts_with("clip_"),
-        "save should return a clip_id: {result}"
-    );
-    assert_eq!(result["tier"], json!("deliberate"));
-    assert!(result["frames"].as_u64().unwrap() > 0);
+    assert_eq!(result["config"]["preset"], "minimal");
+    assert_eq!(result["next_config"]["preset"], "heavy");
+    assert_eq!(result["next_config"]["anomaly_min_proportion"], 0.0);
 }
 
 #[tokio::test]
-async fn test_dashcam_flush_empty_buffer_returns_error() {
-    let handler: QueryHandler = Arc::new(|method, _| match method {
-        "dashcam_flush" => Err((
-            "empty_buffer".into(),
-            "Dashcam ring buffer is empty — no frames to save".into(),
-        )),
-        _ => Err(("unknown_method".into(), method.to_string())),
+async fn capture_lifecycle_actions_are_forwarded_without_implicit_activation() {
+    let handler: QueryHandler = Arc::new(|method, params| match method {
+        "capture_control" => Ok(json!({"requested":params["action"]})),
+        _ => Err(("unknown_method".into(), method.to_owned())),
     });
-
     let harness = TestHarness::new(handler).await;
-    let err = harness
-        .call_tool("clips", json!({ "action": "save", "marker_label": "test" }))
-        .await
-        .unwrap_err();
-
-    assert!(
-        err.message.contains("empty") || err.message.contains("buffer") || !err.message.is_empty(),
-        "expected error about empty buffer, got: {err:?}"
-    );
+    for action in ["start", "continue", "stop", "keep", "discard"] {
+        let result = harness
+            .call_tool("clips", json!({"action":action}))
+            .await
+            .unwrap();
+        assert_eq!(result["requested"], action);
+    }
 }
 
 #[tokio::test]
-async fn test_dashcam_flush_when_disabled_returns_error() {
-    let handler: QueryHandler = Arc::new(|method, _| match method {
-        "dashcam_flush" => Err(("dashcam_disabled".into(), "Dashcam is not enabled".into())),
-        _ => Err(("unknown_method".into(), method.to_string())),
-    });
-
-    let harness = TestHarness::new(handler).await;
-    let err = harness
-        .call_tool("clips", json!({ "action": "save", "marker_label": "test" }))
-        .await
-        .unwrap_err();
-
-    assert!(
-        err.message.contains("not enabled") || err.message.contains("disabled"),
-        "expected error about disabled dashcam, got: {err:?}"
-    );
-}
-
-#[tokio::test]
-async fn test_dashcam_flush_default_label() {
-    // When no marker_label is provided, the server sends "agent flush" as default.
-    let received_label: Arc<std::sync::Mutex<String>> =
-        Arc::new(std::sync::Mutex::new(String::new()));
-    let rl = received_label.clone();
-
-    let handler: QueryHandler = Arc::new(move |method, params| match method {
-        "dashcam_flush" => {
-            let label = params
-                .get("marker_label")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            *rl.lock().unwrap() = label;
-            Ok(json!({
-                "clip_id": "clip_default",
-                "tier": "deliberate",
-                "frames": 100
-            }))
+async fn save_returns_retained_segment_and_forwards_explicit_note() {
+    let handler: QueryHandler = Arc::new(|method, params| match method {
+        "capture_control" if params["action"] == "save" => {
+            assert_eq!(params["note"], "suspected bug");
+            Ok(
+                json!({"state":"idle","last_saved_clip":{"clip_id":"clip_example","recording_id":"recording_example","capture":{"spatial_frame_count":300}}}),
+            )
         }
-        _ => Err(("unknown_method".into(), method.to_string())),
+        _ => Err(("unknown_method".into(), method.to_owned())),
     });
-
     let harness = TestHarness::new(handler).await;
-    let _ = harness
-        .call_tool("clips", json!({ "action": "save" }))
+    let result = harness
+        .call_tool(
+            "clips",
+            json!({"action":"save","marker_label":"suspected bug"}),
+        )
         .await
         .unwrap();
+    assert_eq!(result["state"], "idle");
+    assert_eq!(result["last_saved_clip"]["clip_id"], "clip_example");
+    assert_eq!(
+        result["last_saved_clip"]["capture"]["spatial_frame_count"],
+        300
+    );
+}
 
-    let label = received_label.lock().unwrap().clone();
-    assert_eq!(label, "agent save", "default label should be 'agent save'");
+#[tokio::test]
+async fn capture_errors_are_not_reported_as_successful_saves() {
+    for message in [
+        "Capture is off",
+        "No segment to keep",
+        "Segment was not saved; draft retained",
+    ] {
+        let handler: QueryHandler = Arc::new(move |method, _| match method {
+            "capture_control" => Err(("capture_error".into(), message.into())),
+            _ => Err(("unknown_method".into(), method.to_owned())),
+        });
+        let harness = TestHarness::new(handler).await;
+        let error = harness
+            .call_tool("clips", json!({"action":"save"}))
+            .await
+            .unwrap_err();
+        assert!(error.message.contains(message));
+    }
+}
+
+#[tokio::test]
+async fn capture_save_supplies_a_default_note() {
+    let handler: QueryHandler = Arc::new(|method, params| match method {
+        "capture_control" if params["action"] == "save" => {
+            assert_eq!(params["note"], "agent save");
+            Ok(json!({"state":"idle"}))
+        }
+        _ => Err(("unknown_method".into(), method.to_owned())),
+    });
+    TestHarness::new(handler)
+        .await
+        .call_tool("clips", json!({"action":"save"}))
+        .await
+        .unwrap();
 }
 
 #[tokio::test]

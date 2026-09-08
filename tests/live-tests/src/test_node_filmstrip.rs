@@ -11,14 +11,14 @@ async fn journey_follows_moving_node(b: &impl LiveBackend) {
         .await
         .expect("save")
         .unwrap_data();
-    let clip_id = save["clip_id"].as_str().expect("clip id").to_owned();
-    let status = b
-        .stage("clips", json!({"action":"status"}))
-        .await
-        .expect("status")
-        .unwrap_data();
-    let screenshots = status["screenshots_available"].as_bool().unwrap_or(false)
-        || status["screenshot_buffer_count"].as_u64().unwrap_or(0) > 0;
+    let clip_id = save["last_saved_clip"]["clip_id"]
+        .as_str()
+        .expect("clip id")
+        .to_owned();
+    let screenshots = save["last_saved_clip"]["capture"]["screenshot_frame_count"]
+        .as_u64()
+        .unwrap_or(0)
+        > 0;
     let artifact = b.stage("clips", json!({"action":"visual_artifact","artifact":"node_filmstrip","clip_id":clip_id,"node":"Enemies/Patrol"})).await.expect("artifact").unwrap_data();
     if screenshots {
         assert_eq!(artifact["kind"], json!("node_filmstrip"));
@@ -56,7 +56,10 @@ async fn journey_unknown_node_reports_paths(b: &impl LiveBackend) {
         .await
         .expect("save")
         .unwrap_data();
-    let clip_id = save["clip_id"].as_str().expect("clip id").to_owned();
+    let clip_id = save["last_saved_clip"]["clip_id"]
+        .as_str()
+        .expect("clip id")
+        .to_owned();
     let result = b.stage("clips", json!({"action":"visual_artifact","artifact":"node_filmstrip","clip_id":clip_id,"node":"Enemies/DefinitelyMissing"})).await.expect("artifact response").unwrap_data();
     assert_eq!(result["error"], json!("node_not_found"));
     assert!(

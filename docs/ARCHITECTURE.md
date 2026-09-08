@@ -138,28 +138,38 @@ See [`crates/director/src/backend.rs`](../crates/director/src/backend.rs), [`add
 
 ## Capture and retained evidence
 
-A dashcam is a rolling history kept before an interesting moment is marked.
-The recorder keeps bounded spatial and screenshot buffers and saves capture
-windows as per-clip SQLite files. Spatial entity frames use MessagePack;
-screenshots use JPEG. Capture can remain active without an agent connection,
-and projects can disable dashcam startup independently of on-demand observation.
-The protocol owns the shared recorder-setting vocabulary and validated partial
-patch; the recorder owns effective values. Spatial session configuration does
-not duplicate recorder defaults. Native controls expose start/stop, deliberate
-markers, immediate saves and sampling presets without enabling capture implicitly.
+Stage's runtime autoload resolves a typed launch policy before creating services.
+The default run is inert after configuration resolution. Live observation owns
+the collector, listener and diagnostic logger; capture owns only the services
+required by its selected channels. Metrics-only capture needs neither a spatial
+collector nor a connection. Director passes per-run options through a contained
+environment envelope; startup capture selects a bootstrap without preloading the
+target. The original main scene, editor arguments and unsaved work remain intact.
 
-Markers have their own engine timestamps and need not coincide with a sampled
-spatial frame. A save succeeds only after its database writes commit. Newly
-saved metadata includes run identity, effective settings and configuration-change
-provenance. After a successful save, Godot publishes its resolved storage path
-in the project's `.stage/clip_storage_path` hint; a fresh server can then inspect
-saved evidence after the game exits without reimplementing `user://` resolution.
+`stage-protocol::capture` owns the shared option model, preset expansion,
+precedence and validation. `StageCapturePolicy` exposes that pure resolver to
+GDScript. `runtime.gd` owns readiness and human/agent transitions.
+`StageRecorder` remains the sole buffer/persistence owner. It records separate
+bounded segments, each with fixed configuration; Continue groups them with a
+common recording ID rather than reopening a saved database. Metrics are explicit
+provider dictionaries and engine counters with render/physics identifiers and
+monotonic spacing. Spatial entity frames use MessagePack; images use JPEG.
 
-Spatial-only capture disables new images without changing spatial sampling or
-removing retained screenshots. Automatic visual capture requires a usable native
-asynchronous OpenGL path; otherwise spatial recording continues with image
-unavailability reported. Synchronous readback is explicit recovery, never an
-implicit fallback.
+Each kept segment is a new SQLite clip, format version 2 in capture metadata.
+The additive metrics table leaves older clips readable without inventing new
+channels or provenance. Save uses exclusive file creation, commits before
+acknowledgement and preserves a draft on failure. A visible saved-storage
+admission budget prevents automatic unbounded persistence without deleting old
+evidence. The project's ignored `.stage/clip_storage_path` hint publishes
+Godot's resolved user-storage location for offline readers.
+
+Ordinary session capture stops at a bound or explicit Stop. Rolling capture is
+an optional recent-history retention policy, not a separate recorder.
+On-trigger persistence opens a bounded post-window only when explicitly selected.
+Next-play patches validate without touching the active segment.
+Image-off and metrics-only paths do not request new image work.
+Automatic images require usable native asynchronous OpenGL; synchronous recovery
+is explicit, never a preset default or hidden fallback.
 
 The asynchronous path downsamples the existing viewport through Godot's public
 GPU blit API, without rendering the scene again. Godot objects stay on the main
@@ -183,7 +193,7 @@ strengths and bounded CharacterBody3D contact facts on the main thread. Older
 MessagePack frames remain readable without that record; no second recorder or
 controller hook is involved.
 
-The runtime autoload registers a native Logger for current-process diagnostics.
+With observation explicitly enabled, the runtime autoload registers a native Logger for current-process diagnostics.
 Its bounded queue survives client reconnects, not game restarts. Worker-thread
 callbacks retain bounded data under a mutex; the main-thread query supplies that
 data with engine run identity. This is separate from editor log history and from
@@ -233,6 +243,8 @@ The `theatre` executable separates installation from project deployment:
 - `enable` changes plugin enablement without copying files.
 - `rules` generates the project guidance that keeps scene/resource authoring on Director.
 - `mcp` regenerates the MCP configuration.
+- `run` forwards a selected scene and typed launch options to Director's existing
+  editor-owned lifecycle, without installing components or creating a fallback game.
 
 Development projects may use tracked links for addon directories. Deployment verifies expected links before copying a GDExtension through them; unrelated links are not followed for writes. On native Windows, Git must materialize symlinks as symlinks for that workflow; otherwise use ordinary copied addons. The platform-aware CLI is the supported Windows deployment path.
 

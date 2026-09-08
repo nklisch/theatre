@@ -1,5 +1,8 @@
 /target/
 
+# Private per-project capture preferences
+stage.local.toml
+
 # Godot editor-generated files
 .godot/
 *.uid

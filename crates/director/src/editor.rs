@@ -168,8 +168,15 @@ impl EditorHandle {
 ///
 /// Priority: DIRECTOR_EDITOR_PORT env var > project.godot setting > default 6551.
 pub fn resolve_editor_port(project_path: &Path) -> u16 {
+    resolve_editor_port_with_env(
+        project_path,
+        std::env::var("DIRECTOR_EDITOR_PORT").ok().as_deref(),
+    )
+}
+
+fn resolve_editor_port_with_env(project_path: &Path, value: Option<&str>) -> u16 {
     // 1. Env var
-    if let Ok(val) = std::env::var("DIRECTOR_EDITOR_PORT")
+    if let Some(val) = value
         && let Ok(port) = val.parse::<u16>()
     {
         return port;
@@ -260,17 +267,14 @@ mod tests {
 
     #[test]
     fn resolve_default_port() {
-        unsafe { std::env::remove_var("DIRECTOR_EDITOR_PORT") };
-        let port = resolve_editor_port(Path::new("/nonexistent"));
+        let port = resolve_editor_port_with_env(Path::new("/nonexistent"), None);
         assert_eq!(port, 6551);
     }
 
     #[test]
     fn resolve_env_var_port() {
-        unsafe { std::env::set_var("DIRECTOR_EDITOR_PORT", "7777") };
-        let port = resolve_editor_port(Path::new("/nonexistent"));
+        let port = resolve_editor_port_with_env(Path::new("/nonexistent"), Some("7777"));
         assert_eq!(port, 7777);
-        unsafe { std::env::remove_var("DIRECTOR_EDITOR_PORT") };
     }
 
     #[test]

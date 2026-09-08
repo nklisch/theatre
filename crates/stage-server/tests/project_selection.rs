@@ -149,7 +149,12 @@ async fn switch_resets_state_routes_retained_evidence_and_never_falls_back() {
         assert!(state.lock().await.delta_engine.has_baseline());
     }
     let second = ok(&client, "project_select", json!({"project_path":b.path()})).await;
-    assert_eq!(second["project_path"], b.path().to_str().unwrap());
+    assert_eq!(
+        std::path::Path::new(second["project_path"].as_str().unwrap())
+            .canonicalize()
+            .unwrap(),
+        b.path().canonicalize().unwrap()
+    );
     assert_eq!(second["port"], second_peer.port);
     assert_eq!(second["identity"]["run_id"], "run_b");
     assert!(
@@ -199,7 +204,12 @@ async fn switch_resets_state_routes_retained_evidence_and_never_falls_back() {
         json!({"project_path":b.path(),"port":wrong_peer.port}),
     )
     .await;
-    assert_eq!(wrong["project_path"], b.path().to_str().unwrap());
+    assert_eq!(
+        std::path::Path::new(wrong["project_path"].as_str().unwrap())
+            .canonicalize()
+            .unwrap(),
+        b.path().canonicalize().unwrap()
+    );
     assert_eq!(wrong["connected"], false);
     assert!(wrong["identity"].is_null());
     assert!(
@@ -222,8 +232,14 @@ async fn switch_resets_state_routes_retained_evidence_and_never_falls_back() {
     assert_eq!(unavailable["connected"], false);
     assert!(unavailable["identity"].is_null());
     assert_eq!(
-        ok(&client, "runtime_status", json!({})).await["project_path"],
-        b.path().to_str().unwrap()
+        std::path::Path::new(
+            ok(&client, "runtime_status", json!({})).await["project_path"]
+                .as_str()
+                .unwrap()
+        )
+        .canonicalize()
+        .unwrap(),
+        b.path().canonicalize().unwrap()
     );
 
     let returning_peer = peer(a.path(), "return").await;
@@ -446,7 +462,7 @@ async fn real_games_switch_in_one_mcp_session_and_return_to_the_original_run() {
         std::path::PathBuf::from(second["identity"]["project_path"].as_str().unwrap())
             .canonicalize()
             .unwrap(),
-        b.path()
+        b.path().canonicalize().unwrap()
     );
     let tree = ok(&client, "scene_tree", json!({"action":"roots"})).await;
     assert!(tree.to_string().contains("TestScene2D"), "{tree}");

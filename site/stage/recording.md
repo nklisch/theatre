@@ -1,277 +1,279 @@
 ---
-description: "Mark gameplay, save a clip, and inspect its sampled state and images—even after the game closes."
+description: "Choose explicit capture channels, separate loading from play, and keep bounded gameplay evidence."
 ---
 
-<script setup>
-import { data } from '../.vitepress/data/tools.data'
-const params = data.params['clips'] ?? []
-</script>
+# Recording
 
-# clips
+Stage capture is opt-in. Installing the addon does not start a listener, logger,
+sampler, recorder or capture controls on ordinary launches. Godot still loads
+the installed scripts and extension. Live observation and retained capture are
+independent choices.
 
-Keep evidence of a gameplay problem and inspect it later. While enabled, the
-dashcam holds a rolling history of spatial samples and optional screenshots.
-A marker preserves a window around an interesting moment; a successful save
-writes that window to a clip file.
+## Choose a launch
 
-## Capture a problem
+Use an already open, verified Godot editor with Director enabled:
 
-The in-game **Stage capture** panel shows whether recording is active, how much
-history is available, and the configured marker shortcut—F9 by default.
-
-| Control | Effect |
-| --- | --- |
-| **Start / Stop** | Enable or disable rolling capture. Stopping a pending marked window saves the available portion. |
-| **Mark** | Mark this moment and collect the configured post-window: the time after the marker. |
-| **Save now** | Save the available buffer immediately, including its marker label, without waiting for the remaining post-window. |
-| **Copy reference** | Copy the last saved clip's identifier, run, frame range and scene at save for the agent. |
-| **Share note + still** | Open the separate feedback composer. This creates a feedback note with a still image, not a dashcam clip. |
-
-Wait for **Clip saved** before asking the agent to inspect the new clip. A marker
-acknowledgement means the marker was accepted; it does not mean the post-window
-has finished. Marking while recording is stopped explains that recording must
-be started first.
-
-Choose a corner or hide the controls with the project setting
-`theatre/stage/display/capture_controls`. Hiding the panel does not disable the
-marker shortcut or **Ctrl+Shift+F8** for feedback. Human confirmations remain
-available when agent notifications are disabled.
-
-An agent can mark the current moment with:
-
-```json
-{"action":"add_marker","marker_label":"player stopped against the wall"}
+```sh
+theatre run scenes/review.tscn
+theatre run scenes/review.tscn --observe on
+theatre run scenes/review.tscn --play minimal --operator human
+theatre run scenes/review.tscn --startup minimal --play standard --play-scope group:review --operator human
+theatre run scenes/review.tscn --startup heavy --startup-images off --play off
 ```
 
-The response identifies the current engine frame and trigger tier. It does not
-promise an immediately available clip. Historical marker placement is not
-supported. To save immediately instead:
+Paths are relative to the project selected by `--project` (default: current
+directory). Commands resolve through PATH on Windows, Linux and macOS.
+`theatre run` uses Director's existing `editor_run` operation; it does not open
+an editor, install missing components, change the main scene or launch a fallback
+game process. Ask the user before project installation.
 
-```json
-{"action":"save","marker_label":"inspect the available window now"}
-```
-
-Game code can use `StageRuntime.marker(label, tier)`. Deliberate markers trigger
-a clip; system markers are rate-limited; silent markers annotate without
-triggering one.
-
-## Configure recording
-
-Use `status` to inspect effective settings, buffered coverage, image availability,
-recent capture costs, gaps and the last successful save:
-
-```json
-{"action":"status"}
-```
-
-The live states are `disabled`, `buffering`, and `post_capture`. Configured window
-lengths are limits and intentions, not proof that a full window has accumulated.
-Check `coverage` for the actual retained span. `screenshot_capture` reports whether
-new images can be captured, the backend, any unavailability reason and whether a
-readback is pending. `screenshots_available` instead describes images already in
-the buffer: retained images can remain available after new image capture stops.
-
-Configuration accepts a partial patch with a flat vocabulary. Unknown fields,
-wrong types and invalid values are rejected before any settings change.
-
-```json
-{"action":"config","config":{"preset":"lightweight"}}
-```
-
-Choosing a preset leaves recording enabled or disabled as it was. **Spatial
-only** (`spatial_only`) disables new images without changing spatial cadence,
-movement settings or already retained images. Start recording explicitly if it
-is stopped and you want to collect history:
-
-```json
-{"action":"config","config":{"enabled":true}}
-```
-
-Explicit values override the preset in the same request:
+Director accepts the same typed options in `editor_run.launch`:
 
 ```json
 {
-  "action":"config",
-  "config":{
-    "preset":"lightweight",
-    "pre_window_deliberate_sec":15,
-    "post_window_deliberate_sec":5,
-    "screenshot_max_dimension":320
-  }
+  "observe": false,
+  "operator": "human",
+  "readiness": "project",
+  "startup": {"preset": "minimal"},
+  "play": {"preset": "standard", "scope": ["group:review"], "images": false}
 }
 ```
 
-The response returns authoritative effective settings. When stopping closes a
-pending clip, `stop_save` reports that save separately. Recording can stop
-successfully even if the clip could not be saved; inspect that outcome rather
-than treating configuration success as a saved acknowledgement. A project's `[dashcam]`
-section in `stage.toml` uses the same keys; only its explicit fields are pushed
-on connection. Settings chosen at runtime are not automatically written back to
-that file.
+The CLI's `--options` accepts this JSON; named flags override its fields.
+Director's response describes configured intent, not proof that runtime loading
+succeeded. Its `target_scene` distinguishes the selected scene from the native
+bootstrap `playing_scene`. With observation enabled, inspect `runtime_status`
+for the actual run identity and scene. Inspect `clips(status).ready` for the
+capture readiness boundary; a node's ordinary Godot-ready state is not proof
+that asynchronous project loading has finished.
 
-### Choose cost deliberately
+## Presets are option bundles
 
-At 60 physics ticks per second, Lightweight samples spatial state about 10 times
-per second and images about 5 times per second, at a maximum image dimension of
-640 pixels. Detailed samples state about 30 times per second and images about
-10 times per second, at up to 960 pixels. Both turn off dense bursts. Their
-memory limits bound retained data; they do not guarantee the requested duration.
+| Preset | Metrics | Spatial state | Images | Default cadence |
+| --- | --- | --- | --- | --- |
+| Minimal | Yes | No | No | Metrics each rendered process callback |
+| Light | Yes | Explicit scope | No | Spatial every 6 physics ticks |
+| Standard | Yes | Explicit scope | Yes | Spatial every 2 ticks; images every 12 |
+| Heavy | Yes | Whole scene unless scoped | Yes | Spatial every tick; images every 6 |
 
-These names are relative, not a promise of negligible overhead. Cost depends on
-the scene, spatial sampling, viewport size, renderer, graphics driver and build.
-Inspect pacing and readback cost as well as gaps on your actual project. No queue
-drops does not mean capture is smooth, and spatial collection has a cost even
-without images.
+Light and Standard require scene-relative node paths or `group:name` selectors.
+Scope selects those nodes, not an implicit recursive scan of their descendants.
+Heavy deliberately allows broad scene coverage. Images are 640 pixels maximum
+dimension under Standard and 960 under Heavy.
 
-If recording changes the behavior under investigation, reduce image frequency
-or dimensions, choose Spatial only, or stop recording. To turn off new images
-while keeping your spatial settings:
+Each phase defaults to a 120-second, 12,000-record bound. Encoded payload budgets
+are 8 MiB for Minimal, 128 MiB for Light/Standard and 256 MiB for Heavy. These
+are limits on retained encoded data, not total process-memory or frame-time
+guarantees. Effective settings and image capability appear in capture status.
 
-```json
-{"action":"config","config":{"preset":"spatial_only"}}
+Overrides include `metrics`, `spatial`, `images`, `scope`, `spatial_interval`,
+`image_interval`, `image_size`, `duration_secs`, `max_records`, `payload_mib`,
+`retention` and `save`. Use `preset: "off"` to disable a phase.
+Optional `movement_nodes` and `input_actions` select bounded CharacterBody3D
+contact evidence and named InputMap strengths, never raw keyboard capture.
+Movement requires spatial capture; missing evidence is not zero input.
+
+`image_readback: "auto"` uses an available native asynchronous OpenGL path.
+Unavailable images do not stop metrics or spatial capture.
+`image_readback: "synchronous"` is explicit recovery and can stall gameplay.
+No preset selects it or changes the project's renderer.
+`anomaly_enabled: true` separately opts into visual anomaly measurements and
+system markers; it requires images. Automatic persistence still requires an
+explicit saving policy.
+
+## Integrate project readiness
+
+The default `readiness: "project"` requires a deliberate notification. Add it
+at the project's existing transition from initial loading to the intended
+reviewable activity:
+
+```gdscript
+# Call after all required asynchronous work succeeds.
+# Do not notify after failure/cancellation or for later background tasks.
+var stage := get_node_or_null("/root/StageRuntime")
+if stage != null:
+    stage.notify_ready()
 ```
 
-This does not start recording or discard retained images. Setting
-`"screenshot_enabled":false` directly has the same image-disabling effect.
+The project owns what "ready" means. Find the actual completion path, not merely
+the scene's `_ready()` or the first background task. Test successful, failed,
+canceled and repeated notification paths. Repeated calls are idempotent.
+For a purely synchronous scene, explicitly choose `readiness: "scene"` to use
+Godot's scene-ready boundary instead.
 
-### Choose a readback path
+Startup uses a small bootstrap without preloading the target. Capture starts
+before the selected scene's resource load, stops at readiness, and saves once
+by default (`startup.save: "on_stop"`). It does not profile process creation,
+engine initialization or earlier autoloads. Blocking loading work can prevent
+periodic samples; elapsed intervals are not an internal loading trace.
 
-The default `screenshot_readback` is `auto`. It uses native asynchronous OpenGL
-readback when available; otherwise new images are unavailable while spatial
-recording continues. Check `screenshot_capture` rather than assuming a graphical
-session or renderer name guarantees support. Automatic mode never falls back to
-synchronous readback or changes the project's renderer.
+Missing readiness leaves an actionable waiting state. Startup bounds still
+stop capture and retain available evidence; they do not invent a ready event.
+Orderly startup exit attempts a save. A crash can lose the in-memory tail.
 
-The asynchronous path downsamples the existing viewport on the GPU before
-transferring pixels, without rendering the scene a second time. It checks
-capacity before expensive work and polls for completed pixels on later frames
-without waiting for the GPU. Busy capture skips images instead of catching up in
-bursts. Driver submission and completed-pixel copying can still cost time; this
-is not a hard frame-time guarantee.
+## Human and agent operation
 
-If images are necessary and automatic capture is unavailable, opt in to
-synchronous recovery explicitly:
+Human play defaults to manual start. After startup ends, no provider sampling,
+spatial collection or image requests continue while waiting. The game itself
+is not automatically paused; restart explicitly if review needs a fresh scene.
 
-```json
-{"action":"config","config":{"screenshot_enabled":true,"screenshot_readback":"synchronous"}}
+1. **Continue** starts a new play segment in the same recording.
+2. **Start new** starts an independent recording.
+3. **Mark** annotates a moment during capture.
+4. **Stop** freezes the draft. **Keep** persists it; **Discard** removes only
+   that unkept draft. Failed Keep retains the draft for retry.
+5. **Copy reference** identifies saved evidence. **Share note + still** is a
+   separate, deliberate feedback operation.
+
+A segment is one contiguous interval with fixed settings. Changing the preset
+or `clips(config)` stages settings for the next segment, never starts recording,
+and never retroactively enriches earlier evidence. Unkept drafts are lost if
+the process exits.
+
+Agent play defaults to starting at readiness. Explicit `play_start` settings
+override this operator-derived default, including a local user's automatic
+preference on human launches. Review the resolved launch settings.
+
+The live `clips` actions are `start`, `continue`, `stop`, `keep`, `discard`,
+`save` (stop and keep immediately), `add_marker`, `status` and `config`.
+They require observation to be enabled for agent access; native human controls
+and project APIs do not require an agent connection.
+
+The marker and pause shortcuts remain configurable through
+`theatre/stage/shortcuts/marker_key` and `pause_key` (F9/F11 defaults).
+Use buttons or project-appropriate alternative bindings when those keys conflict
+with editor or gameplay controls. Repeated key events are ignored.
+The panel's corner or `hidden` placement uses
+`theatre/stage/display/capture_controls`. Hiding controls does not disable
+shortcuts. An ordinary off launch installs neither.
+
+## Rolling capture (dashcam)
+
+`play.retention: "rolling"` retains bounded recent history instead of stopping
+when a session fills. Start must still be explicit or selected through
+`play_start: "ready"`.
+
+Markers annotate by default. With `play.save: "on_trigger"`, deliberate/system
+markers start one bounded five-second post-window. Repeated markers do not
+extend it indefinitely. At completion the segment is saved and rolling capture
+continues in a new segment. Stop shortens a pending post-window, saves what is
+available and reports shortened coverage. A failed save keeps the draft and
+blocks resumption.
+
+`StageRuntime.marker(label, tier)` remains the developer API. Tiers are
+`deliberate`, `system` and `silent`; silent only annotates. System markers
+are rate-limited. Automatic saving is separately opt-in.
+For local always-on metrics, prefer rolling retention to repeated persistent
+captures. Saved storage has a visible 1024 MiB admission budget; previously
+kept evidence is never deleted automatically.
+
+## Add lightweight metrics
+
+Register explicit synchronous providers, returning small dictionaries:
+
+```gdscript
+func _ready() -> void:
+    var stage := get_node_or_null("/root/StageRuntime")
+    if stage != null:
+        stage.register_metric_provider("simulation", capture_metrics)
+
+func capture_metrics() -> Dictionary:
+    return {"pending_jobs": pending_jobs, "update_usec": last_update_usec}
+
+func _exit_tree() -> void:
+    var stage := get_node_or_null("/root/StageRuntime")
+    if stage != null:
+        stage.unregister_metric_provider("simulation")
 ```
 
-Synchronous recovery downsamples on the GPU where available, but still waits for
-pixels and can stall gameplay. Return to `"screenshot_readback":"auto"` or choose
-Spatial only when that cost interferes with the investigation.
+Use unit-bearing names and cheap values already computed by the project.
+Do not traverse the world or trigger expensive calculations in a provider.
+There are at most 32 named providers. Callbacks run only while the metrics
+channel is active, on Godot's main thread. Built-in `engine` values remain
+distinct from project values.
 
-## Capture movement intent and contacts
+For context that should not be repeated in every sample, use
+`register_metadata_provider(name, Callable)` and `unregister_metadata_provider(name)`.
+These providers return dictionaries and run once at an explicit phase/Start
+boundary, not during the human wait. Register before that boundary; providers
+registered by scene code are available for play, not the earlier startup boundary.
+Use an existing early integration point if startup metadata is needed. Automatic rolling resumes
+reuse the captured context. At most 32 providers and 64 KiB of combined encoded
+metadata are accepted; invalid or oversized context leaves capture stopped.
+Metadata is retained under `capture.context.project_metadata`. Keep it small,
+portable and free of secrets.
 
-Standing still does not prove that a character was stuck. For a movement
-investigation, opt in to selected CharacterBody3D nodes and existing InputMap
-actions. Replace these example paths and action names with those in your game:
+Records include wall time, monotonic elapsed and interval microseconds, render
+and physics frame identifiers. Callback/serialization timing is diagnostic
+observer cost, not a controlled benchmark or total recorder cost. Provider
+callbacks themselves can be expensive.
 
-```json
-{
-  "action":"config",
-  "config":{
-    "movement_nodes":["/root/Main/Player"],
-    "input_actions":["move_forward","move_left","move_right"]
-  }
-}
+## Preferences and consent
+
+Resolution order, lowest to highest:
+
+1. Built-in safe defaults.
+2. Shared project `stage.toml`.
+3. Private `theatre/settings.toml` beneath Godot's `OS.get_config_dir()`.
+4. Private project `stage.local.toml`.
+5. Explicit launch options.
+
+All files use a `[launch]` table, for example a deliberate private preference:
+
+```toml
+[launch]
+play_start = "ready"
+
+[launch.play]
+preset = "minimal"
+retention = "rolling"
+save = "manual"
 ```
 
-The recorder validates targets before applying the patch and returns their
-canonical paths. It supports up to 16 selected bodies and 16 actions. At each
-spatial sample it records action strengths, floor/wall/ceiling flags, floor
-normal when available, real velocity and up to eight slide-contact normals.
-Truncation is explicit. These fields are absent when movement capture is off;
-old clips remain readable without them.
+Ask before creating private project preferences; ensure the narrow
+`stage.local.toml` ignore entry is approved and present first.
+Tracked defaults must use portable project-relative paths.
+An explicit off launch overrides always-on preferences:
 
-Use full `snapshot_at` results or request `"movement"` in a trajectory's
-`properties` alongside position or velocity. Use node paths from the saved
-spatial data when selecting a trajectory.
-
-Input strengths are global sampled intent, not proof that a particular body
-consumed that input. Contacts describe the body's most recent `move_and_slide`
-call. Callback order matters, and presses between samples can be missed. Use
-these observations to distinguish idle, attempted movement and blocking
-contacts—not to claim deterministic replay or an atomic controller trace.
-
-## Select saved evidence
-
-```json
-{"action":"list"}
+```sh
+theatre run scenes/review.tscn --observe off --startup off --play off
 ```
 
-Choose an explicit `clip_id`, especially when the storage contains older runs.
-New clips retain run identity, scene at save and configuration provenance.
-`scene_at_save` identifies the scene when persistence occurred, not every scene
-in the buffered history: a clip can span a scene transition. The live
-status's `last_saved_clip` belongs to that recorder instance; older clips may
-not contain enough metadata to establish their run.
+Legacy `[dashcam]` handshake settings and Godot auto-start settings do not
+override launch-managed capture. Migrate intentional always-on behavior into
+`[launch]`; do not infer that consent from old settings.
 
-After a successful save, Godot publishes its resolved storage location in the
-project's `.stage/clip_storage_path` hint. A fresh CLI or MCP process can use
-that location to inspect saved clips after the game closes. Live status,
-configuration, markers and saving still need a running game. If the hint is
-missing or the storage has moved, reconnect to resolve Godot's storage location
-or update the hint to the known directory containing the retained clips.
+For deliberate direct Godot launches, place Theatre arguments after `--`:
 
-For the following examples, replace `clip_example`, frames and node paths with
-values from your selected clip.
-
-```json
-{"action":"markers","clip_id":"clip_example"}
+```sh
+godot --path . scenes/review.tscn -- --theatre-play=minimal --theatre-readiness=scene
+godot --path . addons/stage/capture_bootstrap.tscn -- --theatre-target=res://scenes/review.tscn --theatre-startup=minimal
 ```
 
-Markers have their own engine timestamps. A marker need not coincide with a
-sampled spatial frame or image. Missing samples are not evidence that nothing
-happened between them.
+Use `--theatre-options=JSON` for the full option model. Startup capture requires
+the bootstrap and an explicit target. Do not change the project's main scene
+to the bootstrap.
 
-## Inspect state and images
+## Inspect retained evidence
 
-| Action | Use |
-| --- | --- |
-| `snapshot_at` | Inspect state at a recorded spatial frame, or nearest to a timestamp. |
-| `trajectory` | Read a selected node's sampled position, velocity or other supported properties. |
-| `query_range` | Search retained frames for supported spatial/state conditions. |
-| `diff_frames` | Compare two recorded frames. |
-| `find_event` | Search recorded events; an empty result does not establish that every game event was captured. |
-| `screenshots` | List actual image frames and timestamps. |
-| `screenshot_at` | Retrieve the nearest retained image. |
-| `visual_artifact` | Generate a storyboard, motion history, difference map or node-following filmstrip. |
+Each kept segment is a new SQLite clip in Godot's `user://stage_recordings`.
+Segments share a recording ID when continued, but keep independent settings,
+time ranges, stop reasons and actual channel counts. Never average timings
+across an uncaptured gap or interpolate missing frames.
 
-```json
-{"action":"snapshot_at","clip_id":"clip_example","at_frame":336,"detail":"full"}
-```
+Use `clips(list)`, then `clips(metrics)` for metric samples and numeric summaries.
+Physics-frame filters preserve separate render-frame IDs; summaries exclude
+missing values rather than treating them as zero.
+Responses return at most 200 samples and report truncation; numeric summaries
+cover the selected range (up to 256 series and eight object levels). Use narrower
+frame ranges for detailed inspection; the SQLite file retains the full data.
+Spatial and image analysis report unavailable channels when they were not
+captured. Use `snapshot_at`, `trajectory`, `query_range`, `diff_frames`,
+`screenshot_at` and `visual_artifact` only with appropriate retained evidence.
+Older clips remain readable; missing new metadata is not guessed.
 
-```json
-{
-  "action":"trajectory","clip_id":"clip_example","node":"Player",
-  "from_frame":300,"to_frame":360,
-  "properties":["position","velocity"],"sample_interval":1
-}
-```
-
-```json
-{"action":"visual_artifact","clip_id":"clip_example","artifact":"storyboard"}
-```
-
-Visual results identify sampled frames and coverage gaps. Image frames and
-timestamps refer to the capture request even when pixels arrive later; they do
-not promise atomic correspondence with sampled physics state. Saving does not
-wait for unfinished readback or encoding: missing images in the saved window
-are reported as gaps. Stop and configuration changes discard stale pending
-results, so they cannot seed later image-change anomaly detection.
-
-Markers outside the saved image timestamps remain available through `markers`;
-the artifact reports
-them as outside visual coverage rather than implying that an image exists at
-that moment. Headless runs can retain spatial evidence without rendered images.
-These tools analyze recordings; they do not replay or simulate the game.
-
-Delete an unwanted clip explicitly:
-
-```json
-{"action":"delete","clip_id":"clip_example"}
-```
-
-## Parameters
-
-<ParamTable :params="params" />
+Completed images retain their request frame/time. Unfinished work is reported
+as gaps when a segment stops, never assigned to the next segment. Image and
+physics samples are not an atomic snapshot.
+After Keep, the ignored `.stage/clip_storage_path` hint enables offline analysis
+without a running game. See [Dashcam workflow](/stage/dashcam).

@@ -7,21 +7,27 @@ signal marker_requested
 signal save_requested
 signal preset_requested(preset: String)
 signal feedback_requested
+signal continue_requested
+signal discard_requested
+signal cancel_requested
 
 const PRESETS := {
-	"Custom": "", "Lightweight": "lightweight", "Detailed": "detailed",
-	"Spatial only": "spatial_only",
+	"Minimal": "minimal", "Light": "light", "Standard": "standard", "Heavy": "heavy",
 }
 
 var _toggle: Button
 var _marker: Button
 var _save: Button
+var _continue: Button
+var _discard: Button
 var _status: Label
 var _last_saved: Label
 var _copy: Button
 var _preset: OptionButton
 var _last_clip: Dictionary = {}
 var _placement := "bottom_right"
+var _marker_binding := "F9"
+var _has_draft := false
 var _acknowledgement := ""
 var _acknowledgement_until := 0
 
@@ -48,7 +54,7 @@ func _init() -> void:
 	for label in PRESETS:
 		_preset.add_item(label)
 		_preset.set_item_metadata(_preset.item_count - 1, PRESETS[label])
-	_preset.tooltip_text = "Choosing a preset does not start recording. Spatial only turns off new images without changing spatial sampling or discarding retained images."
+	_preset.tooltip_text = "Settings for the next segment. Light and Standard require explicit node paths or groups in the launch options."
 	_preset.item_selected.connect(func(index: int) -> void:
 		var preset: String = _preset.get_item_metadata(index)
 		if not preset.is_empty():
@@ -57,19 +63,31 @@ func _init() -> void:
 	heading.add_child(_preset)
 	var actions := HBoxContainer.new()
 	rows.add_child(actions)
-	_toggle = _button("Start", "ToggleDashcam", actions, func() -> void: toggle_requested.emit())
+	_toggle = _button("Start new", "ToggleDashcam", actions, func() -> void: toggle_requested.emit())
 	_marker = _button("Mark", "Mark", actions, func() -> void: marker_requested.emit())
-	_marker.tooltip_text = "Mark this moment and retain the configured before/after window."
-	_save = _button("Save now", "SaveNow", actions, func() -> void: save_requested.emit())
-	_save.tooltip_text = "Save the available buffer immediately, without waiting for the remaining post-window."
+	_marker.tooltip_text = "Annotate this moment. Automatic saving requires rolling retention and on_trigger saving."
+	var review := HBoxContainer.new()
+	rows.add_child(review)
+	_continue = _button("Continue", "ContinueCapture", review, func() -> void: continue_requested.emit())
+	_continue.tooltip_text = "New segment in the same recording. The uncaptured gap remains visible."
+	_save = _button("Keep", "SaveNow", review, func() -> void: save_requested.emit())
+	_save.tooltip_text = "Save the stopped draft. Failed saves retain the draft for retry."
+	_discard = _button("Discard", "DiscardCapture", review, func() -> void:
+		if _has_draft:
+			discard_requested.emit()
+		else:
+			cancel_requested.emit()
+	)
 	_status = Label.new()
 	_status.name = "CaptureStatus"
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_status.max_lines_visible = 3
+	_status.max_lines_visible = 2
 	_status.text = "Recorder unavailable"
 	rows.add_child(_status)
 	_last_saved = Label.new()
 	_last_saved.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_last_saved.max_lines_visible = 1
+	_last_saved.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_last_saved.text = "No clip saved this run"
 	rows.add_child(_last_saved)
 	var footer := HBoxContainer.new()
@@ -92,6 +110,7 @@ func _button(text: String, node_name: String, parent: Node, callback: Callable) 
 
 
 func configure(marker_binding: String, placement: String) -> void:
+	_marker_binding = marker_binding
 	_marker.text = "Mark (%s)" % marker_binding
 	visible = placement != "hidden"
 	_placement = placement
@@ -125,6 +144,8 @@ func _place() -> void:
 		target.x = maxf(0, available.x - size.x - 12)
 	if _placement.begins_with("bottom"):
 		target.y = maxf(0, available.y - size.y - 12)
+	target.x = clampf(target.x, 0, maxf(0, available.x - size.x))
+	target.y = clampf(target.y, 0, maxf(0, available.y - size.y))
 	position = target
 
 
@@ -136,37 +157,55 @@ func acknowledge(message: String) -> void:
 	_status.tooltip_text = message
 
 
+func clear_acknowledgement() -> void:
+	_acknowledgement = ""
+	_acknowledgement_until = 0
+
+
 func refresh(status: Dictionary) -> void:
-	var available := not status.is_empty()
-	var active := bool(status.get("dashcam_enabled", false))
-	_toggle.disabled = not available
-	_toggle.text = "Stop" if active else "Start"
+	var state: String = status.get("state", "off")
+	var available := state != "off"
+	var active := state == "recording"
+	var draft := state == "review"
+	_has_draft = draft
+	var next_enabled: bool = status.get("next_config", {}).get("enabled", false)
+	_toggle.disabled = not available or draft or (not active and (not status.get("ready", false) or not next_enabled))
+	_toggle.text = "Stop" if active else "Start new"
 	_marker.disabled = not active
-	_save.disabled = not active or int(status.get("buffer_frames", 0)) == 0
+	_save.disabled = not draft
+	_discard.text = "Discard" if draft else "Cancel"
+	_discard.disabled = not available or active or (not draft and not next_enabled)
+	_discard.tooltip_text = "Remove only this unsaved draft" if draft else "Cancel scheduled play capture for this run; saved evidence is retained"
+	_continue.disabled = _toggle.disabled or active or not status.get("can_continue", false)
 	_preset.disabled = not available
+	var auto_save: bool = status.get("config", {}).get("save") == "on_trigger"
+	_marker.text = ("Mark + save (%s)" if active and auto_save else "Mark (%s)") % _marker_binding
 	if not active:
-		_marker.tooltip_text = "Start dashcam before marking. The marker shortcut will explain this too."
+		_marker.tooltip_text = "Start capture before marking."
 	else:
-		_marker.tooltip_text = "Retain the configured before/after window around this moment."
+		_marker.tooltip_text = "Mark, save after the five-second post-window, then resume rolling capture." if auto_save else "Annotate this moment without saving."
 	_preset.select(0)
 	for index in _preset.item_count:
-		if _preset.get_item_metadata(index) == status.get("preset"):
+		if _preset.get_item_metadata(index) == status.get("next_config", {}).get("preset"):
 			_preset.select(index)
 			break
-	var coverage: Dictionary = status.get("coverage", {})
-	var buffered := float(coverage.get("buffered_seconds") if coverage.get("buffered_seconds") != null else 0.0)
-	var message := "Dashcam stopped · Start to retain gameplay"
+	var message := "Ready · No capture running" if status.get("ready", false) else "Waiting for project readiness"
 	if not available:
-		message = "Recorder unavailable · Check Stage auto-start and addon loading"
+		message = "Capture off for this launch"
 	elif status.get("last_save_error") != null:
-		message = "Save failed · %s" % status.last_save_error
-	elif status.get("state") == "post_capture":
-		message = "Marked · collecting %.1f s after the marker" % float(coverage.get("post_window_remaining_seconds", 0.0))
+		message = "Save failed · Draft retained; retry Keep or Discard"
+	elif draft:
+		message = "Stopped (%s) · Unsaved draft; Keep or Discard before exit" % str(status.get("stop_reason", "manual_stop"))
 	elif active:
-		message = "Buffering · %.1f s retained" % buffered
+		message = "%s · %.1f s · %d metrics / %d spatial / %d images" % [str(status.get("phase", "Capture")).capitalize(), float(status.get("active_duration_usec", 0)) / 1000000.0, int(status.get("metric_samples", 0)), int(status.get("spatial_samples", 0)), int(status.get("image_samples", 0))]
 	if available:
 		message += " · " + _image_status(status)
 	var tooltip := message
+	if status.get("last_save_error") != null:
+		tooltip += "\n" + str(status.last_save_error)
+	if available:
+		var bounds: Dictionary = status.get("config", status.get("next_config", {}))
+		tooltip += "\nLimits: %s seconds / %s records / %s MiB encoded payload" % [bounds.get("duration_secs", "?"), bounds.get("max_records", "?"), bounds.get("payload_mib", "?")]
 	var screenshot_capture: Dictionary = status.get("screenshot_capture", {})
 	if screenshot_capture.get("reason") != null:
 		tooltip += "\n" + str(screenshot_capture.reason)
@@ -178,7 +217,8 @@ func refresh(status: Dictionary) -> void:
 	var clip: Variant = status.get("last_saved_clip")
 	if clip is Dictionary:
 		_last_clip = clip
-		_last_saved.text = "Last saved: %s" % str(clip.get("clip_id", ""))
+		_last_saved.text = "Saved · …%s" % str(clip.get("clip_id", "")).right(16)
+		_last_saved.tooltip_text = str(clip.get("clip_id", ""))
 		_copy.disabled = false
 
 
@@ -186,15 +226,15 @@ func _image_status(status: Dictionary) -> String:
 	var config: Dictionary = status.get("config", {})
 	var capture: Dictionary = status.get("screenshot_capture", {})
 	var message := "Images unavailable"
-	if not config.get("screenshot_enabled", true):
+	if not config.get("images", false):
 		message = "Images off"
-	elif not status.get("dashcam_enabled", false):
+	elif status.get("state") != "recording":
 		message = "Images stopped"
 	elif capture.get("available", false):
 		message = "Images pending" if capture.get("pending", false) else "Images on"
 	elif capture.get("backend") == "initializing":
 		message = "Images initializing"
-	var retained := int(status.get("screenshot_buffer_count", 0))
+	var retained := int(status.get("image_samples", 0))
 	if retained > 0:
 		message += " · %d images retained" % retained
 	return message

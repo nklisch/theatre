@@ -1,5 +1,6 @@
 //! TCP wire protocol types shared between stage-server and stage-godot.
 
+pub mod capture;
 pub mod codec;
 pub mod connection_state;
 pub mod dashcam;

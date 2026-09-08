@@ -449,23 +449,33 @@ async fn journey_dashcam_agent_workflow() {
     // Step 1: verify dashcam is actively buffering on startup
     let status = h.expect(1, "clips", json!({ "action": "status" })).await;
     assert_eq!(
-        status["dashcam_enabled"],
+        status["config"]["enabled"],
         json!(true),
-        "Dashcam should be enabled by default"
+        "The fixture explicitly requested capture"
     );
     assert_eq!(
         status["state"],
-        json!("buffering"),
+        json!("recording"),
         "Dashcam should start in buffering state"
     );
     assert!(
-        status["buffer_frames"].as_u64().is_some(),
+        status["spatial_samples"].as_u64().is_some(),
         "buffer_frames should be present"
     );
     assert!(
         status["config"].is_object(),
         "dashcam config should be returned"
     );
+
+    h.expect(1, "clips", json!({"action":"stop"})).await;
+    h.expect(1, "clips", json!({"action":"discard"})).await;
+    h.expect(
+        1,
+        "clips",
+        json!({"action":"config","config":{"save":"on_trigger"}}),
+    )
+    .await;
+    h.expect(1, "clips", json!({"action":"start"})).await;
 
     // Step 2: baseline snapshot — verify scene is live
     let baseline = h
@@ -516,8 +526,8 @@ async fn journey_dashcam_agent_workflow() {
     // Step 7: dashcam should now be in post_capture state
     let status_post = h.expect(7, "clips", json!({ "action": "status" })).await;
     assert_eq!(
-        status_post["state"],
-        json!("post_capture"),
+        status_post["pending_post_window"],
+        json!(true),
         "Dashcam should be in post_capture after marker trigger. Got: {status_post}"
     );
 
@@ -532,7 +542,7 @@ async fn journey_dashcam_agent_workflow() {
             }),
         )
         .await;
-    let clip_id = save_result["clip_id"]
+    let clip_id = save_result["last_saved_clip"]["clip_id"]
         .as_str()
         .expect("save should return clip_id");
     assert!(
@@ -540,7 +550,10 @@ async fn journey_dashcam_agent_workflow() {
         "clip id should start with 'clip_', got: {clip_id}"
     );
     assert!(
-        save_result["frames"].as_u64().unwrap_or(0) > 0,
+        save_result["last_saved_clip"]["capture"]["spatial_frame_count"]
+            .as_u64()
+            .unwrap_or(0)
+            > 0,
         "Clip should contain captured frames"
     );
 
@@ -548,7 +561,7 @@ async fn journey_dashcam_agent_workflow() {
     let status_after = h.expect(9, "clips", json!({ "action": "status" })).await;
     assert_eq!(
         status_after["state"],
-        json!("buffering"),
+        json!("idle"),
         "Dashcam should return to buffering after clip save. Got: {status_after}"
     );
 
@@ -559,7 +572,7 @@ async fn journey_dashcam_agent_workflow() {
         .expect("list should return clips array");
     let dashcam_clips: Vec<_> = clips
         .iter()
-        .filter(|r| r["dashcam"].as_bool() == Some(true))
+        .filter(|r| r["capture"]["config"]["retention"] == "rolling")
         .collect();
     assert!(
         !dashcam_clips.is_empty(),
@@ -571,7 +584,7 @@ async fn journey_dashcam_agent_workflow() {
         .iter()
         .find(|r| r["clip_id"].as_str() == Some(clip_id))
         .unwrap_or_else(|| panic!("Clip {clip_id} should be in list. Clips: {clips:?}"));
-    assert_eq!(our_clip["dashcam"], json!(true));
+    assert_eq!(our_clip["capture"]["config"]["retention"], json!("rolling"));
 }
 
 /// Journey: Save a dashcam clip, verify it exists, delete it, verify it's gone.
@@ -600,7 +613,7 @@ async fn journey_dashcam_clip_lifecycle() {
             json!({ "action": "save", "marker_label": "cleanup_test" }),
         )
         .await;
-    let clip_id = save["clip_id"]
+    let clip_id = save["last_saved_clip"]["clip_id"]
         .as_str()
         .expect("save should return clip_id")
         .to_string();
@@ -840,13 +853,13 @@ async fn journey_screenshot_api_contract() {
 
     // Step 1: initial status — screenshot fields must be present
     let status1 = h.expect(1, "clips", json!({ "action": "status" })).await;
-    assert_eq!(status1["state"], json!("buffering"));
+    assert_eq!(status1["state"], json!("recording"));
     assert!(
-        status1["screenshot_buffer_count"].as_u64().is_some(),
+        status1["image_samples"].as_u64().is_some(),
         "screenshot_buffer_count must be present in status: {status1}"
     );
     assert!(
-        status1["screenshot_buffer_kb"].as_u64().is_some(),
+        status1["config"]["payload_mib"].as_u64().is_some(),
         "screenshot_buffer_kb must be present in status: {status1}"
     );
 
@@ -856,11 +869,11 @@ async fn journey_screenshot_api_contract() {
     // Step 3: fields still present after wait
     let status2 = h.expect(3, "clips", json!({ "action": "status" })).await;
     assert!(
-        status2["screenshot_buffer_count"].as_u64().is_some(),
+        status2["image_samples"].as_u64().is_some(),
         "screenshot_buffer_count must still be present: {status2}"
     );
     assert!(
-        status2["screenshot_buffer_kb"].as_u64().is_some(),
+        status2["config"]["payload_mib"].as_u64().is_some(),
         "screenshot_buffer_kb must still be present: {status2}"
     );
     let godot_stderr = h.godot.stderr_output();
@@ -877,7 +890,7 @@ async fn journey_screenshot_api_contract() {
             json!({ "action": "save", "marker_label": "screenshot_api_test" }),
         )
         .await;
-    let clip_id = save["clip_id"]
+    let clip_id = save["last_saved_clip"]["clip_id"]
         .as_str()
         .expect("save should return clip_id")
         .to_string();
@@ -1002,6 +1015,7 @@ async fn journey_visual_anomaly_detection() {
         json!({
             "action":"config",
             "config": {
+                "anomaly_enabled":true,
                 "anomaly_min_proportion":0.0,
                 "anomaly_relative_factor":1.0,
                 "anomaly_sustained_frames":1,
@@ -1010,10 +1024,13 @@ async fn journey_visual_anomaly_detection() {
         }),
     )
     .await;
+    h.expect(3, "clips", json!({"action":"stop"})).await;
+    h.expect(3, "clips", json!({"action":"discard"})).await;
+    h.expect(3, "clips", json!({"action":"start"})).await;
     h.wait_frames(120).await;
     let after = h.expect(4, "clips", json!({"action":"status"})).await;
     let screenshots_available = after["screenshots_available"].as_bool().unwrap_or(false)
-        || after["screenshot_buffer_count"].as_u64().unwrap_or(0) > 0;
+        || after["image_samples"].as_u64().unwrap_or(0) > 0;
     if screenshots_available {
         assert!(after["anomaly"]["triggers_total"].as_u64().unwrap_or(0) >= 1);
         let list = h.expect(5, "clips", json!({"action":"list"})).await;
@@ -1101,7 +1118,7 @@ async fn journey_visual_artifact_contract() {
     )
     .await;
     let save = h.expect(3, "clips", json!({"action":"save"})).await;
-    let clip_id = save["clip_id"]
+    let clip_id = save["last_saved_clip"]["clip_id"]
         .as_str()
         .expect("save should return clip_id")
         .to_string();

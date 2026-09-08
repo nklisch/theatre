@@ -2,6 +2,7 @@ extends Node
 
 const CaptureControls := preload("res://addons/stage/capture_controls.gd")
 const RuntimeLoggerScript := preload("res://addons/stage/runtime_logger.gd")
+const LaunchPolicy := preload("res://addons/stage/launch_policy.gd")
 const Feedback := preload("res://addons/theatre_shared/feedback.gd")
 const FeedbackComposer := preload("res://addons/theatre_shared/feedback_composer.gd")
 var _feedback_composer: ConfirmationDialog
@@ -10,6 +11,15 @@ var tcp_server
 var collector
 var recorder
 var _runtime_logger: Logger
+var launch_config: Dictionary = {}
+var launch_error := ""
+var target_scene := ""
+var _project_ready := false
+var _recording_id := ""
+var _metrics_enabled := false
+var _metric_providers: Dictionary = {}
+var _metadata_providers: Dictionary = {}
+var _phase := ""
 
 var _overlay: CanvasLayer
 var _pause_label: Label
@@ -26,65 +36,62 @@ var _pause_keycode: int = KEY_F11
 
 
 func _init() -> void:
-	# Register before _ready so capture begins as early as the autoload lifecycle
-	# permits. Godot initialization and pre-registration history are unavailable.
-	_runtime_logger = RuntimeLoggerScript.new()
-	OS.add_logger(_runtime_logger)
+	var result := LaunchPolicy.runtime_request()
+	if not result.get("ok", false):
+		launch_error = str(result.get("error", "Invalid launch policy"))
+		return
+	launch_config = result.config
+	target_scene = result.get("target_scene", "")
+	if launch_config.observe:
+		_runtime_logger = RuntimeLoggerScript.new()
+		OS.add_logger(_runtime_logger)
 
 
 func _ready() -> void:
-	# Run even when the game tree is paused so TCP polling and recording continue.
 	process_mode = Node.PROCESS_MODE_ALWAYS
-
+	set_process(false)
+	set_physics_process(false)
+	set_process_shortcut_input(false)
+	if not launch_error.is_empty():
+		push_error("[Stage] " + launch_error)
+		return
+	if not launch_config.observe and not launch_config.startup.enabled and not launch_config.play.enabled:
+		return
 	_resolve_shortcut_keys()
 	_setup_overlay()
-
-	for extension_class in [&"StageTCPServer", &"StageCollector", &"StageRecorder"]:
-		if not ClassDB.class_exists(extension_class):
-			push_error("[Stage] GDExtension not loaded — %s class not found. Check that the stage.gdextension binary exists for your platform." % extension_class)
-			return
-
-	var auto_start: bool = ProjectSettings.get_setting(
-		"theatre/stage/connection/auto_start", true)
-	if not auto_start:
-		return
-
-	collector = ClassDB.instantiate(&"StageCollector")
-	add_child(collector)
-
-	tcp_server = ClassDB.instantiate(&"StageTCPServer")
-	add_child(tcp_server)
-	tcp_server.set_collector(collector)
-	tcp_server.set_runtime_logger(_runtime_logger)
-	tcp_server.activity_received.connect(_on_activity_received)
-
-	recorder = ClassDB.instantiate(&"StageRecorder")
-	var dashcam_enabled: bool = ProjectSettings.get_setting(
-		"theatre/stage/dashcam/enabled", true)
-	recorder.set_dashcam_enabled(dashcam_enabled)
-	add_child(recorder)
-	recorder.set_collector(collector)
-	recorder.marker_added.connect(_on_marker_added)
-	recorder.dashcam_clip_saved.connect(_on_dashcam_clip_saved)
-	recorder.dashcam_clip_started.connect(_on_dashcam_clip_started)
-	recorder.dashcam_clip_failed.connect(_on_dashcam_clip_failed)
+	set_process_shortcut_input(true)
+	set_physics_process(true)
+	if launch_config.observe:
+		_ensure_collector()
+		tcp_server = ClassDB.instantiate(&"StageTCPServer")
+		add_child(tcp_server)
+		tcp_server.set_collector(collector)
+		tcp_server.set_runtime_logger(_runtime_logger)
+		tcp_server.activity_received.connect(_on_activity_received)
+		var port := int(OS.get_environment("THEATRE_PORT"))
+		if port == 0:
+			port = ProjectSettings.get_setting("theatre/stage/connection/port", 9077)
+		tcp_server.start(port)
+		tcp_server.set_idle_timeout(ProjectSettings.get_setting("theatre/stage/connection/client_idle_timeout_secs", 10))
+	if launch_config.startup.enabled or launch_config.play.enabled:
+		recorder = ClassDB.instantiate(&"StageRecorder")
+		recorder.capture_manage()
+		recorder.set_dashcam_enabled(false)
+		add_child(recorder)
+		recorder.marker_added.connect(_on_marker_added)
+		if tcp_server:
+			tcp_server.set_recorder(recorder)
+		if launch_config.startup.enabled:
+			if target_scene.is_empty():
+				launch_error = "Startup capture requires the Theatre bootstrap and an explicit target scene."
+				push_error("[Stage] " + launch_error)
+			else:
+				_begin_phase("startup", false)
+		if launch_config.readiness == "scene":
+			get_tree().scene_changed.connect(_on_scene_changed)
+			call_deferred("_on_scene_changed")
 	_update_capture_controls()
-
-	tcp_server.set_recorder(recorder)
-
-	var port: int = 0
-	var env_port := OS.get_environment("THEATRE_PORT")
-	if not env_port.is_empty():
-		port = env_port.to_int()
-	if port == 0:
-		port = ProjectSettings.get_setting("theatre/stage/connection/port", 9077)
-	tcp_server.start(port)
-	var idle_timeout: int = ProjectSettings.get_setting(
-		"theatre/stage/connection/client_idle_timeout_secs", 10)
-	tcp_server.set_idle_timeout(idle_timeout)
-
-	# Push status to editor dock every 2s via EngineDebugger (only active in editor play mode).
-	if EngineDebugger.is_active():
+	if launch_config.observe and EngineDebugger.is_active():
 		EngineDebugger.register_message_capture("stage", _on_debugger_command)
 		var status_timer := Timer.new()
 		status_timer.wait_time = 2.0
@@ -92,6 +99,207 @@ func _ready() -> void:
 		status_timer.process_mode = Node.PROCESS_MODE_ALWAYS
 		status_timer.timeout.connect(_push_status_to_editor)
 		add_child(status_timer)
+
+
+func _ensure_collector() -> void:
+	if collector == null:
+		collector = ClassDB.instantiate(&"StageCollector")
+		add_child(collector)
+	if recorder != null:
+		recorder.set_collector(collector)
+
+
+func _on_scene_changed() -> void:
+	var scene := get_tree().current_scene
+	if scene == null or scene.scene_file_path == "res://addons/stage/capture_bootstrap.tscn":
+		return
+	if not target_scene.is_empty() and scene.scene_file_path != target_scene:
+		return
+	notify_ready()
+
+
+## Call once when asynchronous project loading has actually finished. Safe off.
+func notify_ready() -> Dictionary:
+	if _project_ready or launch_config.is_empty():
+		return capture_status()
+	_project_ready = true
+	if recorder != null and _phase == "startup":
+		_capture_result(recorder.capture_stop("project_ready"))
+		_metrics_enabled = false
+		set_process(false)
+	if recorder != null and launch_config.play.enabled and launch_config.play_start == "ready":
+		# A failed startup save keeps its draft and deliberately blocks auto-play.
+		if capture_status().get("state") == "idle":
+			_begin_phase("play", true)
+	_update_capture_controls()
+	return capture_status()
+
+
+func _begin_phase(phase: String, continue_recording: bool) -> Dictionary:
+	if recorder == null:
+		return {"error": "Capture was not enabled for this launch"}
+	if phase == "play" and not _project_ready:
+		return {"error": "Waiting for the configured project readiness notification"}
+	var config: Dictionary = launch_config[phase]
+	if not config.enabled or recorder.capture_is_active() or capture_status().get("state") == "review":
+		return _start_error("Enable the next phase and finish/keep or discard the current segment before starting")
+	var project_metadata := {}
+	for provider_name in _metadata_providers.keys():
+		var callback: Callable = _metadata_providers.get(provider_name, Callable())
+		if callback.is_valid():
+			var value: Variant = callback.call()
+			if not value is Dictionary:
+				return _start_error("Metadata providers must return a Dictionary")
+			project_metadata[provider_name] = value
+	var metadata_encoded := JSON.stringify(project_metadata)
+	if metadata_encoded.to_utf8_buffer().size() > 64 * 1024:
+		return _start_error("Project metadata exceeds 64 KiB encoded payload")
+	if config.spatial:
+		_ensure_collector()
+	var context := {"target_scene": target_scene, "readiness": launch_config.readiness,
+		"operator": launch_config.operator, "sources": launch_config.sources,
+		"project_metadata": project_metadata}
+	var result := _capture_result(recorder.capture_begin(JSON.stringify(config), phase,
+		_recording_id if continue_recording else "", JSON.stringify(context)))
+	if not result.has("error"):
+		_capture_controls.clear_acknowledgement()
+		_recording_id = result.recording_id
+		_phase = phase
+		_metrics_enabled = config.metrics
+		set_process(_metrics_enabled)
+	_update_capture_controls()
+	return result
+
+
+func capture_start(continue_recording: bool = false) -> Dictionary:
+	return _begin_phase("play", continue_recording)
+
+
+func _start_error(message: String) -> Dictionary:
+	_acknowledge_capture(message)
+	return {"error": message}
+
+
+func capture_stop(reason: String = "manual_stop") -> Dictionary:
+	if recorder == null:
+		return {"error": "Capture is off"}
+	var result := _capture_result(recorder.capture_stop(reason))
+	if not result.has("error"):
+		_capture_controls.clear_acknowledgement()
+	_metrics_enabled = false
+	set_process(false)
+	_update_capture_controls()
+	return result
+
+
+func capture_keep(note: String = "") -> Dictionary:
+	if recorder == null:
+		return {"error": "Capture is off"}
+	var result := _capture_result(recorder.capture_keep(note))
+	if not result.has("error"):
+		_acknowledge_capture("Saved · Ready for a new segment")
+	_update_capture_controls()
+	return result
+
+
+func capture_save(note: String = "") -> Dictionary:
+	if recorder == null:
+		return {"error": "Capture is off"}
+	if recorder.capture_is_active():
+		var stopped := capture_stop()
+		if stopped.has("error") or stopped.get("state") == "idle":
+			return stopped
+	return capture_keep(note)
+
+
+func capture_discard() -> Dictionary:
+	if recorder == null:
+		return {"error": "Capture is off"}
+	var result := _capture_result(recorder.capture_discard())
+	if not result.has("error"):
+		_capture_controls.clear_acknowledgement()
+	_update_capture_controls()
+	return result
+
+
+func capture_status() -> Dictionary:
+	var status: Dictionary = JSON.parse_string(recorder.capture_status()) if recorder != null else {"state": "off"}
+	status["ready"] = _project_ready
+	status["launch"] = launch_config
+	status["target_scene"] = target_scene
+	status["can_continue"] = not _recording_id.is_empty()
+	status["next_config"] = launch_config.get("play", {})
+	return status
+
+
+func capture_configure(options: Dictionary) -> Dictionary:
+	if recorder == null:
+		return {"error": "Capture is off for this launch; relaunch with a capture phase enabled"}
+	var result: Dictionary = JSON.parse_string(ClassDB.class_call_static(&"StageCapturePolicy", &"configure_play",
+		JSON.stringify(launch_config), JSON.stringify(options)))
+	if not result.get("ok", false):
+		return {"error": result.error}
+	launch_config = result.config
+	_capture_controls.clear_acknowledgement()
+	_update_capture_controls()
+	return capture_status()
+
+
+func _capture_result(encoded: String) -> Dictionary:
+	var result: Dictionary = JSON.parse_string(encoded)
+	if result.has("error"):
+		_acknowledge_capture(str(result.error))
+	return result
+
+
+## Explicit providers only. No discovery, reflection, or callbacks while idle.
+func register_metric_provider(provider_name: String, callback: Callable) -> bool:
+	if provider_name.is_empty() or provider_name.length() > 64 or provider_name == "engine" or not callback.is_valid():
+		return false
+	if not _metric_providers.has(provider_name) and _metric_providers.size() >= 32:
+		return false
+	_metric_providers[provider_name] = callback
+	return true
+
+
+func unregister_metric_provider(provider_name: String) -> void:
+	_metric_providers.erase(provider_name)
+
+
+## Snapshot small project context at explicit phase/Start boundaries, never idle.
+## Automatic rolling continuations retain this context rather than call providers.
+func register_metadata_provider(provider_name: String, callback: Callable) -> bool:
+	if provider_name.is_empty() or provider_name.length() > 64 or not callback.is_valid():
+		return false
+	if not _metadata_providers.has(provider_name) and _metadata_providers.size() >= 32:
+		return false
+	_metadata_providers[provider_name] = callback
+	return true
+
+
+func unregister_metadata_provider(provider_name: String) -> void:
+	_metadata_providers.erase(provider_name)
+
+
+func _process(delta: float) -> void:
+	if recorder == null or not _metrics_enabled or not recorder.capture_is_active():
+		set_process(false)
+		return
+	var started := Time.get_ticks_usec()
+	var values := {"engine": {"process_delta_secs": delta,
+		"fps": Engine.get_frames_per_second(),
+		"static_memory_bytes": Performance.get_monitor(Performance.MEMORY_STATIC),
+		"object_count": Performance.get_monitor(Performance.OBJECT_COUNT)}}
+	for provider_name in _metric_providers.keys():
+		var callback: Callable = _metric_providers.get(provider_name, Callable())
+		if callback.is_valid():
+			var value: Variant = callback.call()
+			if value is Dictionary:
+				values[provider_name] = value
+	# Callback work and serialization are measured, but never claimed as total
+	# observer cost: native collection/persistence have separate timings.
+	var encoded := JSON.stringify(values)
+	_capture_result(recorder.capture_metrics(encoded, Time.get_ticks_usec() - started))
 
 
 func _push_status_to_editor() -> void:
@@ -176,6 +384,9 @@ func _setup_overlay() -> void:
 	_capture_controls.toggle_requested.connect(_toggle_capture)
 	_capture_controls.marker_requested.connect(_drop_marker)
 	_capture_controls.save_requested.connect(_save_capture_now)
+	_capture_controls.continue_requested.connect(func() -> void: capture_start(true))
+	_capture_controls.discard_requested.connect(func() -> void: capture_discard())
+	_capture_controls.cancel_requested.connect(func() -> void: capture_configure({"preset": "off"}))
 	_capture_controls.preset_requested.connect(_apply_capture_preset)
 	_capture_controls.feedback_requested.connect(share_feedback)
 	_capture_controls.refresh({})
@@ -194,6 +405,8 @@ func _physics_process(_delta: float) -> void:
 
 
 func _shortcut_input(event: InputEvent) -> void:
+	if is_instance_valid(_feedback_composer) and _feedback_composer.visible:
+		return
 	if not event.is_pressed() or event.is_echo():
 		return
 	if event is InputEventKey:
@@ -239,9 +452,9 @@ func _acknowledge_capture(message: String) -> void:
 
 func _drop_marker() -> void:
 	if not recorder:
-		_acknowledge_capture("Recorder unavailable · Check Stage auto-start and addon loading")
-	elif not recorder.is_dashcam_active():
-		_acknowledge_capture("Dashcam stopped · Start recording before marking")
+		_acknowledge_capture("Capture is off for this launch · Relaunch with a capture phase enabled")
+	elif not recorder.capture_is_active():
+		_acknowledge_capture("Capture idle · Start recording before marking")
 	else:
 		recorder.add_marker("human", "Human marker")
 
@@ -249,47 +462,31 @@ func _drop_marker() -> void:
 func _toggle_capture() -> void:
 	if not recorder:
 		return
-	var was_pending: bool = recorder.get_dashcam_state() == "post_capture"
-	var enable: bool = not recorder.is_dashcam_active()
-	recorder.set_dashcam_enabled(enable)
-	var status: Dictionary = JSON.parse_string(recorder.get_dashcam_status_json())
-	if status.get("last_save_error") != null:
-		_acknowledge_capture(str(status.last_save_error))
-	elif enable:
-		_acknowledge_capture("Dashcam started · buffering gameplay")
-	elif was_pending and status.get("last_saved_clip") is Dictionary:
-		_acknowledge_capture("Stopped · available capture saved as %s" % status.last_saved_clip.clip_id)
+	if recorder.capture_is_active():
+		capture_stop()
 	else:
-		_acknowledge_capture("Dashcam stopped · no new clip saved")
-	_update_capture_controls()
+		capture_start(false)
 
 
 func _save_capture_now() -> void:
-	if not recorder or not recorder.is_dashcam_active():
-		_acknowledge_capture("Start dashcam before saving a clip")
-		return
-	if recorder.get_dashcam_buffer_frames() == 0:
-		_acknowledge_capture("No sampled gameplay yet · wait for the buffer")
-		return
-	recorder.flush_dashcam_clip("Human Save now")
-	_update_capture_controls()
+	capture_keep()
 
 
 func _apply_capture_preset(preset: String) -> void:
 	if not recorder:
 		return
-	var result: Dictionary = JSON.parse_string(recorder.apply_dashcam_config(JSON.stringify({"preset":preset})))
-	if result.has("error"):
-		_acknowledge_capture(str(result.error))
+	var result := capture_configure({"preset": preset})
+	if not result.has("error"):
+		_acknowledge_capture("%s selected for the next segment" % preset.capitalize())
 	else:
-		_acknowledge_capture("%s capture settings applied · recording state unchanged" % preset.capitalize())
+		_acknowledge_capture(str(result.error))
 	_update_capture_controls()
 
 
 ## Place a code marker at the current frame.
 ## Tier controls dashcam behavior:
-##   "system"     — rate-limited clip trigger (default, safe in loops)
-##   "deliberate" — always triggers a clip (use for rare, important events)
+##   "system"     — rate-limited marker; triggers only with on_trigger saving
+##   "deliberate" — marker; triggers only with on_trigger saving
 ##   "silent"     — annotates only, no clip trigger
 func marker(label: String, tier: String = "system") -> void:
 	if not recorder:
@@ -300,34 +497,15 @@ func marker(label: String, tier: String = "system") -> void:
 func _update_capture_controls() -> void:
 	if not _capture_controls:
 		return
-	var status: Dictionary = {}
-	if recorder:
-		status = JSON.parse_string(recorder.get_dashcam_status_json())
-	_capture_controls.refresh(status)
+	_capture_controls.refresh(capture_status())
 
 
 func _on_marker_added(frame: int, source: String, label: String) -> void:
 	if source == "human":
-		_acknowledge_capture("Marked frame %d · collecting the post-window" % frame)
+		_acknowledge_capture("Marked frame %d" % frame)
 	else:
 		_show_toast("[%s] Marker: %s" % [source, label])
 	call_deferred("_update_capture_controls")
-
-
-func _on_dashcam_clip_saved(clip_id: String, _tier: String, _frames: int) -> void:
-	_acknowledge_capture("Clip saved: %s" % clip_id)
-	# Never re-enter recorder getters while its native save call is still bound.
-	call_deferred("_update_capture_controls")
-
-
-func _on_dashcam_clip_failed(message: String) -> void:
-	_acknowledge_capture(message)
-	call_deferred("_update_capture_controls")
-
-
-func _on_dashcam_clip_started(_trigger_frame: int, tier: String) -> void:
-	call_deferred("_update_capture_controls")
-	_show_toast("[dashcam] Collecting post-window (%s)…" % tier)
 
 
 func _on_activity_received(entry_type: String, summary: String, tool: String, active_watches: int) -> void:
@@ -370,6 +548,12 @@ func _show_toast(text: String, human_confirmation: bool = false) -> void:
 
 
 func _exit_tree() -> void:
+	if recorder != null and is_instance_valid(recorder):
+		var status: Dictionary = JSON.parse_string(recorder.capture_status())
+		if status.get("state") == "recording" and _phase == "startup":
+			recorder.capture_stop("runtime_exit_before_ready")
+		elif status.get("state") in ["recording", "review"]:
+			push_warning("[Stage] Unkept play capture is local memory only and is lost on exit. Stop and Keep before closing.")
 	if _runtime_logger:
 		OS.remove_logger(_runtime_logger)
 	if tcp_server:

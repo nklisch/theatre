@@ -47,15 +47,76 @@ that same MCP session. `stage serve` speaks MCP over stdio; it is not a shell
 session command for passing subsequent CLI calls into. In shell-only workflows,
 act without `return_delta`, then inspect or snapshot the result explicitly.
 
-**Prerequisite for live tools:** The Stage addon must be enabled and the game must be running. If live tools report a failed or absent connection (the CLI emits `connection_failed` with exit 1; MCP tools return a "not connected" error), use `runtime_status` and start the selected saved scene through Director `editor_run` or Godot. Project-local `feedback` remains available without a running game.
+**Prerequisite for live tools:** Stage must be installed/enabled in the project and this run must explicitly enable `observe`. An ordinary launch intentionally has no listener or recording. A failed connection is not permission to install or activate anything. Use `runtime_status` to diagnose identity/connection and request only the evidence needed for the task. Project-local `feedback` and retained clips remain available without a running game.
+
+## Explicit launches and human review
+
+Ask the user before installing or enabling missing Theatre components in a project.
+Machine installation, project wiring, and activation for a run are separate choices.
+`--yes` selects setup defaults, not consent: after user approval, project setup uses
+`theatre init . --yes --accept-project-install`. Preserve existing configuration;
+request deliberate approval before `--overwrite-existing`.
+
+Default to ordinary launches without observation or recording unless an autonomous
+task needs evidence, the user requests it, or you request a specific human capture.
+Honor local defaults and explicit per-run off. Do not rewrite preferences for one run.
+Use `theatre run scene.tscn` through the existing editor, or Director `editor_run`
+with the same typed `launch` object. For example:
+
+```json
+{"action":"start","scene_path":"scenes/review.tscn","launch":{"startup":{"preset":"minimal"},"play":{"preset":"standard","scope":["group:review"]},"operator":"human","readiness":"project"}}
+```
+
+Supply Director's project selection separately. Add `observe:true` only when live
+agent tools are needed. Human capture works without a listener. Human play defaults
+to manual Start; requested startup capture automatically stops and saves at readiness.
+Hours away from the game must not become play evidence. This does not pause gameplay.
+Agent play defaults to start at readiness; local/per-run `play_start` can override it.
+
+Minimal collects metrics only; Light adds scoped spatial state; Standard adds images;
+Heavy permits whole-scene, higher-frequency state/images. Light/Standard require
+explicit node paths or `group:name` scope. Images, bounds, retention and saving are
+independent options. Never promise a preset's performance from its name.
+
+For asynchronous loading, identify the project's successful readiness transition
+and explicitly integrate this call there before using phased capture:
+
+```gdscript
+var stage := get_node_or_null("/root/StageRuntime")
+if stage != null:
+    stage.notify_ready()
+```
+
+Keep `readiness=project`, the default. Do not notify for failed/canceled loading,
+or guess completion from `_ready()`, elapsed time, frame rate, or one finished job.
+The safe absent/off call and duplicate notifications have no capture side effects.
+Only synchronous scenes should explicitly select `readiness=scene`; it means scene
+initialization, not background-work completion. Missing readiness hits the startup
+bound without silently starting play. Startup cannot profile internals of synchronous
+work that blocks the main thread; it retains available samples and elapsed time.
+
+Custom metrics use `register_metric_provider(name, Callable)` returning a Dictionary
+and `unregister_metric_provider(name)`. Callbacks run only in active metrics capture.
+Use `register_metadata_provider(name, Callable)` for small per-segment context,
+and unregister it on teardown. It snapshots at explicit Start/phase boundaries;
+register before the desired boundary. Do not include secrets or machine paths.
+Keep callbacks cheap, bounded, and free of private information. Project-specific
+providers, readiness conditions and input choices belong to that project, not Theatre.
+
+Shared defaults use `[launch]` in `stage.toml`. Private overrides use the OS config
+directory's `theatre/settings.toml`, then `stage.local.toml`; per-run options win.
+Before creating `stage.local.toml`, obtain approval for its narrow `.gitignore` rule
+and verify it is ignored. Never commit private preferences or machine paths. Use
+repository-relative paths for repository content and command names through PATH.
+Windows resolves the executable suffix; retain separate Unix instructions.
 
 ## Set Up and Select a Godot Project
 
-Install Theatre once, then initialize each Godot project once so it has the
+After user approval, install Theatre once, then initialize each Godot project so it has the
 addons, plugin registration, and Stage autoload:
 
 ```bash
-theatre init /absolute/path/to/godot-project
+theatre init .
 ```
 
 Respect the target repository's instructions and generators. If a generator owns
@@ -150,7 +211,7 @@ to register another MCP server.
 
 ## Standard Opening Move
 
-Always start cheap and drill down:
+When live observation is needed and enabled, start cheap and drill down:
 
 ```
 1. runtime_status()                              → verify project, run, scene, readiness
@@ -445,17 +506,28 @@ for defaults shared by future invocations:
 
 ## clips — Mark, Save, Analyze
 
-Clips are captured by the dashcam ring buffer. Mark a moment to save; analyze saved clips.
+Capture is explicitly launched and divided into segments. Stop a manual segment,
+then Keep or Discard its draft. Continue starts a separate segment under the same
+recording ID, preserving the uncaptured gap. Start creates a new recording ID.
+Unkept drafts are memory-only and are lost on exit; Keep before closing.
+Rolling retention and `save=on_trigger` explicitly enable marker-triggered saving.
 
 ```jsonc
-// Check dashcam buffer state
+// Check phase, readiness, effective settings, bounds and retained draft
 { "action": "status" }
 
-// Mark a moment — triggers automatic clip save
+// Start deliberately after readiness (use continue for the same recording)
+{ "action": "start" }
+
+// Annotate a moment; manual saving does not secretly become automatic
 { "action": "add_marker", "marker_label": "wall_clip_repro" }
 
-// Force-save the current buffer
-{ "action": "save", "marker_label": "manual save" }
+// Finalize and retain the manual draft
+{ "action": "stop" }
+{ "action": "keep", "marker_label": "reproduction note" }
+
+// Metrics remain inspectable after the game stops
+{ "action": "metrics", "clip_id": "clip_001a2b3c" }
 
 // List saved clips
 { "action": "list" }
@@ -463,8 +535,8 @@ Clips are captured by the dashcam ring buffer. Mark a moment to save; analyze sa
 // See markers in a clip
 { "action": "markers", "clip_id": "clip_001a2b3c" }
 // Note: marker entries have a "source" field: "human" (F9), "agent" (MCP add_marker),
-// "system" (automatic dashcam trigger), or "code" (StageRuntime.marker() in game script).
-// Code markers may be "system" tier (rate-limited), "deliberate" (always triggers),
+// "system" (opt-in anomaly marker), or "code" (StageRuntime.marker() in game script).
+// Code markers may be "system" tier (rate-limited), "deliberate" (triggers only with explicit on_trigger saving),
 // or "silent" (annotation only — attached to clips triggered by other means).
 
 // Spatial state at a frame (omit clip_id for most recent)
@@ -506,8 +578,8 @@ Clips are captured by the dashcam ring buffer. Mark a moment to save; analyze sa
 // artifact: "storyboard", "motion_history", "difference_map", or "node_filmstrip"
 { "action": "visual_artifact", "artifact": "storyboard", "at_frame": 4582 }
 
-// Push dashcam configuration to the recorder (e.g. enable recording)
-{ "action": "config", "config": { "enabled": true } }
+// Stage next-segment settings; never starts capture or rewrites an active segment
+{ "action": "config", "config": { "preset": "minimal" } }
 ```
 
 ## Common Debugging Workflows
@@ -516,7 +588,7 @@ Clips are captured by the dashcam ring buffer. Mark a moment to save; analyze sa
 ```
 1. spatial_config(static_patterns: ["walls/*"])
 2. spatial_watch(node: "enemies/guard_01", track: ["position", "physics"])
-3. [human reproduces bug, presses F9]
+3. [human starts capture, reproduces bug, marks, then Stops and Keeps]
 4. clips(action: "markers") → find the marked frame
 5. clips(action: "query_range", condition: { type: "proximity", target: "walls/*", threshold: 0.5 })
 6. spatial_inspect(node: "enemies/guard_01", include: ["physics"])
@@ -572,5 +644,5 @@ Clips are captured by the dashcam ring buffer. Mark a moment to save; analyze sa
 | `scene_not_loaded` | Between scene transitions | Wait for scene to load |
 | `node_not_found` | Path doesn't exist | Use `scene_tree(action: "find")` |
 | Query timeout — "Addon did not respond within …" | Game frozen or at a breakpoint | Check if the game is paused |
-| `dashcam_disabled` | Dashcam recording is off (recorder state, not `spatial_config`) | Enable it with clips `config` (`{"enabled": true}`), the native capture controls, or the project's `theatre/stage/dashcam/enabled` setting |
+| Capture off or waiting | This launch did not enable capture, or the project has not declared readiness | Select explicit launch options and integrate readiness; configuration alone never starts recording |
 | Truncated snapshot (success response with `pagination.truncated: true`) | Snapshot hit its token budget; entities omitted | Read `pagination.showing`/`total`, reduce radius, add filters, use `summary`, or raise `token_budget` |

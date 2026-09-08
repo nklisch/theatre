@@ -1017,8 +1017,8 @@ async fn test_dashcam_clips_in_list() {
     let saved: Arc<std::sync::Mutex<bool>> = Arc::new(std::sync::Mutex::new(false));
     let s = saved.clone();
 
-    let handler: QueryHandler = Arc::new(move |method, _| match method {
-        "dashcam_flush" => {
+    let handler: QueryHandler = Arc::new(move |method, params| match method {
+        "capture_control" if params["action"] == "save" => {
             *s.lock().unwrap() = true;
             Ok(json!({
                 "clip_id": "clip_001",

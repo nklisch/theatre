@@ -187,6 +187,35 @@ pub(crate) fn sort_clip_entries(clips: &mut [serde_json::Value]) {
     });
 }
 
+/// Derive grouping from immutable segment metadata, with no mutable index.
+pub(crate) fn group_segments(data: &mut serde_json::Value) {
+    let mut recordings = std::collections::BTreeMap::<String, Vec<serde_json::Value>>::new();
+    if let Some(clips) = data["clips"].as_array() {
+        for clip in clips {
+            let capture = &clip["capture"];
+            if let Some(id) = capture["recording_id"].as_str() {
+                recordings.entry(id.to_owned()).or_default().push(json!({
+                    "clip_id":clip["clip_id"], "phase":capture["phase"],
+                    "started_at_ms":capture["started_at_ms"], "ended_at_ms":capture["ended_at_ms"],
+                    "active_duration_usec":capture["active_duration_usec"]
+                }));
+            }
+        }
+    }
+    for segments in recordings.values_mut() {
+        segments.sort_by_key(|s| s["started_at_ms"].as_u64().unwrap_or(0));
+        let mut previous_end = None;
+        for segment in segments {
+            segment["uncaptured_gap_ms"] = match (previous_end, segment["started_at_ms"].as_u64()) {
+                (Some(end), Some(start)) => json!(start.saturating_sub(end)),
+                _ => serde_json::Value::Null,
+            };
+            previous_end = segment["ended_at_ms"].as_u64();
+        }
+    }
+    data["recordings"] = json!(recordings);
+}
+
 /// List markers for a clip directly from SQLite (no addon required).
 pub fn list_markers_from_disk(
     storage_path: &str,
@@ -464,7 +493,123 @@ pub fn read_recording_meta(db: &Connection) -> Result<ClipMeta, McpError> {
 // ClipSession
 // ---------------------------------------------------------------------------
 
-/// Open recording DB and metadata in one step. Used by all 4 analysis handlers.
+/// Reject unavailable channels without treating missing evidence as empty data.
+pub fn require_channel(db: &Connection, channel: &str) -> Result<(), McpError> {
+    let encoded: Option<String> = db
+        .query_row("SELECT capture_config FROM recording LIMIT 1", [], |row| {
+            row.get(0)
+        })
+        .optional()
+        .map_err(|e| McpError::internal_error(format!("Cannot read capture metadata: {e}"), None))?
+        .flatten();
+    let metadata: serde_json::Value = encoded
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default();
+    if channel == "metrics" && metadata["format_version"] != 2 {
+        return Err(McpError::invalid_params(
+            "This clip predates metric capture and has no metrics channel",
+            None,
+        ));
+    }
+    if metadata["format_version"] == 2 && metadata["config"][channel] == false {
+        return Err(McpError::invalid_params(
+            format!(
+                "The {channel} channel was not captured in this segment; relaunch or start a new segment with it enabled. Retained evidence cannot be enriched retroactively."
+            ),
+            None,
+        ));
+    }
+    Ok(())
+}
+
+/// Metric rows remain available without an engine connection. Frame filters are
+/// physics frames; render-frame identity and measured intervals remain distinct.
+pub fn metrics(
+    db: &Connection,
+    from_frame: Option<u64>,
+    to_frame: Option<u64>,
+) -> Result<serde_json::Value, McpError> {
+    require_channel(db, "metrics")?;
+    let error = |e: rusqlite::Error| {
+        McpError::internal_error(format!("Cannot read retained metrics: {e}"), None)
+    };
+    let exists: bool = db
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='metrics')",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(error)?;
+    if !exists {
+        return Err(McpError::invalid_params(
+            "This clip predates metric capture and has no metrics channel",
+            None,
+        ));
+    }
+    let from = from_frame.unwrap_or(0).min(i64::MAX as u64);
+    let to = to_frame.unwrap_or(i64::MAX as u64).min(i64::MAX as u64);
+    if from > to {
+        return Err(McpError::invalid_params(
+            "from_frame must not exceed to_frame",
+            None,
+        ));
+    }
+    let mut stmt = db.prepare("SELECT render_frame,physics_frame,timestamp_ms,elapsed_usec,interval_usec,data FROM metrics WHERE physics_frame BETWEEN ?1 AND ?2 ORDER BY id").map_err(error)?;
+    let mut rows = stmt.query(rusqlite::params![from, to]).map_err(error)?;
+    let mut samples = Vec::new();
+    let mut count = 0u64;
+    let mut summaries = std::collections::BTreeMap::<String, (u64, f64, f64, f64)>::new();
+    fn accumulate(
+        value: &serde_json::Value,
+        path: String,
+        summaries: &mut std::collections::BTreeMap<String, (u64, f64, f64, f64)>,
+        depth: u8,
+    ) {
+        if depth > 8 {
+            return;
+        }
+        if let Some(number) = value.as_f64().filter(|n| n.is_finite()) {
+            if summaries.len() >= 256 && !summaries.contains_key(&path) {
+                return;
+            }
+            let entry = summaries.entry(path).or_insert((0, 0.0, number, number));
+            entry.0 += 1;
+            entry.1 += (number - entry.1) / entry.0 as f64;
+            entry.2 = entry.2.min(number);
+            entry.3 = entry.3.max(number);
+        } else if let Some(object) = value.as_object() {
+            for (key, value) in object {
+                // JSON Pointer escaping makes provider/key punctuation unambiguous.
+                let key = key.replace('~', "~0").replace('/', "~1");
+                accumulate(value, format!("{path}/{key}"), summaries, depth + 1);
+            }
+        }
+    }
+    while let Some(row) = rows.next().map_err(error)? {
+        count += 1;
+        let encoded: String = row.get(5).map_err(error)?;
+        let values: serde_json::Value = serde_json::from_str(&encoded)
+            .map_err(|e| McpError::internal_error(format!("Corrupt metric sample: {e}"), None))?;
+        accumulate(&values, String::new(), &mut summaries, 0);
+        if samples.len() < 200 {
+            samples.push(json!({"render_frame":row.get::<_, u64>(0).map_err(error)?, "physics_frame":row.get::<_, u64>(1).map_err(error)?,
+                "timestamp_ms":row.get::<_, u64>(2).map_err(error)?,"elapsed_usec":row.get::<_, u64>(3).map_err(error)?,
+                "interval_usec":row.get::<_, u64>(4).map_err(error)?,"values":values}));
+        }
+    }
+    let summary: std::collections::BTreeMap<_, _> = summaries
+        .into_iter()
+        .map(|(path, (count, mean, min, max))| {
+            (path, json!({"count":count,"mean":mean,"min":min,"max":max}))
+        })
+        .collect();
+    Ok(
+        json!({"sample_count":count,"samples":samples,"truncated":count > 200,"summary":summary,
+        "limits":{"returned_samples":200,"summary_series":256,"summary_depth":8},
+        "limitations":["Intervals are measured callback spacing, not internal profiling of blocking work.","Metrics describe explicit providers and engine counters, not spatial state or images."]}),
+    )
+}
+
 pub struct ClipSession {
     pub db: Connection,
     pub meta: ClipMeta,
@@ -1792,6 +1937,82 @@ pub fn list_screenshots(db: &Connection) -> Result<Vec<ScreenshotMeta>, McpError
 mod tests {
     use super::*;
     use rusqlite::Connection;
+
+    #[test]
+    fn legacy_recording_with_empty_metrics_table_has_no_metrics_channel() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch("CREATE TABLE recording(capture_config TEXT); INSERT INTO recording VALUES ('{\"dashcam\":true}'); CREATE TABLE metrics(id INTEGER);").unwrap();
+        assert!(
+            metrics(&db, None, None)
+                .unwrap_err()
+                .message
+                .contains("predates")
+        );
+        // Older spatial recordings remain readable without new channel metadata.
+        assert!(require_channel(&db, "spatial").is_ok());
+    }
+
+    #[test]
+    fn segment_groups_preserve_separate_recordings_and_uncaptured_gaps() {
+        let mut data = json!({"clips":[
+            {"clip_id":"play", "capture":{"recording_id":"review", "phase":"play", "started_at_ms":8000, "ended_at_ms":9000, "active_duration_usec":1000000}},
+            {"clip_id":"startup", "capture":{"recording_id":"review", "phase":"startup", "started_at_ms":1000, "ended_at_ms":2000, "active_duration_usec":1000000}},
+            {"clip_id":"new", "capture":{"recording_id":"separate", "phase":"play", "started_at_ms":10000, "ended_at_ms":11000}},
+            {"clip_id":"legacy", "capture":{"dashcam":true}}
+        ]});
+        group_segments(&mut data);
+        assert_eq!(data["recordings"].as_object().unwrap().len(), 2);
+        assert_eq!(data["recordings"]["review"][0]["clip_id"], "startup");
+        assert!(data["recordings"]["review"][0]["uncaptured_gap_ms"].is_null());
+        assert_eq!(data["recordings"]["review"][1]["uncaptured_gap_ms"], 6000);
+        assert_eq!(
+            data["recordings"]["review"][1]["active_duration_usec"],
+            1000000
+        );
+        assert!(data["recordings"]["separate"][0]["uncaptured_gap_ms"].is_null());
+    }
+
+    #[test]
+    fn retained_metrics_preserve_frame_identity_missing_values_and_channel_limits() {
+        let db = Connection::open_in_memory().unwrap();
+        db.execute_batch("CREATE TABLE recording(capture_config TEXT); CREATE TABLE metrics(id INTEGER PRIMARY KEY, render_frame INTEGER, physics_frame INTEGER, timestamp_ms INTEGER, elapsed_usec INTEGER, interval_usec INTEGER, data TEXT);").unwrap();
+        db.execute("INSERT INTO recording VALUES (?1)", [json!({"format_version":2,"config":{"metrics":true,"spatial":false,"images":false}}).to_string()]).unwrap();
+        for (id, physics, values) in [
+            (1, 7, json!({"fixture":{"count":0,"only_first":9}})),
+            (2, 7, json!({"fixture":{"count":4}})),
+            (3, 8, json!({"fixture":{"count":8}})),
+        ] {
+            db.execute(
+                "INSERT INTO metrics VALUES (?1,?2,?3,1000,?2,16,?4)",
+                rusqlite::params![id, id + 20, physics, values.to_string()],
+            )
+            .unwrap();
+        }
+        let result = metrics(&db, Some(7), Some(7)).unwrap();
+        assert_eq!(result["sample_count"], 2);
+        assert_eq!(result["samples"][0]["render_frame"], 21);
+        assert_eq!(result["samples"][1]["physics_frame"], 7);
+        assert_eq!(result["summary"]["/fixture/count"]["mean"], 2.0);
+        assert_eq!(result["summary"]["/fixture/only_first"]["count"], 1);
+        assert!(metrics(&db, Some(8), Some(7)).is_err());
+        for channel in ["spatial", "images"] {
+            assert!(
+                require_channel(&db, channel)
+                    .unwrap_err()
+                    .message
+                    .contains("not captured")
+            );
+        }
+        db.execute("DELETE FROM metrics", []).unwrap();
+        assert_eq!(metrics(&db, None, None).unwrap()["sample_count"], 0);
+        db.execute_batch("DROP TABLE metrics").unwrap();
+        assert!(
+            metrics(&db, None, None)
+                .unwrap_err()
+                .message
+                .contains("predates")
+        );
+    }
 
     const SCHEMA_SQL: &str = "
 CREATE TABLE IF NOT EXISTS recording (

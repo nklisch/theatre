@@ -6,10 +6,20 @@ use std::path::{Path, PathBuf};
 /// (`GODOT_BIN` is the workspace convention used by the E2E harnesses;
 /// `GODOT_PATH` is kept as an alias.)
 pub fn resolve_godot_bin() -> Result<PathBuf, ResolveError> {
-    if let Ok(path) = std::env::var("GODOT_BIN") {
+    resolve_godot_bin_with_env(
+        std::env::var("GODOT_BIN").ok(),
+        std::env::var("GODOT_PATH").ok(),
+    )
+}
+
+fn resolve_godot_bin_with_env(
+    bin: Option<String>,
+    alias: Option<String>,
+) -> Result<PathBuf, ResolveError> {
+    if let Some(path) = bin {
         return Ok(PathBuf::from(path));
     }
-    if let Ok(path) = std::env::var("GODOT_PATH") {
+    if let Some(path) = alias {
         return Ok(PathBuf::from(path));
     }
     which::which("godot").map_err(|_| ResolveError::GodotNotFound)
@@ -56,19 +66,10 @@ mod tests {
 
     #[test]
     fn resolve_godot_bin_uses_env_var() {
-        // SAFETY: single-threaded test environment
-        unsafe {
-            std::env::set_var("GODOT_BIN", "/usr/bin/godot-fake-bin");
-            std::env::set_var("GODOT_PATH", "/usr/bin/godot-fake");
-        }
-        let result = resolve_godot_bin();
-        // SAFETY: single-threaded test environment
-        unsafe {
-            std::env::remove_var("GODOT_BIN");
-            std::env::remove_var("GODOT_PATH");
-        }
+        let result =
+            resolve_godot_bin_with_env(Some("godot-fake-bin".into()), Some("godot-fake".into()));
         // GODOT_BIN wins; no existence check on env-provided paths
-        assert_eq!(result.unwrap(), PathBuf::from("/usr/bin/godot-fake-bin"));
+        assert_eq!(result.unwrap(), PathBuf::from("godot-fake-bin"));
     }
 
     #[test]

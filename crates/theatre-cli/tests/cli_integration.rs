@@ -211,7 +211,12 @@ fn init_fails_without_install() {
     std::fs::write(dir.path().join("project.godot"), "").unwrap();
 
     let output = Command::new(env!("CARGO_BIN_EXE_theatre"))
-        .args(["init", dir.path().to_str().unwrap(), "--yes"])
+        .args([
+            "init",
+            dir.path().to_str().unwrap(),
+            "--yes",
+            "--accept-project-install",
+        ])
         .env("THEATRE_SHARE_DIR", missing_path("initial-share"))
         .output()
         .unwrap();
@@ -225,6 +230,52 @@ fn init_fails_without_install() {
 // ============================================================
 
 #[test]
+fn unattended_init_requires_explicit_project_install_consent_without_writes() {
+    let share = tempfile::tempdir().unwrap();
+    let bin = tempfile::tempdir().unwrap();
+    let project = tempfile::tempdir().unwrap();
+    make_share_dir(share.path());
+    make_project(project.path());
+    let before = fs::read(project.path().join("project.godot")).unwrap();
+    let output = theatre_cmd(share.path(), bin.path())
+        .arg("init")
+        .arg(project.path())
+        .arg("--yes")
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("accept-project-install"));
+    assert_eq!(
+        fs::read(project.path().join("project.godot")).unwrap(),
+        before
+    );
+    assert_eq!(fs::read_dir(project.path()).unwrap().count(), 1);
+}
+
+#[test]
+fn deploy_rejects_text_materialized_addon_link_before_changing_installation() {
+    let share = tempfile::tempdir().unwrap();
+    let bin = tempfile::tempdir().unwrap();
+    let project = tempfile::tempdir().unwrap();
+    make_share_dir(share.path());
+    make_project(project.path());
+    fs::create_dir(project.path().join("addons")).unwrap();
+    fs::write(project.path().join("addons/stage"), "../../../addons/stage").unwrap();
+    let output = theatre_cmd(share.path(), bin.path())
+        .arg("deploy")
+        .arg(project.path())
+        .output()
+        .unwrap();
+    assert!(!output.status.success());
+    assert!(String::from_utf8_lossy(&output.stderr).contains("symlink support"));
+    assert_eq!(
+        fs::read_to_string(project.path().join("addons/stage")).unwrap(),
+        "../../../addons/stage"
+    );
+    assert_eq!(fs::read_dir(bin.path()).unwrap().count(), 0);
+}
+
+#[test]
 fn init_yes_copies_addons_and_generates_config() {
     let share = tempfile::tempdir().unwrap();
     let bin = tempfile::tempdir().unwrap();
@@ -234,7 +285,12 @@ fn init_yes_copies_addons_and_generates_config() {
     make_project(project.path());
 
     let output = theatre_cmd(share.path(), bin.path())
-        .args(["init", project.path().to_str().unwrap(), "--yes"])
+        .args([
+            "init",
+            project.path().to_str().unwrap(),
+            "--yes",
+            "--accept-project-install",
+        ])
         .output()
         .unwrap();
     assert!(
@@ -294,7 +350,12 @@ fn init_yes_uses_default_port_no_theatre_port_env() {
     make_project(project.path());
 
     let output = theatre_cmd(share.path(), bin.path())
-        .args(["init", project.path().to_str().unwrap(), "--yes"])
+        .args([
+            "init",
+            project.path().to_str().unwrap(),
+            "--yes",
+            "--accept-project-install",
+        ])
         .output()
         .unwrap();
     assert!(
@@ -330,7 +391,12 @@ fn init_project_with_existing_addons() {
     .unwrap();
 
     let output = theatre_cmd(share.path(), bin.path())
-        .args(["init", project.path().to_str().unwrap(), "--yes"])
+        .args([
+            "init",
+            project.path().to_str().unwrap(),
+            "--yes",
+            "--accept-project-install",
+        ])
         .output()
         .unwrap();
     assert!(
@@ -339,12 +405,40 @@ fn init_project_with_existing_addons() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    // New plugin.cfg should replace the old one
+    // Noninteractive setup preserves existing addon files without explicit replacement.
     let content = fs::read_to_string(project.path().join("addons/stage/plugin.cfg")).unwrap();
-    assert!(content.contains("Stage"), "Expected fresh Stage plugin.cfg");
     assert!(
-        !content.contains("OldStage"),
-        "Old content should be replaced"
+        content.contains("OldStage"),
+        "Existing addon content must be preserved"
+    );
+    let mcp: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(project.path().join(".mcp.json")).unwrap())
+            .unwrap();
+    assert!(
+        mcp["mcpServers"].get("stage").is_some(),
+        "Existing enabled addon remains in generated MCP configuration: {mcp}"
+    );
+    assert!(mcp["mcpServers"].get("director").is_some());
+    let preserved = "{\"mcpServers\":{\"custom\":{\"command\":\"custom-tool\"}}}";
+    fs::write(project.path().join(".mcp.json"), preserved).unwrap();
+    let repeated = theatre_cmd(share.path(), bin.path())
+        .args([
+            "init",
+            project.path().to_str().unwrap(),
+            "--yes",
+            "--accept-project-install",
+        ])
+        .output()
+        .unwrap();
+    assert!(repeated.status.success());
+    assert_eq!(
+        fs::read_to_string(project.path().join(".mcp.json")).unwrap(),
+        preserved
+    );
+    assert!(
+        fs::read_to_string(old_stage.join("plugin.cfg"))
+            .unwrap()
+            .contains("OldStage")
     );
 }
 
@@ -358,7 +452,12 @@ fn init_without_project_godot() {
     // Do NOT create project.godot
 
     let output = theatre_cmd(share.path(), bin.path())
-        .args(["init", project.path().to_str().unwrap(), "--yes"])
+        .args([
+            "init",
+            project.path().to_str().unwrap(),
+            "--yes",
+            "--accept-project-install",
+        ])
         .output()
         .unwrap();
     assert!(!output.status.success());
@@ -377,7 +476,7 @@ fn init_nonexistent_path() {
     let output = theatre_cmd(share.path(), bin.path())
         .arg("init")
         .arg(missing_path("init-project"))
-        .arg("--yes")
+        .args(["--yes", "--accept-project-install"])
         .output()
         .unwrap();
     assert!(!output.status.success());
@@ -390,7 +489,12 @@ fn init_share_dir_missing() {
     make_project(project.path());
 
     let output = Command::new(env!("CARGO_BIN_EXE_theatre"))
-        .args(["init", project.path().to_str().unwrap(), "--yes"])
+        .args([
+            "init",
+            project.path().to_str().unwrap(),
+            "--yes",
+            "--accept-project-install",
+        ])
         .env("THEATRE_SHARE_DIR", missing_path("init-share"))
         .env("THEATRE_BIN_DIR", bin.path())
         .env("THEATRE_ROOT", missing_path("init-root"))
@@ -435,7 +539,12 @@ fn init_share_dir_incomplete_missing_so() {
     make_project(project.path());
 
     let output = theatre_cmd(share.path(), bin.path())
-        .args(["init", project.path().to_str().unwrap(), "--yes"])
+        .args([
+            "init",
+            project.path().to_str().unwrap(),
+            "--yes",
+            "--accept-project-install",
+        ])
         .output()
         .unwrap();
 
@@ -1361,7 +1470,12 @@ fn full_lifecycle_init_then_disable_then_reenable() {
 
     // Step 1: init
     let output = theatre_cmd(share.path(), bin.path())
-        .args(["init", project.path().to_str().unwrap(), "--yes"])
+        .args([
+            "init",
+            project.path().to_str().unwrap(),
+            "--yes",
+            "--accept-project-install",
+        ])
         .output()
         .unwrap();
     assert!(
@@ -1451,7 +1565,12 @@ fn init_then_mcp_regenerate_with_different_port() {
 
     // Step 1: init with default port
     let output = theatre_cmd(share.path(), bin.path())
-        .args(["init", project.path().to_str().unwrap(), "--yes"])
+        .args([
+            "init",
+            project.path().to_str().unwrap(),
+            "--yes",
+            "--accept-project-install",
+        ])
         .output()
         .unwrap();
     assert!(

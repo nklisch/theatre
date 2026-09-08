@@ -88,14 +88,14 @@ async fn journey_dashcam_captures_rendered_scene(b: &impl LiveBackend) {
         .await
         .expect("clips status")
         .unwrap_data();
-    assert_eq!(status["dashcam_enabled"], json!(true));
-    assert_eq!(status["state"], json!("buffering"));
+    assert_eq!(status["config"]["enabled"], json!(true));
+    assert_eq!(status["state"], json!("recording"));
     assert!(
-        status["screenshot_buffer_count"].as_u64().is_some(),
+        status["image_samples"].as_u64().is_some(),
         "screenshot_buffer_count must be present: {status}"
     );
     assert!(
-        status["screenshot_buffer_kb"].as_u64().is_some(),
+        status["config"]["payload_mib"].as_u64().is_some(),
         "screenshot_buffer_kb must be present: {status}"
     );
 
@@ -119,7 +119,11 @@ async fn journey_dashcam_captures_rendered_scene(b: &impl LiveBackend) {
         .await
         .expect("status after wait")
         .unwrap_data();
-    let buffer_count = status2["screenshot_buffer_count"].as_u64().unwrap_or(0);
+    let buffer_count = status2["image_samples"].as_u64().unwrap_or(0);
+    assert!(
+        status2["spatial_samples"].as_u64().unwrap_or(0) > 0,
+        "Rolling spatial and image channels must share a retention clock: {status2}"
+    );
     assert!(
         buffer_count > 0,
         "Windowed Godot should have rendered screenshots, buffer_count={buffer_count}"
@@ -134,8 +138,13 @@ async fn journey_dashcam_captures_rendered_scene(b: &impl LiveBackend) {
         .await
         .expect("save clip_a")
         .unwrap_data();
-    let clip_a = save_a["clip_id"].as_str().expect("clip_id").to_string();
-    let frames_a = save_a["frames"].as_u64().unwrap_or(0);
+    let clip_a = save_a["last_saved_clip"]["clip_id"]
+        .as_str()
+        .expect("clip_id")
+        .to_string();
+    let frames_a = save_a["last_saved_clip"]["capture"]["spatial_frame_count"]
+        .as_u64()
+        .unwrap_or(0);
     assert!(frames_a > 0, "First clip should contain frames");
 
     // Step 6: capture the newest known pre-teleport frame and its actual JPEG.
@@ -151,6 +160,10 @@ async fn journey_dashcam_captures_rendered_scene(b: &impl LiveBackend) {
     let pre_teleport_image = rendered_jpeg_at(b, &clip_a, pre_teleport_frame, "pre-teleport").await;
 
     // Step 7: teleport the stationary fixture to origin — changes the scene visually
+    b.stage("clips", json!({"action":"continue"}))
+        .await
+        .expect("continue recording")
+        .unwrap_data();
     b.stage(
         "spatial_action",
         json!({
@@ -201,8 +214,13 @@ async fn journey_dashcam_captures_rendered_scene(b: &impl LiveBackend) {
         .await
         .expect("save clip_b")
         .unwrap_data();
-    let clip_b = save_b["clip_id"].as_str().expect("clip_id b").to_string();
-    let frames_b = save_b["frames"].as_u64().unwrap_or(0);
+    let clip_b = save_b["last_saved_clip"]["clip_id"]
+        .as_str()
+        .expect("clip_id b")
+        .to_string();
+    let frames_b = save_b["last_saved_clip"]["capture"]["spatial_frame_count"]
+        .as_u64()
+        .unwrap_or(0);
     assert!(frames_b > 0, "Second clip should contain frames");
 
     // Step 11: rolling clips overlap, so explicitly choose a frame captured

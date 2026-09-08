@@ -1,17 +1,17 @@
 extends SceneTree
 
 var failures: Array[String] = []
+var emitted_markers := 0
 
 func _initialize() -> void:
 	GDExtensionManager.load_extension("res://addons/stage/stage.gdextension")
-	ProjectSettings.set_setting("theatre/stage/dashcam/enabled", false)
+	OS.set_environment("THEATRE_LAUNCH_JSON", JSON.stringify({"options": {
+		"readiness": "project", "play": {"preset": "light", "scope": ["."]}}}))
 	ProjectSettings.set_setting("theatre/stage/display/show_agent_notifications", false)
-	ProjectSettings.set_setting("theatre/stage/display/capture_controls", "bottom_right")
 	ProjectSettings.set_setting("theatre/stage/shortcuts/marker_key", "F7")
 	root.size = Vector2i(320, 240)
 	var scene := Node2D.new()
 	scene.name = "CaptureJourney"
-	scene.scene_file_path = "res://before_transition.tscn"
 	root.add_child(scene)
 	current_scene = scene
 	var runtime = load("res://addons/stage/runtime.gd").new()
@@ -26,160 +26,119 @@ func check(condition: bool, message: String) -> bool:
 
 func _exercise(runtime: Node) -> void:
 	await process_frame
-	var recorder = runtime.recorder
-	if not check(recorder != null, "recorder initialized"):
+	if not check(runtime.recorder != null, "recorder initialized"):
 		finish()
 		return
-	var controls: Control = runtime.get("_capture_controls")
+	var controls: Control = runtime._capture_controls
 	var mark: Button = controls.find_child("Mark", true, false)
 	var toggle: Button = controls.find_child("ToggleDashcam", true, false)
-	var save: Button = controls.find_child("SaveNow", true, false)
+	var keep: Button = controls.find_child("SaveNow", true, false)
+	var discard: Button = controls.find_child("DiscardCapture", true, false)
+	var resume: Button = controls.find_child("ContinueCapture", true, false)
 	var status: Label = controls.find_child("CaptureStatus", true, false)
 	var preset: OptionButton = controls.find_child("CapturePreset", true, false)
-	# Exercise the selector signal, not only the runtime's direct helper.
-	for index in range(1, preset.item_count):
+	runtime.recorder.marker_added.connect(func(_frame: int, _source: String, _label: String) -> void: emitted_markers += 1)
+	check(toggle.disabled and mark.disabled and keep.disabled, "waiting cannot start before readiness")
+	check(mark.text.contains("F7"), "configured shortcut displayed")
+	runtime.notify_ready()
+	for index in preset.item_count:
 		preset.item_selected.emit(index)
-		var selected: Dictionary = JSON.parse_string(recorder.get_dashcam_status_json())
-		check(selected.preset == preset.get_item_metadata(index), "preset selection maps to its explicit name")
-		check(not selected.dashcam_enabled and toggle.text == "Start", "preset selection leaves stopped recording stopped")
-	check(preset.get_item_text(preset.selected) == "Spatial only", "Spatial only is displayed")
-	check(mark.text.contains("F7"), "configured marker shortcut is displayed")
-	check(mark.disabled and save.disabled and toggle.text == "Start", "stopped controls are truthful")
-	var key := InputEventKey.new()
-	key.keycode = KEY_F7
-	key.pressed = true
-	runtime._shortcut_input(key)
-	check(status.text.contains("Start recording"), "disabled shortcut explains why no marker was saved")
-	for dimensions in [Vector2i(320,240), Vector2i(1280,720)]:
+		check(runtime.capture_status().next_config.preset == preset.get_item_metadata(index), "preset is staged")
+		check(runtime.capture_status().state == "idle", "preset never starts capture")
+	runtime._apply_capture_preset("light")
+	check(toggle.focus_mode == Control.FOCUS_ALL, "capture actions support keyboard focus")
+	toggle.grab_focus()
+	var accept := InputEventAction.new()
+	accept.action = "ui_accept"
+	accept.pressed = true
+	Input.parse_input_event(accept)
+	await process_frame
+	accept.pressed = false
+	Input.parse_input_event(accept)
+	await process_frame
+	toggle.release_focus()
+	check(toggle.text == "Stop" and not mark.disabled, "Start starts capture")
+	for tick in 14:
+		await physics_frame
+	var captured: Dictionary = runtime.capture_status()
+	check(captured.spatial_samples > 0 and captured.image_samples == 0 and captured.metric_samples > 0, "Light captures selected spatial state plus metrics, without images: " + JSON.stringify(captured))
+	preset.item_selected.emit(0)
+	check(runtime.capture_status().config.preset == "light", "preset cannot rewrite active segment settings")
+	mark.pressed.emit()
+	check(status.text.contains("Marked frame"), "marker acknowledged with agent notifications off")
+	check(runtime.capture_status().last_saved_clip == null, "manual marker does not secretly save")
+	var marker_key := InputEventKey.new()
+	marker_key.keycode = KEY_F7
+	marker_key.pressed = true
+	marker_key.echo = true
+	var before_markers := emitted_markers
+	runtime._shortcut_input(marker_key)
+	check(emitted_markers == before_markers, "repeated keys do not add markers")
+	marker_key.echo = false
+	var composer := ConfirmationDialog.new()
+	runtime.add_child(composer)
+	runtime._feedback_composer = composer
+	composer.popup_centered()
+	runtime._shortcut_input(marker_key)
+	check(emitted_markers == before_markers, "text composition suppresses capture shortcuts")
+	composer.hide()
+	composer.queue_free()
+	runtime._feedback_composer = null
+	runtime._shortcut_input(marker_key)
+	check(emitted_markers == before_markers + 1, "configured marker key works outside text composition")
+	runtime._toggle_pause()
+	check(paused, "pause shortcut pauses gameplay")
+	runtime._toggle_pause()
+	check(not paused, "pause toggles back without ending capture")
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	runtime._update_capture_controls()
+	check(Input.mouse_mode == Input.MOUSE_MODE_CAPTURED, "status refresh does not seize pointer mode")
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	toggle.pressed.emit()
+	check(toggle.disabled and not keep.disabled and not discard.disabled, "stopped draft requires disposition")
+	var clip_path := "user://stage_recordings/" + str(runtime.capture_status().segment_id) + ".sqlite"
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path("user://stage_recordings"))
+	var blocker := FileAccess.open(clip_path, FileAccess.WRITE)
+	blocker.store_string("reserved fixture file")
+	blocker.close()
+	keep.pressed.emit()
+	check(runtime.capture_status().state == "review" and runtime.capture_status().last_save_error != null, "failed save retains draft")
+	check(FileAccess.get_file_as_string(clip_path) == "reserved fixture file", "failure leaves existing destination unchanged")
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(clip_path))
+	keep.pressed.emit()
+	check(runtime.capture_status().state == "idle" and not resume.disabled, "retry saves and enables Continue")
+	check(not status.text.contains("not saved") and not status.text.contains("Save failed"), "successful retry replaces stale error acknowledgement")
+	check(not controls.find_child("CopyClipReference", true, false).disabled, "saved reference available")
+	var recording_id: String = runtime.capture_status().last_saved_clip.recording_id
+	resume.pressed.emit()
+	check(runtime.capture_status().config.preset == "minimal", "staged preset applies to next segment")
+	check(runtime.capture_status().recording_id == recording_id, "Continue groups a new segment")
+	await create_timer(0.05).timeout
+	toggle.pressed.emit()
+	discard.pressed.emit()
+	check(runtime.capture_status().state == "idle", "Discard releases only unsaved draft")
+	for dimensions in [Vector2i(320, 240), Vector2i(1280, 720)]:
 		root.size = dimensions
 		for placement in ["top_left", "top_right", "bottom_left", "bottom_right"]:
 			controls.configure("F7", placement)
 			await process_frame
 			await process_frame
-			var bounds := Rect2(Vector2.ZERO, Vector2(dimensions))
-			check(bounds.encloses(controls.get_global_rect()), "controls fit %s at %s: %s" % [dimensions, placement, controls.get_global_rect()])
-	if not OS.get_environment("CAPTURE_SCREENSHOT_PATH").is_empty():
-		await RenderingServer.frame_post_draw
-		root.get_texture().get_image().save_png(OS.get_environment("CAPTURE_SCREENSHOT_PATH"))
+			check(Rect2(Vector2.ZERO, Vector2(dimensions)).encloses(controls.get_global_rect()), "controls fit %s at %s: %s" % [dimensions, placement, controls.get_global_rect()])
+			if placement == "bottom_right" and not OS.get_environment("CAPTURE_UI_OUTPUT").is_empty():
+				await RenderingServer.frame_post_draw
+				var screenshot := root.get_texture().get_image()
+				check(screenshot.save_png(OS.get_environment("CAPTURE_UI_OUTPUT") + "-%dx%d.png" % [dimensions.x, dimensions.y]) == OK, "write visual QA screenshot")
+	controls.refresh(runtime.capture_status())
+	discard.pressed.emit()
+	check(not runtime.capture_status().next_config.enabled and toggle.disabled, "Cancel disables scheduled play without deleting saved evidence")
+	check(runtime.capture_status().last_saved_clip != null, "Cancel preserves kept evidence")
 	controls.configure("F7", "hidden")
-	check(not controls.visible, "hidden placement removes the launcher")
+	var key := InputEventKey.new()
+	key.keycode = KEY_F7
+	key.pressed = true
 	runtime._shortcut_input(key)
-	check(runtime.get("_toasts").size() > 0, "hidden shortcut acknowledgement survives disabled agent notifications")
-	controls.configure("F7", "bottom_right")
-	var patch: Dictionary = JSON.parse_string(recorder.apply_dashcam_config(JSON.stringify({
-		"post_window_deliberate_sec": 1, "min_after_sec": 0,
-		"anomaly_enabled": false, "capture_interval": 6,
-		"preset": "spatial_only"
-	})))
-	check(patch.get("result") == "ok", "test recording settings applied")
-	toggle.pressed.emit()
-	check(recorder.is_dashcam_active() and toggle.text == "Stop", "Start begins recording and updates controls")
-	await create_timer(0.15).timeout
-	runtime._update_capture_controls()
-	var spatial: Dictionary = JSON.parse_string(recorder.get_dashcam_status_json())
-	check(spatial.buffer_frames > 0, "Spatial only retains spatial samples")
-	check(spatial.screenshot_buffer_count == 0, "Spatial only has no new pixels")
-	check(spatial.capture_probe.dispatched == 0 and spatial.capture_probe.readback_ms_max == 0,
-		"Spatial only does not dispatch or read pixels")
-	check(spatial.screenshot_capture.backend == "disabled" and not spatial.screenshot_capture.available,
-		"current screenshot capture is explicitly disabled")
-	controls.set("_acknowledgement_until", 0)
-	controls.refresh(spatial)
-	check(status.text.contains("Images off"), "Spatial only explains that images are off")
-	mark.pressed.emit()
-	check(status.text.contains("Marked frame"), "human marker is immediately acknowledged")
-	check(recorder.get_dashcam_state() == "post_capture", "Mark retains its post-window rather than immediately saving")
-	await create_timer(1.2).timeout
-	var capture: Dictionary = JSON.parse_string(recorder.get_dashcam_status_json())
-	check(capture.get("last_saved_clip") is Dictionary, "marked post-window saved a clip")
-	if capture.get("last_saved_clip") is Dictionary:
-		var first_id: String = capture.last_saved_clip.clip_id
-		check(controls.find_child("CopyClipReference", true, false).disabled == false, "saved reference is available")
-		mark.pressed.emit()
-		var previous_scene := current_scene
-		var after := Node2D.new()
-		after.name = "AfterTransition"
-		after.scene_file_path = "res://after_transition.tscn"
-		root.add_child(after)
-		current_scene = after
-		previous_scene.queue_free()
-		await physics_frame
-		await physics_frame
-		save.pressed.emit()
-		capture = JSON.parse_string(recorder.get_dashcam_status_json())
-		check(capture.last_saved_clip.clip_id != first_id, "Save now closes a new pending clip immediately")
-		check(capture.last_saved_clip.get("scene_at_save") == "res://after_transition.tscn", "scene provenance is explicitly the scene at save")
-		check(not capture.last_saved_clip.has("scene_path"), "mixed-scene clip does not claim an unqualified scene")
-	mark.pressed.emit()
-	toggle.pressed.emit()
-	capture = JSON.parse_string(recorder.get_dashcam_status_json())
-	check(capture.state == "disabled", "Stop disables recording")
-	check(status.text.contains("available capture saved"), "Stop acknowledges saving a shortened pending window")
-	runtime._apply_capture_preset("lightweight")
-	check(not recorder.is_dashcam_active(), "preset choice does not enable recording")
-	# A real filesystem failure must not publish a new successful-save identity.
-	var hint := FileAccess.open("res://.stage/clip_storage_path", FileAccess.READ)
-	var storage := hint.get_as_text().strip_edges().trim_suffix("/")
-	hint.close()
-	var prior_clip: String = capture.last_saved_clip.clip_id
-	check(DirAccess.rename_absolute(storage, storage + "_retained") == OK, "isolate saved files for failure injection")
-	var blocker := FileAccess.open(storage, FileAccess.WRITE)
-	blocker.store_string("deliberate storage obstruction")
-	blocker.close()
-	runtime._toggle_capture()
-	await create_timer(0.15).timeout
-	runtime._save_capture_now()
-	capture = JSON.parse_string(recorder.get_dashcam_status_json())
-	check(capture.last_save_error != null, "failed persistence is exposed")
-	check(capture.last_saved_clip.clip_id == prior_clip, "failed save does not replace the last successful reference")
-	check(status.text.contains("not saved"), "human sees failure rather than a saved acknowledgement")
-	DirAccess.remove_absolute(storage)
-	DirAccess.rename_absolute(storage + "_retained", storage)
-	runtime._save_capture_now()
-	capture = JSON.parse_string(recorder.get_dashcam_status_json())
-	check(capture.last_save_error == null and capture.last_saved_clip.clip_id != prior_clip, "explicit save succeeds after storage is restored")
-	# Synchronous recovery makes retained-image behavior testable independently
-	# of whether this test machine supports the automatic graphics backend.
-	patch = JSON.parse_string(recorder.apply_dashcam_config(JSON.stringify({
-		"preset": "lightweight", "screenshot_readback": "synchronous"
-	})))
-	check(patch.get("result") == "ok", "explicit synchronous recovery applied")
-	await create_timer(0.6).timeout
-	capture = JSON.parse_string(recorder.get_dashcam_status_json())
-	check(capture.screenshot_buffer_count > 0, "recovery capture supplies images before Spatial only")
-	var before_spatial: Dictionary = capture.config.duplicate(true)
-	var retained: int = capture.screenshot_buffer_count
-	for index in preset.item_count:
-		if preset.get_item_metadata(index) == "spatial_only":
-			preset.item_selected.emit(index)
-	capture = JSON.parse_string(recorder.get_dashcam_status_json())
-	check(capture.dashcam_enabled and toggle.text == "Stop", "Spatial only leaves started recording started")
-	before_spatial.screenshot_enabled = false
-	check(capture.config == before_spatial, "Spatial only changes only screenshot enablement")
-	check(capture.screenshot_buffer_count == retained and capture.screenshots_available,
-		"Spatial only preserves historical images and their availability")
-	var dispatched: int = capture.capture_probe.dispatched
-	await create_timer(0.3).timeout
-	capture = JSON.parse_string(recorder.get_dashcam_status_json())
-	check(capture.capture_probe.dispatched == dispatched and capture.screenshot_buffer_count == retained,
-		"Spatial only does not add images after selection")
-	controls.set("_acknowledgement_until", 0)
-	controls.refresh(capture)
-	check(status.text.contains("Images off") and status.text.contains("images retained"),
-		"controls distinguish disabled new images from retained images")
-	var unavailable: Dictionary = capture.duplicate(true)
-	unavailable.config.screenshot_enabled = true
-	unavailable.screenshot_capture = {"available": false, "backend": "unavailable", "reason": "test capability unavailable", "pending": false}
-	controls.refresh(unavailable)
-	check(status.text.contains("Images unavailable") and status.text.contains("images retained")
-		and status.tooltip_text.contains("test capability unavailable"), "current unavailability does not hide retained images or its reason")
-	root.size = Vector2i(320, 240)
-	for placement in ["top_left", "top_right", "bottom_left", "bottom_right"]:
-		controls.configure("F7", placement)
-		await process_frame
-		await process_frame
-		check(Rect2(Vector2.ZERO, Vector2(320, 240)).encloses(controls.get_global_rect()),
-			"retained-image and unavailable status fits 320x240 at %s" % placement)
+	check(not controls.visible and runtime._toasts.size() > 0, "hidden controls acknowledge inactive shortcut")
+	OS.unset_environment("THEATRE_LAUNCH_JSON")
 	finish()
 
 func finish() -> void:

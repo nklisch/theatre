@@ -388,15 +388,11 @@ async fn agent_stop_reports_failed_pending_save_without_claiming_rollback() {
     );
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(&path, "deliberate storage obstruction").unwrap();
-    let server = StageServer::new(state.clone());
-    let result = server
-        .clips(Parameters(
-            serde_json::from_value(json!({"action":"config","config":{"enabled":false}})).unwrap(),
-        ))
+    // This isolated fixture exercises the low-level legacy recorder, not the
+    // launch-managed runtime. Its old wire patch remains bounded by that owner.
+    let result = tcp::query_addon(&state, "dashcam_config", json!({"enabled":false}))
         .await
         .unwrap();
-    let result: serde_json::Value =
-        serde_json::from_str(&result.content[0].as_text().unwrap().text).unwrap();
     assert_eq!(result["result"], "ok");
     assert_eq!(result["config"]["enabled"], false);
     assert_eq!(result["stop_save"]["result"], "error", "{result}");
@@ -423,10 +419,12 @@ async fn invalid_project_recorder_settings_are_reported_without_blocking_cli_sta
             "Movement target",
         ),
     ] {
-        let (game, _state) = start_with_connection(true, false).await;
+        let (game, state) = start_with_connection(true, false).await;
         std::fs::write(game._dir.path().join("stage.toml"), patch).unwrap();
         let output = Command::new(env!("CARGO_BIN_EXE_stage"))
-            .args(["clips", "{\"action\":\"status\"}"])
+            // This fixture deliberately owns a raw legacy recorder, not a
+            // StageRuntime. Runtime identity remains a supported CLI query.
+            .args(["runtime_status", "{}"])
             .env("THEATRE_PROJECT_DIR", game._dir.path())
             .env("THEATRE_PORT", game.port.to_string())
             .env("RUST_LOG", "warn")
@@ -439,7 +437,12 @@ async fn invalid_project_recorder_settings_are_reported_without_blocking_cli_sta
                 && stderr.contains(evidence),
             "{stderr}"
         );
-        let status: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        let runtime: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(runtime["ready"], true);
+        tcp::connect_once(&state, game.port).await.unwrap();
+        let status = tcp::query_addon(&state, "dashcam_status", json!({}))
+            .await
+            .unwrap();
         assert_eq!(status["config"]["enabled"], false);
         assert_ne!(status["config"]["capture_interval"], 0);
     }
