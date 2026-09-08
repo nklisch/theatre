@@ -1,4 +1,4 @@
-extends PanelContainer
+extends Window
 ## Native capture controls. Runtime owns recorder calls; this view only presents
 ## authoritative status and emits deliberate human actions.
 
@@ -10,6 +10,7 @@ signal feedback_requested
 signal continue_requested
 signal discard_requested
 signal cancel_requested
+signal shortcut_requested(event: InputEvent)
 
 const PRESETS := {
 	"Minimal": "minimal", "Light": "light", "Standard": "standard", "Heavy": "heavy",
@@ -24,6 +25,14 @@ var _status: Label
 var _last_saved: Label
 var _copy: Button
 var _preset: OptionButton
+var _panel: PanelContainer
+var _body: VBoxContainer
+var _heading: Control
+var _minimize: Button
+var _minimized := false
+var _moved := false
+var _dragging := false
+var _drag_offset := Vector2.ZERO
 var _last_clip: Dictionary = {}
 var _placement := "bottom_right"
 var _marker_binding := "F9"
@@ -34,21 +43,41 @@ var _acknowledgement_until := 0
 
 func _init() -> void:
 	name = "StageCaptureControls"
-	custom_minimum_size.x = 284
-	size.x = 284
+	title = "Stage capture"
+	borderless = true
+	unresizable = true
+	wrap_controls = true
+	transient = true
+	visible = false
+	# A non-exclusive child Window receives its pointer events before the game's
+	# _input handlers. Plain Controls receive them too late to prevent recapture.
+	_panel = PanelContainer.new()
+	_panel.custom_minimum_size.x = 284
+	add_child(_panel)
+	_panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	add_theme_font_size_override("font_size", 13)
 	var margin := MarginContainer.new()
 	for edge in ["margin_left", "margin_right", "margin_top", "margin_bottom"]:
 		margin.add_theme_constant_override(edge, 8)
-	add_child(margin)
+	_panel.add_child(margin)
 	var rows := VBoxContainer.new()
 	margin.add_child(rows)
-	var heading := HBoxContainer.new()
-	rows.add_child(heading)
-	var title := Label.new()
-	title.text = "Stage capture"
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	heading.add_child(title)
+	var header := HBoxContainer.new()
+	rows.add_child(header)
+	_heading = HBoxContainer.new()
+	_heading.name = "CaptureDragHandle"
+	_heading.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_heading.mouse_filter = Control.MOUSE_FILTER_STOP
+	_heading.mouse_default_cursor_shape = Control.CURSOR_MOVE
+	_heading.tooltip_text = "Drag to move capture controls"
+	_heading.gui_input.connect(_drag_input)
+	header.add_child(_heading)
+	var heading_label := Label.new()
+	heading_label.text = "Stage capture"
+	heading_label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_heading.add_child(heading_label)
+	_body = VBoxContainer.new()
+	rows.add_child(_body)
 	_preset = OptionButton.new()
 	_preset.name = "CapturePreset"
 	for label in PRESETS:
@@ -60,14 +89,18 @@ func _init() -> void:
 		if not preset.is_empty():
 			preset_requested.emit(preset)
 	)
-	heading.add_child(_preset)
+	header.add_child(_preset)
+	_minimize = _button("−", "MinimizeCaptureControls", header, _toggle_minimized)
+	_minimize.custom_minimum_size.x = 28
+	_minimize.size_flags_horizontal = Control.SIZE_SHRINK_END
+	_minimize.tooltip_text = "Minimize capture controls (recording continues)"
 	var actions := HBoxContainer.new()
-	rows.add_child(actions)
+	_body.add_child(actions)
 	_toggle = _button("Start new", "ToggleDashcam", actions, func() -> void: toggle_requested.emit())
 	_marker = _button("Mark", "Mark", actions, func() -> void: marker_requested.emit())
 	_marker.tooltip_text = "Annotate this moment. Automatic saving requires rolling retention and on_trigger saving."
 	var review := HBoxContainer.new()
-	rows.add_child(review)
+	_body.add_child(review)
 	_continue = _button("Continue", "ContinueCapture", review, func() -> void: continue_requested.emit())
 	_continue.tooltip_text = "New segment in the same recording. The uncaptured gap remains visible."
 	_save = _button("Keep", "SaveNow", review, func() -> void: save_requested.emit())
@@ -83,15 +116,15 @@ func _init() -> void:
 	_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_status.max_lines_visible = 2
 	_status.text = "Recorder unavailable"
-	rows.add_child(_status)
+	_body.add_child(_status)
 	_last_saved = Label.new()
 	_last_saved.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_last_saved.max_lines_visible = 1
 	_last_saved.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_last_saved.text = "No clip saved this run"
-	rows.add_child(_last_saved)
+	_body.add_child(_last_saved)
 	var footer := HBoxContainer.new()
-	rows.add_child(footer)
+	_body.add_child(footer)
 	_copy = _button("Copy reference", "CopyClipReference", footer, _copy_reference)
 	_copy.disabled = true
 	var feedback := _button("Share note + still", "ShareFeedback", footer,
@@ -112,8 +145,15 @@ func _button(text: String, node_name: String, parent: Node, callback: Callable) 
 func configure(marker_binding: String, placement: String) -> void:
 	_marker_binding = marker_binding
 	_marker.text = "Mark (%s)" % marker_binding
-	visible = placement != "hidden"
+	if placement == "hidden":
+		hide()
+	elif not visible:
+		# Showing the overlay must not take the game's keyboard focus.
+		unfocusable = true
+		show()
+		unfocusable = false
 	_placement = placement
+	_moved = false
 	if placement not in ["top_left", "top_right", "bottom_left", "bottom_right", "hidden"]:
 		push_warning("[Stage] Unknown capture_controls placement '%s'; using bottom_right" % placement)
 		_placement = "bottom_right"
@@ -123,10 +163,14 @@ func configure(marker_binding: String, placement: String) -> void:
 func _ready() -> void:
 	# Container minimum sizes settle after configuration. Reposition from the
 	# actual size rather than anchoring the earlier, smaller minimum rectangle.
-	resized.connect(_place)
-	minimum_size_changed.connect(func() -> void: call_deferred("_resize_to_content"))
+	size_changed.connect(_place)
+	_panel.minimum_size_changed.connect(func() -> void: call_deferred("_resize_to_content"))
 	call_deferred("_resize_to_content")
-	get_viewport().size_changed.connect(_place)
+	get_parent().get_viewport().size_changed.connect(_place)
+	close_requested.connect(_toggle_minimized)
+	focus_exited.connect(func() -> void: _dragging = false)
+	# Events in a child Window do not reach the runtime's parent viewport.
+	window_input.connect(func(event: InputEvent) -> void: shortcut_requested.emit(event))
 	_place()
 
 
@@ -135,18 +179,56 @@ func _resize_to_content() -> void:
 	_place()
 
 
+func _process(_delta: float) -> void:
+	# A captured gameplay pointer must not hit an overlaid panel at screen center.
+	# Observe the game's choice; never change its pointer mode.
+	var captured := Input.mouse_mode == Input.MOUSE_MODE_CAPTURED
+	if unfocusable != captured:
+		unfocusable = captured
+		mouse_passthrough = captured
+
+
 func _place() -> void:
 	if not is_inside_tree():
 		return
-	var available := get_viewport().get_visible_rect().size
+	var parent_viewport := get_parent().get_viewport()
+	var available := parent_viewport.get_visible_rect().size
+	var origin := Vector2.ZERO if is_embedded() else parent_viewport.get_screen_transform().origin
+	if not is_embedded():
+		available = Vector2(get_parent().get_window().size)
 	var target := Vector2(12, 12)
-	if _placement.ends_with("right"):
+	if _moved:
+		target = Vector2(position) - origin
+	elif _placement.ends_with("right"):
 		target.x = maxf(0, available.x - size.x - 12)
-	if _placement.begins_with("bottom"):
+	if not _moved and _placement.begins_with("bottom"):
 		target.y = maxf(0, available.y - size.y - 12)
 	target.x = clampf(target.x, 0, maxf(0, available.x - size.x))
 	target.y = clampf(target.y, 0, maxf(0, available.y - size.y))
-	position = target
+	position = Vector2i(target + origin)
+
+
+func _drag_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		_dragging = event.pressed
+		_drag_offset = event.position
+		_heading.accept_event()
+	elif event is InputEventMouseMotion and _dragging:
+		_moved = true
+		position += Vector2i(event.position - _drag_offset)
+		_place()
+		_heading.accept_event()
+
+
+func _toggle_minimized() -> void:
+	_minimized = not _minimized
+	_body.visible = not _minimized
+	_heading.visible = not _minimized
+	_preset.visible = not _minimized
+	_panel.custom_minimum_size.x = 0 if _minimized else 284
+	_minimize.text = "Stage +" if _minimized else "−"
+	_minimize.tooltip_text = "Restore capture controls" if _minimized else "Minimize capture controls (recording continues)"
+	_resize_to_content()
 
 
 func acknowledge(message: String) -> void:
@@ -214,6 +296,8 @@ func refresh(status: Dictionary) -> void:
 		tooltip = message
 	_status.text = message
 	_status.tooltip_text = tooltip
+	if _minimized:
+		_minimize.tooltip_text = "Restore capture controls\n" + tooltip
 	var clip: Variant = status.get("last_saved_clip")
 	if clip is Dictionary:
 		_last_clip = clip

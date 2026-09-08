@@ -617,6 +617,17 @@
       "relationships": []
     },
     {
+      "path": ".work/completed/capture-panel-interaction.md",
+      "namespace": "work",
+      "kind": "feature",
+      "id": "capture-panel-interaction",
+      "title": "Reliable, movable capture controls",
+      "summary": null,
+      "updated": null,
+      "status": "completed",
+      "relationships": []
+    },
+    {
       "path": ".work/completed/explicit-runtime-capture.md",
       "namespace": "work",
       "kind": "feature",

@@ -143,9 +143,23 @@ The marker and pause shortcuts remain configurable through
 `theatre/stage/shortcuts/marker_key` and `pause_key` (F9/F11 defaults).
 Use buttons or project-appropriate alternative bindings when those keys conflict
 with editor or gameplay controls. Repeated key events are ignored.
-The panel's corner or `hidden` placement uses
+
+Drag the **Stage capture** header to move the panel away from game UI. **−**
+minimizes it to a single **Stage +** restore button; this does not stop or pause
+recording. Hover the restore button for capture status. Position and minimized
+state last for this run only, and viewport resizing keeps the panel reachable.
+The configured corner remains the initial placement; `hidden` still hides all
+controls rather than leaving a restore button. Set the corner or `hidden` with
 `theatre/stage/display/capture_controls`. Hiding controls does not disable
 shortcuts. An ordinary off launch installs neither.
+
+Release the pointer using the game's own binding before clicking the controls.
+The panel uses a non-modal Godot child window so its clicks cannot fall through
+to gameplay handlers that recapture the pointer. It follows the project's
+embedded/native subwindow setting without changing that setting. Captured mouse
+input passes through to gameplay; Stage never changes the game's mouse mode.
+Gameplay that polls global `Input` state must still respect its own UI policy;
+handling an event does not clear global button or action state.
 
 ## Rolling capture (dashcam)
 

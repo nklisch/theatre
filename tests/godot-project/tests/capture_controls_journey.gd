@@ -29,7 +29,7 @@ func _exercise(runtime: Node) -> void:
 	if not check(runtime.recorder != null, "recorder initialized"):
 		finish()
 		return
-	var controls: Control = runtime._capture_controls
+	var controls: Window = runtime._capture_controls
 	var mark: Button = controls.find_child("Mark", true, false)
 	var toggle: Button = controls.find_child("ToggleDashcam", true, false)
 	var keep: Button = controls.find_child("SaveNow", true, false)
@@ -47,6 +47,7 @@ func _exercise(runtime: Node) -> void:
 		check(runtime.capture_status().state == "idle", "preset never starts capture")
 	runtime._apply_capture_preset("light")
 	check(toggle.focus_mode == Control.FOCUS_ALL, "capture actions support keyboard focus")
+	controls.grab_focus()
 	toggle.grab_focus()
 	var accept := InputEventAction.new()
 	accept.action = "ui_accept"
@@ -123,7 +124,8 @@ func _exercise(runtime: Node) -> void:
 			controls.configure("F7", placement)
 			await process_frame
 			await process_frame
-			check(Rect2(Vector2.ZERO, Vector2(dimensions)).encloses(controls.get_global_rect()), "controls fit %s at %s: %s" % [dimensions, placement, controls.get_global_rect()])
+			var panel_rect := Rect2(Vector2(controls.position), Vector2(controls.size))
+			check(Rect2(Vector2.ZERO, Vector2(dimensions)).encloses(panel_rect), "controls fit %s at %s: %s" % [dimensions, placement, panel_rect])
 			if placement == "bottom_right" and not OS.get_environment("CAPTURE_UI_OUTPUT").is_empty():
 				await RenderingServer.frame_post_draw
 				var screenshot := root.get_texture().get_image()

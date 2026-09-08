@@ -133,8 +133,14 @@ native probe timing and persistence cost are different measurements; presets
 are not a promise about frame-time overhead.
 
 Native controls support keyboard access without taking gameplay focus.
-Marker/pause bindings and panel placement remain configurable. Mark, Keep and
-Share note + still are separate actions. Hiding controls does not disable their
+Drag their header to avoid game UI, or minimize to the single restore button.
+Neither changes capture state; dragged placement and minimization last for the
+run, with viewport changes keeping controls reachable. Release the game's mouse
+before interacting: the non-modal child window isolates clicks from gameplay
+event handlers, while captured input passes through. Global input polling still
+belongs to the game's own UI policy. Marker/pause bindings and initial corner
+placement remain configurable. Mark, Keep and Share note + still are separate
+actions. Hiding controls does not disable their
 shortcuts; an ordinary off launch creates neither controls nor shortcuts.
 
 Saved segments remain available after the game exits using the project-local

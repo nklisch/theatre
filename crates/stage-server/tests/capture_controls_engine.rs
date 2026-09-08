@@ -123,6 +123,16 @@ fn human_capture_controls_preserve_intent_and_fit_small_viewports() {
 }
 
 #[test]
+#[ignore = "requires graphical Godot and built GDExtension"]
+fn capture_pointer_controls_isolate_game_input() {
+    let output = run_journey("capture_pointer_journey.gd", false, &[]);
+    assert!(
+        output.contains("CAPTURE_POINTER_REPORT:{\"failures\":[]}"),
+        "{output}"
+    );
+}
+
+#[test]
 #[ignore = "requires graphical Godot and built GDExtension; measures representative capture cost"]
 fn measure_recording_presets_on_a_moving_scene() {
     let profiles = ["off", "baseline", "minimal", "light", "standard", "heavy"];

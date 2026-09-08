@@ -155,6 +155,13 @@ common recording ID rather than reopening a saved database. Metrics are explicit
 provider dictionaries and engine counters with render/physics identifiers and
 monotonic spacing. Spatial entity frames use MessagePack; images use JPEG.
 
+Human capture controls use a non-modal child Window, following the project's
+embedded/native subwindow setting. Godot routes window input before gameplay
+event handlers, preventing capture clicks from triggering game actions or pointer
+recapture. The controls observe but never change mouse mode; captured gameplay
+input passes through. Movement and minimization affect only this run's UI, not
+the recorder, capture policy or persisted preferences.
+
 Each kept segment is a new SQLite clip, format version 2 in capture metadata.
 The additive metrics table leaves older clips readable without inventing new
 channels or provenance. Save uses exclusive file creation, commits before

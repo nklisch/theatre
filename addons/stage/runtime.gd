@@ -25,7 +25,7 @@ var _overlay: CanvasLayer
 var _pause_label: Label
 var _toast_container: VBoxContainer
 var _toasts: Array[Control] = []
-var _capture_controls: PanelContainer
+var _capture_controls: Window
 
 const MAX_TOASTS := 3
 const TOAST_DURATION := 3.0
@@ -389,6 +389,7 @@ func _setup_overlay() -> void:
 	_capture_controls.cancel_requested.connect(func() -> void: capture_configure({"preset": "off"}))
 	_capture_controls.preset_requested.connect(_apply_capture_preset)
 	_capture_controls.feedback_requested.connect(share_feedback)
+	_capture_controls.shortcut_requested.connect(_shortcut_input)
 	_capture_controls.refresh({})
 
 
