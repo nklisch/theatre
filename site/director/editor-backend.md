@@ -39,6 +39,12 @@ marker may remain.
 scene without implicitly saving open work. Stage `runtime_status` separately
 establishes runtime readiness.
 
+On Windows, start and restart can explicitly select `automated` or `deferred`
+best-effort presentation protection, or `interactive` ordinary presentation.
+Omission preserves legacy behavior. Automated and deferred are rejected before
+dispatch on other platforms. A degraded result retains actual launch and running
+facts so the run can be stopped before fallback.
+
 **No separate process.** Everything runs inside the already-open editor.
 
 ## Limitations

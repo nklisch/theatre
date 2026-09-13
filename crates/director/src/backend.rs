@@ -72,6 +72,30 @@ impl Backend {
         }
     }
 
+    /// Return the process identity of the verified editor selected for a project.
+    ///
+    /// This is used by bounded, editor-only launch helpers that must identify
+    /// windows belonging to the game process without adding another lifecycle
+    /// owner. It performs the same project verification as editor operations.
+    pub async fn editor_process_id(&self, project_path: &Path) -> Result<u32, OperationError> {
+        let port = resolve_editor_port(project_path);
+        let mut guard = self.editor.lock().await;
+        let canonical = std::fs::canonicalize(project_path).map_err(EditorError::IoError)?;
+        if guard
+            .as_ref()
+            .is_some_and(|handle| !handle.matches_project(&canonical, port) || !handle.is_alive())
+        {
+            *guard = None;
+        }
+        if guard.is_none() {
+            *guard = Some(EditorHandle::connect_verified(port, &canonical).await?);
+        }
+        guard
+            .as_ref()
+            .map(EditorHandle::process_id)
+            .ok_or_else(|| EditorError::Required { port }.into())
+    }
+
     /// Attempt to run an operation via the editor plugin.
     async fn try_editor(
         &self,

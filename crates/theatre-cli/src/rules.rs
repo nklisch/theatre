@@ -194,6 +194,26 @@ mod tests {
     }
 
     #[test]
+    fn generated_rules_define_windows_workflows_without_inventing_project_facts() {
+        for expected in [
+            "Agent visual review",
+            "Background testing",
+            "Prepare human testing",
+            "Human-visible review",
+            "presentation=automated",
+            "presentation=deferred",
+            "presentation=interactive",
+            "The user focuses",
+            "the ordinary Godot window",
+            "Linux and macOS",
+        ] {
+            assert!(RULES_CONTENT.contains(expected), "missing {expected}");
+        }
+        assert!(RULES_CONTENT.contains("intentionally does not invent"));
+        assert!(RULES_CONTENT.contains("Quick Sandbox or equivalent review target"));
+    }
+
+    #[test]
     fn append_preserves_user_content_and_adds_current_guidance() {
         let project = tempfile::tempdir().unwrap();
         let original = "# My project\n\nKeep this user-authored section.\n";

@@ -5,6 +5,7 @@ pub mod editor;
 pub mod error;
 pub mod mcp;
 pub mod oneshot;
+mod presentation;
 pub mod process;
 pub mod resolve;
 pub mod responses;

@@ -3,6 +3,7 @@
 const OpsUtil = preload("res://addons/director/ops/ops_util.gd")
 const SAVE_BEFORE_RUNNING := "run/auto_save/save_before_running"
 const ACTIONS := ["start", "stop", "restart", "status"]
+const PRESENTATIONS := ["automated", "deferred", "interactive"]
 const LAUNCH_ENVIRONMENT := "THEATRE_LAUNCH_JSON"
 static var _last_launch: Dictionary = {}
 static var _last_target := ""
@@ -11,6 +12,7 @@ static var _last_target := ""
 static func dispatch(params: Dictionary) -> Dictionary:
 	var action: String = params.get("action", "")
 	var scene_path: String = params.get("scene_path", "")
+	var presentation: String = params.get("presentation", "")
 	if action not in ACTIONS:
 		return OpsUtil._error(
 			"action must be one of: start, stop, restart, status",
@@ -21,12 +23,18 @@ static func dispatch(params: Dictionary) -> Dictionary:
 				"scene_path is required for %s" % action,
 				"editor_run", {"action": action})
 	else:
+		if params.has("presentation"):
+			return OpsUtil._error("presentation is only valid for start and restart", "editor_run", {})
 		if params.has("launch"):
 			return OpsUtil._error("launch is only valid for start and restart", "editor_run", {})
 		if scene_path != "":
 			return OpsUtil._error(
 				"scene_path is only valid for start and restart",
 				"editor_run", {"action": action, "scene_path": scene_path})
+	if presentation != "" and presentation not in PRESENTATIONS:
+		return OpsUtil._error(
+			"presentation must be one of: automated, deferred, interactive",
+			"editor_run", {"presentation": presentation})
 
 	var previously_playing := EditorInterface.get_playing_scene().trim_prefix("res://")
 	if action == "status":

@@ -322,10 +322,24 @@ and resource operations persist their target files.
 ### Run and Verify a Saved Scene
 
 ```jsonc
-// Start without implicitly saving open editor work
+// Windows agent visual review; does not implicitly save open editor work
 { "project_path": ".", "action": "start",
-  "scene_path": "res://scenes/main.tscn" }
+  "scene_path": "res://scenes/main.tscn", "presentation": "automated" }
 ```
+
+On Windows, use `automated` for agent visual review, headless testing when it
+retains the required evidence (otherwise `automated`), `deferred` to prepare a run
+for later user focus, and `interactive` only for an expressly requested
+human-visible review. Omission preserves legacy launch behavior and is not a safe
+default. Successful deferred preparation is handed to the user through the normal
+agent response: state that the scene is ready and name requested checks. There is
+no runtime handoff action. Automated and deferred are unsupported outside Windows;
+keep existing Linux/macOS launch conventions.
+
+If presentation is degraded after launch, inspect `launch_requested` and
+`game_running`, stop the run before fallback, and do not present a degraded deferred
+run as ready without explaining the limitation and obtaining a new user decision.
+Capture and observation settings never imply presentation permission.
 
 A successful `editor_run` start or restart reports that Godot accepted the native
 play request. Ordinary launches enable neither Stage observation nor recording.

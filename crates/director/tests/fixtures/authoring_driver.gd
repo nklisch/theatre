@@ -122,6 +122,7 @@ func input_readiness() -> Dictionary:
 		"window_focus": get_window().has_focus(),
 		"frames_per_second": Engine.get_frames_per_second(),
 		"low_processor_sleep_usec": OS.low_processor_usage_mode_sleep_usec,
+		"game_embed_mode": EditorInterface.get_editor_settings().get_setting("run/window_placement/game_embed_mode"),
 	}
 
 # Diagnostic control: no Director plugin or mutation implementation participates.

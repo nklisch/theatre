@@ -1,6 +1,6 @@
 use director::{
     editor::EditorHandle,
-    mcp::editor_run::{EditorRunAction, EditorRunParams},
+    mcp::editor_run::{EditorRunAction, EditorRunParams, Presentation},
     oneshot::OperationResult,
     server::DirectorServer,
 };
@@ -255,11 +255,21 @@ impl Fixture {
             .map(|result| result.structured_content.unwrap())
     }
     async fn editor_run(&self, action: EditorRunAction, scene_path: Option<&str>) -> Value {
+        self.editor_run_with_presentation(action, scene_path, None)
+            .await
+    }
+    async fn editor_run_with_presentation(
+        &self,
+        action: EditorRunAction,
+        scene_path: Option<&str>,
+        presentation: Option<Presentation>,
+    ) -> Value {
         let result = self
             .server
             .editor_run(Parameters(EditorRunParams {
                 project_path: self.project.path().to_string_lossy().into_owned(),
                 action,
+                presentation,
                 scene_path: scene_path.map(str::to_owned),
                 launch: matches!(action, EditorRunAction::Start | EditorRunAction::Restart)
                     .then_some(stage_protocol::capture::LaunchOptions {
@@ -271,6 +281,26 @@ impl Fixture {
             .unwrap_or_else(|e| panic!("{}: {}", e.message, self.log()));
         result.structured_content.unwrap()
     }
+}
+
+async fn stage_call(project: &Path, port: u16, tool: &str, params: Value) -> Value {
+    let stage = Path::new(env!("CARGO_BIN_EXE_director"))
+        .with_file_name(format!("stage{}", std::env::consts::EXE_SUFFIX));
+    let output = tokio::process::Command::new(stage)
+        .arg(tool)
+        .arg(params.to_string())
+        .env("THEATRE_PORT", port.to_string())
+        .env("THEATRE_PROJECT_DIR", project)
+        .output()
+        .await
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "stage {tool} failed: {}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    serde_json::from_slice(&output.stdout).unwrap()
 }
 
 async fn stage_status(project: &Path, port: u16) -> Value {
@@ -303,6 +333,127 @@ async fn wait_for_stage(project: &Path, port: u16) -> Value {
     })
     .await
     .expect("Stage did not report a ready current scene")
+}
+
+#[cfg(windows)]
+#[tokio::test]
+#[ignore = "requires graphical Godot 4.7 editor and deployed Stage GDExtension"]
+async fn windows_presentation_modes_preserve_editor_and_stage_paths() {
+    let mut f = Fixture::start_with_stage(true).await;
+    let saved = std::fs::read(f.project.path().join("a.tscn")).unwrap();
+    let dirty_before = f.inspect("Human").await;
+    let editor_readiness = f.drive("input_readiness", json!({})).await;
+    eprintln!(
+        "presentation fixture game_embed_mode={}",
+        editor_readiness["game_embed_mode"]
+    );
+
+    let automated = f
+        .editor_run_with_presentation(
+            EditorRunAction::Start,
+            Some("a.tscn"),
+            Some(Presentation::Automated),
+        )
+        .await;
+    assert_eq!(automated["launch_requested"], true, "{automated}");
+    assert_eq!(automated["game_running"], true, "{automated}");
+    assert_eq!(automated["presentation"]["mode"], "automated");
+    assert_eq!(
+        automated["presentation"]["outcome"], "applied",
+        "{automated}"
+    );
+    assert_eq!(
+        wait_for_stage(f.project.path(), f.stage_port).await["ready"],
+        true
+    );
+    let viewport = stage_call(
+        f.project.path(),
+        f.stage_port,
+        "viewport",
+        json!({"max_dimension": 320}),
+    )
+    .await;
+    assert_eq!(viewport["status"], "available", "{viewport}");
+    assert!(viewport["image_base64"].is_string(), "{viewport}");
+    stage_call(
+        f.project.path(),
+        f.stage_port,
+        "spatial_action",
+        json!({"action":"pause", "paused":true}),
+    )
+    .await;
+    let interaction = stage_call(
+        f.project.path(),
+        f.stage_port,
+        "spatial_action",
+        json!({
+            "action":"interaction_sequence",
+            "steps":[
+                {"press":[{"action_name":"ui_accept","strength":1.0}],"frames":1},
+                {"release":["ui_accept"],"frames":1}
+            ]
+        }),
+    )
+    .await;
+    assert!(interaction.is_object(), "{interaction}");
+    f.editor_run(EditorRunAction::Stop, None).await;
+
+    let deferred = f
+        .editor_run_with_presentation(
+            EditorRunAction::Start,
+            Some("a.tscn"),
+            Some(Presentation::Deferred),
+        )
+        .await;
+    assert_eq!(deferred["presentation"]["outcome"], "applied", "{deferred}");
+    f.editor_run(EditorRunAction::Stop, None).await;
+
+    let interactive = f
+        .editor_run_with_presentation(
+            EditorRunAction::Start,
+            Some("a.tscn"),
+            Some(Presentation::Interactive),
+        )
+        .await;
+    assert_eq!(interactive["presentation"]["outcome"], "interactive");
+    f.editor_run(EditorRunAction::Stop, None).await;
+
+    let legacy = f.editor_run(EditorRunAction::Start, Some("a.tscn")).await;
+    assert!(legacy.get("presentation").is_none(), "{legacy}");
+    f.editor_run(EditorRunAction::Stop, None).await;
+
+    assert_eq!(
+        std::fs::read(f.project.path().join("a.tscn")).unwrap(),
+        saved
+    );
+    assert_eq!(
+        f.inspect("Human").await["position"],
+        dirty_before["position"]
+    );
+}
+
+#[cfg(windows)]
+#[tokio::test]
+#[ignore = "requires graphical Godot 4.7 editor"]
+async fn windows_automated_presentation_does_not_require_stage() {
+    let f = Fixture::start().await;
+    let started = f
+        .server
+        .editor_run(Parameters(EditorRunParams {
+            project_path: f.project.path().to_string_lossy().into_owned(),
+            action: EditorRunAction::Start,
+            presentation: Some(Presentation::Automated),
+            scene_path: Some("a.tscn".into()),
+            launch: None,
+        }))
+        .await
+        .unwrap_or_else(|error| panic!("{}: {}", error.message, f.log()))
+        .structured_content
+        .unwrap();
+    assert_eq!(started["presentation"]["outcome"], "applied", "{started}");
+    assert_eq!(started["launch_requested"], true);
+    assert_eq!(started["game_running"], true);
+    f.editor_run(EditorRunAction::Stop, None).await;
 }
 
 #[tokio::test]

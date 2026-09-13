@@ -653,7 +653,7 @@ impl DirectorServer {
 
     #[tool(
         name = "editor_run",
-        description = "Control a saved scene through the verified Godot editor. Start and restart require scene_path; stop is idempotent and status is observational. Launch requests never implicitly save open work and never fall back to a headless process. The response reports native editor play state only; query Stage runtime_status separately for readiness and run_id."
+        description = "Control a saved scene through the verified Godot editor. Start and restart require scene_path and may explicitly select presentation: automated or deferred use best-effort Windows focus/input protection, while interactive and omission preserve ordinary launch behavior. Automated and deferred are unsupported outside Windows. Stop is idempotent and status is observational. Launch requests never implicitly save open work and never fall back to a headless process. A degraded presentation result preserves launch_requested and game_running; stop that run before choosing a fallback. Query Stage runtime_status separately for readiness and run_id."
     )]
     pub async fn editor_run(
         &self,

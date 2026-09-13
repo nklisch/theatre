@@ -387,6 +387,13 @@ open work or fall back to a headless run. A successful response reports Godot's
 native play state only. Use Stage `runtime_status` to establish the actual run,
 current scene, and readiness.
 
+On Windows, start and restart may set `presentation` to `automated`, `deferred`,
+or `interactive`. Automated is for agent visual work, deferred prepares an
+ordinary window for the user to focus after the agent reports readiness, and
+interactive permits a requested visible review. Omission is legacy behavior.
+Automated and deferred are unsupported outside Windows. If their best-effort
+window protection degrades after launch, stop the reported run before fallback.
+
 ### Inspect the installed engine API
 
 Use `engine_api` when a class member, property type, signal, method, enum, or

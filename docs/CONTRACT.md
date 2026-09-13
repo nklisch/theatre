@@ -301,6 +301,23 @@ launch request reports editor play state, not Stage readiness. Use
 `runtime_status` to establish the connected run and current scene. Director does
 not replay run control on a headless backend.
 
+Start and restart optionally accept `presentation` as `automated`, `deferred`, or
+`interactive`. Omission and explicit interactive use the established ordinary
+editor path on every platform. Automated and deferred are Windows-only and fail
+before editor dispatch elsewhere. On Windows they request bounded, best-effort
+focus protection; automated additionally suppresses ordinary physical input to
+the identified game surface. They do not claim process or device isolation, and
+capture, observation, readiness, and operator fields never select presentation.
+
+An explicit presentation returns its mode and outcome. Interactive reports the
+ordinary path. Applied means the bounded native operations completed, not that all
+future focus or input is impossible. If a window operation fails after Godot has
+started, the response reports `degraded` with a reason while retaining the actual
+`launch_requested` and `game_running` facts. Stop and status perform no presentation
+preflight. Deferred has no handoff token, activation operation, or stored state;
+the agent confirms readiness and tells the user through its normal response that
+the existing Godot window is ready for deliberate inspection.
+
 Director resolves the standalone Godot executable from `GODOT_BIN`, then `GODOT_PATH`, then `godot` on `PATH`. An explicit path override is therefore an execution setting for the Director process, not an MCP operation field; `project_path` still identifies the Godot project being operated on.
 
 ### Director result and error behavior

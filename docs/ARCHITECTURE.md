@@ -132,6 +132,18 @@ Director's important boundary is serialization: `.tscn`, `.tres`, and other Godo
 scene without saving open work. Director reports native play state. Stage remains
 the authority for runtime readiness and run identity.
 
+On Windows, an explicit automated or deferred presentation wraps that same
+one-shot editor operation with a bounded native window check in the Director
+process. It snapshots the foreground and existing windows, identifies a new
+visible game surface by the verified editor's descendant process, and conditionally
+restores the prior foreground when that game surface took it and no newer physical
+input was observed. Automated presentation also disables that game surface for
+ordinary physical input; Stage synthetic input remains an engine operation and does
+not depend on this window path. The helper adds no editor, service, monitor,
+persistent state, or Stage dependency. Omitted and interactive launches retain the
+existing path; automated and deferred are rejected before dispatch on other
+platforms.
+
 Director operations return a normalized `success`/`data` or `success: false`/`error` shape internally. The MCP layer deserializes the data into typed responses and returns matching JSON text and structured content. Generated schemas use standard JSON Schema nullability so strict clients can validate referenced optional types. A `batch` is sequential and can stop at the first failure; it is not a transaction and does not provide rollback.
 
 See [`crates/director/src/backend.rs`](../crates/director/src/backend.rs), [`addons/director/editor_ops.gd`](../addons/director/editor_ops.gd), and [`addons/director/operations.gd`](../addons/director/operations.gd).
@@ -251,7 +263,8 @@ The `theatre` executable separates installation from project deployment:
 - `rules` generates the project guidance that keeps scene/resource authoring on Director.
 - `mcp` regenerates the MCP configuration.
 - `run` forwards a selected scene and typed launch options to Director's existing
-  editor-owned lifecycle, without installing components or creating a fallback game.
+  editor-owned lifecycle, with optional Windows presentation intent, without
+  installing components or creating a fallback game.
 
 Development projects may use tracked links for addon directories. Deployment verifies expected links before copying a GDExtension through them; unrelated links are not followed for writes. On native Windows, Git must materialize symlinks as symlinks for that workflow; otherwise use ordinary copied addons. The platform-aware CLI is the supported Windows deployment path.
 

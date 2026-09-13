@@ -584,17 +584,6 @@
       "relationships": []
     },
     {
-      "path": ".work/active/lightweight-godot-presentation.md",
-      "namespace": "work",
-      "kind": "feature",
-      "id": "lightweight-godot-presentation",
-      "title": "Lightweight Godot launch presentation",
-      "summary": null,
-      "updated": "2026-09-12",
-      "status": "active",
-      "relationships": []
-    },
-    {
       "path": ".work/active/stage-cli-session-semantics.md",
       "namespace": "work",
       "kind": "feature",
@@ -644,6 +633,17 @@
       "kind": "feature",
       "id": "explicit-runtime-capture",
       "title": "Explicit, human-ready runtime capture",
+      "summary": null,
+      "updated": null,
+      "status": "completed",
+      "relationships": []
+    },
+    {
+      "path": ".work/completed/lightweight-godot-presentation.md",
+      "namespace": "work",
+      "kind": "feature",
+      "id": "lightweight-godot-presentation",
+      "title": "Lightweight Godot launch presentation",
       "summary": null,
       "updated": null,
       "status": "completed",
