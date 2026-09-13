@@ -36,7 +36,7 @@ those existing workflows.
 |---|---|---|
 | Agent visual review | `presentation: "automated"` | Keep windowed rendering available to Stage while making a best-effort attempt to preserve the current foreground and suppress ordinary physical keyboard and mouse input. |
 | Background testing | Headless when that retains the required evidence; otherwise `presentation: "automated"` | Use the least disruptive test path that still proves the requested behavior. |
-| Prepare human testing | `presentation: "deferred"` | Prepare the windowed run without deliberate activation and suppress ordinary physical input until a separate explicit handoff. |
+| Prepare human testing | `presentation: "deferred"` | Prepare the windowed run without deliberate activation. After readiness, the agent announces that the scene is ready; the user deliberately focuses the ordinary Godot window to begin inspection. |
 | Human-visible review | `presentation: "interactive"` | Permit normal visible launch, focus, and physical user input because the user requested an interactive review. |
 
 Capture operator, presets, readiness, observation, recording, and expanded
@@ -70,17 +70,14 @@ keeps the public contract predictable.
 
 Start and restart accept presentation. Stop remains available regardless of the
 run's presentation so cleanup cannot be blocked by a protection check. Status is
-observational. A deferred run gains one explicit handoff operation that transitions
-the current game to interactive presentation without restarting it. The exact
-action name should follow the existing `editor_run` action vocabulary; `handoff`
-is the working name. The initial callable route is Director `editor_run`; this
-does not require redesigning `theatre run`, whose existing command shape starts or
-restarts a named scene. Preparation alone never authorizes handoff: it follows a
-later deliberate user instruction or explicit human action. Handoff rejects a
-missing, stopped, non-deferred, or replaced run with an actionable result rather
-than guessing which window to activate. A run is replaced when the originally
-tracked game process or window has disappeared or changed; this does not imply a
-new stale-client authorization contract.
+observational. Deferred presentation adds no runtime handoff action, activation
+API, token, or state transition. After the agent confirms that the requested scene
+is ready, it communicates the handoff in its ordinary Codex app or CLI response.
+The user then chooses whether and when to focus the existing Godot window. A
+user-requested review can be announced as “The scene is ready for your inspection.”
+When the agent needs manual evidence, it should name the checks, for example,
+“The Godot scene is ready. Please verify that X, Y, and Z behave as expected.”
+Project guidance may refine this wording without creating application behavior.
 
 On non-Windows systems, omitted and explicit interactive presentation follow the
 existing code path. Explicit automated and deferred requests return unsupported
@@ -96,23 +93,26 @@ project copy, or add a persistent preparation service.
 
 A small Windows-only presentation helper may observe the foreground window,
 identify the game window belonging to the selected editor run, apply reversible
-no-activation and input-suppression behavior, and restore the prior foreground
-when Godot activates itself. Prefer ordinary Win32 window operations over process
-isolation. Scope all platform dependencies behind `cfg(windows)` and keep the
-non-Windows launch path structurally unchanged.
+no-activation behavior, suppress ordinary physical input for automated runs, and
+restore the prior foreground when Godot activates itself. Deferred presentation
+uses only launch-time focus protection that leaves the ordinary game window
+available for the user to focus after the agent's message; it must not install an
+input lock that requires a later application transition. Prefer ordinary Win32
+window operations over process isolation. Scope all platform dependencies behind
+`cfg(windows)` and keep the non-Windows launch path structurally unchanged.
 
 Foreground restoration is conditional as well as bounded. Restore only while the
 current foreground still belongs to the positively identified Theatre-launched
 game or another launch-caused surface. If the user has already selected a different
 application, leave that foreground unchanged. Do not add a background focus monitor.
 
-The editor plugin owns only run-local presentation state needed for deferred
-handoff, such as the current presentation and reversible game-window information.
-Clear it when the game stops, restarts, exits, or the editor plugin shuts down.
-Do not persist presentation state, create identity files, issue handoff tokens, or
-add a second lifecycle owner. Stage remains independent: presentation protection
-must not require observation, recording, a Stage connection, or Stage-provided
-input filtering. Synthetic agent input through Stage should remain usable during
+Do not add run-local state solely to coordinate deferred handoff. The user begins
+manual inspection by focusing the ordinary game window after the agent's message;
+Theatre does not programmatically promote or activate it. Do not persist
+presentation state, create identity files, issue handoff tokens, or add a second
+lifecycle owner. Stage remains independent: presentation protection must not
+require observation, recording, a Stage connection, or Stage-provided input
+filtering. Synthetic agent input through Stage should remain usable during
 automated testing.
 
 The helper makes a bounded attempt rather than proving isolation. If its Windows
@@ -123,13 +123,8 @@ result, and retain ordinary stop recovery. Preserve the response's existing
 `launch_requested` and `game_running` facts, and add only the smallest explicit
 presentation outcome and reason needed to distinguish no launch from a launched
 run with degraded protection. Do not manufacture native proof or silently describe
-the run as protected. A degraded deferred run is not successfully prepared for
-handoff.
-
-Deferred handoff reverses only presentation controls that Theatre applied to the
-current run, then deliberately activates that game window. It must not change
-capture configuration, restart the scene, save editor work, or promote an unrelated
-window discovered after the original run disappeared.
+the run as protected. An agent must not announce a degraded deferred run as ready
+without explaining the limitation and obtaining a new user decision.
 
 ## Three delivery stages
 
@@ -151,8 +146,11 @@ Windows agents use a meaningful headless path or report the limitation rather th
 silently launching interactively. If a requested launch occurred with degraded
 protection, the agent inspects the returned launch and running facts, stops that run
 before attempting a fallback, and never reports a degraded deferred run as ready
-for human handoff. Linux agents continue to follow existing project launch and test
-conventions instead of being prohibited from established graphical workflows.
+for human inspection. For a successful deferred run, the agent's ordinary response
+is the deliberate handoff: it states that the scene is ready and names any checks
+the user was asked to perform. Linux agents continue to follow existing project
+launch and test conventions instead of being prohibited from established graphical
+workflows.
 
 Repository-owned Stage and Director operating skills must agree with this policy
 where they teach launch behavior. That synchronization prevents examples from
@@ -176,19 +174,17 @@ Use existing unit, CLI, Director editor, Stage live, and graphical harnesses. Do
 not create a parallel presentation test framework.
 
 1. Contract tests prove all three explicit values, omission preserving the legacy
-   path, stop/status independence, handoff validation, and capture settings having
-   no presentation side effects.
+   path, stop/status independence, and capture settings having no presentation
+   side effects. No handoff operation or persistent handoff state is introduced.
 2. Linux builds and ordinary tests retain their existing behavior. Existing Unix
    graphical and wrapper paths remain present and runnable; no Windows capability
    guard may replace or skip them. Run available Linux engine journeys or report
    the exact missing environment evidence.
-3. A bounded Windows editor journey exercises automated launch, deferred launch
-   and handoff, interactive launch, stop recovery, preserved unsaved editor work,
-   Stage viewport capture, and synthetic Stage input. Reuse the existing fixture
-   and keep manual foreground/input observation clearly labeled as attended evidence
-   rather than an automated guarantee. That observation includes ordinary typing
-   and clicking during automated and deferred launch, successful human input after
-   handoff, and a short legacy-behavior comparison.
+3. A bounded Windows editor journey exercises automated, deferred, interactive,
+   and legacy launch, stop recovery, preserved unsaved editor work, Stage viewport
+   capture, and synthetic Stage input. Reuse the existing fixture. Attended human
+   focus, typing, and clicking are not acceptance gates for this delivery; ordinary
+   use in local projects will supply that observational evidence after rollout.
 4. Verify that automated/deferred behavior does not depend on Stage activation.
    Exercise known helper failure after preflight and confirm that the response is
    degraded, preserves launch/running facts, and leaves stop available. Exercise a
@@ -196,7 +192,9 @@ not create a parallel presentation test framework.
    over the newly selected application.
 5. Walk the base and project instructions through all four workflows. Confirm that
    they neither launch interactively without user intent nor choose headless when
-   doing so would discard the visual behavior under test.
+   doing so would discard the visual behavior under test. Confirm that deferred
+   guidance communicates readiness and requested manual checks through the agent's
+   normal response without implying an application handoff feature.
 6. Run the complete repository checks from `.work/CONVENTIONS.md`, regenerate
    affected schemas and public references, check bundled client-skill parity, and
    reconcile affected architecture, contract, journey, and public launch guidance.
@@ -208,20 +206,20 @@ can identify and modify the correct game window soon enough to improve ordinary
 focus and input behavior without harming rendering. Validate that assumption first
 against representative native and embedded game-window configurations. The first
 implementation probe must also establish the concrete minimal boundary by which the
-GDScript editor plugin invokes native Windows operations, where that helper is
-delivered, and how run-local reversible state survives a one-shot Director launch
-until a later Director handoff or editor shutdown. Demonstrate one one-shot launch
-followed by a later handoff before broad contract or instruction implementation.
-Do not prescribe a new GDExtension, service, or Stage dependency before that probe.
-If a lightweight boundary cannot satisfy the lifecycle, stop and bring the evidence
-back to design; do not reintroduce the isolated-desktop system as an implementation
-detail.
+GDScript editor plugin invokes any necessary native Windows operation and where that
+helper is delivered. It needs to support the bounded launch-time behavior of a
+one-shot Director call; it does not need a later native handoff or a second lifetime
+owner. Do not prescribe a new GDExtension, service, or Stage dependency before that
+probe. If a lightweight boundary cannot satisfy the launch behavior, stop and bring
+the evidence back to design; do not reintroduce the isolated-desktop system as an
+implementation detail.
 
 Best-effort foreground restoration may be refused by Windows, and disabling a
 window may not cover every physical device class. These are accepted initial
-limitations when they are documented accurately. A failed or stale handoff must
-leave the user with ordinary Director stop and process-level recovery; it must not
-strand an editor or require deletion of persistent coordination state.
+limitations when they are documented accurately. Deferred presentation has no
+failed or stale application-handoff state: the handoff is only the agent's message
+and the user's ordinary decision to focus the game. Director stop and process-level
+recovery remain available without persistent coordination state.
 
 The change is recoverable by removing the optional presentation plumbing and
 Windows helper: omitted calls already use the unchanged legacy path, and no stored
