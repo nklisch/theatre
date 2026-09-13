@@ -14,6 +14,33 @@ evidence needed for an autonomous task, expressly requested by the user, or need
 for a specific human capture request. Do not change persistent preferences to
 satisfy one run. Respect explicit local preferences and explicit per-run off.
 
+On Windows, choose launch presentation explicitly for agent-initiated work:
+
+- Agent visual review: use `presentation=automated`.
+- Background testing: use headless execution when it preserves the required
+  evidence; otherwise use `presentation=automated`.
+- Prepare human testing: use `presentation=deferred`. After confirming the
+  project's real readiness condition, tell the user in the normal agent response
+  that the scene is ready and name any checks they should perform. The user focuses
+  the ordinary Godot window; Theatre has no separate handoff action.
+- Human-visible review expressly requested by the user: use
+  `presentation=interactive`.
+
+Omitting presentation preserves legacy behavior; it is not an automation safety
+default. If automated or deferred launch reports degraded protection, inspect its
+`launch_requested` and `game_running` facts, stop the run before any fallback, and
+do not announce a degraded deferred run as ready without explaining the limitation
+and obtaining a new user decision. Capture operator, presets, readiness, viewport,
+recording, and Stage controls do not grant focus or physical-input permission.
+These presentation modes are Windows-only; on Linux and macOS, keep the project's
+established headless, graphical, and wrapper-based workflows, using omission or
+explicit interactive presentation for ordinary editor launches.
+
+This generated guidance intentionally does not invent the project's launch target,
+successful readiness transition, Quick Sandbox or equivalent review target, or
+local background-test command. Record those facts in the consuming project's own
+instructions beneath this policy when they are known.
+
 Use Director `editor_run.launch` or `theatre run` to select observation independently
 from startup/play capture. Human review normally uses `operator=human` and
 `play_start=manual`: startup can finish and save, but play does not collect hours

@@ -200,7 +200,8 @@ CI builds cross-platform binaries (Linux, macOS, Windows) and creates a GitHub r
 ### Explicit runtime capture
 
 Ordinary launches do not activate Stage observation or recording. Use
-`theatre run scenes/review.tscn --observe on` for live access, or select a capture
+`theatre run scenes/review.tscn --observe on` for live access; for Windows agent
+visual review, add `--presentation automated`. You can instead select a capture
 phase such as `--play minimal --operator human`. Human capture waits for project
 readiness and an explicit Start by default. See [Recording](site/stage/recording.md)
 for phased loading capture, provider/readiness integration and private overrides.

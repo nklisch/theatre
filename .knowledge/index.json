@@ -639,6 +639,17 @@
       "relationships": []
     },
     {
+      "path": ".work/completed/lightweight-godot-presentation.md",
+      "namespace": "work",
+      "kind": "feature",
+      "id": "lightweight-godot-presentation",
+      "title": "Lightweight Godot launch presentation",
+      "summary": null,
+      "updated": null,
+      "status": "completed",
+      "relationships": []
+    },
+    {
       "path": ".work/releases/0.4.0.md",
       "namespace": "work",
       "kind": "release",

@@ -15,7 +15,9 @@ Use an already open, verified Godot editor with Director enabled:
 
 ```sh
 theatre run scenes/review.tscn
-theatre run scenes/review.tscn --observe on
+theatre run scenes/review.tscn --presentation automated --observe on
+theatre run scenes/review.tscn --presentation deferred --operator human
+theatre run scenes/review.tscn --presentation interactive
 theatre run scenes/review.tscn --play minimal --operator human
 theatre run scenes/review.tscn --startup minimal --play standard --play-scope group:review --operator human
 theatre run scenes/review.tscn --startup heavy --startup-images off --play off
@@ -26,6 +28,16 @@ directory). Commands resolve through PATH on Windows, Linux and macOS.
 `theatre run` uses Director's existing `editor_run` operation; it does not open
 an editor, install missing components, change the main scene or launch a fallback
 game process. Ask the user before project installation.
+
+Presentation is separate from capture. On Windows, use `automated` for agent
+visual review, headless execution for background tests only when it preserves the
+required evidence (otherwise automated), `deferred` to prepare a run the user will
+focus later, and `interactive` for a user-requested visible review. Omission keeps
+legacy behavior. Automated and deferred are unsupported on other platforms, whose
+existing launch conventions remain unchanged. A successful deferred run is handed
+over by the agent's ordinary message after real readiness, not by an application
+action. A degraded result retains launch/running facts; stop that run before trying
+a fallback.
 
 Director accepts the same typed options in `editor_run.launch`:
 

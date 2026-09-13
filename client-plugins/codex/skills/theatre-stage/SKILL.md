@@ -57,6 +57,19 @@ Machine installation, project wiring, and activation for a run are separate choi
 `theatre init . --yes --accept-project-install`. Preserve existing configuration;
 request deliberate approval before `--overwrite-existing`.
 
+On Windows, explicitly select among these workflows. Use
+`--presentation automated` for agent visual review. For background tests, prefer a
+meaningful headless path when it retains the evidence under test; otherwise use
+automated. Use `--presentation deferred` to prepare requested human testing, then
+confirm the project's actual readiness and tell the user in the normal response
+that the scene is ready, including the checks to perform. Use
+`--presentation interactive` only for an expressly requested human-visible review.
+Omission is legacy behavior, not an automatic safety choice. If an automated or
+deferred result is degraded, preserve its launch/running facts, stop the run before
+fallback, and do not announce a degraded deferred run as ready without a new user
+decision. Linux and macOS retain their established headless, graphical, and wrapper
+workflows; automated and deferred are unsupported there.
+
 Default to ordinary launches without observation or recording unless an autonomous
 task needs evidence, the user requests it, or you request a specific human capture.
 Honor local defaults and explicit per-run off. Do not rewrite preferences for one run.

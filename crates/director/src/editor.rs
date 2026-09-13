@@ -64,6 +64,7 @@ pub struct EditorHandle {
     stream: TcpStream,
     port: u16,
     project_path: PathBuf,
+    process_id: u32,
 }
 
 impl EditorHandle {
@@ -80,6 +81,7 @@ impl EditorHandle {
             stream,
             port,
             project_path: expected.clone(),
+            process_id: 0,
         };
         let response = handle
             .send_operation("ping", &serde_json::json!({}))
@@ -111,6 +113,7 @@ impl EditorHandle {
                 actual.display()
             )));
         }
+        handle.process_id = identity.process_id;
         Ok(handle)
     }
 
@@ -161,6 +164,10 @@ impl EditorHandle {
 
     pub fn port(&self) -> u16 {
         self.port
+    }
+
+    pub fn process_id(&self) -> u32 {
+        self.process_id
     }
 }
 

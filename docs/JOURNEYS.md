@@ -182,7 +182,12 @@ This is the preferred cross-tool journey:
 1. Use direct code edits for scripts and Director for serialized scenes/resources.
 2. Use `project_reload` or an equivalent Godot-backed validation pass after script changes.
 3. With a verified open editor, use Director `editor_run` to start or restart a
-   selected saved scene without saving unrelated open work. A shell or manual
+   selected saved scene without saving unrelated open work. On Windows, select
+   `automated` for agent visual review, `deferred` when preparing later human
+   testing, or `interactive` for a user-requested visible review. Background tests
+   use headless execution when it retains the required evidence and automated
+   presentation otherwise. Omission preserves legacy behavior. Linux and macOS
+   retain existing graphical, headless, and wrapper conventions. A shell or manual
    editor launch remains valid when run control is unavailable.
 4. Use `runtime_status` to verify the current run and readiness. A successful
    Director launch request alone does not establish Stage readiness. Read
@@ -196,6 +201,13 @@ This is the preferred cross-tool journey:
    analyze the saved clip instead; clip screenshots and visual artifacts remain
    retained-evidence operations.
 7. Persist the accepted fix in code or a Director-authored resource, then repeat the real loop.
+
+For a successful deferred Windows run, wait for the project's actual readiness
+condition and use the normal agent response to say the scene is ready and identify
+the checks the user should perform. The user focuses the ordinary Godot window;
+there is no Theatre handoff command. If presentation is degraded, read the retained
+launch/running facts, stop the run before fallback, and explain the limitation
+instead of announcing it as ready.
 
 For a bounded input script, pause the game and use an `interaction_sequence` action.
 It applies named InputMap changes across selected physics-frame counts and releases

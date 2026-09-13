@@ -17,6 +17,9 @@ pub struct RunArgs {
     /// Restart instead of start (stops the editor's current game)
     #[arg(long)]
     restart: bool,
+    /// Window presentation on Windows; omission preserves legacy editor behavior
+    #[arg(long, value_parser = ["automated", "deferred", "interactive"])]
+    presentation: Option<String>,
     #[arg(long, value_parser = ["on", "off"])]
     observe: Option<String>,
     #[arg(long, value_parser = ["human", "agent"])]
@@ -114,6 +117,19 @@ fn options(args: &RunArgs) -> Result<Value> {
     Ok(result)
 }
 
+fn editor_run_params(args: &RunArgs, project: &std::path::Path, launch: Value) -> Value {
+    let mut params = json!({
+        "project_path": project,
+        "scene_path": args.scene,
+        "action": if args.restart { "restart" } else { "start" },
+        "launch": launch,
+    });
+    if let Some(presentation) = &args.presentation {
+        params["presentation"] = json!(presentation);
+    }
+    params
+}
+
 pub fn run(args: RunArgs) -> Result<()> {
     crate::project::validate_project(&args.project)?;
     let launch = options(&args)?;
@@ -124,8 +140,7 @@ pub fn run(args: RunArgs) -> Result<()> {
     // Director owns the existing editor lifecycle. This command does not install,
     // open an editor, change preferences, or create another process supervisor.
     let executable = which::which("director").context("director is not on PATH. Ask the user before installing Theatre; otherwise add its existing installation to PATH.")?;
-    let params = json!({"project_path":project, "scene_path":args.scene,
-        "action":if args.restart { "restart" } else { "start" }, "launch":launch});
+    let params = editor_run_params(&args, &project, launch);
     let mut child = Command::new(executable)
         .arg("editor_run")
         .arg(params.to_string())
@@ -189,6 +204,8 @@ mod tests {
             panic!("run");
         };
         assert_eq!(options(&args).unwrap(), json!({}));
+        let params = editor_run_params(&args, std::path::Path::new("/project"), json!({}));
+        assert!(params.get("presentation").is_none());
     }
 
     #[test]
@@ -214,5 +231,22 @@ mod tests {
         assert_eq!(result["startup"]["preset"], "minimal");
         assert_eq!(result["play"]["images"], false);
         assert!(result.get("observe").is_none());
+    }
+
+    #[test]
+    fn presentation_is_forwarded_only_when_explicit() {
+        let crate::Command::Run(args) = crate::Cli::parse_from([
+            "theatre",
+            "run",
+            "review.tscn",
+            "--presentation",
+            "deferred",
+        ])
+        .command
+        else {
+            panic!("run");
+        };
+        let params = editor_run_params(&args, std::path::Path::new("/project"), json!({}));
+        assert_eq!(params["presentation"], "deferred");
     }
 }

@@ -122,7 +122,7 @@ merely to describe existing code.
 
 Tests mirror the real operating loop: pure logic in unit tests, handlers
 against a mock transport, and end-to-end journeys against a real headless
-Godot that are never skipped.
+or windowed Godot when the changed behavior reaches that boundary.
 
 ### Why
 
@@ -133,9 +133,8 @@ caught.
 
 ### Implications
 
-- All required test layers must pass. Environment-dependent journeys may need a
-  separate explicit invocation; the ordinary workspace test command does not
-  count as evidence for them.
+- Select the smallest test layer that can disprove the change. Ordinary delivery
+  uses a few focused checks rather than every repository suite.
 - New user-facing capability arrives with the journey that exercises it, not
   just unit coverage of its parts.
 - A component that cannot be exercised in its real environment is treated as
@@ -146,8 +145,10 @@ caught.
 
 ### Boundaries
 
-Slow or environment-dependent tests may be marked for explicit invocation,
-but the project's definition of "done" includes them passing.
+Slow or environment-dependent tests may be marked for explicit invocation. Run
+the representative journey affected by the change; reserve exhaustive ignored
+suites for release qualification, unusually broad risk, explicit requests, or
+failures that justify expanding the evidence.
 
 ## Change in place — compatibility only where developers call in
 
