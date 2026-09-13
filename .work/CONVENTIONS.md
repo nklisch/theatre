@@ -18,6 +18,26 @@ Run from the repository root with Rust and Godot available. `GODOT_BIN` can
 select the Godot executable. Engine journeys require a deployed GDExtension;
 windowed visual journeys also require a working graphical session.
 
+Use the smallest evidence set that exercises the changed behavior at a stable
+boundary. Ordinary implementation should normally use formatting, Clippy for
+the affected package or workspace as appropriate, and no more than three focused
+test invocations. Prefer one representative test or journey per materially
+different affected boundary; do not repeat a green check after documentation or
+other changes that cannot affect it.
+
+When engine behavior changes, run one representative real-engine journey. Add a
+second only when the change spans a genuinely distinct boundary such as headless
+and windowed behavior or Director and Stage. Deploy the test project only when
+the selected journey needs the updated addon payload. Report unavailable platform
+or rendering evidence rather than substituting a broad mock suite.
+
+Expand verification when a genuine failure, unusually broad shared-boundary
+change, release preparation, or explicit user request provides a reason. A
+failure normally earns one diagnostic reproduction and one post-fix rerun of the
+affected check; it does not automatically require every repository suite. The
+commands below are available for that escalation or for CI/release qualification,
+not as a mandatory sequence for every delivery:
+
 ```bash
 cargo build --workspace
 cargo fmt --check --all
@@ -27,12 +47,9 @@ cargo test --workspace
 cargo test --workspace -- --ignored --test-threads=1
 ```
 
-All test layers must pass for implementation delivery: unit, integration,
-scenarios, wire tests, Director operations, and Stage/live end-to-end journeys.
-The second test command explicitly runs environment-dependent tests marked
-`#[ignore]`; the ordinary workspace command alone does not run them. Do not
-introduce feature flags that silently omit required journeys. Report unavailable
-platform or rendering verification rather than claiming it passed.
+Do not introduce feature flags that silently omit selected journeys. Record the
+focused commands actually run and their results; do not claim exhaustive coverage
+from a targeted check.
 
 For documentation- or workflow-only changes, validate the affected documents,
 references, generated artifacts, and Workbench/research substrate. Do not claim

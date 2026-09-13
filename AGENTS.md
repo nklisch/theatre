@@ -49,9 +49,11 @@ change.
   unwraps. Follow the existing serde naming and default conventions.
 - Parameters must have an implemented effect or be explicitly rejected. Follow
   [contract naming rules](docs/CONTRACT.md) rather than inventing field aliases.
-- Required implementation verification includes real engine journeys; ordinary
-  workspace tests do not include every ignored environment-dependent test.
-  Use the complete commands in `.work/CONVENTIONS.md` and report missing evidence.
+- Verify with a small, risk-based set of focused checks. When engine behavior
+  changes, include one representative real-engine journey and add another only
+  for a materially distinct boundary or a genuine failure. Use the escalation
+  commands and repetition rules in `.work/CONVENTIONS.md`; do not run every
+  ignored environment-dependent test for ordinary delivery.
 
 ## Consumer independence
 
