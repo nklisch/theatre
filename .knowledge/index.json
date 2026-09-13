@@ -584,6 +584,17 @@
       "relationships": []
     },
     {
+      "path": ".work/active/lightweight-godot-presentation.md",
+      "namespace": "work",
+      "kind": "feature",
+      "id": "lightweight-godot-presentation",
+      "title": "Lightweight Godot launch presentation",
+      "summary": null,
+      "updated": "2026-09-12",
+      "status": "active",
+      "relationships": []
+    },
+    {
       "path": ".work/active/stage-cli-session-semantics.md",
       "namespace": "work",
       "kind": "feature",
