@@ -117,11 +117,14 @@ fn exported_state_preserves_inherited_dynamic_and_validated_properties() {
             .unwrap_data();
         }
         let expected = if changed {
-            serde_json::json!({"health":17, "inventory":["gem"], "direction":[-1.0,8.0],
-                "visible":false, "dynamic_after":456, "hidden_export":7})
+            serde_json::json!({"health":17, "inventory":["gem"],
+                "attributes":{"role":"subject"}, "target_name":"changed",
+                "direction":[-1.0,8.0], "visible":false, "dynamic_after":456,
+                "hidden_export":7})
         } else {
-            serde_json::json!({"health":42, "inventory":["key","coin"], "direction":[2.0,3.0],
-                "visible":true, "dynamic_before":123})
+            serde_json::json!({"health":42, "inventory":["key","coin"],
+                "attributes":{"role":"subject"}, "target_name":"",
+                "direction":[2.0,3.0], "visible":true, "dynamic_before":123})
         };
         for detail in ["summary", "standard", "full"] {
             let data = f

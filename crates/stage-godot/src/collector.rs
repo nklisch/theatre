@@ -1,6 +1,6 @@
 use godot::builtin::VariantType;
 use godot::builtin::{
-    Array, Color, GString, PackedByteArray, PackedColorArray, PackedFloat32Array,
+    Array, Color, GString, NodePath, PackedByteArray, PackedColorArray, PackedFloat32Array,
     PackedFloat64Array, PackedInt32Array, PackedInt64Array, PackedStringArray, PackedVector2Array,
     PackedVector3Array, StringName, VarDictionary, Variant, Vector2, Vector3,
 };
@@ -2303,7 +2303,7 @@ pub(crate) fn variant_to_json(v: &Variant) -> Option<serde_json::Value> {
             serde_json::Number::from_f64(f).map(serde_json::Value::Number)
         }
         VariantType::STRING | VariantType::STRING_NAME | VariantType::NODE_PATH => {
-            Some(serde_json::Value::String(v.to::<GString>().to_string()))
+            variant_text(v).map(serde_json::Value::String)
         }
         VariantType::VECTOR2 => {
             let vec = v.to::<Vector2>();
@@ -2335,7 +2335,9 @@ pub(crate) fn variant_to_json(v: &Variant) -> Option<serde_json::Value> {
             let dict = v.to::<VarDictionary>();
             let mut map = serde_json::Map::new();
             for key in dict.keys_array().iter_shared() {
-                let key_str = key.to::<GString>().to_string();
+                let Some(key_str) = variant_text(&key) else {
+                    continue;
+                };
                 if let Some(val) = dict.get(&key).and_then(|v| variant_to_json(&v)) {
                     map.insert(key_str, val);
                 }
@@ -2426,6 +2428,15 @@ pub(crate) fn variant_to_json(v: &Variant) -> Option<serde_json::Value> {
             ))
         }
         _ => Some(serde_json::Value::String(format!("{v}"))),
+    }
+}
+
+fn variant_text(v: &Variant) -> Option<String> {
+    match v.get_type() {
+        VariantType::STRING => Some(v.to::<GString>().to_string()),
+        VariantType::STRING_NAME => Some(v.to::<StringName>().to_string()),
+        VariantType::NODE_PATH => Some(v.to::<NodePath>().to_string()),
+        _ => None,
     }
 }
 

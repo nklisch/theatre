@@ -4,6 +4,8 @@ extends SceneTree
 class ExportBase extends Node2D:
 	@export var health: int = 42
 	@export var inventory: PackedStringArray = ["key", "coin"]
+	@export var attributes: Dictionary = {&"role": "subject"}
+	@export var target_name: StringName = &""
 	var internal_value: int = 99
 
 class ExportSubject extends ExportBase:
@@ -32,6 +34,7 @@ class ExportSubject extends ExportBase:
 	func change_exports() -> void:
 		health = 17
 		inventory = ["gem"]
+		target_name = &"changed"
 		direction = Vector2(-1, 8)
 		visible = false
 		changed = true
