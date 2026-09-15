@@ -64,7 +64,7 @@ Supported platforms: Linux x86_64, macOS arm64, macOS x86_64 (Rosetta), Windows 
 ### Install a specific version
 
 ```bash
-curl -LsSf https://github.com/nklisch/theatre/releases/latest/download/install.sh | sh -s -- --version 0.6.0
+curl -LsSf https://github.com/nklisch/theatre/releases/latest/download/install.sh | sh -s -- --version 0.6.1
 ```
 
 ## Install from source
@@ -405,7 +405,7 @@ echo '{"detail": "summary"}' | stage spatial_snapshot
 # Help and version
 stage --help
 director --help
-stage --version   # {"version": "0.6.0"}
+stage --version   # {"version": "0.6.1"}
 ```
 
 CLI output is JSON to stdout. Exit codes 1 and 2 report runtime and usage
