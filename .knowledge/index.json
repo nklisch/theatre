@@ -670,6 +670,28 @@
       "updated": null,
       "status": null,
       "relationships": []
+    },
+    {
+      "path": ".work/completed/clarify-stage-default-state.md",
+      "namespace": "work",
+      "kind": "story",
+      "id": "clarify-stage-default-state",
+      "title": "Clarify Stage's default launch state",
+      "summary": null,
+      "updated": null,
+      "status": "completed",
+      "relationships": []
+    },
+    {
+      "path": ".work/completed/stage-snapshot-string-name-variants.md",
+      "namespace": "work",
+      "kind": "story",
+      "id": "stage-snapshot-string-name-variants",
+      "title": "Keep StringName state from crashing Stage snapshots",
+      "summary": null,
+      "updated": null,
+      "status": "completed",
+      "relationships": []
     }
   ]
 }
