@@ -70,8 +70,9 @@ fallback, and do not announce a degraded deferred run as ready without a new use
 decision. Linux and macOS retain their established headless, graphical, and wrapper
 workflows; automated and deferred are unsupported there.
 
-Default to ordinary launches without observation or recording unless an autonomous
-task needs evidence, the user requests it, or you request a specific human capture.
+Ordinary launches keep Stage present, with observation and recording off by default,
+unless an autonomous task needs evidence, the user requests it, or you request a
+specific human capture.
 Honor local defaults and explicit per-run off. Do not rewrite preferences for one run.
 Use `theatre run scene.tscn` through the existing editor, or Director `editor_run`
 with the same typed `launch` object. For example:

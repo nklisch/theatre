@@ -53,8 +53,9 @@ that completed its ready notification; an editor connection alone does not prove
 this. Compare engine run identifiers across restarts, not client session identifiers.
 
 - **Stage** connects to the running project's Stage listener on `127.0.0.1:9077` by default. The game must be running before a useful Stage query can complete.
-- Ordinary launches leave that listener and capture off. Enable observation
-  explicitly for live access; configure capture phases independently.
+- Ordinary launches keep Stage present, with observation and recording off by
+  default. Enable observation explicitly for live access; configure capture
+  phases independently.
 - **Director** requires a `project_path` in every operation. It can use the editor plugin, a headless daemon, or a one-shot Godot process; the agent does not need to select the backend. The standalone Godot executable is resolved from `GODOT_BIN`, then `GODOT_PATH`, then `godot` on `PATH`.
 - **Nested projects and switching:** initialize each Godot project once. Keep one root MCP configuration rather than loading duplicate nested configurations. `THEATRE_PROJECT_DIR` selects Stage's startup project; `project_select` switches the running MCP server explicitly without a restart. Selection discards watches, baselines, spatial indexes, session overrides and the cached clip location, even for the same project. Take a fresh snapshot and recreate watches afterward. A stopped or unreachable target remains selected and reconnecting; Stage never returns to the previous project automatically. Director continues to select its absolute `project_path` per call. Separate live games/editors need distinct listener ports, or stop the old process before reusing its port.
 - **Feedback after switching:** Stage's tool results and feedback calls use the selected project's queue. A client feedback hook runs outside the MCP server and keeps its own environment/working-directory selection; `project_select` does not change that. Launch the client with the intended absolute `THEATRE_PROJECT_DIR` when its hook should select a nested queue. One-off Stage CLI calls still use explicit environment selection; `project_select` requires persistent MCP.

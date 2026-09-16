@@ -7,7 +7,8 @@ description: "Enable only the Theatre observation or capture needed for your cur
 Theatre installs tools for authoring and inspecting Godot projects. Installation,
 project wiring and runtime activation are separate choices. Ask before adding
 missing Theatre components to a project. After [Installation](/guide/installation),
-ordinary game launches leave Stage observation and recording off.
+ordinary game launches keep Stage present, with observation and recording off by
+default.
 
 ## Observe a selected scene
 
